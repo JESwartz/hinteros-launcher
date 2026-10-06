@@ -432,6 +432,7 @@ class MockSystem implements SystemRepository {
     this.updates, {
     this.adminPassword = 'correct horse',
     this.acceptsAdminPassword = true,
+    this.dev = false,
   });
 
   final MockJobs jobs;
@@ -445,6 +446,9 @@ class MockSystem implements SystemRepository {
   /// answers `authenticationRequired` and no password is looked at.
   @override
   final bool acceptsAdminPassword;
+
+  /// A developer build (`system.info.dev`): About shows the DEV badge.
+  bool dev;
   bool _enabled = false;
 
   /// Everything done to the box: `power:<action>`, `ssh:on`, ...
@@ -461,6 +465,7 @@ class MockSystem implements SystemRepository {
     rev: updates.status.currentRev,
     generation: 12,
     hostname: 'hinteros-livingroom',
+    dev: dev,
     hostKeyFingerprints: const [
       'SHA256:hK4s9WqY2mRz7LxD0vTb3NcUe5GfJ8aPiOyH1CwEoXg (ed25519)',
     ],

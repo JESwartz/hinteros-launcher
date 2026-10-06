@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../api/api.dart';
+import '../osk/osk_control.dart';
 import 'app_icons.dart';
 import 'apps_repository.dart';
 import 'games_repository.dart';
@@ -45,6 +46,10 @@ class LauncherData extends ChangeNotifier {
   final DaemonConnection connection;
   final AppsRepository apps;
   final GamesRepository games;
+
+  /// Shows the on-screen keyboard while one of the launcher's text fields has
+  /// focus.
+  late final OskControl osk = OskControl(connection);
 
   ConnectionStatus status = const Connecting();
   List<App>? appList;

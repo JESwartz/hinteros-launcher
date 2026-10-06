@@ -426,52 +426,53 @@ class DaemonJobs implements JobsRepository {
 
   @override
   Stream<JobSnapshot> watch(String jobId) {
-    return Stream.multi((c) {
-      StreamSubscription<JobSnapshot>? sub;
-      var closed = false;
+    StreamSubscription<JobSnapshot>? sub;
+    var closed = false;
+    late final StreamController<JobSnapshot> c;
 
-      void follow(_Entry e) {
-        if (closed) return;
-        c.add(e.snap);
-        if (e.snap.finished) {
-          closed = true;
-          c.close();
-          return;
-        }
-        sub = e.changes.stream.listen((s) {
-          c.add(s);
-          if (s.finished) {
-            closed = true;
-            sub?.cancel();
-            c.close();
+    void close() {
+      if (closed) return;
+      closed = true;
+      sub?.cancel();
+      c.close();
+    }
+
+    void follow(_Entry e) {
+      if (closed) return;
+      c.add(e.snap);
+      if (e.snap.finished) return close();
+      sub = e.changes.stream.listen((s) {
+        c.add(s);
+        if (s.finished) close();
+      });
+      if (!e.refreshed) unawaited(_refresh(jobId));
+    }
+
+    c = StreamController<JobSnapshot>(
+      onListen: () {
+        final known = _jobs[jobId];
+        if (known != null) return follow(known);
+        _refresh(jobId).then((_) {
+          if (closed) return;
+          final e = _jobs[jobId];
+          if (e == null) {
+            c.addError(
+              const SystemException(SystemErrorKind.notFound, 'No such job.'),
+            );
+            close();
+          } else {
+            follow(e);
           }
         });
-        if (!e.refreshed) unawaited(_refresh(jobId));
-      }
-
-      c.onCancel = () {
+      },
+      // Not returned: a cancel future would delay whoever cancels (and, in
+      // widget tests, complete outside the fake-async zone).
+      onCancel: () {
         closed = true;
-        return sub?.cancel();
-      };
-      final known = _jobs[jobId];
-      if (known != null) {
-        follow(known);
-        return;
-      }
-      _refresh(jobId).then((_) {
-        if (closed) return;
-        final e = _jobs[jobId];
-        if (e == null) {
-          c.addError(
-            const SystemException(SystemErrorKind.notFound, 'No such job.'),
-          );
-          closed = true;
-          c.close();
-        } else {
-          follow(e);
-        }
-      });
-    });
+        unawaited(sub?.cancel());
+      },
+    );
+    return c.stream;
   }
 
   @override
@@ -510,8 +511,20 @@ class DaemonUpdates implements UpdatesRepository {
   @override
   Stream<UpdateStatus> get changes => _changes.stream;
 
+  /// The startup check can come before the socket is up: wait a moment for
+  /// the connection rather than report "unavailable" at once.
+  Future<void> _connected() async {
+    if (_conn.status is api.Connected) return;
+    try {
+      await _conn.waitConnected(timeout: const Duration(seconds: 5));
+    } on TimeoutException {
+      throw const api.DaemonUnavailableException();
+    }
+  }
+
   @override
   Future<UpdateStatus> check() => _guard(() async {
+    await _connected();
     final r = await _conn.systemUpdateCheck();
     var result = r.result;
     if (result == null) {

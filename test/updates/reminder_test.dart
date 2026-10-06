@@ -39,6 +39,31 @@ void main() {
     r.dispose();
   });
 
+  test('a system service that starts late is tried again', () async {
+    final ups = MockUpdates(MockJobs())
+      ..nextAvailable = mockSecurityUpdate()
+      ..failCheckWith = const SystemException(
+        SystemErrorKind.unavailable,
+        'down',
+      );
+    final r = UpdateReminders(
+      ups,
+      retryDelays: const [Duration(milliseconds: 10)],
+    );
+    var late = 0;
+    r.onLateResult = () => late++;
+    await r.start();
+    expect(r.behind, isFalse);
+    expect(ups.checks, 1);
+    // The service comes up; the retry after the first delay finds the update.
+    ups.failCheckWith = null;
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(ups.checks, 2);
+    expect(r.behind, isTrue);
+    expect(late, 1);
+    r.dispose();
+  });
+
   test('up to date: no reminder', () async {
     final r = UpdateReminders(MockUpdates(MockJobs()));
     await r.start();

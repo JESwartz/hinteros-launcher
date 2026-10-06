@@ -8,6 +8,7 @@ import '../data/launcher_data.dart';
 import '../fps_overlay.dart';
 import '../nav/nav_controller.dart';
 import '../nav/nav_model.dart';
+import '../osk/osk_control.dart';
 import '../settings/launcher_settings.dart';
 import '../system/models.dart';
 import '../system/repositories.dart';
@@ -191,6 +192,7 @@ class _LauncherShellState extends State<LauncherShell> {
       }),
     );
     _reminders.addListener(_onReminders);
+    _reminders.onLateResult = _homeEntered;
     unawaited(_reminders.start().then((_) => _homeEntered()));
     if (widget.now == null) {
       _clock = Timer.periodic(const Duration(seconds: 20), (_) {
@@ -532,51 +534,54 @@ class _LauncherShellState extends State<LauncherShell> {
   @override
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
-    return Focus(
-      autofocus: true,
-      onKeyEvent: _onKey,
-      child: Scaffold(
-        backgroundColor: t.background,
-        body: ModalHost(
-          controller: _modals,
-          child: Stack(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TopBar(
-                    region: _tabs,
-                    labels: [for (final s in _sections) s.label],
-                    selected: _sections.indexOf(_section),
-                    onFocusTab: (i) => _setSection(_sections[i]),
-                    time: _time,
-                  ),
-                  if (_updateBannerVisible && _reminders.update != null)
-                    UpdateBanner(
-                      update: _reminders.update!,
-                      region: _updateBanner,
-                      onOpen: _openUpdates,
+    return OskScope(
+      control: widget.data.osk,
+      child: Focus(
+        autofocus: true,
+        onKeyEvent: _onKey,
+        child: Scaffold(
+          backgroundColor: t.background,
+          body: ModalHost(
+            controller: _modals,
+            child: Stack(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TopBar(
+                      region: _tabs,
+                      labels: [for (final s in _sections) s.label],
+                      selected: _sections.indexOf(_section),
+                      onFocusTab: (i) => _setSection(_sections[i]),
+                      time: _time,
                     ),
-                  if (_bannerVisible)
-                    SteamBanner(
-                      windows: widget.data.steamAttention,
-                      region: _banner,
-                      onOpen: () => unawaited(widget.data.focusSteam()),
-                    ),
-                  Expanded(child: _content()),
-                ],
-              ),
-              if (_dialogOpen && widget.data.closeRequest != null)
-                CloseConfirm(
-                  id: widget.data.closeRequest!.id,
-                  name: widget.data.closeRequest!.name,
-                  iconPath: widget.data.closeRequest!.iconPath,
-                  region: _dialog,
-                  onCancel: widget.data.cancelClose,
-                  onConfirm: () => unawaited(widget.data.confirmClose()),
+                    if (_updateBannerVisible && _reminders.update != null)
+                      UpdateBanner(
+                        update: _reminders.update!,
+                        region: _updateBanner,
+                        onOpen: _openUpdates,
+                      ),
+                    if (_bannerVisible)
+                      SteamBanner(
+                        windows: widget.data.steamAttention,
+                        region: _banner,
+                        onOpen: () => unawaited(widget.data.focusSteam()),
+                      ),
+                    Expanded(child: _content()),
+                  ],
                 ),
-              if (widget.showFps) const FpsOverlay(),
-            ],
+                if (_dialogOpen && widget.data.closeRequest != null)
+                  CloseConfirm(
+                    id: widget.data.closeRequest!.id,
+                    name: widget.data.closeRequest!.name,
+                    iconPath: widget.data.closeRequest!.iconPath,
+                    region: _dialog,
+                    onCancel: widget.data.cancelClose,
+                    onConfirm: () => unawaited(widget.data.confirmClose()),
+                  ),
+                if (widget.showFps) const FpsOverlay(),
+              ],
+            ),
           ),
         ),
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../nav/nav_controller.dart';
 import '../nav/nav_model.dart';
+import '../osk/osk_control.dart';
 import '../theme/hinter_theme.dart';
 import 'focus_frame.dart';
 import 'modal_host.dart';
@@ -312,8 +313,9 @@ class _ChoiceDialog<T> extends StatelessWidget {
 /// A text field that takes its focus node from a [NavRegion] row, so the nav
 /// layer moves focus in and out of it like any item. Typed text reaches it
 /// from the daemon's on-screen keyboard (keys typed through the compositor);
-/// on the desktop the real keyboard works too. Accept (Enter) calls
-/// [onSubmit].
+/// on the desktop the real keyboard works too. The keyboard opens by itself
+/// when the field gains focus (`osk.show`) and closes when focus leaves it or
+/// the text is submitted (`osk.hide`). Accept (Enter) calls [onSubmit].
 class NavTextField extends StatefulWidget {
   const NavTextField({
     super.key,
@@ -339,6 +341,15 @@ class NavTextField extends StatefulWidget {
 class _NavTextFieldState extends State<NavTextField> {
   late final FocusNode _node = widget.region.nodeAt(widget.rowKey, 0);
   bool _focused = false;
+  OskControl? _osk;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _osk = OskScope.maybeOf(context);
+    // The field may already have focus when the scope is first found.
+    if (_node.hasFocus) _osk?.fieldFocused(this);
+  }
 
   @override
   void initState() {
@@ -350,10 +361,18 @@ class _NavTextFieldState extends State<NavTextField> {
     });
   }
 
-  void _submit() => widget.onSubmit?.call();
+  void _submit() {
+    _osk?.submitted(this);
+    widget.onSubmit?.call();
+  }
 
   void _onFocus() {
-    if (_node.hasFocus) widget.region.noteFocused(widget.rowKey, 0);
+    if (_node.hasFocus) {
+      widget.region.noteFocused(widget.rowKey, 0);
+      _osk?.fieldFocused(this);
+    } else {
+      _osk?.fieldLeft(this);
+    }
     if (mounted && _focused != _node.hasFocus) {
       setState(() => _focused = _node.hasFocus);
     }
@@ -362,6 +381,7 @@ class _NavTextFieldState extends State<NavTextField> {
   @override
   void dispose() {
     _node.removeListener(_onFocus);
+    _osk?.fieldLeft(this);
     widget.region.unregisterSelect(widget.rowKey, 0);
     super.dispose();
   }
@@ -492,6 +512,9 @@ class _TextEntryDialogState extends State<_TextEntryDialog> {
     if (err == null) {
       widget.modal.close(value);
     } else {
+      // The text was submitted (keyboard hidden) but the field is still
+      // there to retry in.
+      OskScope.maybeOf(context)?.reshow();
       setState(() {
         _busy = false;
         _error = err;
@@ -524,11 +547,6 @@ class _TextEntryDialogState extends State<_TextEntryDialog> {
           obscure: widget.secret && !_reveal,
           hint: widget.hint,
           onSubmit: _submit,
-        ),
-        const SizedBox(height: HinterTokens.s1),
-        Text(
-          'No keyboard? Hold Guide and press Y to open the on-screen keyboard.',
-          style: t.caption,
         ),
         if (widget.secret) ...[
           const SizedBox(height: HinterTokens.s2),
