@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'osk_main.dart';
 import 'src/api/api.dart';
 import 'src/app.dart';
 import 'src/settings/launcher_settings.dart';
@@ -23,6 +24,8 @@ bool _flag(List<String> args, String flag, String env) =>
 /// or restarts a game update.
 /// `--server` (or `HINTEROS_SERVER=1`) shows the phase 2 Server tab.
 Future<void> main(List<String> args) async {
+  // One binary, two apps: `--osk` (the hinteros-osk wrapper) is the keyboard.
+  if (args.contains('--osk')) return runOsk(args);
   WidgetsFlutterBinding.ensureInitialized();
   final showFps = _flag(args, '--fps', 'HINTEROS_FPS');
   final mock = _flag(args, '--mock', 'HINTEROS_MOCK');
