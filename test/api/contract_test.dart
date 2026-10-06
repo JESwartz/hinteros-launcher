@@ -53,7 +53,17 @@ void main() {
 
       for (final ex in examples) {
         test('$method: ${ex['name']}', () async {
-          final mock = MockDaemon();
+          // The hello examples name the server version they were written for
+          // (upstream left them at 0.4 in the 0.5 schema): play them against
+          // a mock that serves that version.
+          final mock = MockDaemon(
+            serverApiVersion:
+                ((ex['result'] as Map?)?['api_version'] ??
+                        ((ex['error'] as Map?)?['data']
+                            as Map?)?['server_api_version'] ??
+                        apiVersion)
+                    as String,
+          );
           final params = (ex['params'] as Map).cast<String, dynamic>();
           _expectValid(
             spec['params'] as Map<String, dynamic>,
@@ -409,6 +419,40 @@ void main() {
         );
         expect(installed.map((g) => g.name), contains('Factorio'));
       });
+
+      test(
+        'apps_changed follows an icon change; apps.list carries the icon',
+        () async {
+          const dir = '/icons';
+          final withIcons = MockDaemon(apps: mockAppsWithIcons(dir));
+          expect(
+            withIcons.apps.map((a) => a.icon).whereType<String>(),
+            isEmpty,
+            reason: 'no such directory: no icons',
+          );
+          mock.setAppIcon('plex', '/icons/plex.png');
+          await settle();
+          expect(seen, [isA<AppsChangedEvent>()]);
+          final raw = await mock.rpc('apps.list', {});
+          _expectValid(
+            (_section('methods')['apps.list'] as Map<String, dynamic>)['result']
+                as Map<String, dynamic>,
+            raw,
+            'apps.list result',
+          );
+          final plex = (raw['apps'] as List).cast<Map>().firstWhere(
+            (a) => a['id'] == 'plex',
+          );
+          expect(plex['icon'], '/icons/plex.png');
+          // An app without an icon has no icon key at all (the field is optional).
+          final steam = (raw['apps'] as List).cast<Map>().first;
+          expect(steam.containsKey('icon'), isFalse);
+          // Taking it away again is a change too.
+          mock.setAppIcon('plex', null);
+          await settle();
+          expect(seen, hasLength(2));
+        },
+      );
 
       test('osk.show/hide emit osk_visibility once per change', () async {
         await mock.oskShow();

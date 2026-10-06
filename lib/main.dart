@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import 'dart:io' show Directory, Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,7 +21,8 @@ bool _flag(List<String> args, String flag, String env) =>
 /// the controller's Home button, A/D/W/S, Space, Q and E for the D-pad,
 /// accept, back and context (as `input_nav` events), F2 quits the last app
 /// that was started, F3/F4 make Steam ask for attention / stop, F5 finishes
-/// or restarts a game update.
+/// or restarts a game update, F6 makes the next missing app icon arrive
+/// (`apps_changed`).
 /// `--server` (or `HINTEROS_SERVER=1`) shows the phase 2 Server tab.
 Future<void> main(List<String> args) async {
   // One binary, two apps: `--osk` (the hinteros-osk wrapper) is the keyboard.
@@ -29,8 +30,13 @@ Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   final showFps = _flag(args, '--fps', 'HINTEROS_FPS');
   final mock = _flag(args, '--mock', 'HINTEROS_MOCK');
+  final iconDir = mock ? _mockIconDir() : null;
   final DaemonConnection connection = mock
-      ? MockDaemon()
+      ? MockDaemon(
+          apps: iconDir == null
+              ? mockApps
+              : mockAppsWithIcons(iconDir, without: {'youtube', 'plex'}),
+        )
       : DaemonClient(socketPath: defaultSocketPath());
   final settings = await SettingsController.load(FileSettingsStorage.xdg());
   final data = buildData(connection);
@@ -40,8 +46,18 @@ Future<void> main(List<String> args) async {
     showFps: showFps,
     showServer: _flag(args, '--server', 'HINTEROS_SERVER'),
   );
-  if (connection is MockDaemon) app = _DevKeys(mock: connection, child: app);
+  if (connection is MockDaemon) {
+    app = _DevKeys(mock: connection, iconDir: iconDir, child: app);
+  }
   runApp(app);
+}
+
+/// Where the mock finds its generic icons (`HINTEROS_MOCK_ICONS`, else the
+/// repo fixtures when run from the repo root); null: no icons.
+String? _mockIconDir() {
+  final d =
+      Platform.environment['HINTEROS_MOCK_ICONS'] ?? 'test/fixtures/icons';
+  return Directory(d).existsSync() ? Directory(d).absolute.path : null;
 }
 
 /// Dev-only keys that emit `input_nav` from the mock daemon.
@@ -56,9 +72,10 @@ final _devPad = [
 ];
 
 class _DevKeys extends StatelessWidget {
-  const _DevKeys({required this.mock, required this.child});
+  const _DevKeys({required this.mock, required this.child, this.iconDir});
 
   final MockDaemon mock;
+  final String? iconDir;
   final Widget child;
 
   @override
@@ -86,6 +103,10 @@ class _DevKeys extends StatelessWidget {
             c.setSteamAttention(const []),
         // A game update finishes (or starts again): games_changed.
         const SingleActivator(LogicalKeyboardKey.f5): c.toggleFirstUpdate,
+        // An app's icon arrives (YouTube, then Plex): apps_changed.
+        if (iconDir != null)
+          const SingleActivator(LogicalKeyboardKey.f6): () =>
+              c.iconArrives(iconDir!),
       },
       child: Focus(canRequestFocus: false, child: child),
     );

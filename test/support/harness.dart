@@ -5,11 +5,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart';
 import 'package:hinteros_launcher/src/app.dart';
+import 'package:hinteros_launcher/src/data/app_icons.dart';
 import 'package:hinteros_launcher/src/data/launcher_data.dart';
 import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
 
 /// Directory of the committed placeholder artwork (tool/gen_mock_art.dart).
 String artDir() => '${Directory.current.path}/test/fixtures/art';
+
+/// Directory of the committed generic app icons (tool/gen_mock_icons.dart).
+String iconDir() => '${Directory.current.path}/test/fixtures/icons';
+
+/// The mock apps with local icons; Plex has none (the letter tile).
+List<App> appsWithIcons() => mockAppsWithIcons(iconDir(), without: {'plex'});
 
 /// The mock library with local artwork for a few games.
 List<Game> gamesWithArt() => mockGames(artDir: artDir());
@@ -36,7 +43,7 @@ class Harness {
     MockDaemon? mock,
     LauncherSettings settings = const LauncherSettings(),
     this.showServer = false,
-  }) : mock = mock ?? MockDaemon(games: gamesWithArt()),
+  }) : mock = mock ?? MockDaemon(apps: appsWithIcons(), games: gamesWithArt()),
        storage = MemorySettingsStorage(settings) {
     this.settings = SettingsController(storage, settings);
     data = buildData(this.mock);
@@ -58,9 +65,16 @@ class Harness {
   /// Pumps the app and lets everything settle.
   Future<void> pump(WidgetTester tester) async {
     await precacheArt(tester);
+    await precacheIcons(tester);
     await tester.pumpWidget(app);
     await tester.pumpAndSettle();
   }
+
+  /// Loads the icon files of the mock apps into [AppIconCache] before the first
+  /// frame (the fake-async test zone has no real file IO), so tiles paint
+  /// their icons at once.
+  Future<void> precacheIcons(WidgetTester tester) =>
+      loadIcons(tester, [for (final a in mock.apps) ?a.icon]);
 
   /// Decodes the artwork files of the mock library into the image cache
   /// before the first frame asks for them (file IO needs real async, which
@@ -86,6 +100,16 @@ class Harness {
     });
   }
 }
+
+/// Loads [paths] into the icon cache with real async (and again after
+/// [AppIconCache.invalidate], as `apps_changed` does).
+Future<void> loadIcons(WidgetTester tester, Iterable<String> paths) =>
+    tester.runAsync(() async {
+      AppIconCache.instance.debugForgetInFlight();
+      for (final p in paths) {
+        await AppIconCache.instance.load(p);
+      }
+    });
 
 /// Logical [size] at [dpr] (4K is 1920x1080 logical at 2.0).
 void setView(

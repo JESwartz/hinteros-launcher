@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show File;
 
 import 'daemon.dart';
 import 'errors.dart';
@@ -15,6 +16,28 @@ const mockApps = <App>[
   App(id: 'firefox', name: 'Firefox', kind: AppKind.native),
   App(id: 'plex', name: 'Plex', kind: AppKind.native),
 ];
+
+/// The default apps with local icons from [iconDir] (holding `<app-id>.png` or
+/// `.svg`, made by `tool/gen_mock_icons.dart`). Apps in [without] get none,
+/// like an app whose icon cannot be found or has not arrived yet.
+List<App> mockAppsWithIcons(String iconDir, {Set<String> without = const {}}) {
+  String? find(String id) {
+    for (final ext in ['png', 'svg']) {
+      if (File('$iconDir/$id.$ext').existsSync()) return '$iconDir/$id.$ext';
+    }
+    return null;
+  }
+
+  return [
+    for (final a in mockApps)
+      App(
+        id: a.id,
+        name: a.name,
+        kind: a.kind,
+        icon: without.contains(a.id) ? null : find(a.id),
+      ),
+  ];
+}
 
 /// A fake Steam library, sorted by name like the daemon does. With [artDir]
 /// (holding `<slug>_portrait.png` and `<slug>_header.png`, made by
@@ -505,6 +528,32 @@ class MockDaemon extends DaemonConnection {
   }
 
   /// The Steam library changed (a game finished updating, was installed...).
+  /// App [id] gets (or loses, with null) its icon: `apps_changed`, like the
+  /// daemon when a web icon finishes downloading.
+  void setAppIcon(String id, String? icon) {
+    final i = apps.indexWhere((a) => a.id == id);
+    if (i < 0) return;
+    final a = apps[i];
+    apps[i] = App(id: a.id, name: a.name, kind: a.kind, icon: icon);
+    emitRaw('apps_changed');
+  }
+
+  /// Dev key: the next app without an icon that has a fixture in [iconDir]
+  /// gets it. Returns its id, or null when all have one.
+  String? iconArrives(String iconDir) {
+    for (final a in apps) {
+      if (a.icon != null) continue;
+      for (final ext in ['png', 'svg']) {
+        final p = '$iconDir/${a.id}.$ext';
+        if (File(p).existsSync()) {
+          setAppIcon(a.id, p);
+          return a.id;
+        }
+      }
+    }
+    return null;
+  }
+
   void setGames(List<Game> games) {
     _games = List.of(games);
     emitRaw('games_changed');
