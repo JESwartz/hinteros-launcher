@@ -67,8 +67,13 @@ class _NavFocusableState extends State<NavFocusable> {
 
   @override
   void dispose() {
-    widget.region.unregisterSelect(widget.rowKey, widget.col);
-    widget.region.registerContext(widget.rowKey, widget.col, null);
+    widget.region.releaseSelect(widget.rowKey, widget.col, widget.onSelect);
+    widget.region.registerContext(
+      widget.rowKey,
+      widget.col,
+      null,
+      replacing: widget.onContext,
+    );
     super.dispose();
   }
 

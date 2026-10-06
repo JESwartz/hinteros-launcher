@@ -365,21 +365,49 @@ class _LauncherShellState extends State<LauncherShell> {
     }
   }
 
-  /// Banner "See update": Settings, on the Updates entry.
-  void _openUpdates() {
-    _setSection(Section.settings);
-    _settingsList.model.goTo(settingsEntryIds.indexOf('updates'), 0);
-    _settingsList.changed();
+  /// Goes to [section] from a button of another one. The button disappears
+  /// with its section and Flutter would hand focus to a tab (which switches
+  /// the section back), so focus goes to the right tab first, and into the
+  /// content once it exists.
+  void _openSection(
+    Section section,
+    NavRegion content, {
+    VoidCallback? prepare,
+  }) {
+    _pendingPrepare = prepare;
+    _setSection(section);
     _tabs.changed();
-    _nav.focusRegion(_settingsList);
+    _nav.focusRegion(_tabs);
+    _pendingContentFocus = content;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _contentReady());
   }
 
-  /// The Store tab (the Games tab's "install Steam" prompt leads here).
-  void _openStore() {
-    _setSection(Section.store);
-    _tabs.changed();
-    _nav.focusRegion(_store);
+  NavRegion? _pendingContentFocus;
+  VoidCallback? _pendingPrepare;
+
+  /// The content of a section opened by [_openSection] has rows (also called
+  /// by screens that fill their rows asynchronously).
+  void _contentReady() {
+    final c = _pendingContentFocus;
+    if (c == null || !mounted || !c.hasItems) return;
+    _pendingContentFocus = null;
+    _pendingPrepare?.call();
+    _pendingPrepare = null;
+    if (_contentOf(_section) == c) _nav.focusRegion(c);
   }
+
+  /// Banner "See update": Settings, on the Updates entry.
+  void _openUpdates() => _openSection(
+    Section.settings,
+    _settingsList,
+    prepare: () {
+      _settingsList.model.goTo(settingsEntryIds.indexOf('updates'), 0);
+      _settingsList.changed();
+    },
+  );
+
+  /// The Store tab (the Games tab's "install Steam" prompt leads here).
+  void _openStore() => _openSection(Section.store, _store);
 
   /// Switches the visible section (tab focus, L1/R1, Back, Home).
   void _setSection(Section s) {
@@ -485,6 +513,7 @@ class _LauncherShellState extends State<LauncherShell> {
       services: widget.services,
       cats: _store,
       grid: _storeGrid,
+      onPopulated: _contentReady,
     ),
     Section.apps => AppsScreen(data: widget.data, region: _apps),
     Section.settings => SettingsScreen(

@@ -30,11 +30,16 @@ class StoreScreen extends StatefulWidget {
     required this.services,
     required this.cats,
     required this.grid,
+    this.onPopulated,
   });
 
   final SystemServices services;
   final NavRegion cats;
   final NavRegion grid;
+
+  /// Called once the catalog is loaded and the rows are in the regions (the
+  /// shell then moves focus in, if it was asked to before they existed).
+  final VoidCallback? onPopulated;
 
   /// Id of the pseudo categories.
   static const featured = 'featured';
@@ -78,6 +83,9 @@ class _StoreScreenState extends State<StoreScreen> {
       final c = await _store.catalog();
       if (!mounted) return;
       setState(() => _catalog = c);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onPopulated?.call();
+      });
       for (final a in c) {
         unawaited(
           _store.resolveIcon(a).then((p) {

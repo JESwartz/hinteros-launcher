@@ -27,11 +27,11 @@ typedef ModalBuilder<T> = Widget Function(
 );
 
 class _Entry {
-  _Entry(this.id, this.handle, this.builder, this.completer, this.previous);
+  _Entry(this.id, this.region, this.build, this.completer, this.previous);
 
   final int id;
-  final ModalHandle<Object?> handle;
-  final Widget Function(BuildContext, ModalHandle<Object?>) builder;
+  final NavRegion region;
+  final Widget Function(BuildContext) build;
   final Completer<Object?> completer;
 
   /// The region that held focus before the modal opened.
@@ -53,7 +53,7 @@ class ModalController extends ChangeNotifier {
   int get depth => _stack.length;
 
   /// The region of the modal on top, if any.
-  NavRegion? get topRegion => _stack.isEmpty ? null : _stack.last.handle.region;
+  NavRegion? get topRegion => _stack.isEmpty ? null : _stack.last.region;
 
   /// Shows [builder] over everything, resolving with what the modal passes to
   /// [ModalHandle.close] (null when closed with Back).
@@ -63,15 +63,15 @@ class ModalController extends ChangeNotifier {
     nav.adopt(region);
     final completer = Completer<Object?>();
     late final _Entry entry;
-    final handle = ModalHandle<Object?>._(region, (r) => _close(entry, r));
+    final handle = ModalHandle<T>._(region, (r) => _close(entry, r));
     region.onBack = () {
       if (handle.canBack?.call() ?? true) handle.close();
       return true;
     };
     entry = _Entry(
       id,
-      handle,
-      (c, h) => builder(c, h as ModalHandle<T>),
+      region,
+      (c) => builder(c, handle),
       completer,
       nav.active,
     );
@@ -89,12 +89,12 @@ class ModalController extends ChangeNotifier {
     if (!_stack.remove(e) || e.completer.isCompleted) return;
     e.completer.complete(result);
     notifyListeners();
-    final next = _stack.isEmpty ? null : _stack.last.handle.region;
+    final next = _stack.isEmpty ? null : _stack.last.region;
     final back = next ?? e.previous;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (back != null && back.hasItems) nav.focusRegion(back);
       // The nodes are no longer in the tree after this frame.
-      e.handle.region.dispose();
+      e.region.dispose();
     });
   }
 
@@ -141,10 +141,7 @@ class ModalHost extends StatelessWidget {
             builder: (context, _) => Stack(
               children: [
                 for (final e in controller._stack)
-                  Positioned.fill(
-                    key: ValueKey(e.id),
-                    child: e.builder(context, e.handle),
-                  ),
+                  Positioned.fill(key: ValueKey(e.id), child: e.build(context)),
               ],
             ),
           ),

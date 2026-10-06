@@ -89,11 +89,27 @@ class NavRegion extends ChangeNotifier {
   void unregisterSelect(String rowKey, int col) =>
       _selects.remove('$rowKey:$col');
 
+  /// Removes the registration only if it is still [owner]'s: a section
+  /// swapped for another with the same row keys registers its items before
+  /// the old ones are disposed, and must not lose them.
+  void releaseSelect(String rowKey, int col, VoidCallback? owner) {
+    final k = '$rowKey:$col';
+    if (_selects.containsKey(k) && _selects[k] == owner) _selects.remove(k);
+  }
+
   /// Registered by items that have a context action (the `context` button,
   /// Y/Triangle): what it does on them.
-  void registerContext(String rowKey, int col, VoidCallback? onContext) {
+  void registerContext(
+    String rowKey,
+    int col,
+    VoidCallback? onContext, {
+    VoidCallback? replacing,
+  }) {
     if (onContext == null) {
-      _contexts.remove('$rowKey:$col');
+      final k = '$rowKey:$col';
+      if (replacing == null || _contexts[k] == replacing) {
+        _contexts.remove(k);
+      }
     } else {
       _contexts['$rowKey:$col'] = onContext;
     }
