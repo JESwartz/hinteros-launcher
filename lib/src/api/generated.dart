@@ -1,13 +1,13 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.5).
+// Source: schema/session-api.json (session API 0.6).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
-// ignore_for_file: unnecessary_this, unnecessary_cast
+// ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
 
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.5';
+const apiVersion = '0.6';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -28,6 +28,21 @@ const apiMethodNames = <String>[
   'keys.type',
   'keys.key',
   'keys.action',
+  'system.info',
+  'system.settings.get',
+  'system.settings.set',
+  'system.ssh.set',
+  'system.generations.list',
+  'system.rebuild',
+  'system.hardware.redetect',
+  'system.rollback',
+  'system.update.check',
+  'system.update.apply',
+  'system.channel.set',
+  'system.base.set',
+  'system.jobs.get',
+  'system.jobs.list',
+  'system.jobs.cancel',
 ];
 
 /// Event names in the schema.
@@ -41,6 +56,9 @@ const apiEventNames = <String>[
   'apps_changed',
   'steam_attention',
   'osk_visibility',
+  'job_started',
+  'job_progress',
+  'job_finished',
 ];
 
 /// Error name to JSON-RPC code.
@@ -58,6 +76,18 @@ const apiErrorCodesByName = <String, int>{
   'steam_no_windows': 2003,
   'keyboard_unavailable': 2004,
   'osk_unavailable': 2005,
+  'permission_denied': 3002,
+  'job_failed': 3003,
+  'insufficient_resources': 3004,
+  'job_busy': 3005,
+  'rate_limited': 3006,
+  'state_conflict': 3007,
+  'update_unreachable': 3008,
+  'update_verification_failed': 3009,
+  'not_found': 3010,
+  'needs_acknowledgement': 3011,
+  'authentication_required': 3012,
+  'system_unavailable': 3001,
 };
 
 /// JSON-RPC error codes of the session API.
@@ -71,7 +101,7 @@ abstract final class ApiErrorCode {
   /// Unknown method (or not available in the negotiated version).
   static const methodNotFound = -32601;
 
-  /// Params do not match the method's params schema.
+  /// Params do not match the method's params schema (unknown fields included), or fail a semantic check. data names the field when known.
   static const invalidParams = -32602;
 
   /// Unexpected server-side failure.
@@ -100,6 +130,42 @@ abstract final class ApiErrorCode {
 
   /// osk.show: the on-screen keyboard is disabled in the daemon's config.
   static const oskUnavailable = 2005;
+
+  /// Not allowed: the caller does not own seat0's active session (seat), polkit said no (polkit), or the peer cannot be identified safely (peer: no SO_PEERPIDFD, or the process is gone).
+  static const permissionDenied = 3002;
+
+  /// Only in job_finished.error and jobs.get: the job failed (or was cancelled) at stage; log_hint is the last relevant log line.
+  static const jobFailed = 3003;
+
+  /// Not enough memory or free disk space for a rebuild.
+  static const insufficientResources = 3004;
+
+  /// Another job runs (only one at a time), or the job is past the point of cancelling.
+  static const jobBusy = 3005;
+
+  /// Too many mutating requests from this user (10 per minute, burst 3).
+  static const rateLimited = 3006;
+
+  /// Stale settings revision, or update.apply's rev is not the last verified check result.
+  static const stateConflict = 3007;
+
+  /// The update server cannot be reached (the 'home lab unreachable' screen).
+  static const updateUnreachable = 3008;
+
+  /// The channel tip is unsigned, signed by an unknown signer, or does not descend from the locked revision.
+  static const updateVerificationFailed = 3009;
+
+  /// Unknown generation or job.
+  static const notFound = 3010;
+
+  /// A downgrading channel or base switch without acknowledge_downgrade: true.
+  static const needsAcknowledgement = 3011;
+
+  /// polkit would allow the action only after interactive authentication (auth_admin: the admin password). No agent is involved yet: the call is refused, and the launcher can ask for the password once one exists.
+  static const authenticationRequired = 3012;
+
+  /// A relayed method could not reach the system service: it is down (reason down) or speaks another system API version (reason version_mismatch, e.g. after a switch until the session restarts). The session API keeps working.
+  static const systemUnavailable = 3001;
 }
 
 /// MAJOR.MINOR
@@ -113,6 +179,17 @@ typedef FocusTarget = String;
 
 /// Absolute path of an image file in Steam's library cache (readable by the session user), or null if Steam has not cached it.
 typedef ArtworkPath = String;
+
+/// Server-issued job id.
+typedef JobId = String;
+
+/// A full git commit id.
+typedef Rev = String;
+
+/// SHA-256 of state.json, hex.
+typedef Revision = String;
+typedef Fingerprint = String;
+typedef PolkitAction = String;
 
 /// Name and build version of one side of the connection (informational, for logs).
 class Peer {
@@ -147,6 +224,9 @@ enum EventName {
   appsChanged('apps_changed'),
   steamAttention('steam_attention'),
   oskVisibility('osk_visibility'),
+  jobStarted('job_started'),
+  jobProgress('job_progress'),
+  jobFinished('job_finished'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -693,6 +773,471 @@ class SteamWindow {
 
   @override
   String toString() => 'SteamWindow(${jsonEncode(toJson())})';
+}
+
+enum Channel {
+  stable('stable'),
+  beta('beta'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const Channel(this.value);
+  final String value;
+
+  factory Channel.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+enum Base {
+  stable('stable'),
+  unstable('unstable'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const Base(this.value);
+  final String value;
+
+  factory Base.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+enum JobKind {
+  settings('settings'),
+  ssh('ssh'),
+  rebuild('rebuild'),
+  hardwareRedetect('hardware_redetect'),
+  updateCheck('update_check'),
+  updateApply('update_apply'),
+  rollback('rollback'),
+  channel('channel'),
+  base('base'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const JobKind(this.value);
+  final String value;
+
+  factory JobKind.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+enum JobState {
+  running('running'),
+  succeeded('succeeded'),
+  failed('failed'),
+  cancelled('cancelled'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const JobState(this.value);
+  final String value;
+
+  factory JobState.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+enum Stage {
+  preparing('preparing'),
+  fetching('fetching'),
+  verifying('verifying'),
+  evaluating('evaluating'),
+  downloading('downloading'),
+  building('building'),
+  activating('activating'),
+  finishing('finishing'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const Stage(this.value);
+  final String value;
+
+  factory Stage.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+enum Severity {
+  low('low'),
+  medium('medium'),
+  high('high'),
+  critical('critical'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const Severity(this.value);
+  final String value;
+
+  factory Severity.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+/// A started job, or null when there was nothing to do.
+class JobRef {
+  const JobRef({required this.jobId});
+
+  final String? jobId;
+
+  factory JobRef.fromJson(Map<String, dynamic> json) =>
+      JobRef(jobId: json['job_id'] == null ? null : json['job_id'] as String);
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is JobRef && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'JobRef(${jsonEncode(toJson())})';
+}
+
+class Generation {
+  const Generation({
+    required this.generation,
+    required this.date,
+    required this.rev,
+    required this.current,
+    required this.booted,
+  });
+
+  final int generation;
+
+  /// Created (Unix time, seconds).
+  final int date;
+
+  /// System repo revision in its config snapshot, if any.
+  final String? rev;
+  final bool current;
+  final bool booted;
+
+  factory Generation.fromJson(Map<String, dynamic> json) => Generation(
+    generation: json['generation'] as int,
+    date: json['date'] as int,
+    rev: json['rev'] == null ? null : json['rev'] as String,
+    current: json['current'] as bool,
+    booted: json['booted'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'generation': generation,
+    'date': date,
+    'rev': rev,
+    'current': current,
+    'booted': booted,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is Generation && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'Generation(${jsonEncode(toJson())})';
+}
+
+class AvailableUpdate {
+  const AvailableUpdate({
+    required this.rev,
+    required this.date,
+    required this.summary,
+    required this.signer,
+    required this.security,
+    required this.commits,
+  });
+
+  /// A full git commit id.
+  final String rev;
+
+  /// Commit time (Unix time, seconds).
+  final int date;
+
+  /// Subject line of rev.
+  final String summary;
+
+  /// Allowed-signers principal that signed rev.
+  final String signer;
+
+  /// Highest Security: trailer severity among the new commits; non-null means the launcher shows the full-screen security notice.
+  final Severity? security;
+  final int commits;
+
+  factory AvailableUpdate.fromJson(Map<String, dynamic> json) =>
+      AvailableUpdate(
+        rev: json['rev'] as String,
+        date: json['date'] as int,
+        summary: json['summary'] as String,
+        signer: json['signer'] as String,
+        security: json['security'] == null
+            ? null
+            : Severity.fromJson(json['security'] as String),
+        commits: json['commits'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'rev': rev,
+    'date': date,
+    'summary': summary,
+    'signer': signer,
+    'security': security == null ? null : security!.toJson(),
+    'commits': commits,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AvailableUpdate &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AvailableUpdate(${jsonEncode(toJson())})';
+}
+
+class UpdateCheckResult {
+  const UpdateCheckResult({
+    required this.channel,
+    required this.currentRev,
+    required this.available,
+    required this.checkedAt,
+  });
+
+  final Channel channel;
+  final String? currentRev;
+  final AvailableUpdate? available;
+  final int checkedAt;
+
+  factory UpdateCheckResult.fromJson(Map<String, dynamic> json) =>
+      UpdateCheckResult(
+        channel: Channel.fromJson(json['channel'] as String),
+        currentRev: json['current_rev'] == null
+            ? null
+            : json['current_rev'] as String,
+        available: json['available'] == null
+            ? null
+            : AvailableUpdate.fromJson(
+                (json['available'] as Map).cast<String, dynamic>(),
+              ),
+        checkedAt: json['checked_at'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'channel': channel.toJson(),
+    'current_rev': currentRev,
+    'available': available == null ? null : available!.toJson(),
+    'checked_at': checkedAt,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is UpdateCheckResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'UpdateCheckResult(${jsonEncode(toJson())})';
+}
+
+class AppliedResult {
+  const AppliedResult({required this.generation, required this.rev});
+
+  final int? generation;
+  final String? rev;
+
+  factory AppliedResult.fromJson(Map<String, dynamic> json) => AppliedResult(
+    generation: json['generation'] == null ? null : json['generation'] as int,
+    rev: json['rev'] == null ? null : json['rev'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {'generation': generation, 'rev': rev};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppliedResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppliedResult(${jsonEncode(toJson())})';
+}
+
+class ProgressDetail {
+  const ProgressDetail({
+    this.pathsDone,
+    this.pathsTotal,
+    this.bytesDone,
+    this.bytesTotal,
+  });
+
+  final int? pathsDone;
+  final int? pathsTotal;
+  final int? bytesDone;
+  final int? bytesTotal;
+
+  factory ProgressDetail.fromJson(Map<String, dynamic> json) => ProgressDetail(
+    pathsDone: json['paths_done'] == null ? null : json['paths_done'] as int,
+    pathsTotal: json['paths_total'] == null ? null : json['paths_total'] as int,
+    bytesDone: json['bytes_done'] == null ? null : json['bytes_done'] as int,
+    bytesTotal: json['bytes_total'] == null ? null : json['bytes_total'] as int,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'paths_done': ?pathsDone,
+    'paths_total': ?pathsTotal,
+    'bytes_done': ?bytesDone,
+    'bytes_total': ?bytesTotal,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ProgressDetail &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'ProgressDetail(${jsonEncode(toJson())})';
+}
+
+/// A JSON-RPC error object (codes from this document's errors).
+class ErrorObject {
+  const ErrorObject({required this.code, required this.message, this.data});
+
+  final int code;
+  final String message;
+  final Object? data;
+
+  factory ErrorObject.fromJson(Map<String, dynamic> json) => ErrorObject(
+    code: json['code'] as int,
+    message: json['message'] as String,
+    data: json['data'] == null ? null : json['data'],
+  );
+
+  Map<String, dynamic> toJson() => {
+    'code': code,
+    'message': message,
+    'data': ?data,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ErrorObject &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'ErrorObject(${jsonEncode(toJson())})';
+}
+
+class Job {
+  const Job({
+    required this.jobId,
+    required this.kind,
+    required this.uid,
+    required this.state,
+    required this.stage,
+    required this.createdAt,
+    required this.finishedAt,
+    required this.error,
+    required this.result,
+    required this.sessionRestartRequired,
+  });
+
+  /// Server-issued job id.
+  final String jobId;
+  final JobKind kind;
+
+  /// Who started it.
+  final int uid;
+  final JobState state;
+
+  /// Current or last reached stage.
+  final Stage? stage;
+  final int createdAt;
+  final int? finishedAt;
+  final ErrorObject? error;
+  final Object? result;
+  final bool sessionRestartRequired;
+
+  factory Job.fromJson(Map<String, dynamic> json) => Job(
+    jobId: json['job_id'] as String,
+    kind: JobKind.fromJson(json['kind'] as String),
+    uid: json['uid'] as int,
+    state: JobState.fromJson(json['state'] as String),
+    stage: json['stage'] == null
+        ? null
+        : Stage.fromJson(json['stage'] as String),
+    createdAt: json['created_at'] as int,
+    finishedAt: json['finished_at'] == null ? null : json['finished_at'] as int,
+    error: json['error'] == null
+        ? null
+        : ErrorObject.fromJson((json['error'] as Map).cast<String, dynamic>()),
+    result: json['result'] == null ? null : json['result'],
+    sessionRestartRequired: json['session_restart_required'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'job_id': jobId,
+    'kind': kind.toJson(),
+    'uid': uid,
+    'state': state.toJson(),
+    'stage': stage == null ? null : stage!.toJson(),
+    'created_at': createdAt,
+    'finished_at': finishedAt,
+    'error': error == null ? null : error!.toJson(),
+    'result': result,
+    'session_restart_required': sessionRestartRequired,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is Job && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'Job(${jsonEncode(toJson())})';
 }
 
 class HelloParams {
@@ -1533,6 +2078,921 @@ class KeysActionResult {
   String toString() => 'KeysActionResult(${jsonEncode(toJson())})';
 }
 
+class SystemInfoParams {
+  const SystemInfoParams();
+
+  factory SystemInfoParams.fromJson(Map<String, dynamic> json) =>
+      SystemInfoParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemInfoParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemInfoParams(${jsonEncode(toJson())})';
+}
+
+class SystemInfoResultSsh {
+  const SystemInfoResultSsh({
+    required this.enabled,
+    required this.hostKeyFingerprints,
+  });
+
+  final bool enabled;
+
+  /// SHA256 fingerprints of the SSH host keys, for checking the first connection.
+  final List<String> hostKeyFingerprints;
+
+  factory SystemInfoResultSsh.fromJson(Map<String, dynamic> json) =>
+      SystemInfoResultSsh(
+        enabled: json['enabled'] as bool,
+        hostKeyFingerprints: (json['host_key_fingerprints'] as List)
+            .map((x) => x as String)
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'enabled': enabled,
+    'host_key_fingerprints': hostKeyFingerprints,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemInfoResultSsh &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemInfoResultSsh(${jsonEncode(toJson())})';
+}
+
+class SystemInfoResult {
+  const SystemInfoResult({
+    required this.version,
+    required this.channel,
+    required this.base,
+    required this.rev,
+    required this.generation,
+    required this.hostname,
+    required this.dev,
+    required this.ssh,
+  });
+
+  /// HinterOS release of the running generation, or 'unknown'.
+  final String version;
+
+  /// Channel /etc/hinteros follows; null without a locked channel (the dev box).
+  final Channel? channel;
+  final Base base;
+
+  /// Locked system repo revision.
+  final String? rev;
+
+  /// Current system generation.
+  final int? generation;
+  final String hostname;
+
+  /// A dev build (hinteros.dev.enable): the launcher shows a DEV badge.
+  final bool dev;
+  final SystemInfoResultSsh ssh;
+
+  factory SystemInfoResult.fromJson(Map<String, dynamic> json) =>
+      SystemInfoResult(
+        version: json['version'] as String,
+        channel: json['channel'] == null
+            ? null
+            : Channel.fromJson(json['channel'] as String),
+        base: Base.fromJson(json['base'] as String),
+        rev: json['rev'] == null ? null : json['rev'] as String,
+        generation: json['generation'] == null
+            ? null
+            : json['generation'] as int,
+        hostname: json['hostname'] as String,
+        dev: json['dev'] as bool,
+        ssh: SystemInfoResultSsh.fromJson(
+          (json['ssh'] as Map).cast<String, dynamic>(),
+        ),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'version': version,
+    'channel': channel == null ? null : channel!.toJson(),
+    'base': base.toJson(),
+    'rev': rev,
+    'generation': generation,
+    'hostname': hostname,
+    'dev': dev,
+    'ssh': ssh.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemInfoResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemInfoResult(${jsonEncode(toJson())})';
+}
+
+class SystemSettingsGetParams {
+  const SystemSettingsGetParams();
+
+  factory SystemSettingsGetParams.fromJson(Map<String, dynamic> json) =>
+      SystemSettingsGetParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemSettingsGetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemSettingsGetParams(${jsonEncode(toJson())})';
+}
+
+class SystemSettingsGetResultSettingsSsh {
+  const SystemSettingsGetResultSettingsSsh({required this.enabled});
+
+  /// sshd runs; login is the admin account with its password.
+  final bool enabled;
+
+  factory SystemSettingsGetResultSettingsSsh.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemSettingsGetResultSettingsSsh(enabled: json['enabled'] as bool);
+
+  Map<String, dynamic> toJson() => {'enabled': enabled};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemSettingsGetResultSettingsSsh &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemSettingsGetResultSettingsSsh(${jsonEncode(toJson())})';
+}
+
+class SystemSettingsGetResultSettings {
+  const SystemSettingsGetResultSettings({
+    required this.base,
+    required this.ssh,
+  });
+
+  final Base base;
+  final SystemSettingsGetResultSettingsSsh ssh;
+
+  factory SystemSettingsGetResultSettings.fromJson(Map<String, dynamic> json) =>
+      SystemSettingsGetResultSettings(
+        base: Base.fromJson(json['base'] as String),
+        ssh: SystemSettingsGetResultSettingsSsh.fromJson(
+          (json['ssh'] as Map).cast<String, dynamic>(),
+        ),
+      );
+
+  Map<String, dynamic> toJson() => {'base': base.toJson(), 'ssh': ssh.toJson()};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemSettingsGetResultSettings &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemSettingsGetResultSettings(${jsonEncode(toJson())})';
+}
+
+class SystemSettingsGetResult {
+  const SystemSettingsGetResult({
+    required this.revision,
+    required this.settings,
+  });
+
+  /// SHA-256 of state.json, hex.
+  final String revision;
+  final SystemSettingsGetResultSettings settings;
+
+  factory SystemSettingsGetResult.fromJson(Map<String, dynamic> json) =>
+      SystemSettingsGetResult(
+        revision: json['revision'] as String,
+        settings: SystemSettingsGetResultSettings.fromJson(
+          (json['settings'] as Map).cast<String, dynamic>(),
+        ),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'revision': revision,
+    'settings': settings.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemSettingsGetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemSettingsGetResult(${jsonEncode(toJson())})';
+}
+
+class SystemSettingsSetParamsChanges {
+  const SystemSettingsSetParamsChanges();
+
+  factory SystemSettingsSetParamsChanges.fromJson(Map<String, dynamic> json) =>
+      SystemSettingsSetParamsChanges();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemSettingsSetParamsChanges &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemSettingsSetParamsChanges(${jsonEncode(toJson())})';
+}
+
+class SystemSettingsSetParams {
+  const SystemSettingsSetParams({
+    required this.revision,
+    required this.changes,
+  });
+
+  /// SHA-256 of state.json, hex.
+  final String revision;
+  final SystemSettingsSetParamsChanges changes;
+
+  factory SystemSettingsSetParams.fromJson(Map<String, dynamic> json) =>
+      SystemSettingsSetParams(
+        revision: json['revision'] as String,
+        changes: SystemSettingsSetParamsChanges.fromJson(
+          (json['changes'] as Map).cast<String, dynamic>(),
+        ),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'revision': revision,
+    'changes': changes.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemSettingsSetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemSettingsSetParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemSettingsSetResult {
+  const SystemSettingsSetResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemSettingsSetResult.fromJson(Map<String, dynamic> json) =>
+      SystemSettingsSetResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemSettingsSetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemSettingsSetResult(${jsonEncode(toJson())})';
+}
+
+class SystemSshSetParams {
+  const SystemSshSetParams({required this.enabled});
+
+  final bool enabled;
+
+  factory SystemSshSetParams.fromJson(Map<String, dynamic> json) =>
+      SystemSshSetParams(enabled: json['enabled'] as bool);
+
+  Map<String, dynamic> toJson() => {'enabled': enabled};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemSshSetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemSshSetParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemSshSetResult {
+  const SystemSshSetResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemSshSetResult.fromJson(Map<String, dynamic> json) =>
+      SystemSshSetResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemSshSetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemSshSetResult(${jsonEncode(toJson())})';
+}
+
+class SystemGenerationsListParams {
+  const SystemGenerationsListParams();
+
+  factory SystemGenerationsListParams.fromJson(Map<String, dynamic> json) =>
+      SystemGenerationsListParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemGenerationsListParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemGenerationsListParams(${jsonEncode(toJson())})';
+}
+
+class SystemGenerationsListResult {
+  const SystemGenerationsListResult({required this.generations});
+
+  final List<Generation> generations;
+
+  factory SystemGenerationsListResult.fromJson(Map<String, dynamic> json) =>
+      SystemGenerationsListResult(
+        generations: (json['generations'] as List)
+            .map((x) => Generation.fromJson((x as Map).cast<String, dynamic>()))
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'generations': generations.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemGenerationsListResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemGenerationsListResult(${jsonEncode(toJson())})';
+}
+
+class SystemRebuildParams {
+  const SystemRebuildParams();
+
+  factory SystemRebuildParams.fromJson(Map<String, dynamic> json) =>
+      SystemRebuildParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemRebuildParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemRebuildParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemRebuildResult {
+  const SystemRebuildResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemRebuildResult.fromJson(Map<String, dynamic> json) =>
+      SystemRebuildResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemRebuildResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemRebuildResult(${jsonEncode(toJson())})';
+}
+
+class SystemHardwareRedetectParams {
+  const SystemHardwareRedetectParams();
+
+  factory SystemHardwareRedetectParams.fromJson(Map<String, dynamic> json) =>
+      SystemHardwareRedetectParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemHardwareRedetectParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemHardwareRedetectParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemHardwareRedetectResult {
+  const SystemHardwareRedetectResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemHardwareRedetectResult.fromJson(Map<String, dynamic> json) =>
+      SystemHardwareRedetectResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemHardwareRedetectResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemHardwareRedetectResult(${jsonEncode(toJson())})';
+}
+
+class SystemRollbackParams {
+  const SystemRollbackParams({this.generation});
+
+  final int? generation;
+
+  factory SystemRollbackParams.fromJson(Map<String, dynamic> json) =>
+      SystemRollbackParams(
+        generation: json['generation'] == null
+            ? null
+            : json['generation'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {'generation': ?generation};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemRollbackParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemRollbackParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemRollbackResult {
+  const SystemRollbackResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemRollbackResult.fromJson(Map<String, dynamic> json) =>
+      SystemRollbackResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemRollbackResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemRollbackResult(${jsonEncode(toJson())})';
+}
+
+class SystemUpdateCheckParams {
+  const SystemUpdateCheckParams();
+
+  factory SystemUpdateCheckParams.fromJson(Map<String, dynamic> json) =>
+      SystemUpdateCheckParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemUpdateCheckParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemUpdateCheckParams(${jsonEncode(toJson())})';
+}
+
+class SystemUpdateCheckResult {
+  const SystemUpdateCheckResult({required this.jobId, required this.result});
+
+  final String? jobId;
+  final UpdateCheckResult? result;
+
+  factory SystemUpdateCheckResult.fromJson(Map<String, dynamic> json) =>
+      SystemUpdateCheckResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+        result: json['result'] == null
+            ? null
+            : UpdateCheckResult.fromJson(
+                (json['result'] as Map).cast<String, dynamic>(),
+              ),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'job_id': jobId,
+    'result': result == null ? null : result!.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemUpdateCheckResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemUpdateCheckResult(${jsonEncode(toJson())})';
+}
+
+class SystemUpdateApplyParams {
+  const SystemUpdateApplyParams({required this.rev});
+
+  /// A full git commit id.
+  final String rev;
+
+  factory SystemUpdateApplyParams.fromJson(Map<String, dynamic> json) =>
+      SystemUpdateApplyParams(rev: json['rev'] as String);
+
+  Map<String, dynamic> toJson() => {'rev': rev};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemUpdateApplyParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemUpdateApplyParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemUpdateApplyResult {
+  const SystemUpdateApplyResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemUpdateApplyResult.fromJson(Map<String, dynamic> json) =>
+      SystemUpdateApplyResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemUpdateApplyResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemUpdateApplyResult(${jsonEncode(toJson())})';
+}
+
+class SystemChannelSetParams {
+  const SystemChannelSetParams({
+    required this.channel,
+    this.acknowledgeDowngrade,
+  });
+
+  final Channel channel;
+  final bool? acknowledgeDowngrade;
+
+  factory SystemChannelSetParams.fromJson(Map<String, dynamic> json) =>
+      SystemChannelSetParams(
+        channel: Channel.fromJson(json['channel'] as String),
+        acknowledgeDowngrade: json['acknowledge_downgrade'] == null
+            ? null
+            : json['acknowledge_downgrade'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'channel': channel.toJson(),
+    'acknowledge_downgrade': ?acknowledgeDowngrade,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemChannelSetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemChannelSetParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemChannelSetResult {
+  const SystemChannelSetResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemChannelSetResult.fromJson(Map<String, dynamic> json) =>
+      SystemChannelSetResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemChannelSetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemChannelSetResult(${jsonEncode(toJson())})';
+}
+
+class SystemBaseSetParams {
+  const SystemBaseSetParams({required this.base, this.acknowledgeDowngrade});
+
+  final Base base;
+  final bool? acknowledgeDowngrade;
+
+  factory SystemBaseSetParams.fromJson(Map<String, dynamic> json) =>
+      SystemBaseSetParams(
+        base: Base.fromJson(json['base'] as String),
+        acknowledgeDowngrade: json['acknowledge_downgrade'] == null
+            ? null
+            : json['acknowledge_downgrade'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'base': base.toJson(),
+    'acknowledge_downgrade': ?acknowledgeDowngrade,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemBaseSetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemBaseSetParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemBaseSetResult {
+  const SystemBaseSetResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemBaseSetResult.fromJson(Map<String, dynamic> json) =>
+      SystemBaseSetResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemBaseSetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemBaseSetResult(${jsonEncode(toJson())})';
+}
+
+class SystemJobsGetParams {
+  const SystemJobsGetParams({required this.jobId});
+
+  /// Server-issued job id.
+  final String jobId;
+
+  factory SystemJobsGetParams.fromJson(Map<String, dynamic> json) =>
+      SystemJobsGetParams(jobId: json['job_id'] as String);
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemJobsGetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemJobsGetParams(${jsonEncode(toJson())})';
+}
+
+class SystemJobsGetResult {
+  const SystemJobsGetResult({required this.job});
+
+  final Job job;
+
+  factory SystemJobsGetResult.fromJson(Map<String, dynamic> json) =>
+      SystemJobsGetResult(
+        job: Job.fromJson((json['job'] as Map).cast<String, dynamic>()),
+      );
+
+  Map<String, dynamic> toJson() => {'job': job.toJson()};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemJobsGetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemJobsGetResult(${jsonEncode(toJson())})';
+}
+
+class SystemJobsListParams {
+  const SystemJobsListParams();
+
+  factory SystemJobsListParams.fromJson(Map<String, dynamic> json) =>
+      SystemJobsListParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemJobsListParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemJobsListParams(${jsonEncode(toJson())})';
+}
+
+class SystemJobsListResult {
+  const SystemJobsListResult({required this.jobs});
+
+  final List<Job> jobs;
+
+  factory SystemJobsListResult.fromJson(Map<String, dynamic> json) =>
+      SystemJobsListResult(
+        jobs: (json['jobs'] as List)
+            .map((x) => Job.fromJson((x as Map).cast<String, dynamic>()))
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'jobs': jobs.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemJobsListResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemJobsListResult(${jsonEncode(toJson())})';
+}
+
+class SystemJobsCancelParams {
+  const SystemJobsCancelParams({required this.jobId});
+
+  /// Server-issued job id.
+  final String jobId;
+
+  factory SystemJobsCancelParams.fromJson(Map<String, dynamic> json) =>
+      SystemJobsCancelParams(jobId: json['job_id'] as String);
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemJobsCancelParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemJobsCancelParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemJobsCancelResult {
+  const SystemJobsCancelResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemJobsCancelResult.fromJson(Map<String, dynamic> json) =>
+      SystemJobsCancelResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemJobsCancelResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemJobsCancelResult(${jsonEncode(toJson())})';
+}
+
 /// The global Home button was pressed. The launcher brings itself to the front.
 final class HomePressedEvent extends SessionEvent {
   const HomePressedEvent();
@@ -1822,6 +3282,192 @@ final class OskVisibilityEvent extends SessionEvent {
   String toString() => 'OskVisibilityEvent(${jsonEncode(toJson())})';
 }
 
+/// Relayed from the system service. A job was started (by any caller).
+final class JobStartedEvent extends SessionEvent {
+  const JobStartedEvent({
+    required this.jobId,
+    required this.kind,
+    required this.uid,
+  });
+
+  /// Server-issued job id.
+  final String jobId;
+  final JobKind kind;
+  final int uid;
+
+  factory JobStartedEvent.fromJson(Map<String, dynamic> json) =>
+      JobStartedEvent(
+        jobId: json['job_id'] as String,
+        kind: JobKind.fromJson(json['kind'] as String),
+        uid: json['uid'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'job_id': jobId,
+    'kind': kind.toJson(),
+    'uid': uid,
+  };
+
+  @override
+  String get name => 'job_started';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is JobStartedEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'JobStartedEvent(${jsonEncode(toJson())})';
+}
+
+/// Relayed from the system service. A job reached a stage or made progress (at most 4 per second). percent only where meaningful (downloading).
+final class JobProgressEvent extends SessionEvent {
+  const JobProgressEvent({
+    required this.jobId,
+    required this.stage,
+    this.percent,
+    this.detail,
+  });
+
+  /// Server-issued job id.
+  final String jobId;
+  final Stage stage;
+  final int? percent;
+  final ProgressDetail? detail;
+
+  factory JobProgressEvent.fromJson(Map<String, dynamic> json) =>
+      JobProgressEvent(
+        jobId: json['job_id'] as String,
+        stage: Stage.fromJson(json['stage'] as String),
+        percent: json['percent'] == null ? null : json['percent'] as int,
+        detail: json['detail'] == null
+            ? null
+            : ProgressDetail.fromJson(
+                (json['detail'] as Map).cast<String, dynamic>(),
+              ),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'job_id': jobId,
+    'stage': stage.toJson(),
+    'percent': ?percent,
+    if (detail != null) 'detail': detail!.toJson(),
+  };
+
+  @override
+  String get name => 'job_progress';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is JobProgressEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'JobProgressEvent(${jsonEncode(toJson())})';
+}
+
+/// Relayed from the system service. A job ended. session_restart_required: the switch replaced the system service's API or the session daemon, so the launcher should offer a session restart.
+final class JobFinishedEvent extends SessionEvent {
+  const JobFinishedEvent({
+    required this.jobId,
+    required this.kind,
+    required this.ok,
+    this.error,
+    this.result,
+    required this.sessionRestartRequired,
+  });
+
+  /// Server-issued job id.
+  final String jobId;
+  final JobKind kind;
+  final bool ok;
+
+  /// A JSON-RPC error object (codes from this document's errors).
+  final ErrorObject? error;
+
+  /// update_check jobs: an UpdateCheckResult; jobs that change the system: an AppliedResult.
+  final Object? result;
+  final bool sessionRestartRequired;
+
+  factory JobFinishedEvent.fromJson(Map<String, dynamic> json) =>
+      JobFinishedEvent(
+        jobId: json['job_id'] as String,
+        kind: JobKind.fromJson(json['kind'] as String),
+        ok: json['ok'] as bool,
+        error: json['error'] == null
+            ? null
+            : ErrorObject.fromJson(
+                (json['error'] as Map).cast<String, dynamic>(),
+              ),
+        result: json['result'] == null ? null : json['result'],
+        sessionRestartRequired: json['session_restart_required'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'job_id': jobId,
+    'kind': kind.toJson(),
+    'ok': ok,
+    if (error != null) 'error': error!.toJson(),
+    'result': ?result,
+    'session_restart_required': sessionRestartRequired,
+  };
+
+  @override
+  String get name => 'job_finished';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is JobFinishedEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'JobFinishedEvent(${jsonEncode(toJson())})';
+}
+
+class InvalidParamsData {
+  const InvalidParamsData({required this.field, required this.reason});
+
+  final String field;
+  final String reason;
+
+  factory InvalidParamsData.fromJson(Map<String, dynamic> json) =>
+      InvalidParamsData(
+        field: json['field'] as String,
+        reason: json['reason'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'field': field, 'reason': reason};
+
+  @override
+  bool operator ==(Object other) =>
+      other is InvalidParamsData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'InvalidParamsData(${jsonEncode(toJson())})';
+}
+
 class VersionMismatchData {
   const VersionMismatchData({
     required this.clientApiVersion,
@@ -1855,6 +3501,358 @@ class VersionMismatchData {
 
   @override
   String toString() => 'VersionMismatchData(${jsonEncode(toJson())})';
+}
+
+enum PermissionDeniedDataReason {
+  seat('seat'),
+  polkit('polkit'),
+  peer('peer'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const PermissionDeniedDataReason(this.value);
+  final String value;
+
+  factory PermissionDeniedDataReason.fromJson(String value) =>
+      values.firstWhere(
+        (e) => e != unknown && e.value == value,
+        orElse: () => unknown,
+      );
+
+  String toJson() => value;
+}
+
+class PermissionDeniedData {
+  const PermissionDeniedData({required this.action, required this.reason});
+
+  final String action;
+  final PermissionDeniedDataReason reason;
+
+  factory PermissionDeniedData.fromJson(Map<String, dynamic> json) =>
+      PermissionDeniedData(
+        action: json['action'] as String,
+        reason: PermissionDeniedDataReason.fromJson(json['reason'] as String),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'action': action,
+    'reason': reason.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is PermissionDeniedData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'PermissionDeniedData(${jsonEncode(toJson())})';
+}
+
+class JobFailedData {
+  const JobFailedData({required this.stage, required this.logHint});
+
+  final Stage stage;
+  final String logHint;
+
+  factory JobFailedData.fromJson(Map<String, dynamic> json) => JobFailedData(
+    stage: Stage.fromJson(json['stage'] as String),
+    logHint: json['log_hint'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'stage': stage.toJson(),
+    'log_hint': logHint,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is JobFailedData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'JobFailedData(${jsonEncode(toJson())})';
+}
+
+enum InsufficientResourcesDataKind {
+  memory('memory'),
+  disk('disk'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const InsufficientResourcesDataKind(this.value);
+  final String value;
+
+  factory InsufficientResourcesDataKind.fromJson(String value) =>
+      values.firstWhere(
+        (e) => e != unknown && e.value == value,
+        orElse: () => unknown,
+      );
+
+  String toJson() => value;
+}
+
+class InsufficientResourcesData {
+  const InsufficientResourcesData({
+    required this.kind,
+    required this.neededBytes,
+    required this.availableBytes,
+  });
+
+  final InsufficientResourcesDataKind kind;
+  final int neededBytes;
+  final int availableBytes;
+
+  factory InsufficientResourcesData.fromJson(Map<String, dynamic> json) =>
+      InsufficientResourcesData(
+        kind: InsufficientResourcesDataKind.fromJson(json['kind'] as String),
+        neededBytes: json['needed_bytes'] as int,
+        availableBytes: json['available_bytes'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'kind': kind.toJson(),
+    'needed_bytes': neededBytes,
+    'available_bytes': availableBytes,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is InsufficientResourcesData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'InsufficientResourcesData(${jsonEncode(toJson())})';
+}
+
+class JobBusyData {
+  const JobBusyData({required this.jobId});
+
+  /// Server-issued job id.
+  final String jobId;
+
+  factory JobBusyData.fromJson(Map<String, dynamic> json) =>
+      JobBusyData(jobId: json['job_id'] as String);
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is JobBusyData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'JobBusyData(${jsonEncode(toJson())})';
+}
+
+class RateLimitedData {
+  const RateLimitedData({required this.retryAfterMs});
+
+  final int retryAfterMs;
+
+  factory RateLimitedData.fromJson(Map<String, dynamic> json) =>
+      RateLimitedData(retryAfterMs: json['retry_after_ms'] as int);
+
+  Map<String, dynamic> toJson() => {'retry_after_ms': retryAfterMs};
+
+  @override
+  bool operator ==(Object other) =>
+      other is RateLimitedData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'RateLimitedData(${jsonEncode(toJson())})';
+}
+
+enum StateConflictDataReason {
+  revision('revision'),
+  updateRev('update_rev'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const StateConflictDataReason(this.value);
+  final String value;
+
+  factory StateConflictDataReason.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+class StateConflictData {
+  const StateConflictData({required this.reason});
+
+  final StateConflictDataReason reason;
+
+  factory StateConflictData.fromJson(Map<String, dynamic> json) =>
+      StateConflictData(
+        reason: StateConflictDataReason.fromJson(json['reason'] as String),
+      );
+
+  Map<String, dynamic> toJson() => {'reason': reason.toJson()};
+
+  @override
+  bool operator ==(Object other) =>
+      other is StateConflictData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'StateConflictData(${jsonEncode(toJson())})';
+}
+
+class UpdateUnreachableData {
+  const UpdateUnreachableData({required this.host});
+
+  final String host;
+
+  factory UpdateUnreachableData.fromJson(Map<String, dynamic> json) =>
+      UpdateUnreachableData(host: json['host'] as String);
+
+  Map<String, dynamic> toJson() => {'host': host};
+
+  @override
+  bool operator ==(Object other) =>
+      other is UpdateUnreachableData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'UpdateUnreachableData(${jsonEncode(toJson())})';
+}
+
+enum UpdateVerificationFailedDataReason {
+  unsigned('unsigned'),
+  unknownSigner('unknown_signer'),
+  notFastForward('not_fast_forward'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const UpdateVerificationFailedDataReason(this.value);
+  final String value;
+
+  factory UpdateVerificationFailedDataReason.fromJson(String value) =>
+      values.firstWhere(
+        (e) => e != unknown && e.value == value,
+        orElse: () => unknown,
+      );
+
+  String toJson() => value;
+}
+
+class UpdateVerificationFailedData {
+  const UpdateVerificationFailedData({required this.reason});
+
+  final UpdateVerificationFailedDataReason reason;
+
+  factory UpdateVerificationFailedData.fromJson(Map<String, dynamic> json) =>
+      UpdateVerificationFailedData(
+        reason: UpdateVerificationFailedDataReason.fromJson(
+          json['reason'] as String,
+        ),
+      );
+
+  Map<String, dynamic> toJson() => {'reason': reason.toJson()};
+
+  @override
+  bool operator ==(Object other) =>
+      other is UpdateVerificationFailedData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'UpdateVerificationFailedData(${jsonEncode(toJson())})';
+}
+
+class AuthenticationRequiredData {
+  const AuthenticationRequiredData({required this.action});
+
+  final String action;
+
+  factory AuthenticationRequiredData.fromJson(Map<String, dynamic> json) =>
+      AuthenticationRequiredData(action: json['action'] as String);
+
+  Map<String, dynamic> toJson() => {'action': action};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AuthenticationRequiredData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AuthenticationRequiredData(${jsonEncode(toJson())})';
+}
+
+enum SystemUnavailableDataReason {
+  down('down'),
+  versionMismatch('version_mismatch'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const SystemUnavailableDataReason(this.value);
+  final String value;
+
+  factory SystemUnavailableDataReason.fromJson(String value) =>
+      values.firstWhere(
+        (e) => e != unknown && e.value == value,
+        orElse: () => unknown,
+      );
+
+  String toJson() => value;
+}
+
+class SystemUnavailableData {
+  const SystemUnavailableData({required this.reason});
+
+  final SystemUnavailableDataReason reason;
+
+  factory SystemUnavailableData.fromJson(Map<String, dynamic> json) =>
+      SystemUnavailableData(
+        reason: SystemUnavailableDataReason.fromJson(json['reason'] as String),
+      );
+
+  Map<String, dynamic> toJson() => {'reason': reason.toJson()};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemUnavailableData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemUnavailableData(${jsonEncode(toJson())})';
 }
 
 /// Typed calls for every method of the session API.
@@ -1973,6 +3971,115 @@ mixin SessionApiMethods {
   /// Sent as the matching key through the virtual keyboard; without it, backspace, delete, enter and the arrows fall back to gamescope's input method. Returns at once.
   Future<KeysActionResult> keysAction(KeysActionParams params) async =>
       KeysActionResult.fromJson(await rpc('keys.action', params.toJson()));
+
+  /// Relayed to the system service's system.info. What is running: release, channel, base, locked revision, generation, hostname, dev build, SSH state and host key fingerprints. Read-only.
+  Future<SystemInfoResult> systemInfo([
+    SystemInfoParams params = const SystemInfoParams(),
+  ]) async =>
+      SystemInfoResult.fromJson(await rpc('system.info', params.toJson()));
+
+  /// Relayed to the system service's settings.get. The user-settable view of state.json and its revision (a hash of the file). Read-only.
+  Future<SystemSettingsGetResult> systemSettingsGet([
+    SystemSettingsGetParams params = const SystemSettingsGetParams(),
+  ]) async => SystemSettingsGetResult.fromJson(
+    await rpc('system.settings.get', params.toJson()),
+  );
+
+  /// Relayed to the system service's settings.set. Change state.json settings (job). Action org.hinteros.system.settings.
+  ///
+  /// changes is a closed, typed object: each settable state.json field is a property here (bool, enum, bounded integer), never free-form. It has no properties in 0.2 (SSH, base and channel have their own methods), so any field is invalid_params with data {field, reason: unknown_field}, and an empty changes object returns job_id null. revision must equal settings.get's, else state_conflict. The service writes state.json from its own typed state, never the caller's bytes.
+  Future<SystemSettingsSetResult> systemSettingsSet(
+    SystemSettingsSetParams params,
+  ) async => SystemSettingsSetResult.fromJson(
+    await rpc('system.settings.set', params.toJson()),
+  );
+
+  /// Relayed to the system service's ssh.set. Turn SSH (sshd) on or off (job). Action org.hinteros.system.ssh, which needs the admin password (auth_admin).
+  ///
+  /// Login over SSH is the admin account with its password; the system repo configures sshd. polkit's default for this action is auth_admin, so without an authorization the call gets authentication_required (the launcher will ask for the admin password once a polkit agent exists). Returns job_id null if SSH already is in that state.
+  Future<SystemSshSetResult> systemSshSet(SystemSshSetParams params) async =>
+      SystemSshSetResult.fromJson(await rpc('system.ssh.set', params.toJson()));
+
+  /// Relayed to the system service's generations.list. System generations on disk (newest first). Read-only.
+  Future<SystemGenerationsListResult> systemGenerationsList([
+    SystemGenerationsListParams params = const SystemGenerationsListParams(),
+  ]) async => SystemGenerationsListResult.fromJson(
+    await rpc('system.generations.list', params.toJson()),
+  );
+
+  /// Relayed to the system service's rebuild. Re-apply the current /etc/hinteros (job): repair after a failed switch. Action org.hinteros.system.rebuild.
+  Future<SystemRebuildResult> systemRebuild([
+    SystemRebuildParams params = const SystemRebuildParams(),
+  ]) async => SystemRebuildResult.fromJson(
+    await rpc('system.rebuild', params.toJson()),
+  );
+
+  /// Relayed to the system service's hardware.redetect. Regenerate facter.json with nixos-facter and apply it (job). Action org.hinteros.system.rebuild.
+  Future<SystemHardwareRedetectResult> systemHardwareRedetect([
+    SystemHardwareRedetectParams params = const SystemHardwareRedetectParams(),
+  ]) async => SystemHardwareRedetectResult.fromJson(
+    await rpc('system.hardware.redetect', params.toJson()),
+  );
+
+  /// Relayed to the system service's rollback. Switch to an earlier generation (default: the one before the current), then restore /etc/hinteros from its snapshot (job). Action org.hinteros.system.rollback.
+  Future<SystemRollbackResult> systemRollback([
+    SystemRollbackParams params = const SystemRollbackParams(),
+  ]) async => SystemRollbackResult.fromJson(
+    await rpc('system.rollback', params.toJson()),
+  );
+
+  /// Relayed to the system service's update.check. Look for a newer signed revision of the channel (job), or, within 60 s of the last check, return that result without a job. Action org.hinteros.system.update.check.
+  ///
+  /// The job lists the channel branch (git ls-remote of the URL from the running generation's channel table), fetches it into a root-owned bare repo, verifies the tip's SSH signature against the allowed signers shipped in the running generation, requires it to descend from the locked revision, and reads the highest Security: &lt;low|medium|high|critical&gt; trailer among the new commits. The job's result is an UpdateCheckResult; failures are job_failed, update_unreachable or update_verification_failed in job_finished.error.
+  Future<SystemUpdateCheckResult> systemUpdateCheck([
+    SystemUpdateCheckParams params = const SystemUpdateCheckParams(),
+  ]) async => SystemUpdateCheckResult.fromJson(
+    await rpc('system.update.check', params.toJson()),
+  );
+
+  /// Relayed to the system service's update.apply. Install the revision found by the last update.check (job). Action org.hinteros.system.update.apply.
+  ///
+  /// rev must equal the last verified check result's available.rev for the current channel and locked revision, else state_conflict. The job re-verifies it, locks the hinteros input to ?rev=&lt;rev&gt; (never re-fetching the branch) and runs the apply flow.
+  Future<SystemUpdateApplyResult> systemUpdateApply(
+    SystemUpdateApplyParams params,
+  ) async => SystemUpdateApplyResult.fromJson(
+    await rpc('system.update.apply', params.toJson()),
+  );
+
+  /// Relayed to the system service's channel.set. Follow another channel (job). Action org.hinteros.system.channel.
+  ///
+  /// The URL comes from the running generation's channel table, never from params. The target tip must be signed by an allowed signer. Moving from beta to stable, or to a tip that does not descend from the locked revision, needs acknowledge_downgrade: true (else needs_acknowledgement: at once for beta to stable, in job_finished.error for a non-fast-forward tip). Returns job_id null if the channel is already the current one.
+  Future<SystemChannelSetResult> systemChannelSet(
+    SystemChannelSetParams params,
+  ) async => SystemChannelSetResult.fromJson(
+    await rpc('system.channel.set', params.toJson()),
+  );
+
+  /// Relayed to the system service's base.set. Switch the nixpkgs base (job). Action org.hinteros.system.channel. unstable to stable needs acknowledge_downgrade: true.
+  Future<SystemBaseSetResult> systemBaseSet(SystemBaseSetParams params) async =>
+      SystemBaseSetResult.fromJson(
+        await rpc('system.base.set', params.toJson()),
+      );
+
+  /// Relayed to the system service's jobs.get. One job: running or among the last 10 finished. Read-only.
+  Future<SystemJobsGetResult> systemJobsGet(SystemJobsGetParams params) async =>
+      SystemJobsGetResult.fromJson(
+        await rpc('system.jobs.get', params.toJson()),
+      );
+
+  /// Relayed to the system service's jobs.list. The running job, if any, and the last 10 finished jobs, newest first. Read-only.
+  Future<SystemJobsListResult> systemJobsList([
+    SystemJobsListParams params = const SystemJobsListParams(),
+  ]) async => SystemJobsListResult.fromJson(
+    await rpc('system.jobs.list', params.toJson()),
+  );
+
+  /// Relayed to the system service's jobs.cancel. Cancel a running job before its activation stage; the box stays unchanged. Action org.hinteros.system.jobs.cancel.
+  Future<SystemJobsCancelResult> systemJobsCancel(
+    SystemJobsCancelParams params,
+  ) async => SystemJobsCancelResult.fromJson(
+    await rpc('system.jobs.cancel', params.toJson()),
+  );
 }
 
 /// A server-pushed notification of the session API.
@@ -1999,6 +4106,9 @@ sealed class SessionEvent {
     'apps_changed' => AppsChangedEvent.fromJson(params),
     'steam_attention' => SteamAttentionEvent.fromJson(params),
     'osk_visibility' => OskVisibilityEvent.fromJson(params),
+    'job_started' => JobStartedEvent.fromJson(params),
+    'job_progress' => JobProgressEvent.fromJson(params),
+    'job_finished' => JobFinishedEvent.fromJson(params),
     _ => UnknownSessionEvent(name, params),
   };
 }

@@ -225,7 +225,13 @@ class Generator {
     if (s['type'] == null && (s['oneOf'] != null || s['anyOf'] != null)) {
       return shapeOf(s, name);
     }
-    final type = s['type'];
+    var type = s['type'];
+    // An `enum` of strings without an explicit `type` is a string enum too.
+    if (type == null &&
+        s['enum'] is List &&
+        (s['enum'] as List).every((v) => v is String)) {
+      type = 'string';
+    }
     if (s['enum'] is List && type == 'string') {
       _emitEnum(name, s);
       return Shape(Kind.enumeration, name);
@@ -347,7 +353,9 @@ class Generator {
   }
 
   /// Emits a class for an object schema. [extendsEvent] makes it an event.
-  void _emitClass(String name, Map<String, dynamic> s, {String? eventName}) {
+  void _emitClass(String name, Map<String, dynamic> s0, {String? eventName}) {
+    // A params/result schema may be a `$ref` (with a redundant `type`).
+    final s = s0[r'$ref'] == null ? s0 : {...s0, ..._deref(s0)};
     _register(name, () {
       final props = (s['properties'] as Map<String, dynamic>?) ?? {};
       final required = ((s['required'] as List?) ?? []).cast<String>().toSet();
@@ -549,7 +557,10 @@ class Generator {
         '// Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)',
       )
       ..writeln('//')
-      ..writeln('// ignore_for_file: unnecessary_this, unnecessary_cast')
+      ..writeln(
+        '// ignore_for_file: unnecessary_this, unnecessary_cast, '
+        'prefer_null_aware_operators, prefer_if_null_operators',
+      )
       ..writeln()
       ..writeln("import 'dart:convert';")
       ..writeln()
