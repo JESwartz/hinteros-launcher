@@ -19,9 +19,9 @@ void main() {
       final e = await load(t, AppIconCache(), '${iconDir()}/jellyfin.png');
       final icon = e.icon!;
       expect(icon.image.width, 256);
-      // Purple square: the tint is purple, the icon is not dark.
+      // Green square: the tint is green, the icon is not dark.
       final hsl = HSLColor.fromColor(icon.tint);
-      expect(hsl.hue, inInclusiveRange(240, 285));
+      expect(hsl.hue, inInclusiveRange(100, 160));
       expect(icon.luminance, greaterThan(0.2));
     });
 

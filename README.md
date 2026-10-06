@@ -41,7 +41,7 @@ the home screen says so and the client keeps retrying with backoff.
 | `tool/gen_api.dart` | Generator: schema to `lib/src/api/generated.dart` (models, typed method stubs, sealed event class, error codes) |
 | `lib/src/api/generated.dart` | Generated, committed. Do not edit |
 | `lib/src/api/client.dart` | `DaemonClient`: handshake, request correlation, events, subscribe, reconnect |
-| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.5 methods and events) |
+| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.6 methods and events, the relayed `system.*` API included) |
 | `lib/src/osk/` | The on-screen keyboard: `OskBackend` (+ mock), layouts, state, UI |
 | `tool/gen_mock_art.dart` | Draws the placeholder cover art in `test/fixtures/art/` (committed; no network, no third-party pictures) |
 | `tool/gen_mock_icons.dart` | Draws the generic placeholder app icons in `test/fixtures/icons/` (plain shapes, PNG and one SVG; no logos, no network) |
@@ -50,12 +50,12 @@ the home screen says so and the client keeps retrying with backoff.
 ### Mock daemon
 
 `--mock` (or `HINTEROS_MOCK=1`) swaps the socket for the in-process mock, which behaves like the
-0.5 daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
+0.6 daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
 Plex), a fake Steam library of 14 games in every install state (`games.list`, sorted by name),
 `apps.launch` (by id, command or `steam://rungameid/<appid>`), `apps.running`, `apps.focus`,
 `apps.close` (then `app_exited` with reason `closed`), `steam.attention` / `steam.focus`, and the
 `app_started`, `app_exited`, `focus_changed`, `games_changed`, `steam_attention` and `osk_visibility` events; a
-`command` launch of `does-not-exist` fails with 2002. 0.5: the apps have generic local icons (`test/fixtures/icons`, found from the repo root or `HINTEROS_MOCK_ICONS=<dir>`), except YouTube and Plex, whose icons arrive later (F6, `apps_changed`); `MockDaemon.setAppIcon` does the same in tests. 0.4: `osk.show` / `osk.hide` (event only on a change; Home and a focus change hide it; `oskEnabled = false` gives 2005), `keys.type` (printable ASCII types, anything else comes back as `untypeable`), `keys.key`, `keys.action` (all logged in `MockDaemon.keyLog`; `keyboardAvailable = false` gives 2004), and, while the keyboard is visible, `input_nav` only to a mock constructed with `clientName: 'hinteros-osk'`. No daemon needed for desktop work. Dev keys,
+`command` launch of `does-not-exist` fails with 2002. 0.5: the apps have generic local icons (`test/fixtures/icons`, found from the repo root or `HINTEROS_MOCK_ICONS=<dir>`), except YouTube and Plex, whose icons arrive later (F6, `apps_changed`); `MockDaemon.setAppIcon` does the same in tests. 0.4: `osk.show` / `osk.hide` (event only on a change; Home and a focus change hide it; `oskEnabled = false` gives 2005), `keys.type` (printable ASCII types, anything else comes back as `untypeable`), `keys.key`, `keys.action` (all logged in `MockDaemon.keyLog`; `keyboardAvailable = false` gives 2004), and, while the keyboard is visible, `input_nav` only to a mock constructed with `clientName: 'hinteros-osk'`. 0.6: the relayed system service (`MockDaemon.system`, `lib/src/api/mock_system_relay.dart`): `system.info`, `settings.get` / `set`, `ssh.set` (`authentication_required` until `system.adminAuthorized = true`), `generations.list`, `rebuild`, `hardware.redetect`, `rollback`, `update.check` (a job, 60 s cache), `update.apply` (only the last checked rev), `channel.set` / `base.set` (`needs_acknowledgement` for downgrades), `jobs.get` / `list` / `cancel`, and the `job_started` / `job_progress` / `job_finished` events. One mutating job at a time (`job_busy`); jobs step through their stages by themselves with `systemStepDelay`, or a test drives them (`progressJob`, `finishJob`); `unavailable = SystemUnavailableDataReason.down` gives `system_unavailable`; `failNext` injects any error (rate limit, low memory...). No daemon needed for desktop work. Dev keys,
 all going through the mock's event stream:
 
 | Key | Does |
@@ -179,7 +179,8 @@ nix run .#update-schema           # copy its schema into schema/ and regenerate;
 schema in the pinned `hinteros-daemon` input, and fails (`generated`) while the generated file
 is stale. After re-vendoring, the mock and contract test must cover any new methods. The generator
 handles `$ref` unions (`oneOf [X, null]` becomes `X?`), required-but-nullable fields (sent as
-explicit `null`) and string enums with an `unknown` fallback; `oneOf` on a params object (as in
+explicit `null`) and string enums (with or without `type: string`) with an `unknown` fallback, and
+params/result schemas that are a `$ref` (the relayed `system.*` results); `oneOf` on a params object (as in
 `apps.launch`) is not modelled, so all its fields are optional in Dart and the daemon validates.
 
 ### Tests
@@ -191,11 +192,12 @@ explicit `null`) and string enums with an `unknown` fallback; `oneOf` on a param
 - `test/api03_ui_test.dart` covers the 0.3 behaviour through the UI: install-state badges (also that
   they fit narrow covers at text 1.0 to 1.6x), launching and explaining games, Close with its
   confirm step, the attention banner.
+- `test/system/daemon_system_test.dart` runs the real repositories (`DaemonSystem`, `DaemonUpdates`, `DaemonJobs`) over `MockDaemon`'s relay: error mapping, jobs from events, cancel, downgrade acknowledgement, the update check and its cache, `settings.set` with a revision. `test/system/daemon_ui_test.dart` is the same through the Settings screens (SSH without a polkit agent, settings unavailable, About with the DEV badge, a security update through to "Restart session"). `test/osk/osk_auto_show_test.dart`: the keyboard opens and closes with the launcher's text fields.
 - `test/osk/` drives the on-screen keyboard with the mock backend: layout, D-pad navigation, shift,
   pages, and the exact backend calls for typing `P@ss-w0rd!` with D-pad presses only.
 - `test/integration/` runs the real `hinteros-session` binary: `nix build .#checks.x86_64-linux.integration`.
   It starts the daemon with `--no-gamescope --no-inputplumber`, a temp config of two command apps
-  and `--steam-dir` pointing at the daemon repo's fake Steam home, and covers the 0.5 handshake (an app with an explicit `icon` path gets it back in `apps.list`),
+  and `--steam-dir` pointing at the daemon repo's fake Steam home, and covers the 0.6 handshake (an app with an explicit `icon` path gets it back in `apps.list`),
   `apps.list` (built-in `steam` first), `apps.launch` (configured app, unknown app, spawn failure),
   `apps.running`, `app_started` / `app_exited`, `apps.close` (reason `closed`, 2001 when not
   running), `games.list` against the fixture (names, install state, artwork files that exist),
@@ -207,8 +209,20 @@ explicit `null`) and string enums with an `unknown` fallback; `oneOf` on a param
   2004 without a virtual keyboard (`--no-uinput`), 2005 with `[osk] enable = false`. What it cannot
   cover is `input_nav` routing to the `hinteros-osk` connection: that needs a fake InputPlumber on a
   D-Bus, which the daemon's own tests have (the launcher's mock and tests cover the client side).
+  `system_relay_integration_test.dart`: with no system service (`--system-socket` at a missing
+  path) every `system.*` call is `system_unavailable {reason: down}`, ping and `apps.list` still
+  work, and the real repositories report "Settings are unavailable". With a real
+  `hinteros-system` (`HINTEROS_SYSTEM_BIN`, plus `ssh-keygen` on `PATH`) on a temporary fake root
+  (`/etc/hinteros`, profile links, `release.json`, an SSH host key) the read-only methods
+  (`system.info` with the DEV flag and host key fingerprints, `settings.get`, `generations.list`,
+  `jobs.list`, `jobs.get` not found) go through the real relay and the real repositories. **Not
+  covered:** the mutating methods against a real `hinteros-system`. The service checks the caller
+  against logind (seat0) and polkit over D-Bus, and the fakes for those are Rust test helpers in
+  the daemon repo (`crates/hinteros-system/tests/common`), which cannot be used from Dart; those
+  paths (`ssh.set` to `authentication_required`, jobs and their events) are covered against the
+  mock daemon's relay, whose answers the contract test checks against the schema.
   It is a separate check and is skipped by plain `flutter test` unless `HINTEROS_SESSION_BIN`
-  points at the binary (and `HINTEROS_STEAM_FIXTURE` at `crates/hinteros-session/tests/fixtures/steam-home`
+  points at the binary (and `HINTEROS_SYSTEM_BIN` at `hinteros-system`) (and `HINTEROS_STEAM_FIXTURE` at `crates/hinteros-session/tests/fixtures/steam-home`
   for the games test), e.g.
   `HINTEROS_SESSION_BIN=$(nix build ../hinteros-daemon#hinteros-session --no-link --print-out-paths)/bin/hinteros-session HINTEROS_STEAM_FIXTURE=../hinteros-daemon/crates/hinteros-session/tests/fixtures/steam-home flutter test test/integration`.
 
@@ -248,9 +262,9 @@ client `hinteros-launcher`, not; it also drops any `input_nav` that arrives whil
 says the keyboard is up). `osk_visibility {visible: false}` resets the keyboard (letters, shift
 off, empty preview). Errors show in the strip for a few seconds: 2004 `keyboard_unavailable` as
 "No keyboard available", and characters that `keys.type` reports as `untypeable` ("Cannot type:
-é"; with the preview masked only their number, as the characters may be secret). The launcher has
-no button that summons the keyboard (the daemon does it: hold Guide and press Y), so it never calls
-`osk.show`.
+é"; with the preview masked only their number, as the characters may be secret). Anywhere else the
+keyboard is summoned by the daemon (hold Guide and press Y). The launcher's own text fields call
+`osk.show` themselves, see "Text entry".
 
 **Controls** (the nav layer's conventions: presses and repeats move, only a press acts):
 
@@ -356,20 +370,23 @@ back per field:
 
 ### System screens, jobs and the Store
 
-Everything below is built against **repository interfaces** (`lib/src/system/repositories.dart`)
-and driven by in-process mocks (`lib/src/system/mock_system.dart`), because the privileged service
-and its session relay (system API: `design/system-api.md` in hinteros-docs) ship in a new session API
-version that is not vendored yet. Every place the real API plugs in is marked `TODO(system-api)`.
-`main` uses `MockSystemServices` with `--mock` and, without it, `unavailableSystemServices()`, so
-the real build shows "needs a newer HinterOS service" instead of invented data.
+Everything below is built against **repository interfaces** (`lib/src/system/repositories.dart`).
+Since session API 0.6 the daemon relays the privileged system service (`system.*`, design in
+`design/system-api.md` in hinteros-docs), and `lib/src/system/daemon_system.dart` implements
+`SystemRepository` (info, SSH), `UpdatesRepository` and `JobsRepository` over it
+(`daemonSystemServices(connection)`, what `main` uses). `--mock` uses the in-process fakes of
+`lib/src/system/mock_system.dart` (all repositories). The rest is still unavailable in the real
+build (the screens say "needs a newer HinterOS service" instead of showing invented data):
+Network, Bluetooth, Display, Audio and Power wait for the session API 0.7 (`TODO(0.7)`), the Store
+for `apps.install` / `apps.remove` (`TODO(M8)`).
 
 | Interface | Wraps (later) | Used by |
 |---|---|---|
-| `SystemRepository` | `system.info`, power (session side, logind), `ssh.set` | About, Power, Remote access, session restart |
+| `SystemRepository` | `system.info`, `ssh.set`, `settings.get` / `set` (with `revision`); power and session restart: TODO(0.7) | About, Power, Remote access, session restart |
 | `UpdatesRepository` | `update.check`, `update.apply`, `generations.list`, `rollback`, `channel.set`, `base.set` | Updates, reminders |
 | `JobsRepository` | `jobs.get` / `jobs.cancel`, `job_started` / `job_progress` / `job_finished` | the progress page |
-| `NetworkRepository` | NetworkManager (runtime) | Network |
-| `BluetoothRepository` | BlueZ (runtime) | Bluetooth |
+| `NetworkRepository` | NetworkManager (runtime), TODO(0.7) | Network |
+| `BluetoothRepository` | BlueZ (runtime), TODO(0.7) | Bluetooth |
 | `DisplayAudioRepository` | display modes, PipeWire | Display, Audio |
 | `StoreRepository` | the catalog index, `apps.install` / `apps.remove` (M8) | Store, Games, installer |
 
@@ -381,17 +398,31 @@ through their stages by themselves.
   the top one takes all input, Back closes it unless it says otherwise. Regions also have
   `interceptMove` and `onAction` hooks (the terms page scrolls on up/down and pages on L1/R1; the
   volume row steps on left/right).
-- **Text entry:** a masked `TextField` bound to a nav row (`NavTextField`). The launcher never calls
-  `osk.show`: the daemon shows the keyboard (hold Guide, press Y) and its keystrokes land in the
-  field; on the desktop the real keyboard works. Typing Y or X into a field is not a button press.
+- **Text entry:** a masked `TextField` bound to a nav row (`NavTextField`). **The keyboard opens by
+  itself:** a field that gains focus calls `osk.show`, and focus leaving it, the dialog closing or
+  a submit calls `osk.hide` (a refused password shows it again for the retry); `OskControl`
+  (`lib/src/osk/osk_control.dart`, reached through `OskScope`) counts the focused fields so one
+  going away after the next took focus does not hide it. If the keyboard is off (`osk_unavailable`,
+  2005) or there is no daemon, the field still works with a physical keyboard. What the keyboard
+  types arrives as `keys.type` text and `keys.action` Backspace/Enter, which the daemon injects
+  into the focused window (the launcher's; the keyboard window never takes focus), so the field
+  needs nothing special: `test/osk/osk_auto_show_test.dart` checks text, Backspace and Enter reach
+  it and that typing Y or X is text, not a button press. (Checked in widget tests only; the key
+  injection itself is the daemon's, and the real chain, uinput to gamescope to GTK to the field,
+  is on the hardware checklist.) "Hold Guide, press Y" is no longer printed in the dialogs; it is
+  kept in Settings, under "Typed text on keyboard", as the way to open the keyboard anywhere else.
 - **Remote access:** one SSH toggle. SSH is plain username and password for now (you log in as the
-  admin account); turning it on asks for the admin password, masked. Key import and key-only login
-  are in the backlog.
+  admin account). Key import and key-only login are in the backlog. See "Admin password and
+  polkit" for how turning it on works.
 - **Progress page** (`pages.dart`): the stages of the job kind, a percentage where the job reports one,
   Cancel until activation ("Can't cancel now" after), "your session will restart" while running,
   "Restart session" when `session_restart_required`, and on failure or cancel what went wrong plus
   "Nothing was changed". Back does not leave a running job's page.
-- **Updates:** at startup the box checks once (`UpdateReminders`). Behind its channel, Home shows a
+- **Updates:** at startup the box checks once (`UpdateReminders`; the real check waits for the
+  connection, and is tried again after 5, 15, 45 and 120 s while the system service is not up
+  yet, since it can start after the session; the update check is a job whose result arrives with
+  `job_finished`, or comes straight back when cached within 60 s). The version of an update is
+  its date (the wire has no release name), the notice's severity is `available.security`. Behind its channel, Home shows a
   non-modal banner ("See update" leads to Settings, Updates) at startup and on every return to Home.
   A **security update** (severity trailer) shows a full-screen notice instead: the severity, a
   visible countdown, and for 5 seconds buttons, Back and Home do nothing; then "Later" (focused
@@ -416,7 +447,7 @@ through their stages by themselves.
 The UI reads through `AppsRepository` (apps, running, launch, close, Steam attention and focus) and
 `GamesRepository` (`games.list`, launch by Steam URL) in `lib/src/data/`, combined in
 `LauncherData`, which owns all daemon traffic and re-queries on connect and on events (the daemon
-does not replay them). The client speaks session API 0.5 (during 0.x the minor must match).
+does not replay them). The client speaks session API 0.6 (during 0.x the minor must match).
 
 ### Fonts
 
@@ -448,3 +479,44 @@ Goldens are generated on this machine, the future CI runner host; moving the run
 hardware means regenerating all of them in one reviewed commit (TESTING.md). Plain `flutter test`
 in `nix develop` also compares them, and may differ slightly from the sandbox; use
 `update-goldens` rather than `flutter test --update-goldens` when committing.
+
+### Admin password and polkit
+
+`ssh.set` is guarded by the polkit action `org.hinteros.system.ssh` with `auth_admin` (the admin
+password). polkit only asks for a password through an **authentication agent**, and none exists on
+the box; the launcher cannot hand the daemon a password either (no session API method carries
+one). So turning SSH on is answered with `authentication_required` (3012, `data: {action}`), and
+that is what the launcher shows, honestly: **"An admin has to turn on SSH"** (Settings > Remote
+access), saying SSH must be enabled by an admin, from the installer's "Enable SSH" option or over
+the admin account on the box. Turning it off needs no password and works. The same code path,
+`SystemErrorKind.authenticationRequired`, shows "This needs the admin password" for any other
+action that ever gets `auth_admin`.
+
+The admin-password dialog (masked field, retry on a wrong password, `SystemErrorKind.wrongPassword`)
+is kept, tested with the mock (`MockSystem(acceptsAdminPassword: true)`), and **switched off by
+one flag**: `adminPasswordUi` in `lib/src/system/daemon_system.dart` (`false`;
+`SystemRepository.acceptsAdminPassword` reads it). `main --mock` uses the same flag, so the dev
+window behaves like the real daemon.
+
+TODO(polkit-agent), design sketch for when the daemon gains an agent:
+
+1. The session daemon (`hinteros-session`, the session user's process) registers a polkit
+   authentication agent for its session with `org.freedesktop.PolicyKit1.Authority`
+   (`RegisterAuthenticationAgent`, subject `unix-session`, object path of its own, locale), and
+   implements `org.freedesktop.PolicyKit1.AuthenticationAgent.BeginAuthentication(action_id,
+   message, icon_name, details, cookie, identities)`.
+2. The system service stops using `AllowUserInteraction = false` for `auth_admin` actions: it
+   calls `CheckAuthorization` with `AllowUserInteraction`, and polkit calls the agent. The session
+   daemon then sends the launcher a new event, for example `authentication_requested {id, action,
+   message, identity}` (the identity is the admin account polkit offers).
+3. The launcher shows the existing password dialog (`acceptsAdminPassword` flips to true) and
+   answers with a new method, `auth.respond {id, password}` (or `auth.cancel {id}`). The session
+   daemon runs `polkit-agent-helper-1` for the identity (as polkit's own agents do: it speaks the
+   PAM conversation over a pipe), feeds it the password, and completes `BeginAuthentication` or
+   fails it. The password lives only in that exchange: never logged, never stored, zeroed after,
+   and the event/method carry it only over the 0600 session socket.
+4. A wrong password is `BeginAuthentication` failing, which polkit reports to the system service as
+   not authorized; the retry stays inside the same `ssh.set` call (the launcher keeps the dialog
+   open on `auth.respond` returning `{ok: false}`), so the job only starts once polkit says yes.
+5. `ssh.set` stays one method call: the launcher awaits it while the dialog is up. Until the
+   agent exists nothing in the launcher changes except flipping the flag.
