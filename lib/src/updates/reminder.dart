@@ -11,24 +11,14 @@ import '../system/repositories.dart';
 /// - At startup the box checks once. When it is behind its channel, an
 ///   ordinary update shows a non-modal reminder on Home, again on every
 ///   return to Home ([enteredHome] resets it).
-/// - A security update (a severity) shows the full-screen notice instead:
-///   at startup, and after that on a return to Home once at least
-///   [securityInterval] has passed since the last notice (Home is visited
-///   after every game; a lockout each time would punish the user for
-///   closing a game). Between notices it shows as the reminder, marked as
-///   a security update.
+/// - A security update (a severity) shows the full-screen notice instead,
+///   at startup and on every return to Home, until it is installed (the
+///   owner's decision: no throttling).
 class UpdateReminders extends ChangeNotifier {
-  UpdateReminders(
-    this.updates, {
-    DateTime Function()? now,
-    this.securityInterval = const Duration(minutes: 30),
-  }) : _now = now ?? DateTime.now;
+  UpdateReminders(this.updates);
 
   final UpdatesRepository updates;
-  final DateTime Function() _now;
-  final Duration securityInterval;
 
-  DateTime? _lastNotice;
   bool _started = false;
   StreamSubscription<UpdateStatus>? _sub;
 
@@ -51,16 +41,11 @@ class UpdateReminders extends ChangeNotifier {
   }
 
   /// The Home screen is entered (or startup finished): true when the
-  /// full-screen security notice is due now. Marks it as shown.
+  /// full-screen security notice is due, which is every time while a
+  /// security update is pending.
   bool securityNoticeDue() {
     final u = update;
-    if (u == null || !u.isSecurity) return false;
-    final last = _lastNotice;
-    if (last != null && _now().difference(last) < securityInterval) {
-      return false;
-    }
-    _lastNotice = _now();
-    return true;
+    return u != null && u.isSecurity;
   }
 
   @override

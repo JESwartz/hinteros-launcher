@@ -101,7 +101,6 @@ class _LauncherShellState extends State<LauncherShell> {
   bool _updateBannerVisible = false;
   late final UpdateReminders _reminders = UpdateReminders(
     widget.services.updates,
-    now: widget.now,
   );
   bool _dialogOpen = false;
   NavRegion? _beforeDialog;

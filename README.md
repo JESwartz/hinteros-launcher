@@ -395,10 +395,8 @@ through their stages by themselves.
   non-modal banner ("See update" leads to Settings, Updates) at startup and on every return to Home.
   A **security update** (severity trailer) shows a full-screen notice instead: the severity, a
   visible countdown, and for 5 seconds buttons, Back and Home do nothing; then "Later" (focused
-  first) and "Update now". The notice appears at startup and on a return to Home once 30 minutes have
-  passed since the last one (Home is entered after every game; a lockout each time would be punishing);
-  in between the banner says "Security update ... (severity: High)". Nothing is ever installed
-  without choosing it.
+  first) and "Update now". The notice appears at startup and on every return to Home until the update is
+  installed. Nothing is ever installed without choosing it.
 - **Store (a top-level tab, after Apps):** categories on the left, apps on the right, an app page
   (modal) with Install or Remove. Why a tab and not a place under Apps: it is reachable with L1/R1 and
   from Games ("Install Steam from the Store"), has its own two-pane navigation, and keeps the Apps grid

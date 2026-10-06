@@ -4,24 +4,15 @@ import 'package:hinteros_launcher/src/system/models.dart';
 import 'package:hinteros_launcher/src/updates/reminder.dart';
 
 void main() {
-  test('a security notice is due at startup, then once per interval', () async {
-    var now = DateTime(2026, 10, 6, 20);
+  test('a security notice is due at startup and on every return', () async {
     final jobs = MockJobs();
-    final ups = MockUpdates(jobs, now: () => now)
-      ..nextAvailable = mockSecurityUpdate();
-    final r = UpdateReminders(
-      ups,
-      now: () => now,
-      securityInterval: const Duration(minutes: 30),
-    );
+    final ups = MockUpdates(jobs)..nextAvailable = mockSecurityUpdate();
+    final r = UpdateReminders(ups);
     expect(r.securityNoticeDue(), isFalse, reason: 'nothing known yet');
     await r.start();
     expect(r.behind, isTrue);
     expect(r.securityNoticeDue(), isTrue);
-    expect(r.securityNoticeDue(), isFalse);
-    now = now.add(const Duration(minutes: 29));
-    expect(r.securityNoticeDue(), isFalse);
-    now = now.add(const Duration(minutes: 2));
+    expect(r.securityNoticeDue(), isTrue);
     expect(r.securityNoticeDue(), isTrue);
     expect(jobs.started, isEmpty, reason: 'never installs by itself');
     r.dispose();
