@@ -1,0 +1,10 @@
+# Nix
+result
+result-*
+.direnv/
+
+# Flutter
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
