@@ -37,6 +37,15 @@ class NavRegion extends ChangeNotifier {
   /// Back handler for this region; takes precedence over [backTarget].
   bool Function()? onBack;
 
+  /// Asked first on every direction press or repeat while this region holds
+  /// focus; return true to consume it (a scroll area scrolling, a slider
+  /// stepping) instead of moving focus.
+  bool Function(NavDir dir)? interceptMove;
+
+  /// Asked first on other actions (page left/right, secondary, ...) while
+  /// this region holds focus; return true to consume them.
+  bool Function(NavAction action)? onAction;
+
   final Map<String, FocusNode> _nodes = {};
   final Map<String, VoidCallback?> _selects = {};
   final Map<String, VoidCallback?> _contexts = {};
@@ -209,6 +218,7 @@ class NavController {
           return true;
         }
         final dir = NavDir.values.byName(action.name);
+        if (region.interceptMove?.call(dir) ?? false) return true;
         final r = region.model.move(dir);
         if (r.moved) {
           region.changed();
@@ -242,7 +252,9 @@ class NavController {
         }
         return onBack?.call() ?? false;
       default:
-        if (phase == NavPhase.press) onOther?.call(action);
+        if (phase != NavPhase.press) return false;
+        if (region?.onAction?.call(action) ?? false) return true;
+        onOther?.call(action);
         return false;
     }
   }
