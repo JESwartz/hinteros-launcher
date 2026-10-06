@@ -14,8 +14,16 @@ void main() {
       highContrast: true,
       focusStyle: FocusStyle.bar,
       reduceMotion: true,
+      showTypedOnOsk: true,
     );
     expect(LauncherSettings.fromJson(s.toJson()), s);
+    expect(s.toJson()['osk_show_typed'], true);
+    // Privacy: masked unless asked, also for a bad value.
+    expect(const LauncherSettings().showTypedOnOsk, false);
+    expect(
+      LauncherSettings.fromJson({'osk_show_typed': 1}).showTypedOnOsk,
+      false,
+    );
     expect(LauncherSettings.fromJson({}), const LauncherSettings());
   });
 
@@ -94,4 +102,34 @@ void main() {
     expect(h.settings.value.textScale, 1.6);
     expect(h.storage.value.textScale, 1.6, reason: 'saved');
   });
+
+  testWidgets(
+    "the on-screen keyboard text setting is off, and toggles in the UI",
+    (t) async {
+      setView(t);
+      final h = Harness();
+      await h.pump(t);
+      expect(h.settings.value.showTypedOnOsk, false);
+      // Settings > the fifth entry (on-screen keyboard text) > On
+      for (final k in [
+        LogicalKeyboardKey.arrowUp,
+        LogicalKeyboardKey.arrowRight,
+        LogicalKeyboardKey.arrowRight,
+        LogicalKeyboardKey.arrowRight,
+        LogicalKeyboardKey.arrowDown,
+        LogicalKeyboardKey.arrowDown,
+        LogicalKeyboardKey.arrowDown,
+        LogicalKeyboardKey.arrowDown,
+        LogicalKeyboardKey.arrowDown,
+        LogicalKeyboardKey.arrowRight,
+        LogicalKeyboardKey.arrowDown,
+        LogicalKeyboardKey.enter,
+      ]) {
+        await t.sendKeyEvent(k);
+        await t.pumpAndSettle();
+      }
+      expect(h.settings.value.showTypedOnOsk, true);
+      expect(h.storage.value.showTypedOnOsk, true, reason: "saved");
+    },
+  );
 }

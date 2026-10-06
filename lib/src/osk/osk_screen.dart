@@ -55,7 +55,7 @@ class OskApp extends StatelessWidget {
           ),
           home: Material(
             type: MaterialType.transparency,
-            child: OskScreen(backend: backend),
+            child: OskScreen(backend: backend, showTyped: s.showTypedOnOsk),
           ),
         );
       },
@@ -107,20 +107,31 @@ class _DesignScale extends StatelessWidget {
 /// pages, `secondary` is Space, L1/R1 (`page_left`/`page_right`) switch to
 /// letters / symbols.
 class OskScreen extends StatefulWidget {
-  const OskScreen({super.key, required this.backend});
+  const OskScreen({super.key, required this.backend, this.showTyped = false});
 
   final OskBackend backend;
+
+  /// The "Show typed text on the on-screen keyboard" setting; off masks the
+  /// preview strip.
+  final bool showTyped;
 
   @override
   State<OskScreen> createState() => _OskScreenState();
 }
 
 class _OskScreenState extends State<OskScreen> {
-  late final OskState _state = OskState(widget.backend);
+  late final OskState _state = OskState(widget.backend)
+    ..showTyped = widget.showTyped;
   final _nav = NavController();
   final _region = NavRegion('osk', rememberPerRow: false, wrapHorizontal: true);
   StreamSubscription<InputNavEvent>? _sub;
   StreamSubscription<bool>? _visSub;
+
+  @override
+  void didUpdateWidget(OskScreen old) {
+    super.didUpdateWidget(old);
+    _state.showTyped = widget.showTyped;
+  }
 
   @override
   void initState() {
@@ -269,8 +280,10 @@ class _PreviewStrip extends StatelessWidget {
     final t = HinterTheme.of(context);
     final scale = MediaQuery.textScalerOf(context).scale(1);
     final error = state.error;
-    final typed = state.typed;
-    // The tail of what was typed, so the newest character is always visible.
+    final notice = state.notice;
+    // Masked unless the setting is on (it may be a password). The tail only,
+    // so the newest character is always visible.
+    final typed = state.preview;
     final shown = typed.length > 60
         ? '…${typed.substring(typed.length - 60)}'
         : typed;
@@ -288,12 +301,14 @@ class _PreviewStrip extends StatelessWidget {
               Expanded(
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: error != null
+                  child: (error ?? notice) != null
                       ? Text(
-                          error,
+                          (error ?? notice)!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: t.caption.copyWith(color: t.danger),
+                          style: t.caption.copyWith(
+                            color: error != null ? t.danger : t.text,
+                          ),
                         )
                       : FittedBox(
                           fit: BoxFit.scaleDown,

@@ -53,8 +53,39 @@ void main() {
       setup: (t, h) async {
         await h.type(t, 'h');
         await h.type(t, 'i');
+        await t.pump(const Duration(seconds: 2)); // the reveal is over: dots
         await h.nav(t, NavAction.pageRight);
         await h.moveTo(t, '@');
+      },
+    );
+  });
+
+  testWidgets('osk masked preview: dots, newest character readable', (t) async {
+    await shot(
+      t,
+      'osk_masked_1080p',
+      setup: (t, h) async {
+        for (final c in 'hunter2'.split('')) {
+          await h.type(t, c);
+        }
+        // Within a second of the last key: still readable.
+        expect(
+          find.text('\u2022\u2022\u2022\u2022\u2022\u20222'),
+          findsOneWidget,
+        );
+      },
+    );
+  });
+
+  testWidgets('osk preview shows the text when the setting is on', (t) async {
+    await shot(
+      t,
+      'osk_show_typed_1080p',
+      settings: const LauncherSettings(showTypedOnOsk: true),
+      setup: (t, h) async {
+        for (final c in 'hunter2'.split('')) {
+          await h.type(t, c);
+        }
       },
     );
   });

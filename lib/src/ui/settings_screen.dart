@@ -9,11 +9,14 @@ import 'nav_focusable.dart';
 
 /// One entry of the settings list and the options its detail pane offers.
 class _Setting {
-  const _Setting(this.id, this.title, this.blurb);
+  const _Setting(this.id, this.title, this.blurb, [this.listTitle]);
 
   final String id;
   final String title;
   final String blurb;
+
+  /// A shorter title for the list, where the full one would not fit.
+  final String? listTitle;
 }
 
 const _items = [
@@ -38,6 +41,12 @@ const _items = [
     'No scaling or sliding; the focus marker still shows.',
   ),
   _Setting(
+    'osk_text',
+    'Show typed text on the on-screen keyboard',
+    'Off: the keyboard shows dots instead of what you type (so passwords stay off the TV), apart from the newest character for a moment.',
+    'Typed text on keyboard',
+  ),
+  _Setting(
     'system',
     'System',
     'Network, Bluetooth, audio, display, updates and rollback.',
@@ -57,6 +66,7 @@ String _valueOf(String id, LauncherSettings s) => switch (id) {
   'contrast' => s.highContrast ? 'On' : 'Off',
   'focus' => s.focusStyle.label,
   'motion' => s.reduceMotion ? 'On' : 'Off',
+  'osk_text' => s.showTypedOnOsk ? 'On' : 'Off',
   _ => '',
 };
 
@@ -92,6 +102,19 @@ List<_Option> _options(String id, LauncherSettings s) {
             s.focusStyle == f,
             (s, c) => c.update(s.copyWith(focusStyle: f)),
           ),
+      ];
+    case 'osk_text':
+      return [
+        _Option(
+          'Off',
+          !s.showTypedOnOsk,
+          (s, c) => c.update(s.copyWith(showTypedOnOsk: false)),
+        ),
+        _Option(
+          'On',
+          s.showTypedOnOsk,
+          (s, c) => c.update(s.copyWith(showTypedOnOsk: true)),
+        ),
       ];
     case 'motion':
       return [
@@ -167,7 +190,7 @@ class SettingsScreen extends StatelessWidget {
                           col: 0,
                           onSelect: onEnterDetail,
                           builder: (_, f) => _ListRow(
-                            title: _items[i].title,
+                            title: _items[i].listTitle ?? _items[i].title,
                             value: _valueOf(_items[i].id, s),
                             focused: f,
                             selected: _items[i] == selected,

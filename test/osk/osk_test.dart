@@ -4,12 +4,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart';
 import 'package:hinteros_launcher/src/osk/osk_layout.dart';
 
+import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
+
 import '../support/harness.dart';
 import 'osk_harness.dart';
 
 Finder _preview(String s) => find.byWidgetPredicate(
   (w) => w is Text && w.key == const ValueKey('osk-preview') && w.data == s,
 );
+
+const _showTyped = LauncherSettings(showTypedOnOsk: true);
 
 void main() {
   Future<OskHarness> start(WidgetTester t, {OskHarness? h}) async {
@@ -117,7 +121,7 @@ void main() {
 
   group('output', () {
     testWidgets(r'types P@ss-w0rd! with the D-pad', (t) async {
-      final h = await start(t);
+      final h = await start(t, h: OskHarness(settings: _showTyped));
       // Shift (Y), then the keys.
       await h.nav(t, NavAction.context);
       await h.type(t, 'P');
@@ -183,7 +187,7 @@ void main() {
     });
 
     testWidgets('the preview follows backspace', (t) async {
-      final h = await start(t);
+      final h = await start(t, h: OskHarness(settings: _showTyped));
       await h.type(t, 'q');
       await h.type(t, 'w');
       expect(_preview('qw'), findsOneWidget);
@@ -271,6 +275,73 @@ void main() {
       await h.nav(t, NavAction.accept);
       expect(focusLabel(), 'osk/r3:0');
       expect(find.text('More 2/2'), findsOneWidget);
+    });
+  });
+
+  group('privacy: the preview is masked', () {
+    testWidgets('dots, the newest character readable for about a second', (
+      t,
+    ) async {
+      final h = await start(t);
+      await h.type(t, 'h');
+      await h.type(t, 'u');
+      await h.type(t, 'n');
+      // Right after typing: dots, then the last character.
+      expect(find.textContaining('hu'), findsNothing);
+      expect(_preview('\u2022\u2022n'), findsOneWidget);
+      await t.pump(const Duration(milliseconds: 1100));
+      expect(_preview('\u2022\u2022\u2022'), findsOneWidget);
+      expect(find.text('hun'), findsNothing);
+      // The daemon still got the real text.
+      expect(h.backend.typedText, 'hun');
+    });
+
+    testWidgets('backspace removes a dot; the setting shows the text', (
+      t,
+    ) async {
+      final h = await start(t);
+      await h.type(t, 'a');
+      await h.type(t, 'b');
+      await h.nav(t, NavAction.back);
+      await t.pump(const Duration(seconds: 2));
+      expect(_preview('\u2022'), findsOneWidget);
+      h.settings.value = _showTyped;
+      await t.pumpAndSettle();
+      expect(_preview('a'), findsOneWidget);
+    });
+
+    testWidgets('untypeable characters and keyboard_unavailable show briefly', (
+      t,
+    ) async {
+      final h = await start(t);
+      h.backend.untypeable = {'q'};
+      await h.type(t, 'q');
+      await t.pump(const Duration(milliseconds: 100));
+      // Masked: only the count, not the character.
+      expect(find.text('1 character(s) cannot be typed'), findsOneWidget);
+      await t.pump(const Duration(seconds: 5));
+      expect(find.textContaining('cannot be typed'), findsNothing);
+
+      h.backend.failWith = const ApiException(
+        ApiErrorCode.keyboardUnavailable,
+        'no virtual keyboard',
+      );
+      await h.type(t, 'w');
+      await t.pump(const Duration(milliseconds: 100));
+      expect(find.textContaining('No keyboard available'), findsOneWidget);
+      await t.pump(const Duration(seconds: 5));
+      expect(find.textContaining('No keyboard available'), findsNothing);
+    });
+
+    testWidgets('with the setting on, untypeable characters are named', (
+      t,
+    ) async {
+      final h = await start(t, h: OskHarness(settings: _showTyped));
+      h.backend.untypeable = {'q'};
+      await h.type(t, 'q');
+      await t.pump(const Duration(milliseconds: 100));
+      expect(find.text('Cannot type: q'), findsOneWidget);
+      await t.pump(const Duration(seconds: 5));
     });
   });
 }

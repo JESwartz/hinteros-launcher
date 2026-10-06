@@ -232,11 +232,18 @@ void main() {
       keys: [...toSettings, down, down, right, down],
     );
   });
+  testWidgets('settings: show typed text on the on-screen keyboard', (t) async {
+    await shot(
+      t,
+      'settings_osk_text_1080p',
+      keys: [...toSettings, down, down, down, down],
+    );
+  });
   testWidgets('settings system placeholder', (t) async {
     await shot(
       t,
       'settings_system_1080p',
-      keys: [...toSettings, down, down, down, down],
+      keys: [...toSettings, down, down, down, down, down],
     );
   });
   testWidgets('daemon unreachable', (t) async {

@@ -27,6 +27,7 @@ class LauncherSettings {
     this.highContrast = false,
     this.focusStyle = FocusStyle.ring,
     this.reduceMotion = false,
+    this.showTypedOnOsk = false,
   });
 
   static const minTextScale = 1.0;
@@ -40,16 +41,23 @@ class LauncherSettings {
   final FocusStyle focusStyle;
   final bool reduceMotion;
 
+  /// Show what was typed in the on-screen keyboard's preview strip. Off
+  /// (the default) masks it with dots, so passwords do not appear on the TV;
+  /// only the latest character shows briefly.
+  final bool showTypedOnOsk;
+
   LauncherSettings copyWith({
     double? textScale,
     bool? highContrast,
     FocusStyle? focusStyle,
     bool? reduceMotion,
+    bool? showTypedOnOsk,
   }) => LauncherSettings(
     textScale: textScale ?? this.textScale,
     highContrast: highContrast ?? this.highContrast,
     focusStyle: focusStyle ?? this.focusStyle,
     reduceMotion: reduceMotion ?? this.reduceMotion,
+    showTypedOnOsk: showTypedOnOsk ?? this.showTypedOnOsk,
   );
 
   Map<String, dynamic> toJson() => {
@@ -58,6 +66,7 @@ class LauncherSettings {
     'high_contrast': highContrast,
     'focus_style': focusStyle.name,
     'reduce_motion': reduceMotion,
+    'osk_show_typed': showTypedOnOsk,
   };
 
   /// Lenient: wrong types or unknown values fall back to the default for that
@@ -79,6 +88,9 @@ class LauncherSettings {
       reduceMotion: j['reduce_motion'] is bool
           ? j['reduce_motion'] as bool
           : d.reduceMotion,
+      showTypedOnOsk: j['osk_show_typed'] is bool
+          ? j['osk_show_typed'] as bool
+          : d.showTypedOnOsk,
     );
   }
 
@@ -88,11 +100,17 @@ class LauncherSettings {
       other.textScale == textScale &&
       other.highContrast == highContrast &&
       other.focusStyle == focusStyle &&
-      other.reduceMotion == reduceMotion;
+      other.reduceMotion == reduceMotion &&
+      other.showTypedOnOsk == showTypedOnOsk;
 
   @override
-  int get hashCode =>
-      Object.hash(textScale, highContrast, focusStyle, reduceMotion);
+  int get hashCode => Object.hash(
+    textScale,
+    highContrast,
+    focusStyle,
+    reduceMotion,
+    showTypedOnOsk,
+  );
 }
 
 /// Where settings live.

@@ -41,19 +41,19 @@ the home screen says so and the client keeps retrying with backoff.
 | `tool/gen_api.dart` | Generator: schema to `lib/src/api/generated.dart` (models, typed method stubs, sealed event class, error codes) |
 | `lib/src/api/generated.dart` | Generated, committed. Do not edit |
 | `lib/src/api/client.dart` | `DaemonClient`: handshake, request correlation, events, subscribe, reconnect |
-| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.3 methods and events) |
+| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.4 methods and events) |
 | `lib/src/osk/` | The on-screen keyboard: `OskBackend` (+ mock), layouts, state, UI |
 | `tool/gen_mock_art.dart` | Draws the placeholder cover art in `test/fixtures/art/` (committed; no network, no third-party pictures) |
 
 ### Mock daemon
 
 `--mock` (or `HINTEROS_MOCK=1`) swaps the socket for the in-process mock, which behaves like the
-0.3 daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
+0.4 daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
 Plex), a fake Steam library of 14 games in every install state (`games.list`, sorted by name),
 `apps.launch` (by id, command or `steam://rungameid/<appid>`), `apps.running`, `apps.focus`,
 `apps.close` (then `app_exited` with reason `closed`), `steam.attention` / `steam.focus`, and the
-`app_started`, `app_exited`, `focus_changed`, `games_changed` and `steam_attention` events; a
-`command` launch of `does-not-exist` fails with 2002. No daemon needed for desktop work. Dev keys,
+`app_started`, `app_exited`, `focus_changed`, `games_changed`, `steam_attention` and `osk_visibility` events; a
+`command` launch of `does-not-exist` fails with 2002. 0.4: `osk.show` / `osk.hide` (event only on a change; Home and a focus change hide it; `oskEnabled = false` gives 2005), `keys.type` (printable ASCII types, anything else comes back as `untypeable`), `keys.key`, `keys.action` (all logged in `MockDaemon.keyLog`; `keyboardAvailable = false` gives 2004), and, while the keyboard is visible, `input_nav` only to a mock constructed with `clientName: 'hinteros-osk'`. No daemon needed for desktop work. Dev keys,
 all going through the mock's event stream:
 
 | Key | Does |
@@ -130,11 +130,18 @@ explicit `null`) and string enums with an `unknown` fallback; `oneOf` on a param
   pages, and the exact backend calls for typing `P@ss-w0rd!` with D-pad presses only.
 - `test/integration/` runs the real `hinteros-session` binary: `nix build .#checks.x86_64-linux.integration`.
   It starts the daemon with `--no-gamescope --no-inputplumber`, a temp config of two command apps
-  and `--steam-dir` pointing at the daemon repo's fake Steam home, and covers the 0.3 handshake,
+  and `--steam-dir` pointing at the daemon repo's fake Steam home, and covers the 0.4 handshake,
   `apps.list` (built-in `steam` first), `apps.launch` (configured app, unknown app, spawn failure),
   `apps.running`, `app_started` / `app_exited`, `apps.close` (reason `closed`, 2001 when not
   running), `games.list` against the fixture (names, install state, artwork files that exist),
   `steam.attention` and `steam.focus` (2003) without Steam windows.
+  The keyboard part runs the real `DaemonOskBackend` as client `hinteros-osk` with `--fake-keyboard <file>`
+  and `[osk] command = []` (no keyboard process): `osk.show` / `osk.hide` reach every client as
+  `osk_visibility`, `keys.type`, `keys.key` and `keys.action` write the expected key events
+  (`down 30`, `up 30`...) into the fake keyboard log, `untypeable` for a character without a key,
+  2004 without a virtual keyboard (`--no-uinput`), 2005 with `[osk] enable = false`. What it cannot
+  cover is `input_nav` routing to the `hinteros-osk` connection: that needs a fake InputPlumber on a
+  D-Bus, which the daemon's own tests have (the launcher's mock and tests cover the client side).
   It is a separate check and is skipped by plain `flutter test` unless `HINTEROS_SESSION_BIN`
   points at the binary (and `HINTEROS_STEAM_FIXTURE` at `crates/hinteros-session/tests/fixtures/steam-home`
   for the games test), e.g.
@@ -166,12 +173,19 @@ or `./result/bin/hinteros-osk --mock --windowed`. `--mock` prints what it would 
 the arrow keys, Enter, Escape/Backspace, Y and X stand in for the pad.
 
 **Backend:** the UI only talks to `OskBackend` (`lib/src/osk/osk_backend.dart`): `type(text)`
-(`keys.type`), `action(backspace|enter|tab)` (`keys.action`), `key(key, modifiers)` (`keys.key`,
-unused so far), `hide()` (`osk.hide`), plus the streams `nav` (`input_nav`) and `visibility`
-(`osk_visibility`). `MockOskBackend` records every call (`type:P`, `action:backspace`, `hide`...).
-`DaemonOskBackend` is wired for `input_nav` only; every `TODO(0.4)` in that file is where the
-generated 0.4 methods and the event go once the schema is re-vendored. Until then the keys show
-"needs session API 0.4" in the preview strip instead of failing silently.
+(`keys.type`; returns the `untypeable` characters), `action(backspace|enter|tab)` (`keys.action`),
+`key(key, modifiers)` (`keys.key`, unused so far), `hide()` (`osk.hide`), plus the streams `nav`
+(`input_nav`) and `visibility` (`osk_visibility`). `MockOskBackend` records every call
+(`type:P`, `action:backspace`, `hide`...). `DaemonOskBackend` is the real one: it connects to
+`$HINTEROS_SESSION_SOCKET` (else the default socket) with the hello client name `hinteros-osk`,
+which is what makes the daemon send it `input_nav` while the keyboard is visible (and the launcher,
+client `hinteros-launcher`, not; it also drops any `input_nav` that arrives while `osk_visibility`
+says the keyboard is up). `osk_visibility {visible: false}` resets the keyboard (letters, shift
+off, empty preview). Errors show in the strip for a few seconds: 2004 `keyboard_unavailable` as
+"No keyboard available", and characters that `keys.type` reports as `untypeable` ("Cannot type:
+é"; with the preview masked only their number, as the characters may be secret). The launcher has
+no button that summons the keyboard (the daemon does it: hold Guide and press Y), so it never calls
+`osk.show`.
 
 **Controls** (the nav layer's conventions: presses and repeats move, only a press acts):
 
@@ -188,8 +202,11 @@ generated 0.4 methods and the event go once the schema is re-vendored. Until the
 Shift was chosen for `context` rather than the page toggle because it is needed mid-word, while a
 page change is one key away and has L1/R1. Pages: letters (digits row, `'` and `.`), symbols 1,
 symbols 2 (`[ ] { }` and the backtick); together they cover every printable ASCII character. The
-strip above the keys shows what was typed since opening (Backspace removes), so passwords show in
-it; it is cleared on hide. Characters go out with `keys.type` (the daemon picks uinput or the
+strip above the keys is a preview of what was typed since opening (Backspace removes). **It is
+masked by default** (a password must not appear on the TV): dots, with the newest character readable
+for about a second, like a phone password field. Settings > "Show typed text on the on-screen
+keyboard" (default off) shows it in plain text; the keyboard reads `launcher.json` again every time
+it opens. The preview is cleared on hide. Characters go out with `keys.type` (the daemon picks uinput or the
 gamescope input method), Space included; the keyboard has no text field of its own.
 
 ## UI
@@ -221,6 +238,7 @@ UI. Focus on a tab selects its section (like console UIs); Down enters the secti
   overlap at any text size (the initial gives way when there is no room).
 - **Settings:** list left, options of the highlighted entry right (list-detail). Local settings:
   text size (100/120/140/160%), high contrast, focus marker (ring/glow/bar), reduce motion.
+  "Show typed text on the on-screen keyboard" (privacy; off = the keyboard's preview shows dots).
   "System" is a placeholder (M5).
 
 The layout is designed in 1920x1080 logical pixels. A 4K screen under native Wayland runs it at
@@ -266,7 +284,7 @@ atomically on every change; a missing or corrupt file means defaults, unknown or
 back per field:
 
 ```json
-{ "version": 1, "text_scale": 1.0, "high_contrast": false, "focus_style": "ring", "reduce_motion": false }
+{ "version": 1, "text_scale": 1.0, "high_contrast": false, "focus_style": "ring", "reduce_motion": false, "osk_show_typed": false }
 ```
 
 ### Data access
@@ -274,7 +292,7 @@ back per field:
 The UI reads through `AppsRepository` (apps, running, launch, close, Steam attention and focus) and
 `GamesRepository` (`games.list`, launch by Steam URL) in `lib/src/data/`, combined in
 `LauncherData`, which owns all daemon traffic and re-queries on connect and on events (the daemon
-does not replay them). The client speaks session API 0.3 (during 0.x the minor must match).
+does not replay them). The client speaks session API 0.4 (during 0.x the minor must match).
 
 ### Fonts
 
@@ -287,8 +305,8 @@ Atkinson Hyperlegible Regular and Bold (`assets/fonts/`), SIL Open Font License 
 `test/golden/screens_test.dart` captures every screen at 1920x1080 and Home and Games at 3840x2160
 (1920x1080 logical at DPR 2), plus Home in high contrast at 1.6x text, into
 `test/golden/goldens/`. `test/golden/osk_test.dart` renders the on-screen keyboard at 1920x1080 over
-a checkerboard (so the transparent area and the panel's rounded corners show): letters, symbols with
-typed text, high contrast at 1.6x with caps lock, and the bar focus marker with one-shot shift
+a checkerboard (so the transparent area and the panel's rounded corners show): letters, symbols with dots in the preview,
+the masked preview with its newest character readable, the preview with the setting on, high contrast at 1.6x with caps lock, and the bar focus marker with one-shot shift
 (`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
 running game, the attention banner, the close confirm and the app tiles at text 1.3x/1.6x (also high
 contrast). Tests load the bundled font explicitly (`flutter_test_config.dart`, no
