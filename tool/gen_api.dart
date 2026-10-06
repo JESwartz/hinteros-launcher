@@ -505,7 +505,8 @@ class Generator {
         (m['result'] as Map<String, dynamic>?) ?? {'properties': {}},
       );
       methodNames.add(e.key);
-      final params = (m['params'] as Map<String, dynamic>?) ?? {};
+      // A `$ref` params schema (display.set_mode) keeps `required` on its target.
+      final params = _deref((m['params'] as Map<String, dynamic>?) ?? {});
       final anyRequired = ((params['required'] as List?) ?? []).isNotEmpty;
       final arg = anyRequired
           ? '$pName params'

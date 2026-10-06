@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.6).
+// Source: schema/session-api.json (session API 0.7).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.6';
+const apiVersion = '0.7';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -43,6 +43,33 @@ const apiMethodNames = <String>[
   'system.jobs.get',
   'system.jobs.list',
   'system.jobs.cancel',
+  'network.status',
+  'wifi.scan',
+  'wifi.list',
+  'wifi.connect',
+  'wifi.disconnect',
+  'wifi.forget',
+  'wifi.enable',
+  'bluetooth.status',
+  'bluetooth.scan',
+  'bluetooth.devices',
+  'bluetooth.pair',
+  'bluetooth.confirm',
+  'bluetooth.connect',
+  'bluetooth.disconnect',
+  'bluetooth.forget',
+  'audio.outputs',
+  'audio.set_output',
+  'audio.volume',
+  'audio.mute',
+  'display.modes',
+  'display.set_mode',
+  'display.keep',
+  'display.revert',
+  'power.capabilities',
+  'power.suspend',
+  'power.reboot',
+  'power.poweroff',
 ];
 
 /// Event names in the schema.
@@ -59,6 +86,11 @@ const apiEventNames = <String>[
   'job_started',
   'job_progress',
   'job_finished',
+  'network_changed',
+  'wifi_list_changed',
+  'bluetooth_changed',
+  'bluetooth_confirm',
+  'audio_changed',
 ];
 
 /// Error name to JSON-RPC code.
@@ -88,6 +120,11 @@ const apiErrorCodesByName = <String, int>{
   'needs_acknowledgement': 3011,
   'authentication_required': 3012,
   'system_unavailable': 3001,
+  'unavailable': 4001,
+  'device_failed': 4002,
+  'wrong_password': 4003,
+  'not_authorized': 4004,
+  'power_inhibited': 4005,
 };
 
 /// JSON-RPC error codes of the session API.
@@ -155,7 +192,7 @@ abstract final class ApiErrorCode {
   /// The channel tip is unsigned, signed by an unknown signer, or does not descend from the locked revision.
   static const updateVerificationFailed = 3009;
 
-  /// Unknown generation or job.
+  /// Unknown generation or job; for runtime settings: a Wi-Fi network not in range, a Bluetooth device, an audio output or a display mode that does not exist, or a bluetooth.confirm with nothing waiting.
   static const notFound = 3010;
 
   /// A downgrading channel or base switch without acknowledge_downgrade: true.
@@ -166,6 +203,21 @@ abstract final class ApiErrorCode {
 
   /// A relayed method could not reach the system service: it is down (reason down) or speaks another system API version (reason version_mismatch, e.g. after a switch until the session restarts). The session API keeps working.
   static const systemUnavailable = 3001;
+
+  /// A runtime-settings method needs a service that is not there (not installed, not running, no permission to reach it, or no such hardware).
+  static const unavailable = 4001;
+
+  /// The service accepted the request but the operation failed (a connection or pairing attempt, a mode change). The message says why in words; reason is for code.
+  static const deviceFailed = 4002;
+
+  /// wifi.connect: the network refused the password.
+  static const wrongPassword = 4003;
+
+  /// The service's polkit policy refused the session user (not the active local session, or the system's polkit rules are missing).
+  static const notAuthorized = 4004;
+
+  /// logind refused suspend, reboot or power off because an inhibitor lock blocks it (a system job is switching over). The message is logind's.
+  static const powerInhibited = 4005;
 }
 
 /// MAJOR.MINOR
@@ -190,6 +242,9 @@ typedef Rev = String;
 typedef Revision = String;
 typedef Fingerprint = String;
 typedef PolkitAction = String;
+
+/// A Bluetooth address, upper case.
+typedef BtAddress = String;
 
 /// Name and build version of one side of the connection (informational, for logs).
 class Peer {
@@ -227,6 +282,11 @@ enum EventName {
   jobStarted('job_started'),
   jobProgress('job_progress'),
   jobFinished('job_finished'),
+  networkChanged('network_changed'),
+  wifiListChanged('wifi_list_changed'),
+  bluetoothChanged('bluetooth_changed'),
+  bluetoothConfirm('bluetooth_confirm'),
+  audioChanged('audio_changed'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -1238,6 +1298,580 @@ class Job {
 
   @override
   String toString() => 'Job(${jsonEncode(toJson())})';
+}
+
+enum Connectivity {
+  unknown('unknown'),
+  none('none'),
+  portal('portal'),
+  limited('limited'),
+  full('full'),
+
+  /// A value this client does not know (newer daemon).
+  unknown_('unknown');
+
+  const Connectivity(this.value);
+  final String value;
+
+  factory Connectivity.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown_ && e.value == value,
+    orElse: () => unknown_,
+  );
+
+  String toJson() => value;
+}
+
+class NetworkStatus {
+  const NetworkStatus({
+    required this.wifiAvailable,
+    required this.wifiEnabled,
+    required this.ethernet,
+    this.wifiSsid,
+    this.wifiSignal,
+    this.address,
+    required this.connectivity,
+  });
+
+  /// There is a Wi-Fi device.
+  final bool wifiAvailable;
+
+  /// Wi-Fi is switched on.
+  final bool wifiEnabled;
+
+  /// An Ethernet device is connected.
+  final bool ethernet;
+
+  /// The network Wi-Fi is connected to (absent when not connected).
+  final String? wifiSsid;
+  final int? wifiSignal;
+
+  /// The primary connection's IPv4 address.
+  final String? address;
+  final Connectivity connectivity;
+
+  factory NetworkStatus.fromJson(Map<String, dynamic> json) => NetworkStatus(
+    wifiAvailable: json['wifi_available'] as bool,
+    wifiEnabled: json['wifi_enabled'] as bool,
+    ethernet: json['ethernet'] as bool,
+    wifiSsid: json['wifi_ssid'] == null ? null : json['wifi_ssid'] as String,
+    wifiSignal: json['wifi_signal'] == null ? null : json['wifi_signal'] as int,
+    address: json['address'] == null ? null : json['address'] as String,
+    connectivity: Connectivity.fromJson(json['connectivity'] as String),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'wifi_available': wifiAvailable,
+    'wifi_enabled': wifiEnabled,
+    'ethernet': ethernet,
+    'wifi_ssid': ?wifiSsid,
+    'wifi_signal': ?wifiSignal,
+    'address': ?address,
+    'connectivity': connectivity.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is NetworkStatus &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'NetworkStatus(${jsonEncode(toJson())})';
+}
+
+/// wpa is WPA or WPA2 with a passphrase, wpa3 is SAE only, enterprise (802.1X) cannot be joined with a password alone.
+enum WifiSecurity {
+  open('open'),
+  wep('wep'),
+  wpa('wpa'),
+  wpa3('wpa3'),
+  enterprise('enterprise'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const WifiSecurity(this.value);
+  final String value;
+
+  factory WifiSecurity.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+class WifiNetwork {
+  const WifiNetwork({
+    required this.ssid,
+    required this.signal,
+    required this.security,
+    required this.known,
+    required this.connected,
+  });
+
+  final String ssid;
+  final int signal;
+
+  /// wpa is WPA or WPA2 with a passphrase, wpa3 is SAE only, enterprise (802.1X) cannot be joined with a password alone.
+  final WifiSecurity security;
+
+  /// A connection for it is stored (no password needed).
+  final bool known;
+  final bool connected;
+
+  factory WifiNetwork.fromJson(Map<String, dynamic> json) => WifiNetwork(
+    ssid: json['ssid'] as String,
+    signal: json['signal'] as int,
+    security: WifiSecurity.fromJson(json['security'] as String),
+    known: json['known'] as bool,
+    connected: json['connected'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'ssid': ssid,
+    'signal': signal,
+    'security': security.toJson(),
+    'known': known,
+    'connected': connected,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is WifiNetwork &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'WifiNetwork(${jsonEncode(toJson())})';
+}
+
+class WifiList {
+  const WifiList({required this.networks});
+
+  /// Strongest first.
+  final List<WifiNetwork> networks;
+
+  factory WifiList.fromJson(Map<String, dynamic> json) => WifiList(
+    networks: (json['networks'] as List)
+        .map((x) => WifiNetwork.fromJson((x as Map).cast<String, dynamic>()))
+        .toList(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'networks': networks.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is WifiList && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'WifiList(${jsonEncode(toJson())})';
+}
+
+enum BtKind {
+  gamepad('gamepad'),
+  headset('headset'),
+  speaker('speaker'),
+  keyboard('keyboard'),
+  mouse('mouse'),
+  phone('phone'),
+  computer('computer'),
+  other('other'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const BtKind(this.value);
+  final String value;
+
+  factory BtKind.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+class BtDevice {
+  const BtDevice({
+    required this.address,
+    required this.name,
+    required this.kind,
+    required this.paired,
+    required this.connected,
+    required this.trusted,
+    this.battery,
+    this.rssi,
+  });
+
+  /// A Bluetooth address, upper case.
+  final String address;
+  final String name;
+  final BtKind kind;
+  final bool paired;
+  final bool connected;
+  final bool trusted;
+  final int? battery;
+
+  /// dBm, while in range.
+  final int? rssi;
+
+  factory BtDevice.fromJson(Map<String, dynamic> json) => BtDevice(
+    address: json['address'] as String,
+    name: json['name'] as String,
+    kind: BtKind.fromJson(json['kind'] as String),
+    paired: json['paired'] as bool,
+    connected: json['connected'] as bool,
+    trusted: json['trusted'] as bool,
+    battery: json['battery'] == null ? null : json['battery'] as int,
+    rssi: json['rssi'] == null ? null : json['rssi'] as int,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'address': address,
+    'name': name,
+    'kind': kind.toJson(),
+    'paired': paired,
+    'connected': connected,
+    'trusted': trusted,
+    'battery': ?battery,
+    'rssi': ?rssi,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is BtDevice && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BtDevice(${jsonEncode(toJson())})';
+}
+
+class BtStatus {
+  const BtStatus({
+    required this.available,
+    required this.powered,
+    required this.scanning,
+  });
+
+  /// There is a Bluetooth adapter.
+  final bool available;
+  final bool powered;
+  final bool scanning;
+
+  factory BtStatus.fromJson(Map<String, dynamic> json) => BtStatus(
+    available: json['available'] as bool,
+    powered: json['powered'] as bool,
+    scanning: json['scanning'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'available': available,
+    'powered': powered,
+    'scanning': scanning,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is BtStatus && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BtStatus(${jsonEncode(toJson())})';
+}
+
+enum AudioKind {
+  hdmi('hdmi'),
+  analog('analog'),
+  usb('usb'),
+  bluetooth('bluetooth'),
+  other('other'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const AudioKind(this.value);
+  final String value;
+
+  factory AudioKind.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+class AudioOutput {
+  const AudioOutput({
+    required this.id,
+    required this.name,
+    required this.kind,
+    required this.default_,
+  });
+
+  /// The sink's name.
+  final String id;
+  final String name;
+  final AudioKind kind;
+  final bool default_;
+
+  factory AudioOutput.fromJson(Map<String, dynamic> json) => AudioOutput(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    kind: AudioKind.fromJson(json['kind'] as String),
+    default_: json['default'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'kind': kind.toJson(),
+    'default': default_,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AudioOutput &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AudioOutput(${jsonEncode(toJson())})';
+}
+
+class AudioState {
+  const AudioState({
+    required this.outputs,
+    required this.volume,
+    required this.muted,
+  });
+
+  final List<AudioOutput> outputs;
+
+  /// The default output's volume, percent.
+  final int volume;
+  final bool muted;
+
+  factory AudioState.fromJson(Map<String, dynamic> json) => AudioState(
+    outputs: (json['outputs'] as List)
+        .map((x) => AudioOutput.fromJson((x as Map).cast<String, dynamic>()))
+        .toList(),
+    volume: json['volume'] as int,
+    muted: json['muted'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'outputs': outputs.map((x) => x.toJson()).toList(),
+    'volume': volume,
+    'muted': muted,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AudioState && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AudioState(${jsonEncode(toJson())})';
+}
+
+/// A display mode: pixels, and refresh rate in whole Hz (59.94 Hz is 60).
+class Mode {
+  const Mode({
+    required this.width,
+    required this.height,
+    required this.refresh,
+  });
+
+  final int width;
+  final int height;
+  final int refresh;
+
+  factory Mode.fromJson(Map<String, dynamic> json) => Mode(
+    width: json['width'] as int,
+    height: json['height'] as int,
+    refresh: json['refresh'] as int,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'width': width,
+    'height': height,
+    'refresh': refresh,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is Mode && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'Mode(${jsonEncode(toJson())})';
+}
+
+class DisplayModeInfo {
+  const DisplayModeInfo({
+    required this.width,
+    required this.height,
+    required this.refresh,
+    required this.current,
+    required this.preferred,
+  });
+
+  final int width;
+  final int height;
+  final int refresh;
+  final bool current;
+
+  /// The display's own first choice.
+  final bool preferred;
+
+  factory DisplayModeInfo.fromJson(Map<String, dynamic> json) =>
+      DisplayModeInfo(
+        width: json['width'] as int,
+        height: json['height'] as int,
+        refresh: json['refresh'] as int,
+        current: json['current'] as bool,
+        preferred: json['preferred'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'width': width,
+    'height': height,
+    'refresh': refresh,
+    'current': current,
+    'preferred': preferred,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is DisplayModeInfo &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'DisplayModeInfo(${jsonEncode(toJson())})';
+}
+
+class DisplayModes {
+  const DisplayModes({required this.modes, this.display, required this.canSet});
+
+  final List<DisplayModeInfo> modes;
+
+  /// Make and model of the display, if known.
+  final String? display;
+
+  /// display.set_mode can work.
+  final bool canSet;
+
+  factory DisplayModes.fromJson(Map<String, dynamic> json) => DisplayModes(
+    modes: (json['modes'] as List)
+        .map(
+          (x) => DisplayModeInfo.fromJson((x as Map).cast<String, dynamic>()),
+        )
+        .toList(),
+    display: json['display'] == null ? null : json['display'] as String,
+    canSet: json['can_set'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'modes': modes.map((x) => x.toJson()).toList(),
+    'display': ?display,
+    'can_set': canSet,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is DisplayModes &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'DisplayModes(${jsonEncode(toJson())})';
+}
+
+/// logind's answer: challenge needs authentication nobody can give on this box.
+enum PowerCapability {
+  yes('yes'),
+  no('no'),
+  challenge('challenge'),
+  na('na'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const PowerCapability(this.value);
+  final String value;
+
+  factory PowerCapability.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+class PowerCapabilities {
+  const PowerCapabilities({
+    required this.suspend,
+    required this.reboot,
+    required this.poweroff,
+  });
+
+  /// logind's answer: challenge needs authentication nobody can give on this box.
+  final PowerCapability suspend;
+
+  /// logind's answer: challenge needs authentication nobody can give on this box.
+  final PowerCapability reboot;
+
+  /// logind's answer: challenge needs authentication nobody can give on this box.
+  final PowerCapability poweroff;
+
+  factory PowerCapabilities.fromJson(Map<String, dynamic> json) =>
+      PowerCapabilities(
+        suspend: PowerCapability.fromJson(json['suspend'] as String),
+        reboot: PowerCapability.fromJson(json['reboot'] as String),
+        poweroff: PowerCapability.fromJson(json['poweroff'] as String),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'suspend': suspend.toJson(),
+    'reboot': reboot.toJson(),
+    'poweroff': poweroff.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is PowerCapabilities &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'PowerCapabilities(${jsonEncode(toJson())})';
 }
 
 class HelloParams {
@@ -2993,6 +3627,1645 @@ class SystemJobsCancelResult {
   String toString() => 'SystemJobsCancelResult(${jsonEncode(toJson())})';
 }
 
+class NetworkStatusParams {
+  const NetworkStatusParams();
+
+  factory NetworkStatusParams.fromJson(Map<String, dynamic> json) =>
+      NetworkStatusParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is NetworkStatusParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'NetworkStatusParams(${jsonEncode(toJson())})';
+}
+
+class NetworkStatusResult {
+  const NetworkStatusResult({
+    required this.wifiAvailable,
+    required this.wifiEnabled,
+    required this.ethernet,
+    this.wifiSsid,
+    this.wifiSignal,
+    this.address,
+    required this.connectivity,
+  });
+
+  /// There is a Wi-Fi device.
+  final bool wifiAvailable;
+
+  /// Wi-Fi is switched on.
+  final bool wifiEnabled;
+
+  /// An Ethernet device is connected.
+  final bool ethernet;
+
+  /// The network Wi-Fi is connected to (absent when not connected).
+  final String? wifiSsid;
+  final int? wifiSignal;
+
+  /// The primary connection's IPv4 address.
+  final String? address;
+  final Connectivity connectivity;
+
+  factory NetworkStatusResult.fromJson(
+    Map<String, dynamic> json,
+  ) => NetworkStatusResult(
+    wifiAvailable: json['wifi_available'] as bool,
+    wifiEnabled: json['wifi_enabled'] as bool,
+    ethernet: json['ethernet'] as bool,
+    wifiSsid: json['wifi_ssid'] == null ? null : json['wifi_ssid'] as String,
+    wifiSignal: json['wifi_signal'] == null ? null : json['wifi_signal'] as int,
+    address: json['address'] == null ? null : json['address'] as String,
+    connectivity: Connectivity.fromJson(json['connectivity'] as String),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'wifi_available': wifiAvailable,
+    'wifi_enabled': wifiEnabled,
+    'ethernet': ethernet,
+    'wifi_ssid': ?wifiSsid,
+    'wifi_signal': ?wifiSignal,
+    'address': ?address,
+    'connectivity': connectivity.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is NetworkStatusResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'NetworkStatusResult(${jsonEncode(toJson())})';
+}
+
+class WifiScanParams {
+  const WifiScanParams();
+
+  factory WifiScanParams.fromJson(Map<String, dynamic> json) =>
+      WifiScanParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is WifiScanParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'WifiScanParams(${jsonEncode(toJson())})';
+}
+
+class WifiScanResult {
+  const WifiScanResult({required this.networks});
+
+  /// Strongest first.
+  final List<WifiNetwork> networks;
+
+  factory WifiScanResult.fromJson(Map<String, dynamic> json) => WifiScanResult(
+    networks: (json['networks'] as List)
+        .map((x) => WifiNetwork.fromJson((x as Map).cast<String, dynamic>()))
+        .toList(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'networks': networks.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is WifiScanResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'WifiScanResult(${jsonEncode(toJson())})';
+}
+
+class WifiListParams {
+  const WifiListParams();
+
+  factory WifiListParams.fromJson(Map<String, dynamic> json) =>
+      WifiListParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is WifiListParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'WifiListParams(${jsonEncode(toJson())})';
+}
+
+class WifiListResult {
+  const WifiListResult({required this.networks});
+
+  /// Strongest first.
+  final List<WifiNetwork> networks;
+
+  factory WifiListResult.fromJson(Map<String, dynamic> json) => WifiListResult(
+    networks: (json['networks'] as List)
+        .map((x) => WifiNetwork.fromJson((x as Map).cast<String, dynamic>()))
+        .toList(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'networks': networks.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is WifiListResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'WifiListResult(${jsonEncode(toJson())})';
+}
+
+class WifiConnectParams {
+  const WifiConnectParams({required this.ssid, this.password});
+
+  final String ssid;
+
+  /// 8 to 63 characters (WPA), or 64 hex digits (the raw key).
+  final String? password;
+
+  factory WifiConnectParams.fromJson(Map<String, dynamic> json) =>
+      WifiConnectParams(
+        ssid: json['ssid'] as String,
+        password: json['password'] == null ? null : json['password'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'ssid': ssid, 'password': ?password};
+
+  @override
+  bool operator ==(Object other) =>
+      other is WifiConnectParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'WifiConnectParams(${jsonEncode(toJson())})';
+}
+
+class WifiConnectResult {
+  const WifiConnectResult({
+    required this.wifiAvailable,
+    required this.wifiEnabled,
+    required this.ethernet,
+    this.wifiSsid,
+    this.wifiSignal,
+    this.address,
+    required this.connectivity,
+  });
+
+  /// There is a Wi-Fi device.
+  final bool wifiAvailable;
+
+  /// Wi-Fi is switched on.
+  final bool wifiEnabled;
+
+  /// An Ethernet device is connected.
+  final bool ethernet;
+
+  /// The network Wi-Fi is connected to (absent when not connected).
+  final String? wifiSsid;
+  final int? wifiSignal;
+
+  /// The primary connection's IPv4 address.
+  final String? address;
+  final Connectivity connectivity;
+
+  factory WifiConnectResult.fromJson(
+    Map<String, dynamic> json,
+  ) => WifiConnectResult(
+    wifiAvailable: json['wifi_available'] as bool,
+    wifiEnabled: json['wifi_enabled'] as bool,
+    ethernet: json['ethernet'] as bool,
+    wifiSsid: json['wifi_ssid'] == null ? null : json['wifi_ssid'] as String,
+    wifiSignal: json['wifi_signal'] == null ? null : json['wifi_signal'] as int,
+    address: json['address'] == null ? null : json['address'] as String,
+    connectivity: Connectivity.fromJson(json['connectivity'] as String),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'wifi_available': wifiAvailable,
+    'wifi_enabled': wifiEnabled,
+    'ethernet': ethernet,
+    'wifi_ssid': ?wifiSsid,
+    'wifi_signal': ?wifiSignal,
+    'address': ?address,
+    'connectivity': connectivity.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is WifiConnectResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'WifiConnectResult(${jsonEncode(toJson())})';
+}
+
+class WifiDisconnectParams {
+  const WifiDisconnectParams();
+
+  factory WifiDisconnectParams.fromJson(Map<String, dynamic> json) =>
+      WifiDisconnectParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is WifiDisconnectParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'WifiDisconnectParams(${jsonEncode(toJson())})';
+}
+
+class WifiDisconnectResult {
+  const WifiDisconnectResult({
+    required this.wifiAvailable,
+    required this.wifiEnabled,
+    required this.ethernet,
+    this.wifiSsid,
+    this.wifiSignal,
+    this.address,
+    required this.connectivity,
+  });
+
+  /// There is a Wi-Fi device.
+  final bool wifiAvailable;
+
+  /// Wi-Fi is switched on.
+  final bool wifiEnabled;
+
+  /// An Ethernet device is connected.
+  final bool ethernet;
+
+  /// The network Wi-Fi is connected to (absent when not connected).
+  final String? wifiSsid;
+  final int? wifiSignal;
+
+  /// The primary connection's IPv4 address.
+  final String? address;
+  final Connectivity connectivity;
+
+  factory WifiDisconnectResult.fromJson(
+    Map<String, dynamic> json,
+  ) => WifiDisconnectResult(
+    wifiAvailable: json['wifi_available'] as bool,
+    wifiEnabled: json['wifi_enabled'] as bool,
+    ethernet: json['ethernet'] as bool,
+    wifiSsid: json['wifi_ssid'] == null ? null : json['wifi_ssid'] as String,
+    wifiSignal: json['wifi_signal'] == null ? null : json['wifi_signal'] as int,
+    address: json['address'] == null ? null : json['address'] as String,
+    connectivity: Connectivity.fromJson(json['connectivity'] as String),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'wifi_available': wifiAvailable,
+    'wifi_enabled': wifiEnabled,
+    'ethernet': ethernet,
+    'wifi_ssid': ?wifiSsid,
+    'wifi_signal': ?wifiSignal,
+    'address': ?address,
+    'connectivity': connectivity.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is WifiDisconnectResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'WifiDisconnectResult(${jsonEncode(toJson())})';
+}
+
+class WifiForgetParams {
+  const WifiForgetParams({required this.ssid});
+
+  final String ssid;
+
+  factory WifiForgetParams.fromJson(Map<String, dynamic> json) =>
+      WifiForgetParams(ssid: json['ssid'] as String);
+
+  Map<String, dynamic> toJson() => {'ssid': ssid};
+
+  @override
+  bool operator ==(Object other) =>
+      other is WifiForgetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'WifiForgetParams(${jsonEncode(toJson())})';
+}
+
+class WifiForgetResult {
+  const WifiForgetResult();
+
+  factory WifiForgetResult.fromJson(Map<String, dynamic> json) =>
+      WifiForgetResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is WifiForgetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'WifiForgetResult(${jsonEncode(toJson())})';
+}
+
+class WifiEnableParams {
+  const WifiEnableParams({required this.enabled});
+
+  final bool enabled;
+
+  factory WifiEnableParams.fromJson(Map<String, dynamic> json) =>
+      WifiEnableParams(enabled: json['enabled'] as bool);
+
+  Map<String, dynamic> toJson() => {'enabled': enabled};
+
+  @override
+  bool operator ==(Object other) =>
+      other is WifiEnableParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'WifiEnableParams(${jsonEncode(toJson())})';
+}
+
+class WifiEnableResult {
+  const WifiEnableResult({
+    required this.wifiAvailable,
+    required this.wifiEnabled,
+    required this.ethernet,
+    this.wifiSsid,
+    this.wifiSignal,
+    this.address,
+    required this.connectivity,
+  });
+
+  /// There is a Wi-Fi device.
+  final bool wifiAvailable;
+
+  /// Wi-Fi is switched on.
+  final bool wifiEnabled;
+
+  /// An Ethernet device is connected.
+  final bool ethernet;
+
+  /// The network Wi-Fi is connected to (absent when not connected).
+  final String? wifiSsid;
+  final int? wifiSignal;
+
+  /// The primary connection's IPv4 address.
+  final String? address;
+  final Connectivity connectivity;
+
+  factory WifiEnableResult.fromJson(
+    Map<String, dynamic> json,
+  ) => WifiEnableResult(
+    wifiAvailable: json['wifi_available'] as bool,
+    wifiEnabled: json['wifi_enabled'] as bool,
+    ethernet: json['ethernet'] as bool,
+    wifiSsid: json['wifi_ssid'] == null ? null : json['wifi_ssid'] as String,
+    wifiSignal: json['wifi_signal'] == null ? null : json['wifi_signal'] as int,
+    address: json['address'] == null ? null : json['address'] as String,
+    connectivity: Connectivity.fromJson(json['connectivity'] as String),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'wifi_available': wifiAvailable,
+    'wifi_enabled': wifiEnabled,
+    'ethernet': ethernet,
+    'wifi_ssid': ?wifiSsid,
+    'wifi_signal': ?wifiSignal,
+    'address': ?address,
+    'connectivity': connectivity.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is WifiEnableResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'WifiEnableResult(${jsonEncode(toJson())})';
+}
+
+class BluetoothStatusParams {
+  const BluetoothStatusParams();
+
+  factory BluetoothStatusParams.fromJson(Map<String, dynamic> json) =>
+      BluetoothStatusParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothStatusParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothStatusParams(${jsonEncode(toJson())})';
+}
+
+class BluetoothStatusResult {
+  const BluetoothStatusResult({
+    required this.available,
+    required this.powered,
+    required this.scanning,
+  });
+
+  /// There is a Bluetooth adapter.
+  final bool available;
+  final bool powered;
+  final bool scanning;
+
+  factory BluetoothStatusResult.fromJson(Map<String, dynamic> json) =>
+      BluetoothStatusResult(
+        available: json['available'] as bool,
+        powered: json['powered'] as bool,
+        scanning: json['scanning'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'available': available,
+    'powered': powered,
+    'scanning': scanning,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothStatusResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothStatusResult(${jsonEncode(toJson())})';
+}
+
+class BluetoothScanParams {
+  const BluetoothScanParams({required this.enabled, this.timeoutS});
+
+  final bool enabled;
+  final int? timeoutS;
+
+  factory BluetoothScanParams.fromJson(Map<String, dynamic> json) =>
+      BluetoothScanParams(
+        enabled: json['enabled'] as bool,
+        timeoutS: json['timeout_s'] == null ? null : json['timeout_s'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {'enabled': enabled, 'timeout_s': ?timeoutS};
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothScanParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothScanParams(${jsonEncode(toJson())})';
+}
+
+class BluetoothScanResult {
+  const BluetoothScanResult({
+    required this.available,
+    required this.powered,
+    required this.scanning,
+  });
+
+  /// There is a Bluetooth adapter.
+  final bool available;
+  final bool powered;
+  final bool scanning;
+
+  factory BluetoothScanResult.fromJson(Map<String, dynamic> json) =>
+      BluetoothScanResult(
+        available: json['available'] as bool,
+        powered: json['powered'] as bool,
+        scanning: json['scanning'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'available': available,
+    'powered': powered,
+    'scanning': scanning,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothScanResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothScanResult(${jsonEncode(toJson())})';
+}
+
+class BluetoothDevicesParams {
+  const BluetoothDevicesParams();
+
+  factory BluetoothDevicesParams.fromJson(Map<String, dynamic> json) =>
+      BluetoothDevicesParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothDevicesParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothDevicesParams(${jsonEncode(toJson())})';
+}
+
+class BluetoothDevicesResult {
+  const BluetoothDevicesResult({required this.devices});
+
+  final List<BtDevice> devices;
+
+  factory BluetoothDevicesResult.fromJson(Map<String, dynamic> json) =>
+      BluetoothDevicesResult(
+        devices: (json['devices'] as List)
+            .map((x) => BtDevice.fromJson((x as Map).cast<String, dynamic>()))
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'devices': devices.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothDevicesResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothDevicesResult(${jsonEncode(toJson())})';
+}
+
+class BluetoothPairParams {
+  const BluetoothPairParams({required this.address});
+
+  /// A Bluetooth address, upper case.
+  final String address;
+
+  factory BluetoothPairParams.fromJson(Map<String, dynamic> json) =>
+      BluetoothPairParams(address: json['address'] as String);
+
+  Map<String, dynamic> toJson() => {'address': address};
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothPairParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothPairParams(${jsonEncode(toJson())})';
+}
+
+class BluetoothPairResult {
+  const BluetoothPairResult({
+    required this.address,
+    required this.name,
+    required this.kind,
+    required this.paired,
+    required this.connected,
+    required this.trusted,
+    this.battery,
+    this.rssi,
+  });
+
+  /// A Bluetooth address, upper case.
+  final String address;
+  final String name;
+  final BtKind kind;
+  final bool paired;
+  final bool connected;
+  final bool trusted;
+  final int? battery;
+
+  /// dBm, while in range.
+  final int? rssi;
+
+  factory BluetoothPairResult.fromJson(Map<String, dynamic> json) =>
+      BluetoothPairResult(
+        address: json['address'] as String,
+        name: json['name'] as String,
+        kind: BtKind.fromJson(json['kind'] as String),
+        paired: json['paired'] as bool,
+        connected: json['connected'] as bool,
+        trusted: json['trusted'] as bool,
+        battery: json['battery'] == null ? null : json['battery'] as int,
+        rssi: json['rssi'] == null ? null : json['rssi'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'address': address,
+    'name': name,
+    'kind': kind.toJson(),
+    'paired': paired,
+    'connected': connected,
+    'trusted': trusted,
+    'battery': ?battery,
+    'rssi': ?rssi,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothPairResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothPairResult(${jsonEncode(toJson())})';
+}
+
+class BluetoothConfirmParams {
+  const BluetoothConfirmParams({required this.address, required this.accept});
+
+  /// A Bluetooth address, upper case.
+  final String address;
+  final bool accept;
+
+  factory BluetoothConfirmParams.fromJson(Map<String, dynamic> json) =>
+      BluetoothConfirmParams(
+        address: json['address'] as String,
+        accept: json['accept'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {'address': address, 'accept': accept};
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothConfirmParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothConfirmParams(${jsonEncode(toJson())})';
+}
+
+class BluetoothConfirmResult {
+  const BluetoothConfirmResult();
+
+  factory BluetoothConfirmResult.fromJson(Map<String, dynamic> json) =>
+      BluetoothConfirmResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothConfirmResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothConfirmResult(${jsonEncode(toJson())})';
+}
+
+class BluetoothConnectParams {
+  const BluetoothConnectParams({required this.address});
+
+  /// A Bluetooth address, upper case.
+  final String address;
+
+  factory BluetoothConnectParams.fromJson(Map<String, dynamic> json) =>
+      BluetoothConnectParams(address: json['address'] as String);
+
+  Map<String, dynamic> toJson() => {'address': address};
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothConnectParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothConnectParams(${jsonEncode(toJson())})';
+}
+
+class BluetoothConnectResult {
+  const BluetoothConnectResult({
+    required this.address,
+    required this.name,
+    required this.kind,
+    required this.paired,
+    required this.connected,
+    required this.trusted,
+    this.battery,
+    this.rssi,
+  });
+
+  /// A Bluetooth address, upper case.
+  final String address;
+  final String name;
+  final BtKind kind;
+  final bool paired;
+  final bool connected;
+  final bool trusted;
+  final int? battery;
+
+  /// dBm, while in range.
+  final int? rssi;
+
+  factory BluetoothConnectResult.fromJson(Map<String, dynamic> json) =>
+      BluetoothConnectResult(
+        address: json['address'] as String,
+        name: json['name'] as String,
+        kind: BtKind.fromJson(json['kind'] as String),
+        paired: json['paired'] as bool,
+        connected: json['connected'] as bool,
+        trusted: json['trusted'] as bool,
+        battery: json['battery'] == null ? null : json['battery'] as int,
+        rssi: json['rssi'] == null ? null : json['rssi'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'address': address,
+    'name': name,
+    'kind': kind.toJson(),
+    'paired': paired,
+    'connected': connected,
+    'trusted': trusted,
+    'battery': ?battery,
+    'rssi': ?rssi,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothConnectResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothConnectResult(${jsonEncode(toJson())})';
+}
+
+class BluetoothDisconnectParams {
+  const BluetoothDisconnectParams({required this.address});
+
+  /// A Bluetooth address, upper case.
+  final String address;
+
+  factory BluetoothDisconnectParams.fromJson(Map<String, dynamic> json) =>
+      BluetoothDisconnectParams(address: json['address'] as String);
+
+  Map<String, dynamic> toJson() => {'address': address};
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothDisconnectParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothDisconnectParams(${jsonEncode(toJson())})';
+}
+
+class BluetoothDisconnectResult {
+  const BluetoothDisconnectResult({
+    required this.address,
+    required this.name,
+    required this.kind,
+    required this.paired,
+    required this.connected,
+    required this.trusted,
+    this.battery,
+    this.rssi,
+  });
+
+  /// A Bluetooth address, upper case.
+  final String address;
+  final String name;
+  final BtKind kind;
+  final bool paired;
+  final bool connected;
+  final bool trusted;
+  final int? battery;
+
+  /// dBm, while in range.
+  final int? rssi;
+
+  factory BluetoothDisconnectResult.fromJson(Map<String, dynamic> json) =>
+      BluetoothDisconnectResult(
+        address: json['address'] as String,
+        name: json['name'] as String,
+        kind: BtKind.fromJson(json['kind'] as String),
+        paired: json['paired'] as bool,
+        connected: json['connected'] as bool,
+        trusted: json['trusted'] as bool,
+        battery: json['battery'] == null ? null : json['battery'] as int,
+        rssi: json['rssi'] == null ? null : json['rssi'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'address': address,
+    'name': name,
+    'kind': kind.toJson(),
+    'paired': paired,
+    'connected': connected,
+    'trusted': trusted,
+    'battery': ?battery,
+    'rssi': ?rssi,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothDisconnectResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothDisconnectResult(${jsonEncode(toJson())})';
+}
+
+class BluetoothForgetParams {
+  const BluetoothForgetParams({required this.address});
+
+  /// A Bluetooth address, upper case.
+  final String address;
+
+  factory BluetoothForgetParams.fromJson(Map<String, dynamic> json) =>
+      BluetoothForgetParams(address: json['address'] as String);
+
+  Map<String, dynamic> toJson() => {'address': address};
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothForgetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothForgetParams(${jsonEncode(toJson())})';
+}
+
+class BluetoothForgetResult {
+  const BluetoothForgetResult();
+
+  factory BluetoothForgetResult.fromJson(Map<String, dynamic> json) =>
+      BluetoothForgetResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothForgetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothForgetResult(${jsonEncode(toJson())})';
+}
+
+class AudioOutputsParams {
+  const AudioOutputsParams();
+
+  factory AudioOutputsParams.fromJson(Map<String, dynamic> json) =>
+      AudioOutputsParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AudioOutputsParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AudioOutputsParams(${jsonEncode(toJson())})';
+}
+
+class AudioOutputsResult {
+  const AudioOutputsResult({
+    required this.outputs,
+    required this.volume,
+    required this.muted,
+  });
+
+  final List<AudioOutput> outputs;
+
+  /// The default output's volume, percent.
+  final int volume;
+  final bool muted;
+
+  factory AudioOutputsResult.fromJson(Map<String, dynamic> json) =>
+      AudioOutputsResult(
+        outputs: (json['outputs'] as List)
+            .map(
+              (x) => AudioOutput.fromJson((x as Map).cast<String, dynamic>()),
+            )
+            .toList(),
+        volume: json['volume'] as int,
+        muted: json['muted'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'outputs': outputs.map((x) => x.toJson()).toList(),
+    'volume': volume,
+    'muted': muted,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AudioOutputsResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AudioOutputsResult(${jsonEncode(toJson())})';
+}
+
+class AudioSetOutputParams {
+  const AudioSetOutputParams({required this.id});
+
+  final String id;
+
+  factory AudioSetOutputParams.fromJson(Map<String, dynamic> json) =>
+      AudioSetOutputParams(id: json['id'] as String);
+
+  Map<String, dynamic> toJson() => {'id': id};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AudioSetOutputParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AudioSetOutputParams(${jsonEncode(toJson())})';
+}
+
+class AudioSetOutputResult {
+  const AudioSetOutputResult({
+    required this.outputs,
+    required this.volume,
+    required this.muted,
+  });
+
+  final List<AudioOutput> outputs;
+
+  /// The default output's volume, percent.
+  final int volume;
+  final bool muted;
+
+  factory AudioSetOutputResult.fromJson(Map<String, dynamic> json) =>
+      AudioSetOutputResult(
+        outputs: (json['outputs'] as List)
+            .map(
+              (x) => AudioOutput.fromJson((x as Map).cast<String, dynamic>()),
+            )
+            .toList(),
+        volume: json['volume'] as int,
+        muted: json['muted'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'outputs': outputs.map((x) => x.toJson()).toList(),
+    'volume': volume,
+    'muted': muted,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AudioSetOutputResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AudioSetOutputResult(${jsonEncode(toJson())})';
+}
+
+class AudioVolumeParams {
+  const AudioVolumeParams({this.percent});
+
+  final int? percent;
+
+  factory AudioVolumeParams.fromJson(Map<String, dynamic> json) =>
+      AudioVolumeParams(
+        percent: json['percent'] == null ? null : json['percent'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {'percent': ?percent};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AudioVolumeParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AudioVolumeParams(${jsonEncode(toJson())})';
+}
+
+class AudioVolumeResult {
+  const AudioVolumeResult({
+    required this.outputs,
+    required this.volume,
+    required this.muted,
+  });
+
+  final List<AudioOutput> outputs;
+
+  /// The default output's volume, percent.
+  final int volume;
+  final bool muted;
+
+  factory AudioVolumeResult.fromJson(Map<String, dynamic> json) =>
+      AudioVolumeResult(
+        outputs: (json['outputs'] as List)
+            .map(
+              (x) => AudioOutput.fromJson((x as Map).cast<String, dynamic>()),
+            )
+            .toList(),
+        volume: json['volume'] as int,
+        muted: json['muted'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'outputs': outputs.map((x) => x.toJson()).toList(),
+    'volume': volume,
+    'muted': muted,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AudioVolumeResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AudioVolumeResult(${jsonEncode(toJson())})';
+}
+
+class AudioMuteParams {
+  const AudioMuteParams({required this.muted});
+
+  final bool muted;
+
+  factory AudioMuteParams.fromJson(Map<String, dynamic> json) =>
+      AudioMuteParams(muted: json['muted'] as bool);
+
+  Map<String, dynamic> toJson() => {'muted': muted};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AudioMuteParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AudioMuteParams(${jsonEncode(toJson())})';
+}
+
+class AudioMuteResult {
+  const AudioMuteResult({
+    required this.outputs,
+    required this.volume,
+    required this.muted,
+  });
+
+  final List<AudioOutput> outputs;
+
+  /// The default output's volume, percent.
+  final int volume;
+  final bool muted;
+
+  factory AudioMuteResult.fromJson(Map<String, dynamic> json) =>
+      AudioMuteResult(
+        outputs: (json['outputs'] as List)
+            .map(
+              (x) => AudioOutput.fromJson((x as Map).cast<String, dynamic>()),
+            )
+            .toList(),
+        volume: json['volume'] as int,
+        muted: json['muted'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'outputs': outputs.map((x) => x.toJson()).toList(),
+    'volume': volume,
+    'muted': muted,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AudioMuteResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AudioMuteResult(${jsonEncode(toJson())})';
+}
+
+class DisplayModesParams {
+  const DisplayModesParams();
+
+  factory DisplayModesParams.fromJson(Map<String, dynamic> json) =>
+      DisplayModesParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is DisplayModesParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'DisplayModesParams(${jsonEncode(toJson())})';
+}
+
+class DisplayModesResult {
+  const DisplayModesResult({
+    required this.modes,
+    this.display,
+    required this.canSet,
+  });
+
+  final List<DisplayModeInfo> modes;
+
+  /// Make and model of the display, if known.
+  final String? display;
+
+  /// display.set_mode can work.
+  final bool canSet;
+
+  factory DisplayModesResult.fromJson(Map<String, dynamic> json) =>
+      DisplayModesResult(
+        modes: (json['modes'] as List)
+            .map(
+              (x) =>
+                  DisplayModeInfo.fromJson((x as Map).cast<String, dynamic>()),
+            )
+            .toList(),
+        display: json['display'] == null ? null : json['display'] as String,
+        canSet: json['can_set'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'modes': modes.map((x) => x.toJson()).toList(),
+    'display': ?display,
+    'can_set': canSet,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is DisplayModesResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'DisplayModesResult(${jsonEncode(toJson())})';
+}
+
+/// A display mode: pixels, and refresh rate in whole Hz (59.94 Hz is 60).
+class DisplaySetModeParams {
+  const DisplaySetModeParams({
+    required this.width,
+    required this.height,
+    required this.refresh,
+  });
+
+  final int width;
+  final int height;
+  final int refresh;
+
+  factory DisplaySetModeParams.fromJson(Map<String, dynamic> json) =>
+      DisplaySetModeParams(
+        width: json['width'] as int,
+        height: json['height'] as int,
+        refresh: json['refresh'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'width': width,
+    'height': height,
+    'refresh': refresh,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is DisplaySetModeParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'DisplaySetModeParams(${jsonEncode(toJson())})';
+}
+
+class DisplaySetModeResult {
+  const DisplaySetModeResult({required this.previous, required this.current});
+
+  /// A display mode: pixels, and refresh rate in whole Hz (59.94 Hz is 60).
+  final Mode previous;
+
+  /// A display mode: pixels, and refresh rate in whole Hz (59.94 Hz is 60).
+  final Mode current;
+
+  factory DisplaySetModeResult.fromJson(
+    Map<String, dynamic> json,
+  ) => DisplaySetModeResult(
+    previous: Mode.fromJson((json['previous'] as Map).cast<String, dynamic>()),
+    current: Mode.fromJson((json['current'] as Map).cast<String, dynamic>()),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'previous': previous.toJson(),
+    'current': current.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is DisplaySetModeResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'DisplaySetModeResult(${jsonEncode(toJson())})';
+}
+
+class DisplayKeepParams {
+  const DisplayKeepParams();
+
+  factory DisplayKeepParams.fromJson(Map<String, dynamic> json) =>
+      DisplayKeepParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is DisplayKeepParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'DisplayKeepParams(${jsonEncode(toJson())})';
+}
+
+class DisplayKeepResult {
+  const DisplayKeepResult();
+
+  factory DisplayKeepResult.fromJson(Map<String, dynamic> json) =>
+      DisplayKeepResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is DisplayKeepResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'DisplayKeepResult(${jsonEncode(toJson())})';
+}
+
+class DisplayRevertParams {
+  const DisplayRevertParams();
+
+  factory DisplayRevertParams.fromJson(Map<String, dynamic> json) =>
+      DisplayRevertParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is DisplayRevertParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'DisplayRevertParams(${jsonEncode(toJson())})';
+}
+
+class DisplayRevertResult {
+  const DisplayRevertResult({required this.current});
+
+  /// A display mode: pixels, and refresh rate in whole Hz (59.94 Hz is 60).
+  final Mode current;
+
+  factory DisplayRevertResult.fromJson(Map<String, dynamic> json) =>
+      DisplayRevertResult(
+        current: Mode.fromJson(
+          (json['current'] as Map).cast<String, dynamic>(),
+        ),
+      );
+
+  Map<String, dynamic> toJson() => {'current': current.toJson()};
+
+  @override
+  bool operator ==(Object other) =>
+      other is DisplayRevertResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'DisplayRevertResult(${jsonEncode(toJson())})';
+}
+
+class PowerCapabilitiesParams {
+  const PowerCapabilitiesParams();
+
+  factory PowerCapabilitiesParams.fromJson(Map<String, dynamic> json) =>
+      PowerCapabilitiesParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is PowerCapabilitiesParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'PowerCapabilitiesParams(${jsonEncode(toJson())})';
+}
+
+class PowerCapabilitiesResult {
+  const PowerCapabilitiesResult({
+    required this.suspend,
+    required this.reboot,
+    required this.poweroff,
+  });
+
+  /// logind's answer: challenge needs authentication nobody can give on this box.
+  final PowerCapability suspend;
+
+  /// logind's answer: challenge needs authentication nobody can give on this box.
+  final PowerCapability reboot;
+
+  /// logind's answer: challenge needs authentication nobody can give on this box.
+  final PowerCapability poweroff;
+
+  factory PowerCapabilitiesResult.fromJson(Map<String, dynamic> json) =>
+      PowerCapabilitiesResult(
+        suspend: PowerCapability.fromJson(json['suspend'] as String),
+        reboot: PowerCapability.fromJson(json['reboot'] as String),
+        poweroff: PowerCapability.fromJson(json['poweroff'] as String),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'suspend': suspend.toJson(),
+    'reboot': reboot.toJson(),
+    'poweroff': poweroff.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is PowerCapabilitiesResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'PowerCapabilitiesResult(${jsonEncode(toJson())})';
+}
+
+class PowerSuspendParams {
+  const PowerSuspendParams();
+
+  factory PowerSuspendParams.fromJson(Map<String, dynamic> json) =>
+      PowerSuspendParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is PowerSuspendParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'PowerSuspendParams(${jsonEncode(toJson())})';
+}
+
+class PowerSuspendResult {
+  const PowerSuspendResult();
+
+  factory PowerSuspendResult.fromJson(Map<String, dynamic> json) =>
+      PowerSuspendResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is PowerSuspendResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'PowerSuspendResult(${jsonEncode(toJson())})';
+}
+
+class PowerRebootParams {
+  const PowerRebootParams();
+
+  factory PowerRebootParams.fromJson(Map<String, dynamic> json) =>
+      PowerRebootParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is PowerRebootParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'PowerRebootParams(${jsonEncode(toJson())})';
+}
+
+class PowerRebootResult {
+  const PowerRebootResult();
+
+  factory PowerRebootResult.fromJson(Map<String, dynamic> json) =>
+      PowerRebootResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is PowerRebootResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'PowerRebootResult(${jsonEncode(toJson())})';
+}
+
+class PowerPoweroffParams {
+  const PowerPoweroffParams();
+
+  factory PowerPoweroffParams.fromJson(Map<String, dynamic> json) =>
+      PowerPoweroffParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is PowerPoweroffParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'PowerPoweroffParams(${jsonEncode(toJson())})';
+}
+
+class PowerPoweroffResult {
+  const PowerPoweroffResult();
+
+  factory PowerPoweroffResult.fromJson(Map<String, dynamic> json) =>
+      PowerPoweroffResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is PowerPoweroffResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'PowerPoweroffResult(${jsonEncode(toJson())})';
+}
+
 /// The global Home button was pressed. The launcher brings itself to the front.
 final class HomePressedEvent extends SessionEvent {
   const HomePressedEvent();
@@ -3442,6 +5715,268 @@ final class JobFinishedEvent extends SessionEvent {
   String toString() => 'JobFinishedEvent(${jsonEncode(toJson())})';
 }
 
+/// The network status changed (cable, Wi-Fi joined or lost, address, Wi-Fi switched).
+final class NetworkChangedEvent extends SessionEvent {
+  const NetworkChangedEvent({
+    required this.wifiAvailable,
+    required this.wifiEnabled,
+    required this.ethernet,
+    this.wifiSsid,
+    this.wifiSignal,
+    this.address,
+    required this.connectivity,
+  });
+
+  /// There is a Wi-Fi device.
+  final bool wifiAvailable;
+
+  /// Wi-Fi is switched on.
+  final bool wifiEnabled;
+
+  /// An Ethernet device is connected.
+  final bool ethernet;
+
+  /// The network Wi-Fi is connected to (absent when not connected).
+  final String? wifiSsid;
+  final int? wifiSignal;
+
+  /// The primary connection's IPv4 address.
+  final String? address;
+  final Connectivity connectivity;
+
+  factory NetworkChangedEvent.fromJson(
+    Map<String, dynamic> json,
+  ) => NetworkChangedEvent(
+    wifiAvailable: json['wifi_available'] as bool,
+    wifiEnabled: json['wifi_enabled'] as bool,
+    ethernet: json['ethernet'] as bool,
+    wifiSsid: json['wifi_ssid'] == null ? null : json['wifi_ssid'] as String,
+    wifiSignal: json['wifi_signal'] == null ? null : json['wifi_signal'] as int,
+    address: json['address'] == null ? null : json['address'] as String,
+    connectivity: Connectivity.fromJson(json['connectivity'] as String),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'wifi_available': wifiAvailable,
+    'wifi_enabled': wifiEnabled,
+    'ethernet': ethernet,
+    'wifi_ssid': ?wifiSsid,
+    'wifi_signal': ?wifiSignal,
+    'address': ?address,
+    'connectivity': connectivity.toJson(),
+  };
+
+  @override
+  String get name => 'network_changed';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is NetworkChangedEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'NetworkChangedEvent(${jsonEncode(toJson())})';
+}
+
+/// The list of Wi-Fi networks in range changed (a scan finished, a network came or went, saved networks changed).
+final class WifiListChangedEvent extends SessionEvent {
+  const WifiListChangedEvent({required this.networks});
+
+  /// Strongest first.
+  final List<WifiNetwork> networks;
+
+  factory WifiListChangedEvent.fromJson(Map<String, dynamic> json) =>
+      WifiListChangedEvent(
+        networks: (json['networks'] as List)
+            .map(
+              (x) => WifiNetwork.fromJson((x as Map).cast<String, dynamic>()),
+            )
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'networks': networks.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  String get name => 'wifi_list_changed';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is WifiListChangedEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'WifiListChangedEvent(${jsonEncode(toJson())})';
+}
+
+/// The adapter's state or a device changed (found, paired, connected, battery, gone).
+final class BluetoothChangedEvent extends SessionEvent {
+  const BluetoothChangedEvent({required this.status, required this.devices});
+
+  final BtStatus status;
+  final List<BtDevice> devices;
+
+  factory BluetoothChangedEvent.fromJson(Map<String, dynamic> json) =>
+      BluetoothChangedEvent(
+        status: BtStatus.fromJson(
+          (json['status'] as Map).cast<String, dynamic>(),
+        ),
+        devices: (json['devices'] as List)
+            .map((x) => BtDevice.fromJson((x as Map).cast<String, dynamic>()))
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'status': status.toJson(),
+    'devices': devices.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  String get name => 'bluetooth_changed';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothChangedEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothChangedEvent(${jsonEncode(toJson())})';
+}
+
+enum BluetoothConfirmEventMode {
+  confirm('confirm'),
+  display('display'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const BluetoothConfirmEventMode(this.value);
+  final String value;
+
+  factory BluetoothConfirmEventMode.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+/// A device being paired wants the user to compare or read a passkey.
+final class BluetoothConfirmEvent extends SessionEvent {
+  const BluetoothConfirmEvent({
+    required this.address,
+    required this.name_,
+    required this.passkey,
+    required this.mode,
+  });
+
+  /// A Bluetooth address, upper case.
+  final String address;
+  final String name_;
+  final String passkey;
+  final BluetoothConfirmEventMode mode;
+
+  factory BluetoothConfirmEvent.fromJson(Map<String, dynamic> json) =>
+      BluetoothConfirmEvent(
+        address: json['address'] as String,
+        name_: json['name'] as String,
+        passkey: json['passkey'] as String,
+        mode: BluetoothConfirmEventMode.fromJson(json['mode'] as String),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'address': address,
+    'name': name_,
+    'passkey': passkey,
+    'mode': mode.toJson(),
+  };
+
+  @override
+  String get name => 'bluetooth_confirm';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is BluetoothConfirmEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'BluetoothConfirmEvent(${jsonEncode(toJson())})';
+}
+
+/// The outputs, the default output, the volume or the mute state changed.
+final class AudioChangedEvent extends SessionEvent {
+  const AudioChangedEvent({
+    required this.outputs,
+    required this.volume,
+    required this.muted,
+  });
+
+  final List<AudioOutput> outputs;
+
+  /// The default output's volume, percent.
+  final int volume;
+  final bool muted;
+
+  factory AudioChangedEvent.fromJson(Map<String, dynamic> json) =>
+      AudioChangedEvent(
+        outputs: (json['outputs'] as List)
+            .map(
+              (x) => AudioOutput.fromJson((x as Map).cast<String, dynamic>()),
+            )
+            .toList(),
+        volume: json['volume'] as int,
+        muted: json['muted'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'outputs': outputs.map((x) => x.toJson()).toList(),
+    'volume': volume,
+    'muted': muted,
+  };
+
+  @override
+  String get name => 'audio_changed';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is AudioChangedEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AudioChangedEvent(${jsonEncode(toJson())})';
+}
+
 class InvalidParamsData {
   const InvalidParamsData({required this.field, required this.reason});
 
@@ -3855,6 +6390,104 @@ class SystemUnavailableData {
   String toString() => 'SystemUnavailableData(${jsonEncode(toJson())})';
 }
 
+enum UnavailableDataService {
+  networkmanager('networkmanager'),
+  bluez('bluez'),
+  audio('audio'),
+  display('display'),
+  logind('logind'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const UnavailableDataService(this.value);
+  final String value;
+
+  factory UnavailableDataService.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+class UnavailableData {
+  const UnavailableData({required this.service, required this.reason});
+
+  final UnavailableDataService service;
+  final String reason;
+
+  factory UnavailableData.fromJson(Map<String, dynamic> json) =>
+      UnavailableData(
+        service: UnavailableDataService.fromJson(json['service'] as String),
+        reason: json['reason'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'service': service.toJson(),
+    'reason': reason,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is UnavailableData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'UnavailableData(${jsonEncode(toJson())})';
+}
+
+class DeviceFailedData {
+  const DeviceFailedData({required this.reason});
+
+  final String reason;
+
+  factory DeviceFailedData.fromJson(Map<String, dynamic> json) =>
+      DeviceFailedData(reason: json['reason'] as String);
+
+  Map<String, dynamic> toJson() => {'reason': reason};
+
+  @override
+  bool operator ==(Object other) =>
+      other is DeviceFailedData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'DeviceFailedData(${jsonEncode(toJson())})';
+}
+
+class PowerInhibitedData {
+  const PowerInhibitedData({this.who, this.why});
+
+  final String? who;
+  final String? why;
+
+  factory PowerInhibitedData.fromJson(Map<String, dynamic> json) =>
+      PowerInhibitedData(
+        who: json['who'] == null ? null : json['who'] as String,
+        why: json['why'] == null ? null : json['why'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'who': ?who, 'why': ?why};
+
+  @override
+  bool operator ==(Object other) =>
+      other is PowerInhibitedData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'PowerInhibitedData(${jsonEncode(toJson())})';
+}
+
 /// Typed calls for every method of the session API.
 ///
 /// Implementors provide [rpc], which sends one request and returns its
@@ -4080,6 +6713,201 @@ mixin SessionApiMethods {
   ) async => SystemJobsCancelResult.fromJson(
     await rpc('system.jobs.cancel', params.toJson()),
   );
+
+  /// Wired and Wi-Fi state, the SSID joined and the IP address.
+  ///
+  /// Runtime settings (NetworkManager over D-Bus, as the session user). The same object comes with every network_changed event.
+  Future<NetworkStatusResult> networkStatus([
+    NetworkStatusParams params = const NetworkStatusParams(),
+  ]) async => NetworkStatusResult.fromJson(
+    await rpc('network.status', params.toJson()),
+  );
+
+  /// Ask for a fresh scan and return the networks it finds.
+  ///
+  /// Returns when the scan has finished (at most a few seconds); NetworkManager refuses scans right after another one, in which case the current list comes back. wifi_list_changed follows.
+  Future<WifiScanResult> wifiScan([
+    WifiScanParams params = const WifiScanParams(),
+  ]) async => WifiScanResult.fromJson(await rpc('wifi.scan', params.toJson()));
+
+  /// The networks NetworkManager knows now, strongest first (no scan).
+  Future<WifiListResult> wifiList([
+    WifiListParams params = const WifiListParams(),
+  ]) async => WifiListResult.fromJson(await rpc('wifi.list', params.toJson()));
+
+  /// Join a network, creating a system-wide connection for it.
+  ///
+  /// The password is needed unless the network is open or already known; it is stored in NetworkManager's system connection (readable by the session user, as accepted in the threat model) and is never logged by the daemon. Returns when the connection is up (or has failed, at most about 45 s). A failed new connection is removed again. 802.1X (enterprise) networks are refused with invalid_params.
+  Future<WifiConnectResult> wifiConnect(WifiConnectParams params) async =>
+      WifiConnectResult.fromJson(await rpc('wifi.connect', params.toJson()));
+
+  /// Leave the current Wi-Fi network (it will not rejoin until connected again).
+  Future<WifiDisconnectResult> wifiDisconnect([
+    WifiDisconnectParams params = const WifiDisconnectParams(),
+  ]) async => WifiDisconnectResult.fromJson(
+    await rpc('wifi.disconnect', params.toJson()),
+  );
+
+  /// Delete the stored connections of a network.
+  ///
+  /// Disconnects if it is the network in use. Forgetting a network that is not stored is not an error.
+  Future<WifiForgetResult> wifiForget(WifiForgetParams params) async =>
+      WifiForgetResult.fromJson(await rpc('wifi.forget', params.toJson()));
+
+  /// Switch Wi-Fi on or off.
+  Future<WifiEnableResult> wifiEnable(WifiEnableParams params) async =>
+      WifiEnableResult.fromJson(await rpc('wifi.enable', params.toJson()));
+
+  /// Whether there is an adapter, whether it is on and whether it is scanning.
+  ///
+  /// Runtime settings (BlueZ over D-Bus, as the session user).
+  Future<BluetoothStatusResult> bluetoothStatus([
+    BluetoothStatusParams params = const BluetoothStatusParams(),
+  ]) async => BluetoothStatusResult.fromJson(
+    await rpc('bluetooth.status', params.toJson()),
+  );
+
+  /// Start or stop looking for devices.
+  ///
+  /// Discovery stops by itself after timeout_s (default 30, at most 300). Found devices arrive as bluetooth_changed. While scanning (and while a bluetooth.pair is running) the daemon's pairing agent answers pairing requests; at other times it refuses them.
+  Future<BluetoothScanResult> bluetoothScan(BluetoothScanParams params) async =>
+      BluetoothScanResult.fromJson(
+        await rpc('bluetooth.scan', params.toJson()),
+      );
+
+  /// Known and discovered devices: paired ones first, then by name.
+  ///
+  /// Devices BlueZ has seen but that never reported a name are left out.
+  Future<BluetoothDevicesResult> bluetoothDevices([
+    BluetoothDevicesParams params = const BluetoothDevicesParams(),
+  ]) async => BluetoothDevicesResult.fromJson(
+    await rpc('bluetooth.devices', params.toJson()),
+  );
+
+  /// Pair with a device, trust it so that it reconnects by itself, and connect.
+  ///
+  /// The daemon registers a BlueZ agent (DisplayYesNo): devices without input or output (controllers, most headsets) pair without a prompt. If the device asks for a numeric comparison the daemon sends bluetooth_confirm {mode: confirm} and waits up to 30 s for bluetooth.confirm; devices that show a passkey to be typed on them get bluetooth_confirm {mode: display}. Legacy PIN requests are answered with 0000. Gives up after 45 s. Pairing an already paired device just trusts and connects it. Returns the device.
+  Future<BluetoothPairResult> bluetoothPair(BluetoothPairParams params) async =>
+      BluetoothPairResult.fromJson(
+        await rpc('bluetooth.pair', params.toJson()),
+      );
+
+  /// Answer a bluetooth_confirm request (numeric comparison).
+  Future<BluetoothConfirmResult> bluetoothConfirm(
+    BluetoothConfirmParams params,
+  ) async => BluetoothConfirmResult.fromJson(
+    await rpc('bluetooth.confirm', params.toJson()),
+  );
+
+  /// Connect a paired device.
+  Future<BluetoothConnectResult> bluetoothConnect(
+    BluetoothConnectParams params,
+  ) async => BluetoothConnectResult.fromJson(
+    await rpc('bluetooth.connect', params.toJson()),
+  );
+
+  /// Disconnect a device (it stays paired).
+  Future<BluetoothDisconnectResult> bluetoothDisconnect(
+    BluetoothDisconnectParams params,
+  ) async => BluetoothDisconnectResult.fromJson(
+    await rpc('bluetooth.disconnect', params.toJson()),
+  );
+
+  /// Unpair a device and remove it.
+  Future<BluetoothForgetResult> bluetoothForget(
+    BluetoothForgetParams params,
+  ) async => BluetoothForgetResult.fromJson(
+    await rpc('bluetooth.forget', params.toJson()),
+  );
+
+  /// Audio outputs, which one is the default, and its volume and mute state.
+  ///
+  /// Runtime settings through PipeWire's PulseAudio interface (pactl). Every audio.* method returns this same state. An output is a sink; its id is the sink's name, stable across restarts.
+  Future<AudioOutputsResult> audioOutputs([
+    AudioOutputsParams params = const AudioOutputsParams(),
+  ]) async =>
+      AudioOutputsResult.fromJson(await rpc('audio.outputs', params.toJson()));
+
+  /// Make an output the default: sound goes there.
+  Future<AudioSetOutputResult> audioSetOutput(
+    AudioSetOutputParams params,
+  ) async => AudioSetOutputResult.fromJson(
+    await rpc('audio.set_output', params.toJson()),
+  );
+
+  /// Set the default output's volume (0 to 100 percent, never above), or just report it.
+  Future<AudioVolumeResult> audioVolume([
+    AudioVolumeParams params = const AudioVolumeParams(),
+  ]) async =>
+      AudioVolumeResult.fromJson(await rpc('audio.volume', params.toJson()));
+
+  /// Mute or unmute the default output.
+  Future<AudioMuteResult> audioMute(AudioMuteParams params) async =>
+      AudioMuteResult.fromJson(await rpc('audio.mute', params.toJson()));
+
+  /// The display's modes (resolution and refresh rate), and the one in use.
+  ///
+  /// Under gamescope. The list is gamescope's own (the .modes file next to GAMESCOPE_PATCHED_EDID_FILE); the current mode comes from its Xwayland root window. can_set says whether display.set_mode can work (gamescope's mode save file is configured and the display is external). See the README for how modes are changed at runtime.
+  Future<DisplayModesResult> displayModes([
+    DisplayModesParams params = const DisplayModesParams(),
+  ]) async =>
+      DisplayModesResult.fromJson(await rpc('display.modes', params.toJson()));
+
+  /// Change the display's resolution and refresh rate, until reverted or kept.
+  ///
+  /// The mode must be in display.modes. gamescope has no runtime mode request, so the daemon records the mode in gamescope's mode save file (GAMESCOPE_MODE_SAVE_FILE, keyed by the display's name) and nudges gamescope to pick the display's mode again (GAMESCOPE_DISPLAY_MODE_NUDGE). That also makes it the mode used at the next start. Returns once gamescope runs the new mode (about a second); if it does not switch, the old mode is restored and device_failed {reason: not_applied} is returned. The previous mode is remembered for display.revert. A launcher's keep-or-revert dialog calls display.keep when the user keeps it and display.revert when the time runs out.
+  Future<DisplaySetModeResult> displaySetMode(
+    DisplaySetModeParams params,
+  ) async => DisplaySetModeResult.fromJson(
+    await rpc('display.set_mode', params.toJson()),
+  );
+
+  /// Accept the mode set by display.set_mode: there is nothing to revert to any more.
+  Future<DisplayKeepResult> displayKeep([
+    DisplayKeepParams params = const DisplayKeepParams(),
+  ]) async =>
+      DisplayKeepResult.fromJson(await rpc('display.keep', params.toJson()));
+
+  /// Go back to the mode from before the last display.set_mode (unless kept).
+  Future<DisplayRevertResult> displayRevert([
+    DisplayRevertParams params = const DisplayRevertParams(),
+  ]) async => DisplayRevertResult.fromJson(
+    await rpc('display.revert', params.toJson()),
+  );
+
+  /// What logind says about suspend, reboot and power off for this user.
+  ///
+  /// Power goes from the session daemon straight to logind (system-api.md, Power), authorised by the polkit rules for the active local session user.
+  Future<PowerCapabilitiesResult> powerCapabilities([
+    PowerCapabilitiesParams params = const PowerCapabilitiesParams(),
+  ]) async => PowerCapabilitiesResult.fromJson(
+    await rpc('power.capabilities', params.toJson()),
+  );
+
+  /// Suspend the machine.
+  ///
+  /// Returns once logind accepted the request. A system job (update, rebuild) holds a block inhibitor while it switches over: logind then refuses and the error is power_inhibited with its own text.
+  Future<PowerSuspendResult> powerSuspend([
+    PowerSuspendParams params = const PowerSuspendParams(),
+  ]) async =>
+      PowerSuspendResult.fromJson(await rpc('power.suspend', params.toJson()));
+
+  /// Restart the machine.
+  ///
+  /// Same rules as power.suspend.
+  Future<PowerRebootResult> powerReboot([
+    PowerRebootParams params = const PowerRebootParams(),
+  ]) async =>
+      PowerRebootResult.fromJson(await rpc('power.reboot', params.toJson()));
+
+  /// Shut the machine down.
+  ///
+  /// Same rules as power.suspend.
+  Future<PowerPoweroffResult> powerPoweroff([
+    PowerPoweroffParams params = const PowerPoweroffParams(),
+  ]) async => PowerPoweroffResult.fromJson(
+    await rpc('power.poweroff', params.toJson()),
+  );
 }
 
 /// A server-pushed notification of the session API.
@@ -4109,6 +6937,11 @@ sealed class SessionEvent {
     'job_started' => JobStartedEvent.fromJson(params),
     'job_progress' => JobProgressEvent.fromJson(params),
     'job_finished' => JobFinishedEvent.fromJson(params),
+    'network_changed' => NetworkChangedEvent.fromJson(params),
+    'wifi_list_changed' => WifiListChangedEvent.fromJson(params),
+    'bluetooth_changed' => BluetoothChangedEvent.fromJson(params),
+    'bluetooth_confirm' => BluetoothConfirmEvent.fromJson(params),
+    'audio_changed' => AudioChangedEvent.fromJson(params),
     _ => UnknownSessionEvent(name, params),
   };
 }
