@@ -10,6 +10,7 @@
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  gboolean osk;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -37,9 +38,45 @@ static void my_application_activate(GApplication* application) {
     }
   }
 
+  if (self->osk) {
+    // GTK capitalises the program class ("Hinteros-osk"); set WM_CLASS
+    // explicitly (deprecated, but the only way that sticks) so both name and
+    // class are "hinteros-osk".
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    gtk_window_set_wmclass(window, "hinteros-osk", "hinteros-osk");
+    G_GNUC_END_IGNORE_DEPRECATIONS
+    // On-screen keyboard: an ARGB (32-bit visual) window with a transparent
+    // Flutter background; gamescope composites it as an external overlay
+    // (see below). The daemon finds it by WM_CLASS "hinteros-osk".
+    GdkScreen* screen = gtk_widget_get_screen(GTK_WIDGET(window));
+    GdkVisual* visual = gdk_screen_get_rgba_visual(screen);
+    if (visual != nullptr) {
+      gtk_widget_set_visual(GTK_WIDGET(window), visual);
+    } else {
+      g_warning("No RGBA visual: the keyboard window cannot be transparent");
+    }
+    gtk_widget_set_app_paintable(GTK_WIDGET(window), TRUE);
+  }
+
   if (windowed) {
-    gtk_window_set_title(window, "HinterOS");
+    gtk_window_set_title(window, self->osk ? "HinterOS keyboard" : "HinterOS");
     gtk_window_set_default_size(window, 1280, 720);
+  } else if (self->osk) {
+    // Covers the whole output, undecorated, never takes keyboard focus (the
+    // daemon routes the pad to us and types through uinput).
+    gtk_window_set_title(window, "HinterOS keyboard");
+    gtk_window_set_decorated(window, FALSE);
+    gtk_window_set_accept_focus(window, FALSE);
+    gtk_window_set_focus_on_map(window, FALSE);
+    gtk_window_set_skip_taskbar_hint(window, TRUE);
+    gtk_window_set_keep_above(window, TRUE);
+    GdkDisplay* display = gtk_widget_get_display(GTK_WIDGET(window));
+    GdkMonitor* monitor = gdk_display_get_primary_monitor(display);
+    if (monitor == nullptr) monitor = gdk_display_get_monitor(display, 0);
+    GdkRectangle area = {0, 0, 1920, 1080};
+    if (monitor != nullptr) gdk_monitor_get_geometry(monitor, &area);
+    gtk_window_set_default_size(window, area.width, area.height);
+    gtk_window_move(window, area.x, area.y);
   } else {
     gtk_window_set_decorated(window, FALSE);
     gtk_window_fullscreen(window);
@@ -53,10 +90,28 @@ static void my_application_activate(GApplication* application) {
   GdkRGBA background_color;
   // Background defaults to black, override it here if necessary, e.g. #00000000
   // for transparent.
-  gdk_rgba_parse(&background_color, "#000000");
+  gdk_rgba_parse(&background_color, self->osk ? "#00000000" : "#000000");
   fl_view_set_background_color(view, &background_color);
   gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
+
+#ifdef GDK_WINDOWING_X11
+  if (self->osk) {
+    // GAMESCOPE_EXTERNAL_OVERLAY=1: gamescope paints the window above the
+    // running app without ever giving it focus (spike 5). Visible while
+    // _NET_WM_WINDOW_OPACITY is non-zero; the daemon toggles that.
+    gtk_widget_realize(GTK_WIDGET(window));
+    GdkWindow* toplevel = gtk_widget_get_window(GTK_WIDGET(window));
+    if (toplevel != nullptr && GDK_IS_X11_WINDOW(toplevel)) {
+      gulong one = 1;
+      gdk_property_change(toplevel,
+                          gdk_atom_intern("GAMESCOPE_EXTERNAL_OVERLAY", FALSE),
+                          gdk_atom_intern("CARDINAL", FALSE), 32,
+                          GDK_PROP_MODE_REPLACE,
+                          reinterpret_cast<const guchar*>(&one), 1);
+    }
+  }
+#endif
 
   // Show the window when Flutter renders.
   // Requires the view to be realized so we can start rendering.
@@ -136,14 +191,26 @@ static void my_application_class_init(MyApplicationClass* klass) {
 
 static void my_application_init(MyApplication* self) {}
 
-MyApplication* my_application_new() {
+MyApplication* my_application_new(gboolean osk) {
   // Set the program name to the application ID, which helps various systems
   // like GTK and desktop environments map this running application to its
   // corresponding .desktop file. This ensures better integration by allowing
   // the application to be recognized beyond its binary name.
-  g_set_prgname(APPLICATION_ID);
+  //
+  // The keyboard is told apart by its X11 window class, which GTK derives
+  // from the program name and class: both "hinteros-osk" (the daemon finds
+  // the window by it). Must happen before GTK opens the display.
+  if (osk) {
+    g_set_prgname("hinteros-osk");
+    gdk_set_program_class("hinteros-osk");
+  } else {
+    g_set_prgname(APPLICATION_ID);
+  }
 
-  return MY_APPLICATION(g_object_new(my_application_get_type(),
-                                     "application-id", APPLICATION_ID, "flags",
-                                     G_APPLICATION_NON_UNIQUE, nullptr));
+  MyApplication* self = MY_APPLICATION(g_object_new(
+      my_application_get_type(), "application-id",
+      osk ? OSK_APPLICATION_ID : APPLICATION_ID, "flags",
+      G_APPLICATION_NON_UNIQUE, nullptr));
+  self->osk = osk;
+  return self;
 }

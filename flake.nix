@@ -82,17 +82,45 @@
           version = "0.1.0";
           inherit src;
           autoPubspecLock = src + "/pubspec.lock";
+          # One Flutter build, two apps: the same binary started with --osk is
+          # the on-screen keyboard (transparent ARGB window, WM_CLASS
+          # hinteros-osk). The wrapper gives it its own name, so the daemon and
+          # systemd units start `hinteros-osk` like any other program.
+          postInstall = ''
+            cat > $out/bin/hinteros-osk <<EOF
+            #!${final.runtimeShell}
+            exec $out/bin/hinteros-launcher --osk "\$@"
+            EOF
+            chmod +x $out/bin/hinteros-osk
+          '';
           meta = {
-            description = "HinterOS launcher UI";
+            description = "HinterOS launcher UI (and, as hinteros-osk, the on-screen keyboard)";
             license = final.lib.licenses.gpl3Only;
             mainProgram = "hinteros-launcher";
             platforms = [ "x86_64-linux" ];
           };
         };
+
+        # Just bin/hinteros-osk, for systems that want the keyboard on its own
+        # (it is the launcher package underneath: one copy of the app).
+        hinteros-osk =
+          final.runCommand "hinteros-osk"
+            {
+              meta = {
+                description = "HinterOS on-screen keyboard";
+                license = final.lib.licenses.gpl3Only;
+                mainProgram = "hinteros-osk";
+                platforms = [ "x86_64-linux" ];
+              };
+            }
+            ''
+              mkdir -p $out/bin
+              ln -s ${final.hinteros-launcher}/bin/hinteros-osk $out/bin/hinteros-osk
+            '';
       };
 
       packages.${system} = {
-        inherit (pkgs) hinteros-launcher;
+        inherit (pkgs) hinteros-launcher hinteros-osk;
         default = pkgs.hinteros-launcher;
 
         # Golden PNGs rendered inside the Nix sandbox, the same environment as
@@ -131,7 +159,7 @@
       };
 
       checks.${system} = {
-        inherit (pkgs) hinteros-launcher;
+        inherit (pkgs) hinteros-launcher hinteros-osk;
         pre-commit = hooksFor false;
 
         # The vendored schema must equal the one the pinned daemon ships.

@@ -8,6 +8,8 @@ set(BINARY_NAME "hinteros-launcher")
 # The unique GTK application identifier for this application. See:
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
 set(APPLICATION_ID "com.hinteros.Launcher")
+# The same binary started with --osk is the on-screen keyboard (hinteros-osk).
+set(OSK_APPLICATION_ID "com.hinteros.Osk")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
