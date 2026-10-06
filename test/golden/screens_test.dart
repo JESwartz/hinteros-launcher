@@ -45,7 +45,8 @@ void main() {
   const up = LogicalKeyboardKey.arrowUp;
   // From Home content: up to the tab bar, then to the tab and back down.
   const toGames = [up, right, down];
-  const toApps = [up, right, right, down];
+  // With something running, Home has a Continue row above Apps.
+  const toAppsRunning = [up, up, right, right, down];
   const toSettings = [up, right, right, right, down];
 
   testWidgets('home 1080p', (t) async {
@@ -78,7 +79,101 @@ void main() {
     );
   });
   testWidgets('games 1080p', (t) async {
-    await shot(t, 'games_1080p', keys: [...toGames, right, right, down, down]);
+    await shot(t, 'games_1080p', keys: [...toGames, right]);
+  });
+  testWidgets('games scrolled to the last row', (t) async {
+    await shot(
+      t,
+      'games_scrolled_1080p',
+      keys: [...toGames, right, right, down, down],
+    );
+  });
+  testWidgets('games with artwork, second row focused', (t) async {
+    await shot(
+      t,
+      'games_artwork_1080p',
+      keys: [...toGames, right, down, right],
+    );
+  });
+  testWidgets('games text 1.6x, high contrast', (t) async {
+    await shot(
+      t,
+      'games_highcontrast_text160_1080p',
+      h: Harness(
+        settings: const LauncherSettings(textScale: 1.6, highContrast: true),
+      ),
+      keys: [...toGames, down, right],
+    );
+  });
+  testWidgets('home with a running game and a running app', (t) async {
+    await shot(
+      t,
+      'home_running_game_1080p',
+      setup: (t, h) async {
+        await h.mock.appsLaunch(
+          const AppsLaunchParams(url: 'steam://rungameid/620'),
+        );
+        await h.launch(t, 'jellyfin');
+        h.mock.pressHome();
+        await t.pumpAndSettle();
+      },
+      keys: [right],
+    );
+  });
+  testWidgets('steam attention banner', (t) async {
+    await shot(
+      t,
+      'home_steam_attention_1080p',
+      setup: (t, h) async {
+        h.mock.setSteamAttention(const [
+          SteamWindow(window: 6291459, title: 'Steam Guard', pid: 2412),
+        ]);
+        await t.pumpAndSettle();
+      },
+      keys: [up],
+    );
+  });
+  testWidgets('steam attention banner over Games, text 1.6x', (t) async {
+    await shot(
+      t,
+      'games_steam_attention_text160_1080p',
+      h: Harness(settings: const LauncherSettings(textScale: 1.6)),
+      setup: (t, h) async {
+        h.mock.setSteamAttention(const [
+          SteamWindow(window: 6291459, title: 'Steam Guard', pid: 2412),
+        ]);
+        await t.pumpAndSettle();
+      },
+      keys: [up, up, right, down],
+    );
+  });
+  testWidgets('close confirm', (t) async {
+    await shot(
+      t,
+      'close_confirm_1080p',
+      setup: (t, h) async {
+        await h.launch(t, 'jellyfin');
+        await h.launch(t, 'steam');
+        h.mock.pressHome();
+        await t.pumpAndSettle();
+      },
+      keys: [right, LogicalKeyboardKey.keyY, right],
+    );
+  });
+  testWidgets('close confirm, high contrast, text 1.6x', (t) async {
+    await shot(
+      t,
+      'close_confirm_highcontrast_text160_1080p',
+      h: Harness(
+        settings: const LauncherSettings(textScale: 1.6, highContrast: true),
+      ),
+      setup: (t, h) async {
+        await h.launch(t, 'jellyfin');
+        h.mock.pressHome();
+        await t.pumpAndSettle();
+      },
+      keys: [LogicalKeyboardKey.keyY],
+    );
   });
   testWidgets('games 4k', (t) async {
     await shot(
@@ -89,7 +184,34 @@ void main() {
     );
   });
   testWidgets('apps 1080p', (t) async {
-    await shot(t, 'apps_1080p', keys: [...toApps, down, right]);
+    await shot(
+      t,
+      'apps_1080p',
+      setup: (t, h) async => h.launch(t, 'youtube'),
+      keys: [...toAppsRunning, right],
+    );
+  });
+  for (final scale in [1.3, 1.6]) {
+    testWidgets('apps at text $scale, running app', (t) async {
+      await shot(
+        t,
+        'apps_text${(scale * 100).round()}_1080p',
+        h: Harness(settings: LauncherSettings(textScale: scale)),
+        setup: (t, h) async => h.launch(t, 'youtube'),
+        keys: [...toAppsRunning, right],
+      );
+    });
+  }
+  testWidgets('apps high contrast, text 1.6x, running app', (t) async {
+    await shot(
+      t,
+      'apps_highcontrast_text160_1080p',
+      h: Harness(
+        settings: const LauncherSettings(textScale: 1.6, highContrast: true),
+      ),
+      setup: (t, h) async => h.launch(t, 'youtube'),
+      keys: [...toAppsRunning, right],
+    );
   });
   testWidgets('settings 1080p', (t) async {
     await shot(t, 'settings_1080p', keys: [...toSettings, down, down]);
