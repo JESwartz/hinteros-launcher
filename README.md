@@ -16,6 +16,8 @@ nix build && ./result/bin/hinteros-launcher
 nix flake check               # nixfmt, dart format, dart analyze, flutter test, package build
 ```
 
+The same binary is also the on-screen keyboard: `./result/bin/hinteros-osk` (see "On-screen keyboard").
+
 Pass `--fps` (or set `HINTEROS_FPS=1`) to show a frame-rate overlay (fps and worst frame time),
 e.g. `./result/bin/hinteros-launcher --fps`, or `flutter run -d linux --dart-entrypoint-args=--fps`.
 
@@ -40,6 +42,7 @@ the home screen says so and the client keeps retrying with backoff.
 | `lib/src/api/generated.dart` | Generated, committed. Do not edit |
 | `lib/src/api/client.dart` | `DaemonClient`: handshake, request correlation, events, subscribe, reconnect |
 | `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.3 methods and events) |
+| `lib/src/osk/` | The on-screen keyboard: `OskBackend` (+ mock), layouts, state, UI |
 | `tool/gen_mock_art.dart` | Draws the placeholder cover art in `test/fixtures/art/` (committed; no network, no third-party pictures) |
 
 ### Mock daemon
@@ -120,8 +123,11 @@ explicit `null`) and string enums with an `unknown` fallback; `oneOf` on a param
 - `test/api/contract_test.dart` replays every method and event example of the schema through the
   mock and validates all output against the schema with the `json_schema` package.
 - `test/api/client_test.dart` runs `DaemonClient` against a scripted fake server on a real socket.
-- `test/api03_ui_test.dart` covers the 0.3 behaviour through the UI: install-state badges, launching
-  and explaining games, Close with its confirm step, the attention banner.
+- `test/api03_ui_test.dart` covers the 0.3 behaviour through the UI: install-state badges (also that
+  they fit narrow covers at text 1.0 to 1.6x), launching and explaining games, Close with its
+  confirm step, the attention banner.
+- `test/osk/` drives the on-screen keyboard with the mock backend: layout, D-pad navigation, shift,
+  pages, and the exact backend calls for typing `P@ss-w0rd!` with D-pad presses only.
 - `test/integration/` runs the real `hinteros-session` binary: `nix build .#checks.x86_64-linux.integration`.
   It starts the daemon with `--no-gamescope --no-inputplumber`, a temp config of two command apps
   and `--steam-dir` pointing at the daemon repo's fake Steam home, and covers the 0.3 handshake,
@@ -133,6 +139,58 @@ explicit `null`) and string enums with an `unknown` fallback; `oneOf` on a param
   points at the binary (and `HINTEROS_STEAM_FIXTURE` at `crates/hinteros-session/tests/fixtures/steam-home`
   for the games test), e.g.
   `HINTEROS_SESSION_BIN=$(nix build ../hinteros-daemon#hinteros-session --no-link --print-out-paths)/bin/hinteros-session HINTEROS_STEAM_FIXTURE=../hinteros-daemon/crates/hinteros-session/tests/fixtures/steam-home flutter test test/integration`.
+
+## On-screen keyboard
+
+`hinteros-osk` is a second app in the same binary and the same Flutter build: the launcher started
+with `--osk` (entry `lib/osk_main.dart`, `runOsk`). **Why one binary:** a second entrypoint would
+mean a second `buildFlutterApplication` (another AOT compile and another copy of the Flutter
+engine, 17 MB) for what is the same runner, theme and nav code. The GTK runner switches on
+`--osk` (or `HINTEROS_OSK=1`), and the package ships `bin/hinteros-osk`, a two-line wrapper that
+execs `hinteros-launcher --osk`. Nix: `packages.hinteros-launcher` contains both programs;
+`packages.hinteros-osk` (also `overlays.default`'s `hinteros-osk`) is just `bin/hinteros-osk`
+linked to it, for a system that wants only the keyboard.
+
+**Window** (spike 5): X11 `WM_CLASS` is `hinteros-osk` for both name and class; the window has an
+RGBA (32-bit ARGB) visual, `app-paintable`, a Flutter clear colour of `#00000000`, no decoration,
+never takes focus, covers the whole output and sets `GAMESCOPE_EXTERNAL_OVERLAY=1` on itself. The
+Flutter side paints only the keyboard panel (bottom 40% of the height, solid, rounded top corners);
+everything else is transparent. Showing and hiding is the daemon's job (`_NET_WM_WINDOW_OPACITY`);
+the process stays resident, and on `osk_visibility {visible: true}` it re-reads `launcher.json` (text
+size, contrast, focus marker) and focuses `q`. A 4K screen at devicePixelRatio 1 gets the same
+keyboard scaled by height / 1080. Checked here under Xvfb: depth-32 window, class and atom set;
+alpha through a real compositor and gamescope is on the spike's hardware checklist.
+
+Run it on the desktop: `flutter run -d linux -t lib/osk_main.dart --dart-entrypoint-args=--osk,--mock,--windowed`
+or `./result/bin/hinteros-osk --mock --windowed`. `--mock` prints what it would send to the daemon;
+the arrow keys, Enter, Escape/Backspace, Y and X stand in for the pad.
+
+**Backend:** the UI only talks to `OskBackend` (`lib/src/osk/osk_backend.dart`): `type(text)`
+(`keys.type`), `action(backspace|enter|tab)` (`keys.action`), `key(key, modifiers)` (`keys.key`,
+unused so far), `hide()` (`osk.hide`), plus the streams `nav` (`input_nav`) and `visibility`
+(`osk_visibility`). `MockOskBackend` records every call (`type:P`, `action:backspace`, `hide`...).
+`DaemonOskBackend` is wired for `input_nav` only; every `TODO(0.4)` in that file is where the
+generated 0.4 methods and the event go once the schema is re-vendored. Until then the keys show
+"needs session API 0.4" in the preview strip instead of failing silently.
+
+**Controls** (the nav layer's conventions: presses and repeats move, only a press acts):
+
+| Input | Does |
+|---|---|
+| D-pad | Moves between keys. Left/right wrap within a row; up/down go to the key above or below (rows of unequal keys use `NavRow.spans`, so the wide Space bar is under several letters) |
+| accept (A) | Types the key |
+| back (B) | Backspace, also while held (repeat) |
+| context (Y) | Shift: one-shot, again for caps lock, again off. On the symbol pages: switches between symbols 1 and 2 |
+| secondary (X) | Space |
+| L1 / R1 | Letters / symbols page |
+| the Done key | `osk.hide`; the keyboard also resets (letters, shift off, empty preview) |
+
+Shift was chosen for `context` rather than the page toggle because it is needed mid-word, while a
+page change is one key away and has L1/R1. Pages: letters (digits row, `'` and `.`), symbols 1,
+symbols 2 (`[ ] { }` and the backtick); together they cover every printable ASCII character. The
+strip above the keys shows what was typed since opening (Backspace removes), so passwords show in
+it; it is cleared on hide. Characters go out with `keys.type` (the daemon picks uinput or the
+gamescope input method), Space included; the keyboard has no text field of its own.
 
 ## UI
 
@@ -152,7 +210,8 @@ UI. Focus on a tab selects its section (like console UIs); Down enters the secti
   with `Image.file`) with the title underneath. Without art, or if the file cannot be read, a
   placeholder (hue from the title, big initial, drawn in code) shows instead. Games that are not
   `installed` are dimmed and carry a badge ("Update required", "Updating", "Installing",
-  "Removing"; an unknown state counts as Updating); accepting one explains why it cannot start
+  "Removing"; an unknown state counts as Updating; on narrow covers "Update required" breaks into
+  two lines and the badge scales down as a whole, so no word is cut off); accepting one explains why it cannot start
   instead of launching it. The list is refreshed on connect and on `games_changed`.
 - **Apps:** grid of 16:9 tiles. The built-in Steam entry (Big Picture) comes first, as the daemon
   lists it.
@@ -179,10 +238,14 @@ Code: `lib/src/nav/` (pure rules in `nav_model.dart`, binding to Flutter `FocusN
   not visited yet is entered at the current column, clamped. In grids the wanted column is
   **sticky** across a short last row (down then up returns to where you were).
 - Up from the top row goes to the tab bar; Down from the bottom row stays.
+- Rows of unequal items (the on-screen keyboard) give `NavRow` per-item `spans`; up/down then go to
+  the item under the position you aimed for, kept across rows.
 - First item focused on start (as soon as Home has items).
 - **Back** goes up one level: settings detail to its list, section content (or the tab bar) to the
   Home tab with Home focus restored; on Home it does nothing.
-- **Home button** always goes to the Home tab with the first card focused and column memory reset.
+- **Home button** always goes to the Home tab with the first item of the first non-empty row
+  focused (Continue if something runs, else Apps) and column memory reset, also when another tab
+  was showing.
 - PageLeft/PageRight (L1/R1) switch tabs from anywhere.
 - Tested in `test/nav/` (rules, and end to end through the shell).
 
@@ -223,7 +286,10 @@ Atkinson Hyperlegible Regular and Bold (`assets/fonts/`), SIL Open Font License 
 
 `test/golden/screens_test.dart` captures every screen at 1920x1080 and Home and Games at 3840x2160
 (1920x1080 logical at DPR 2), plus Home in high contrast at 1.6x text, into
-`test/golden/goldens/`. Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
+`test/golden/goldens/`. `test/golden/osk_test.dart` renders the on-screen keyboard at 1920x1080 over
+a checkerboard (so the transparent area and the panel's rounded corners show): letters, symbols with
+typed text, high contrast at 1.6x with caps lock, and the bar focus marker with one-shot shift
+(`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
 running game, the attention banner, the close confirm and the app tiles at text 1.3x/1.6x (also high
 contrast). Tests load the bundled font explicitly (`flutter_test_config.dart`, no
 Ahem), use a fixed clock, the in-process mock, the committed placeholder art
