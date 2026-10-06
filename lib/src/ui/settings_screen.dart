@@ -7,6 +7,7 @@ import '../theme/hinter_theme.dart';
 import '../system/repositories.dart';
 import 'system/common.dart';
 import 'system/hardware_sections.dart';
+import 'system/network_sections.dart';
 import 'system/system_sections.dart';
 import 'common.dart' show EdgeFade;
 import 'focus_frame.dart';

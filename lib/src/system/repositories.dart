@@ -1,10 +1,10 @@
 /// What the system UI needs from the world. Screens only ever see these
 /// interfaces. `daemon_system.dart` implements the system ones (info, SSH,
-/// updates, jobs) over the session API 0.6 `system.*` relay; `mock_system.dart`
-/// has in-process fakes for all of them (like `MockDaemon`), and
-/// `unavailable_system.dart` answers "unavailable" for what the daemon does
-/// not offer yet (Wi-Fi, Bluetooth, display, audio, power: TODO(0.7); the
-/// Store: TODO(M8)).
+/// updates, jobs) over the session API 0.6 `system.*` relay and the runtime
+/// settings (Wi-Fi, Bluetooth, audio, display, power) over the 0.7 methods;
+/// `mock_system.dart` has in-process fakes for all of them (like
+/// `MockDaemon`), and `unavailable_system.dart` answers "unavailable" for
+/// what the daemon does not offer yet (the Store: TODO(M8)).
 library;
 
 import 'models.dart';
@@ -26,12 +26,17 @@ abstract class SystemRepository {
 
   /// Restarts the launcher session (after a job reported
   /// `session_restart_required`).
-  // TODO(0.7): no session API method for it in 0.6
+  // TODO(session-restart): no session API method for it in 0.7
   Future<void> restartSession();
 
-  /// Power goes session daemon -> logind directly (system-api.md "Power").
-  // TODO(0.7): session-side power (logind)
+  /// `power.suspend` / `reboot` / `poweroff`, session daemon -> logind
+  /// directly. [SystemErrorKind.powerInhibited] while an update is being
+  /// applied; [SystemErrorKind.notAuthorized] when polkit says no.
   Future<void> power(PowerAction action);
+
+  /// `power.capabilities`: the actions logind allows for this user. Throws
+  /// [SystemErrorKind.unavailable] without logind.
+  Future<Set<PowerAction>> powerAllowed();
 
   Future<SshState> ssh();
 
@@ -84,33 +89,58 @@ abstract class UpdatesRepository {
   Future<JobHandle> setBase(NixBase base, {bool acknowledgeDowngrade = false});
 }
 
-/// Wi-Fi through NetworkManager. System-wide connections: the password is
-/// entered once per box (threat-model decision 5).
+/// Wi-Fi through NetworkManager (`network.status`, `wifi.*`). System-wide
+/// connections: the password is entered once per box (threat-model decision
+/// 5). Every call can throw [SystemErrorKind.unavailable] (no
+/// NetworkManager); the screens say so without touching the other sections.
 abstract class NetworkRepository {
-  // TODO(0.7): NetworkManager, runtime (no rebuild)
   Future<NetworkStatus> status();
 
-  /// A fresh scan, strongest first.
+  /// A fresh scan (`wifi.scan`), strongest first.
   Future<List<WifiNetwork>> scan();
 
+  /// The current list without scanning (`wifi.list`), strongest first.
+  Future<List<WifiNetwork>> list();
+
+  /// `network_changed`: the status after every change.
+  Stream<NetworkStatus> get statusChanges;
+
+  /// `wifi_list_changed`: the list after every change.
+  Stream<List<WifiNetwork>> get listChanges;
+
   /// [SystemErrorKind.wrongPassword] for a bad password, `deviceFailed` for
-  /// anything else.
+  /// anything else (the message says why), `invalidParams` for WEP and 802.1X.
   Future<void> connect(String ssid, {String? password});
   Future<void> disconnect();
   Future<void> forget(String ssid);
   Future<void> setWifiEnabled(bool enabled);
 }
 
-/// Bluetooth through BlueZ.
+/// Bluetooth through BlueZ (`bluetooth.*`).
 abstract class BluetoothRepository {
-  // TODO(0.7): BlueZ, runtime (no rebuild)
   bool get scanning;
 
-  /// Known and discovered devices; emits on every change.
+  /// Loads status and devices (`bluetooth.status`, `bluetooth.devices`) into
+  /// [current]. Throws [SystemErrorKind.unavailable] without BlueZ.
+  Future<void> load();
+
+  /// Known and discovered devices; emits on every change
+  /// (`bluetooth_changed`).
   Stream<List<BtDevice>> get devices;
   List<BtDevice> get current;
+
+  /// Pairings that need the user's word (`bluetooth_confirm`).
+  Stream<BtConfirmRequest> get confirmRequests;
+
+  /// `bluetooth.confirm`: answers the pairing of device [id].
+  Future<void> confirm(String id, {required bool accept});
+
+  /// `bluetooth.scan`; the daemon stops by itself after 30 s.
   Future<void> startScan();
   Future<void> stopScan();
+
+  /// Returns when the pairing is over. Controllers and headsets pair without
+  /// a prompt; a numeric comparison arrives on [confirmRequests] first.
   Future<void> pair(String id);
   Future<void> connect(String id);
   Future<void> disconnect(String id);
@@ -119,11 +149,26 @@ abstract class BluetoothRepository {
 
 /// Display modes and audio, applied at runtime.
 abstract class DisplayAudioRepository {
-  // TODO(0.7): the session's display (gamescope/DRM) and PipeWire
-  Future<List<DisplayMode>> displayModes();
+  /// `display.modes`.
+  Future<DisplayInfo> displayModes();
+
+  /// `display.set_mode`: switches now. The caller then asks the user and ends
+  /// with [keepDisplayMode] or [revertDisplayMode].
+  /// [SystemErrorKind.deviceFailed] with reason `not_applied` when the
+  /// display did not switch.
   Future<void> setDisplayMode(DisplayMode mode);
 
+  /// `display.keep`.
+  Future<void> keepDisplayMode();
+
+  /// `display.revert`: back to the mode from before the last change.
+  Future<void> revertDisplayMode();
+
+  /// `audio.outputs`.
   Future<AudioState> audio();
+
+  /// `audio_changed`: the state after every change (also from elsewhere).
+  Stream<AudioState> get audioChanges;
   Future<void> setAudioOutput(String id);
   Future<void> setVolume(int percent);
   Future<void> setMuted(bool muted);

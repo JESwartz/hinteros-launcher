@@ -1,18 +1,21 @@
-/// The real system repositories: `SystemRepository` (info, SSH),
+/// The real system repositories: `SystemRepository` (info, SSH, power),
 /// `UpdatesRepository` and `JobsRepository` over the session daemon's
-/// `system.*` relay (session API 0.6; the daemon forwards the privileged
-/// service's methods and its three job events unchanged).
-///
-/// Network, Bluetooth, display, audio and power are not part of 0.6 and stay
-/// on the unavailable implementations, see [daemonSystemServices].
+/// `system.*` relay (the daemon forwards the privileged service's methods and
+/// its three job events unchanged), and the runtime settings of session API
+/// 0.7 (`daemon_runtime.dart`). Only the Store is still unavailable, see
+/// [daemonSystemServices].
 library;
 
 import 'dart:async';
 
 import '../api/api.dart' as api;
+import 'daemon_errors.dart';
+import 'daemon_runtime.dart';
 import 'models.dart';
 import 'repositories.dart';
 import 'unavailable_system.dart';
+
+export 'daemon_errors.dart';
 
 /// Whether the launcher can hand an admin password to polkit. It cannot yet:
 /// `ssh.set` is guarded by `auth_admin`, which needs an authentication agent,
@@ -24,119 +27,6 @@ import 'unavailable_system.dart';
 // authentication agent that takes the password from the launcher (design
 // sketch in the README, "Admin password and polkit").
 const bool adminPasswordUi = false;
-
-// ---------------------------------------------------------------- errors
-
-/// Turns whatever a call on the daemon threw into a [SystemException].
-SystemException systemExceptionFrom(Object e) {
-  if (e is SystemException) return e;
-  if (e is api.DaemonUnavailableException) {
-    return const SystemException(
-      SystemErrorKind.unavailable,
-      'Settings are unavailable: the launcher is not connected to HinterOS.',
-      data: {'reason': 'down'},
-    );
-  }
-  if (e is api.ApiException) {
-    final data = e.data is Map
-        ? (e.data! as Map).cast<String, Object?>()
-        : const <String, Object?>{};
-    switch (e.code) {
-      case api.ApiErrorCode.systemUnavailable:
-        final mismatch = data['reason'] == 'version_mismatch';
-        return SystemException(
-          SystemErrorKind.unavailable,
-          mismatch
-              ? 'Settings are unavailable until the session restarts: the '
-                    'system service was updated.'
-              : 'Settings are unavailable: the HinterOS system service is '
-                    'not running.',
-          data: data,
-        );
-      case api.ApiErrorCode.permissionDenied:
-        return SystemException(
-          SystemErrorKind.permissionDenied,
-          'This is not allowed on this box right now.',
-          data: data,
-        );
-      case api.ApiErrorCode.authenticationRequired:
-        return SystemException(
-          SystemErrorKind.authenticationRequired,
-          'This needs the admin password.',
-          data: data,
-        );
-      case api.ApiErrorCode.insufficientResources:
-        return SystemException(
-          SystemErrorKind.insufficientResources,
-          data['kind'] == 'disk'
-              ? 'There is not enough free disk space for this.'
-              : 'There is not enough free memory for this.',
-          data: data,
-        );
-      case api.ApiErrorCode.jobBusy:
-        return SystemException(
-          SystemErrorKind.jobBusy,
-          'Another change is still running.',
-          data: data,
-        );
-      case api.ApiErrorCode.rateLimited:
-        return SystemException(
-          SystemErrorKind.rateLimited,
-          'Too many changes in a short time. Try again in a moment.',
-          data: data,
-        );
-      case api.ApiErrorCode.stateConflict:
-        return SystemException(
-          SystemErrorKind.stateConflict,
-          data['reason'] == 'update_rev'
-              ? 'That is not the update that was checked. Check again.'
-              : 'The settings changed in the meantime. Try again.',
-          data: data,
-        );
-      case api.ApiErrorCode.updateUnreachable:
-        return SystemException(
-          SystemErrorKind.updateUnreachable,
-          "Can't reach the update server right now.",
-          data: data,
-        );
-      case api.ApiErrorCode.updateVerificationFailed:
-        return SystemException(
-          SystemErrorKind.updateVerificationFailed,
-          'The update did not pass its safety check.',
-          data: data,
-        );
-      case api.ApiErrorCode.notFound:
-        return SystemException(SystemErrorKind.notFound, e.message, data: data);
-      case api.ApiErrorCode.needsAcknowledgement:
-        return SystemException(
-          SystemErrorKind.needsAcknowledgement,
-          e.message,
-          data: data,
-        );
-      case api.ApiErrorCode.invalidParams:
-        return SystemException(
-          SystemErrorKind.invalidParams,
-          e.message,
-          data: data,
-        );
-      case api.ApiErrorCode.methodNotFound:
-        return const SystemException(
-          SystemErrorKind.unavailable,
-          'This needs a newer HinterOS service than the one that is running.',
-        );
-    }
-    return SystemException(SystemErrorKind.failed, e.message, data: data);
-  }
-  return SystemException(SystemErrorKind.failed, 'Something went wrong ($e).');
-}
-
-Future<T> _guard<T>(Future<T> Function() call) async {
-  try {
-    return await call();
-  } catch (e) {
-    throw systemExceptionFrom(e);
-  }
-}
 
 // ---------------------------------------------------------------- wire mapping
 
@@ -295,7 +185,7 @@ class DaemonJobs implements JobsRepository {
     Future<String?> Function() call, {
     String nothingToDo = 'There is nothing to change.',
   }) async {
-    final id = await _guard(call);
+    final id = await guardCall(call);
     if (id == null) {
       throw SystemException(SystemErrorKind.nothingToDo, nothingToDo);
     }
@@ -476,7 +366,7 @@ class DaemonJobs implements JobsRepository {
   }
 
   @override
-  Future<void> cancel(String jobId) => _guard(
+  Future<void> cancel(String jobId) => guardCall(
     () => _conn.systemJobsCancel(api.SystemJobsCancelParams(jobId: jobId)),
   ).then((_) {});
 
@@ -523,7 +413,7 @@ class DaemonUpdates implements UpdatesRepository {
   }
 
   @override
-  Future<UpdateStatus> check() => _guard(() async {
+  Future<UpdateStatus> check() => guardCall(() async {
     await _connected();
     final r = await _conn.systemUpdateCheck();
     var result = r.result;
@@ -589,7 +479,7 @@ class DaemonUpdates implements UpdatesRepository {
   );
 
   @override
-  Future<List<Generation>> generations() => _guard(() async {
+  Future<List<Generation>> generations() => guardCall(() async {
     final r = await _conn.systemGenerationsList();
     return [
       for (final g in r.generations)
@@ -656,7 +546,7 @@ class DaemonSystem implements SystemRepository {
   bool get acceptsAdminPassword => adminPasswordUi;
 
   @override
-  Future<SystemInfo> info() => _guard(() async {
+  Future<SystemInfo> info() => guardCall(() async {
     final i = await _conn.systemInfo();
     return SystemInfo(
       version: i.version,
@@ -671,7 +561,7 @@ class DaemonSystem implements SystemRepository {
   });
 
   @override
-  Future<SshState> ssh() => _guard(
+  Future<SshState> ssh() => guardCall(
     () async => SshState(enabled: (await _conn.systemInfo()).ssh.enabled),
   );
 
@@ -716,26 +606,45 @@ class DaemonSystem implements SystemRepository {
     }
   }
 
-  // TODO(0.7): the session daemon's logind power and session restart methods.
   @override
-  Future<void> power(PowerAction action) => Future.error(_needs07);
+  Future<void> power(PowerAction action) => guardCall(() async {
+    switch (action) {
+      case PowerAction.sleep:
+        await _conn.powerSuspend();
+      case PowerAction.restart:
+        await _conn.powerReboot();
+      case PowerAction.shutdown:
+        await _conn.powerPoweroff();
+    }
+  });
 
   @override
-  Future<void> restartSession() => Future.error(_needs07);
+  Future<Set<PowerAction>> powerAllowed() => guardCall(() async {
+    final c = await _conn.powerCapabilities();
+    bool ok(api.PowerCapability p) => p == api.PowerCapability.yes;
+    return {
+      if (ok(c.suspend)) PowerAction.sleep,
+      if (ok(c.reboot)) PowerAction.restart,
+      if (ok(c.poweroff)) PowerAction.shutdown,
+    };
+  });
+
+  // TODO(session-restart): the session API has no method to restart the
+  // session.
+  @override
+  Future<void> restartSession() => Future.error(_needsRestartMethod);
 }
 
-const _needs07 = SystemException(
+const _needsRestartMethod = SystemException(
   SystemErrorKind.unavailable,
   'This needs a newer HinterOS service than the one that is running.',
 );
 
 // ---------------------------------------------------------------- wiring
 
-/// The services over a daemon connection. System info, SSH, updates and jobs
-/// are real (API 0.6); everything else stays unavailable until the daemon has
-/// it.
-// TODO(0.7): NetworkRepository, BluetoothRepository, DisplayAudioRepository
-// and power over the new session methods.
+/// The services over a daemon connection. System info, SSH, updates, jobs,
+/// power, Wi-Fi, Bluetooth, display and audio are real (API 0.7); the Store
+/// stays unavailable until the daemon has it.
 // TODO(M8): StoreRepository (apps.install / apps.remove).
 SystemServices daemonSystemServices(api.DaemonConnection connection) {
   final jobs = DaemonJobs(connection);
@@ -744,9 +653,9 @@ SystemServices daemonSystemServices(api.DaemonConnection connection) {
     jobs: jobs,
     system: DaemonSystem(connection, jobs),
     updates: DaemonUpdates(connection, jobs),
-    network: rest.network,
-    bluetooth: rest.bluetooth,
-    displayAudio: rest.displayAudio,
+    network: DaemonNetwork(connection),
+    bluetooth: DaemonBluetooth(connection),
+    displayAudio: DaemonDisplayAudio(connection),
     store: rest.store,
   );
 }

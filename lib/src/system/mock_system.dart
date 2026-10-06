@@ -475,6 +475,12 @@ class MockSystem implements SystemRepository {
   Future<void> power(PowerAction action) async =>
       log.add('power:${action.name}');
 
+  /// What `power.capabilities` allows.
+  Set<PowerAction> allowedActions = {...PowerAction.values};
+
+  @override
+  Future<Set<PowerAction>> powerAllowed() async => allowedActions;
+
   @override
   Future<void> restartSession() async => log.add('session:restart');
 
@@ -551,6 +557,15 @@ class MockNetwork implements NetworkRepository {
     if (!_wifi) return const [];
     return [..._networks]..sort((a, b) => b.signal.compareTo(a.signal));
   }
+
+  @override
+  Future<List<WifiNetwork>> list() => scan();
+
+  @override
+  Stream<NetworkStatus> get statusChanges => const Stream.empty();
+
+  @override
+  Stream<List<WifiNetwork>> get listChanges => const Stream.empty();
 
   WifiNetwork _find(String ssid) => _networks.firstWhere(
     (n) => n.ssid == ssid,
@@ -663,6 +678,13 @@ class MockBluetooth implements BluetoothRepository {
   @override
   bool get scanning => _scanning;
   @override
+  Future<void> load() async {}
+  @override
+  Stream<BtConfirmRequest> get confirmRequests => const Stream.empty();
+  @override
+  Future<void> confirm(String id, {required bool accept}) async =>
+      log.add('confirm:$id:$accept');
+  @override
   Stream<List<BtDevice>> get devices => _changes.stream;
   @override
   List<BtDevice> get current => List.unmodifiable(_devices);
@@ -745,6 +767,7 @@ class MockDisplayAudio implements DisplayAudioRepository {
   }
 
   late List<DisplayMode> _modes;
+  DisplayMode? _previous;
   var _outputs = const [
     AudioOutput(id: 'hdmi', name: 'TV (HDMI)', current: true),
     AudioOutput(id: 'bt-buds', name: 'Living Room Buds (Bluetooth)'),
@@ -755,11 +778,12 @@ class MockDisplayAudio implements DisplayAudioRepository {
   final List<String> log = [];
 
   @override
-  Future<List<DisplayMode>> displayModes() async => _modes;
+  Future<DisplayInfo> displayModes() async => DisplayInfo(modes: _modes);
 
   @override
   Future<void> setDisplayMode(DisplayMode m) async {
     log.add('mode:${m.id}');
+    _previous = _modes.where((d) => d.current).firstOrNull;
     _modes = [
       for (final d in _modes)
         DisplayMode(
@@ -771,6 +795,29 @@ class MockDisplayAudio implements DisplayAudioRepository {
         ),
     ];
   }
+
+  @override
+  Future<void> keepDisplayMode() async => log.add('keep');
+
+  @override
+  Future<void> revertDisplayMode() async {
+    log.add('revert');
+    final to = _previous;
+    if (to == null) return;
+    _modes = [
+      for (final d in _modes)
+        DisplayMode(
+          width: d.width,
+          height: d.height,
+          refreshHz: d.refreshHz,
+          preferred: d.preferred,
+          current: d.id == to.id,
+        ),
+    ];
+  }
+
+  @override
+  Stream<AudioState> get audioChanges => const Stream.empty();
 
   @override
   Future<AudioState> audio() async =>

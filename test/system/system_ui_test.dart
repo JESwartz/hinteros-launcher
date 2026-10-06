@@ -92,7 +92,7 @@ void main() {
       expect(find.textContaining('Keep 3840'), findsNothing);
       final log = h.services.mockDisplayAudio.log;
       expect(log.first, startsWith('mode:3840x2160@60'));
-      expect(log.last, startsWith('mode:1920x1080@60'), reason: 'went back');
+      expect(log.last, 'revert', reason: 'went back');
     });
 
     testWidgets('Display: keeping a mode', (t) async {
@@ -101,7 +101,8 @@ void main() {
       await h.pump(t);
       await enterSettingsEntry(t, 'display');
       await press(t, [kDown, kEnter, kRight, kEnter]);
-      expect(h.services.mockDisplayAudio.log, hasLength(1));
+      expect(h.services.mockDisplayAudio.log.last, 'keep');
+      expect(h.services.mockDisplayAudio.log, hasLength(2));
     });
 
     testWidgets('Audio: left and right change the volume on its row', (

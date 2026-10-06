@@ -15,6 +15,12 @@ String describeError(Object e) => switch (e) {
   _ => 'Something went wrong ($e).',
 };
 
+/// The title of the message that explains a refused change.
+String refusalTitle(SystemException e) => switch (e.kind) {
+  SystemErrorKind.powerInhibited => 'Not right now',
+  _ => "That didn't work",
+};
+
 /// What a section needs: the services and its pane's region.
 class SectionEnv {
   const SectionEnv({required this.services, required this.region});
@@ -31,10 +37,15 @@ class Loaded<T> extends StatefulWidget {
     required this.region,
     required this.load,
     required this.builder,
+    this.updates = const [],
   });
 
   final NavRegion region;
   final Future<T> Function() load;
+
+  /// Live changes (daemon events): each one turns the data shown into the
+  /// new data. Ignored until the first load has finished.
+  final List<Stream<T Function(T)>> updates;
   final Widget Function(
     BuildContext context,
     T data,
@@ -50,11 +61,28 @@ class _LoadedState<T> extends State<Loaded<T>> {
   T? _data;
   bool _has = false;
   Object? _error;
+  final _subs = <StreamSubscription<T Function(T)>>[];
 
   @override
   void initState() {
     super.initState();
+    for (final s in widget.updates) {
+      _subs.add(
+        s.listen((f) {
+          if (!mounted || !_has) return;
+          setState(() => _data = f(_data as T));
+        }),
+      );
+    }
     unawaited(_reload());
+  }
+
+  @override
+  void dispose() {
+    for (final s in _subs) {
+      unawaited(s.cancel());
+    }
+    super.dispose();
   }
 
   Future<void> _reload() async {

@@ -27,6 +27,8 @@ class _UnavailableSystem implements SystemRepository {
   @override
   Future<void> power(PowerAction action) => Future.error(_gone);
   @override
+  Future<Set<PowerAction>> powerAllowed() => Future.error(_gone);
+  @override
   bool get acceptsAdminPassword => false;
   @override
   Future<SshState> ssh() => Future.error(_gone);
@@ -69,6 +71,12 @@ class _UnavailableNetwork implements NetworkRepository {
   @override
   Future<List<WifiNetwork>> scan() => Future.error(_gone);
   @override
+  Future<List<WifiNetwork>> list() => Future.error(_gone);
+  @override
+  Stream<NetworkStatus> get statusChanges => const Stream.empty();
+  @override
+  Stream<List<WifiNetwork>> get listChanges => const Stream.empty();
+  @override
   Future<void> connect(String ssid, {String? password}) => Future.error(_gone);
   @override
   Future<void> disconnect() => Future.error(_gone);
@@ -81,6 +89,13 @@ class _UnavailableNetwork implements NetworkRepository {
 class _UnavailableBluetooth implements BluetoothRepository {
   @override
   bool get scanning => false;
+  @override
+  Future<void> load() => Future.error(_gone);
+  @override
+  Stream<BtConfirmRequest> get confirmRequests => const Stream.empty();
+  @override
+  Future<void> confirm(String id, {required bool accept}) =>
+      Future.error(_gone);
   @override
   Stream<List<BtDevice>> get devices => const Stream.empty();
   @override
@@ -101,9 +116,15 @@ class _UnavailableBluetooth implements BluetoothRepository {
 
 class _UnavailableDisplayAudio implements DisplayAudioRepository {
   @override
-  Future<List<DisplayMode>> displayModes() => Future.error(_gone);
+  Future<DisplayInfo> displayModes() => Future.error(_gone);
   @override
   Future<void> setDisplayMode(DisplayMode mode) => Future.error(_gone);
+  @override
+  Future<void> keepDisplayMode() => Future.error(_gone);
+  @override
+  Future<void> revertDisplayMode() => Future.error(_gone);
+  @override
+  Stream<AudioState> get audioChanges => const Stream.empty();
   @override
   Future<AudioState> audio() => Future.error(_gone);
   @override

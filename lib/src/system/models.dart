@@ -50,8 +50,16 @@ enum SystemErrorKind {
   /// polkit action.
   authenticationRequired,
 
-  /// Wi-Fi / Bluetooth failures (NetworkManager, BlueZ).
+  /// 4002: a connection, pairing or mode change failed. `data['reason']`
+  /// is for code (`not_applied`, `nothing_to_revert`, ...).
   deviceFailed,
+
+  /// 4004: polkit refused the session user.
+  notAuthorized,
+
+  /// 4005: logind refuses suspend, reboot and power off while a system
+  /// update is being applied.
+  powerInhibited,
 
   /// -32602
   invalidParams,
@@ -401,6 +409,7 @@ class WifiNetwork {
     this.secured = true,
     this.connected = false,
     this.saved = false,
+    this.supported = true,
   });
 
   final String ssid;
@@ -412,6 +421,9 @@ class WifiNetwork {
 
   /// The box has a stored connection (no password needed to join).
   final bool saved;
+
+  /// False for WEP and 802.1X (enterprise): the daemon refuses to join them.
+  final bool supported;
 
   /// 1..4 bars.
   int get bars => signal >= 75
@@ -433,19 +445,32 @@ class WifiNetwork {
 @immutable
 class NetworkStatus {
   const NetworkStatus({
+    this.wifiAvailable = true,
     this.wifiEnabled = true,
     this.ethernet = false,
     this.wifiSsid,
+    this.wifiSignal,
     this.address,
+    this.connectivity = Connectivity.unknown,
   });
 
+  /// There is a Wi-Fi device.
+  final bool wifiAvailable;
   final bool wifiEnabled;
   final bool ethernet;
   final String? wifiSsid;
+
+  /// 0..100
+  final int? wifiSignal;
   final String? address;
+  final Connectivity connectivity;
 
   bool get online => ethernet || wifiSsid != null;
 }
+
+/// How far NetworkManager could check that the connection reaches the
+/// internet.
+enum Connectivity { unknown, none, portal, limited, full }
 
 // ---------------------------------------------------------------- bluetooth
 
@@ -454,6 +479,9 @@ enum BtKind {
   headset('Headset'),
   speaker('Speaker'),
   keyboard('Keyboard'),
+  mouse('Mouse'),
+  phone('Phone'),
+  computer('Computer'),
   other('Other');
 
   const BtKind(this.label);
@@ -468,14 +496,18 @@ class BtDevice {
     required this.kind,
     this.paired = false,
     this.connected = false,
+    this.battery,
   });
 
-  /// The adapter address.
+  /// The Bluetooth address.
   final String id;
   final String name;
   final BtKind kind;
   final bool paired;
   final bool connected;
+
+  /// Percent, when the device reports it.
+  final int? battery;
 
   BtDevice copyWith({bool? paired, bool? connected}) => BtDevice(
     id: id,
@@ -483,10 +515,44 @@ class BtDevice {
     kind: kind,
     paired: paired ?? this.paired,
     connected: connected ?? this.connected,
+    battery: battery,
   );
 }
 
+/// A pairing the daemon needs the user's word on (`bluetooth_confirm`).
+@immutable
+class BtConfirmRequest {
+  const BtConfirmRequest({
+    required this.id,
+    required this.name,
+    required this.passkey,
+    required this.mustAnswer,
+  });
+
+  final String id;
+  final String name;
+  final String passkey;
+
+  /// True: compare the code with the device's and accept or reject (mode
+  /// `confirm`). False: type the code on the device (mode `display`); nothing
+  /// to answer.
+  final bool mustAnswer;
+}
+
 // ---------------------------------------------------------------- display, audio
+
+/// The display's modes. [canSet] false: the box cannot change the mode (an
+/// internal panel, or gamescope is not set up for it).
+@immutable
+class DisplayInfo {
+  const DisplayInfo({required this.modes, this.canSet = true, this.display});
+
+  final List<DisplayMode> modes;
+  final bool canSet;
+
+  /// The display's name, when known.
+  final String? display;
+}
 
 @immutable
 class DisplayMode {

@@ -403,18 +403,10 @@ void main() {
     });
   });
 
-  test('power and session restart wait for API 0.7', () async {
+  test('restarting the session has no session API method', () async {
     final (_, s) = await _setup();
     expect(
       (await _fails(s.system.restartSession())).kind,
-      SystemErrorKind.unavailable,
-    );
-    expect(
-      (await _fails(s.system.power(PowerAction.sleep))).kind,
-      SystemErrorKind.unavailable,
-    );
-    expect(
-      (await _fails(s.network.status())).kind,
       SystemErrorKind.unavailable,
     );
   });

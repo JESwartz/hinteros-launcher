@@ -11,290 +11,6 @@ import '../modal_host.dart';
 import '../widgets.dart';
 import 'common.dart';
 
-// ------------------------------------------------------------------ network
-
-class NetworkSection extends StatelessWidget {
-  const NetworkSection(this.env, {super.key});
-
-  final SectionEnv env;
-
-  @override
-  Widget build(BuildContext context) {
-    final net = env.services.network;
-    return Loaded<(NetworkStatus, List<WifiNetwork>)>(
-      region: env.region,
-      load: () async => (await net.status(), await net.scan()),
-      builder: (context, data, reload) {
-        final (status, networks) = data;
-        final t = HinterTheme.of(context);
-        final p = Pane(env.region);
-        p.add(
-          StatusLine(
-            status.wifiSsid != null
-                ? 'Connected to ${status.wifiSsid}'
-                      '${status.address == null ? '' : ' (${status.address})'}.'
-                : status.ethernet
-                ? 'Connected by cable.'
-                : 'Not connected.',
-            ok: status.online,
-          ),
-        );
-        p.item(
-          'wifi',
-          onSelect: () async {
-            await _guard(
-              context,
-              () => net.setWifiEnabled(!status.wifiEnabled),
-            );
-            await reload();
-          },
-          builder: (f) => SettingRow(
-            title: 'Wi-Fi',
-            focused: f,
-            trailing: ToggleMark(on: status.wifiEnabled),
-          ),
-          gap: HinterTokens.s2,
-        );
-        if (status.wifiEnabled) {
-          p.item(
-            'scan',
-            onSelect: reload,
-            builder: (f) =>
-                SettingRow(title: 'Scan again', focused: f, dim: true),
-          );
-          p.add(Text('Networks nearby', style: t.label), gap: HinterTokens.s2);
-          for (var i = 0; i < networks.length; i++) {
-            final n = networks[i];
-            p.item(
-              'n$i',
-              onSelect: () => _select(context, n, reload),
-              builder: (f) => SettingRow(
-                title: n.ssid,
-                focused: f,
-                subtitle: [
-                  if (n.connected) 'Connected',
-                  if (!n.connected && n.saved) 'Saved',
-                  n.secured ? 'Needs a password' : 'Open',
-                  n.strength,
-                ].join(', '),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (n.secured) const LockMark(),
-                    const SizedBox(width: HinterTokens.s2),
-                    SignalBars(bars: n.bars),
-                  ],
-                ),
-              ),
-            );
-          }
-        }
-        return p.build();
-      },
-    );
-  }
-
-  Future<void> _guard(BuildContext context, Future<void> Function() f) async {
-    try {
-      await f();
-    } on SystemException catch (e) {
-      if (context.mounted) {
-        await showMessage(context, title: "That didn't work", body: e.message);
-      }
-    }
-  }
-
-  Future<void> _select(
-    BuildContext context,
-    WifiNetwork n,
-    Future<void> Function() reload,
-  ) async {
-    final net = env.services.network;
-    if (n.connected) {
-      final c = await showChoice<String>(
-        context,
-        title: n.ssid,
-        body: 'You are connected to this network.',
-        choices: const [
-          Choice('Disconnect', 'disconnect'),
-          Choice('Forget this network', 'forget', danger: true),
-        ],
-      );
-      if (c == null || !context.mounted) return;
-      await _guard(
-        context,
-        () => c == 'disconnect' ? net.disconnect() : net.forget(n.ssid),
-      );
-    } else if (n.secured && !n.saved) {
-      final r = await showTextEntry(
-        context,
-        title: 'Password for ${n.ssid}',
-        body:
-            'Wi-Fi passwords are kept on this box for everyone who uses it, '
-            'so you only enter it once.',
-        secret: true,
-        submitLabel: 'Connect',
-        submit: (pw) async {
-          if (pw.isEmpty) return 'Type the password first.';
-          try {
-            await net.connect(n.ssid, password: pw);
-            return null;
-          } on SystemException catch (e) {
-            return e.kind == SystemErrorKind.wrongPassword
-                ? 'That password was not accepted. Try again.'
-                : e.message;
-          }
-        },
-      );
-      if (r == null) return;
-    } else {
-      await _guard(context, () => net.connect(n.ssid));
-    }
-    await reload();
-  }
-}
-
-// ------------------------------------------------------------------ bluetooth
-
-class BluetoothSection extends StatefulWidget {
-  const BluetoothSection(this.env, {super.key});
-
-  final SectionEnv env;
-
-  @override
-  State<BluetoothSection> createState() => _BluetoothSectionState();
-}
-
-class _BluetoothSectionState extends State<BluetoothSection> {
-  late List<BtDevice> _devices = widget.env.services.bluetooth.current;
-  late bool _scanning = widget.env.services.bluetooth.scanning;
-  StreamSubscription<List<BtDevice>>? _sub;
-
-  BluetoothRepository get _bt => widget.env.services.bluetooth;
-
-  @override
-  void initState() {
-    super.initState();
-    _sub = _bt.devices.listen((d) {
-      if (mounted) {
-        setState(() {
-          _devices = d;
-          _scanning = _bt.scanning;
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _sub?.cancel();
-    // Scanning drains power and slows audio: stop when leaving.
-    unawaited(_bt.stopScan().catchError((_) {}));
-    super.dispose();
-  }
-
-  Future<void> _guard(Future<void> Function() f) async {
-    try {
-      await f();
-    } on SystemException catch (e) {
-      if (mounted) {
-        await showMessage(context, title: "That didn't work", body: e.message);
-      }
-    }
-  }
-
-  Future<void> _select(BtDevice d) async {
-    if (!d.paired) {
-      final r = await showConfirm(
-        context,
-        title: 'Pair with ${d.name}?',
-        body:
-            'Put it in pairing mode first (for a controller, hold its '
-            'pairing button until the light flashes).',
-        confirmLabel: 'Pair',
-      );
-      if (r == null) return;
-      await _guard(() => _bt.pair(d.id));
-      return;
-    }
-    final c = await showChoice<String>(
-      context,
-      title: d.name,
-      body: '${d.kind.label}, ${d.connected ? 'connected' : 'paired'}.',
-      choices: [
-        if (d.connected)
-          const Choice('Disconnect', 'disconnect')
-        else
-          const Choice('Connect', 'connect'),
-        const Choice('Forget this device', 'forget', danger: true),
-      ],
-    );
-    if (c == null) return;
-    await _guard(
-      () => switch (c) {
-        'connect' => _bt.connect(d.id),
-        'disconnect' => _bt.disconnect(d.id),
-        _ => _bt.forget(d.id),
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HinterTheme.of(context);
-    final p = Pane(widget.env.region);
-    p.item(
-      'scan',
-      onSelect: () async {
-        await _guard(() => _scanning ? _bt.stopScan() : _bt.startScan());
-        if (mounted) setState(() => _scanning = _bt.scanning);
-      },
-      builder: (f) => SettingRow(
-        title: 'Look for new devices',
-        subtitle: _scanning
-            ? 'Searching. Put your device in pairing mode.'
-            : null,
-        focused: f,
-        trailing: ToggleMark(
-          on: _scanning,
-          label: _scanning ? 'Searching' : 'Off',
-        ),
-      ),
-    );
-    p.add(Text('Devices', style: t.label), gap: HinterTokens.s2);
-    if (_devices.isEmpty) {
-      p.add(Text('No devices yet.', style: t.bodyDim));
-    }
-    for (var i = 0; i < _devices.length; i++) {
-      final d = _devices[i];
-      p.item(
-        'd$i',
-        onSelect: () => _select(d),
-        builder: (f) => SettingRow(
-          title: d.name,
-          focused: f,
-          subtitle:
-              '${d.kind.label}, '
-              '${d.connected
-                  ? 'connected'
-                  : d.paired
-                  ? 'paired'
-                  : 'not paired'}',
-          trailing: Text(
-            d.connected
-                ? 'Connected'
-                : d.paired
-                ? 'Paired'
-                : 'Pair',
-            style: t.bodyDim,
-          ),
-        ),
-      );
-    }
-    return p.build();
-  }
-}
-
 // ------------------------------------------------------------------ display
 
 class DisplaySection extends StatelessWidget {
@@ -305,12 +21,20 @@ class DisplaySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final da = env.services.displayAudio;
-    return Loaded<List<DisplayMode>>(
+    return Loaded<DisplayInfo>(
       region: env.region,
       load: da.displayModes,
-      builder: (context, modes, reload) {
+      builder: (context, info, reload) {
         final t = HinterTheme.of(context);
         final p = Pane(env.region);
+        if (!info.canSet) {
+          p.add(
+            const StatusLine(
+              "This display's resolution can't be changed from here. "
+              'HinterOS uses what your TV prefers.',
+            ),
+          );
+        }
         p.item(
           'guide',
           onSelect: () =>
@@ -322,16 +46,22 @@ class DisplaySection extends StatelessWidget {
             focused: f,
             trailing: const _SafePreview(),
           ),
+          gap: info.canSet ? HinterTokens.s1 + 4 : HinterTokens.s2,
         );
         p.add(
-          Text('Resolution and refresh rate', style: t.label),
+          Text(
+            info.display == null
+                ? 'Resolution and refresh rate'
+                : 'Resolution and refresh rate of ${info.display}',
+            style: t.label,
+          ),
           gap: HinterTokens.s2,
         );
-        for (var i = 0; i < modes.length; i++) {
-          final m = modes[i];
+        for (var i = 0; i < info.modes.length; i++) {
+          final m = info.modes[i];
           p.item(
             'm$i',
-            onSelect: () => _apply(context, modes, m, reload),
+            onSelect: () => _apply(context, info, m, reload),
             builder: (f) => SettingRow(
               title: m.label,
               focused: f,
@@ -349,30 +79,46 @@ class DisplaySection extends StatelessWidget {
     );
   }
 
+  /// `display.set_mode`, then the 15 second dialog: Keep calls `display.keep`,
+  /// Go back or no answer in time calls `display.revert`.
   Future<void> _apply(
     BuildContext context,
-    List<DisplayMode> modes,
+    DisplayInfo info,
     DisplayMode m,
     Future<void> Function() reload,
   ) async {
     if (m.current) return;
+    Future<void> say(SystemException e) =>
+        showMessage(context, title: refusalTitle(e), body: e.message);
+    if (!info.canSet) {
+      await showMessage(
+        context,
+        title: "Can't change this",
+        body:
+            "This display's resolution can't be changed from here. HinterOS "
+            'uses what your TV prefers.',
+      );
+      return;
+    }
     final da = env.services.displayAudio;
-    final old = modes.firstWhere((x) => x.current, orElse: () => m);
     try {
       await da.setDisplayMode(m);
     } on SystemException catch (e) {
-      if (context.mounted) {
-        await showMessage(context, title: "That didn't work", body: e.message);
-      }
+      if (context.mounted) await say(e);
+      await reload();
       return;
     }
     if (!context.mounted) return;
     final keep = await ModalScope.of(context)
         .show<bool>((c, modal) => KeepDisplayDialog(modal: modal, mode: m));
-    if (keep != true) {
-      try {
-        await da.setDisplayMode(old);
-      } catch (_) {}
+    try {
+      if (keep == true) {
+        await da.keepDisplayMode();
+      } else {
+        await da.revertDisplayMode();
+      }
+    } on SystemException catch (e) {
+      if (context.mounted) await say(e);
     }
     await reload();
   }
@@ -585,6 +331,9 @@ class AudioSection extends StatefulWidget {
 class _AudioSectionState extends State<AudioSection> {
   AudioState? _audio;
   Object? _error;
+  String? _note;
+  int _inFlight = 0;
+  StreamSubscription<AudioState>? _sub;
 
   DisplayAudioRepository get _da => widget.env.services.displayAudio;
 
@@ -592,11 +341,19 @@ class _AudioSectionState extends State<AudioSection> {
   void initState() {
     super.initState();
     widget.env.region.interceptMove = _onMove;
+    // `audio_changed`: changes made elsewhere (a controller, a headset that
+    // connects). While our own change is on its way, its echo is not shown.
+    _sub = _da.audioChanges.listen((a) {
+      if (mounted && _inFlight == 0 && _audio != null) {
+        setState(() => _audio = a);
+      }
+    });
     unawaited(_load());
   }
 
   @override
   void dispose() {
+    _sub?.cancel();
     if (widget.env.region.interceptMove == _onMove) {
       widget.env.region.interceptMove = null;
     }
@@ -606,9 +363,27 @@ class _AudioSectionState extends State<AudioSection> {
   Future<void> _load() async {
     try {
       final a = await _da.audio();
-      if (mounted) setState(() => _audio = a);
+      if (mounted) {
+        setState(() {
+          _audio = a;
+          _error = null;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _error = e);
+    }
+  }
+
+  /// Runs a change; a refusal shows as a line above the controls.
+  Future<void> _change(Future<void> Function() f) async {
+    _inFlight++;
+    try {
+      await f();
+      if (mounted) setState(() => _note = null);
+    } on SystemException catch (e) {
+      if (mounted) setState(() => _note = e.message);
+    } finally {
+      _inFlight--;
     }
   }
 
@@ -623,7 +398,7 @@ class _AudioSectionState extends State<AudioSection> {
     setState(
       () => _audio = AudioState(outputs: a.outputs, volume: v, muted: a.muted),
     );
-    unawaited(_da.setVolume(v));
+    unawaited(_change(() => _da.setVolume(v)));
     return true;
   }
 
@@ -631,9 +406,15 @@ class _AudioSectionState extends State<AudioSection> {
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
     if (_error != null) {
-      return (Pane(
-        widget.env.region,
-      )..add(StatusLine(describeError(_error!), error: true))).build();
+      return (Pane(widget.env.region)
+            ..add(StatusLine(describeError(_error!), error: true))
+            ..buttons('retry', [
+              btn('Try again', () {
+                setState(() => _error = null);
+                unawaited(_load());
+              }),
+            ]))
+          .build();
     }
     final a = _audio;
     if (a == null) {
@@ -641,10 +422,11 @@ class _AudioSectionState extends State<AudioSection> {
       return const StatusLine('Loading...');
     }
     final p = Pane(widget.env.region);
+    if (_note != null) p.add(StatusLine(_note!, error: true));
     p.item(
       'volume',
       onSelect: () async {
-        await _da.setMuted(!a.muted);
+        await _change(() => _da.setMuted(!a.muted));
         await _load();
       },
       builder: (f) => SettingRow(
@@ -671,12 +453,15 @@ class _AudioSectionState extends State<AudioSection> {
       ),
     );
     p.add(Text('Play sound through', style: t.label), gap: HinterTokens.s2);
+    if (a.outputs.isEmpty) {
+      p.add(Text('No sound devices found.', style: t.bodyDim));
+    }
     for (var i = 0; i < a.outputs.length; i++) {
       final o = a.outputs[i];
       p.item(
         'o$i',
         onSelect: () async {
-          await _da.setAudioOutput(o.id);
+          await _change(() => _da.setAudioOutput(o.id));
           await _load();
         },
         builder: (f) => SettingRow(
@@ -700,57 +485,91 @@ class PowerSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sys = env.services.system;
-    final p = Pane(env.region);
-    Future<void> run(PowerAction a) async {
-      try {
-        await sys.power(a);
-      } on SystemException catch (e) {
-        if (context.mounted) {
-          await showMessage(
+    return Loaded<Set<PowerAction>>(
+      region: env.region,
+      load: sys.powerAllowed,
+      builder: (context, allowed, reload) {
+        final p = Pane(env.region);
+        Future<void> run(PowerAction a) async {
+          try {
+            await sys.power(a);
+          } on SystemException catch (e) {
+            if (context.mounted) {
+              await showMessage(
+                context,
+                title: refusalTitle(e),
+                body: e.message,
+              );
+            }
+          }
+        }
+
+        Future<void> confirm(PowerAction a, String body) async {
+          final r = await showConfirm(
             context,
-            title: "That didn't work",
-            body: e.message,
+            title: '${a.label}?',
+            body: body,
+            confirmLabel: a.label,
+            danger: true,
+          );
+          if (r != null) await run(a);
+        }
+
+        void row(
+          String key,
+          PowerAction a,
+          String title,
+          String? subtitle,
+          String? ask,
+        ) {
+          final ok = allowed.contains(a);
+          p.item(
+            key,
+            onSelect: () async {
+              if (!ok) {
+                await showMessage(
+                  context,
+                  title: "Can't ${a.label.toLowerCase()}",
+                  body: "This box doesn't let HinterOS do that.",
+                );
+              } else if (ask == null) {
+                await run(a);
+              } else {
+                await confirm(a, ask);
+              }
+            },
+            builder: (f) => SettingRow(
+              title: title,
+              subtitle: ok ? subtitle : "Not allowed on this box",
+              focused: f,
+              dim: !ok,
+            ),
           );
         }
-      }
-    }
 
-    Future<void> confirm(PowerAction a, String body) async {
-      final r = await showConfirm(
-        context,
-        title: '${a.label}?',
-        body: body,
-        confirmLabel: a.label,
-        danger: true,
-      );
-      if (r != null) await run(a);
-    }
-
-    p.item(
-      'sleep',
-      onSelect: () => run(PowerAction.sleep),
-      builder: (f) => SettingRow(
-        title: 'Sleep',
-        subtitle: 'Wake it with a controller button.',
-        focused: f,
-      ),
+        row(
+          'sleep',
+          PowerAction.sleep,
+          'Sleep',
+          'Wake it with a controller button.',
+          null,
+        );
+        row(
+          'restart',
+          PowerAction.restart,
+          'Restart',
+          null,
+          'Everything that is running is closed, then the box starts again.',
+        );
+        row(
+          'shutdown',
+          PowerAction.shutdown,
+          'Shut down',
+          null,
+          'Everything that is running is closed and the box turns off.',
+        );
+        return p.build();
+      },
     );
-    p.item(
-      'restart',
-      onSelect: () => confirm(
-        PowerAction.restart,
-        'Everything that is running is closed, then the box starts again.',
-      ),
-      builder: (f) => SettingRow(title: 'Restart', focused: f),
-    );
-    p.item(
-      'shutdown',
-      onSelect: () => confirm(
-        PowerAction.shutdown,
-        'Everything that is running is closed and the box turns off.',
-      ),
-      builder: (f) => SettingRow(title: 'Shut down', focused: f),
-    );
-    return p.build();
   }
 }
