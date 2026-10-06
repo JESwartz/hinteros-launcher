@@ -25,34 +25,25 @@ static void my_application_activate(GApplication* application) {
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
-  // Use a header bar when running in GNOME as this is the common style used
-  // by applications and is the setup most users will be using (e.g. Ubuntu
-  // desktop).
-  // If running on X and not using GNOME then just use a traditional title bar
-  // in case the window manager does more exotic layout, e.g. tiling.
-  // If running on Wayland assume the header bar will work (may need changing
-  // if future cases occur).
-  gboolean use_header_bar = TRUE;
-#ifdef GDK_WINDOWING_X11
-  GdkScreen* screen = gtk_window_get_screen(window);
-  if (GDK_IS_X11_SCREEN(screen)) {
-    const gchar* wm_name = gdk_x11_screen_get_window_manager_name(screen);
-    if (g_strcmp0(wm_name, "GNOME Shell") != 0) {
-      use_header_bar = FALSE;
+  // Console mode (default): fullscreen and undecorated, as the only app under
+  // gamescope/cage. --windowed or HINTEROS_WINDOWED=1 gives a normal
+  // decorated 1280x720 window for desktop development.
+  gboolean windowed = g_strcmp0(g_getenv("HINTEROS_WINDOWED"), "1") == 0;
+  if (self->dart_entrypoint_arguments != nullptr) {
+    for (char** arg = self->dart_entrypoint_arguments; *arg != nullptr; arg++) {
+      if (g_strcmp0(*arg, "--windowed") == 0) {
+        windowed = TRUE;
+      }
     }
   }
-#endif
-  if (use_header_bar) {
-    GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
-    gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "HinterOS");
-    gtk_header_bar_set_show_close_button(header_bar, TRUE);
-    gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
-  } else {
-    gtk_window_set_title(window, "HinterOS");
-  }
 
-  gtk_window_set_default_size(window, 1280, 720);
+  if (windowed) {
+    gtk_window_set_title(window, "HinterOS");
+    gtk_window_set_default_size(window, 1280, 720);
+  } else {
+    gtk_window_set_decorated(window, FALSE);
+    gtk_window_fullscreen(window);
+  }
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
@@ -72,6 +63,16 @@ static void my_application_activate(GApplication* application) {
   g_signal_connect_swapped(view, "first-frame", G_CALLBACK(first_frame_cb),
                            self);
   gtk_widget_realize(GTK_WIDGET(view));
+
+  // Hide the mouse cursor in console mode (best effort).
+  if (!windowed) {
+    GdkWindow* gdk_window = gtk_widget_get_window(GTK_WIDGET(view));
+    if (gdk_window != nullptr) {
+      g_autoptr(GdkCursor) blank = gdk_cursor_new_for_display(
+          gdk_window_get_display(gdk_window), GDK_BLANK_CURSOR);
+      gdk_window_set_cursor(gdk_window, blank);
+    }
+  }
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
