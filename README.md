@@ -41,19 +41,21 @@ the home screen says so and the client keeps retrying with backoff.
 | `tool/gen_api.dart` | Generator: schema to `lib/src/api/generated.dart` (models, typed method stubs, sealed event class, error codes) |
 | `lib/src/api/generated.dart` | Generated, committed. Do not edit |
 | `lib/src/api/client.dart` | `DaemonClient`: handshake, request correlation, events, subscribe, reconnect |
-| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.4 methods and events) |
+| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.5 methods and events) |
 | `lib/src/osk/` | The on-screen keyboard: `OskBackend` (+ mock), layouts, state, UI |
 | `tool/gen_mock_art.dart` | Draws the placeholder cover art in `test/fixtures/art/` (committed; no network, no third-party pictures) |
+| `tool/gen_mock_icons.dart` | Draws the generic placeholder app icons in `test/fixtures/icons/` (plain shapes, PNG and one SVG; no logos, no network) |
+| `lib/src/data/app_icons.dart` | `AppIconCache`: loads, decodes (PNG, SVG via `flutter_svg`) and remembers app icons, computes their dominant colour |
 
 ### Mock daemon
 
 `--mock` (or `HINTEROS_MOCK=1`) swaps the socket for the in-process mock, which behaves like the
-0.4 daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
+0.5 daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
 Plex), a fake Steam library of 14 games in every install state (`games.list`, sorted by name),
 `apps.launch` (by id, command or `steam://rungameid/<appid>`), `apps.running`, `apps.focus`,
 `apps.close` (then `app_exited` with reason `closed`), `steam.attention` / `steam.focus`, and the
 `app_started`, `app_exited`, `focus_changed`, `games_changed`, `steam_attention` and `osk_visibility` events; a
-`command` launch of `does-not-exist` fails with 2002. 0.4: `osk.show` / `osk.hide` (event only on a change; Home and a focus change hide it; `oskEnabled = false` gives 2005), `keys.type` (printable ASCII types, anything else comes back as `untypeable`), `keys.key`, `keys.action` (all logged in `MockDaemon.keyLog`; `keyboardAvailable = false` gives 2004), and, while the keyboard is visible, `input_nav` only to a mock constructed with `clientName: 'hinteros-osk'`. No daemon needed for desktop work. Dev keys,
+`command` launch of `does-not-exist` fails with 2002. 0.5: the apps have generic local icons (`test/fixtures/icons`, found from the repo root or `HINTEROS_MOCK_ICONS=<dir>`), except YouTube and Plex, whose icons arrive later (F6, `apps_changed`); `MockDaemon.setAppIcon` does the same in tests. 0.4: `osk.show` / `osk.hide` (event only on a change; Home and a focus change hide it; `oskEnabled = false` gives 2005), `keys.type` (printable ASCII types, anything else comes back as `untypeable`), `keys.key`, `keys.action` (all logged in `MockDaemon.keyLog`; `keyboardAvailable = false` gives 2004), and, while the keyboard is visible, `input_nav` only to a mock constructed with `clientName: 'hinteros-osk'`. No daemon needed for desktop work. Dev keys,
 all going through the mock's event stream:
 
 | Key | Does |
@@ -63,6 +65,7 @@ all going through the mock's event stream:
 | F2 | the last started app exits |
 | F3 / F4 | Steam shows a "Steam Guard" dialog (`steam_attention`) / it goes away |
 | F5 | a game finishes its update (or, if all are installed, the first needs one): `games_changed` |
+| F6 | an app icon arrives (YouTube, then Plex): `apps_changed` |
 
 While an app has focus the mock sends no `input_nav`, like the daemon. Arrow keys, Enter and
 Escape work in every mode and are the same actions as `input_nav` (see below).
@@ -72,6 +75,67 @@ Escape work in every mode and are the same actions as `input_nav` (see below).
 flutter run -d linux --dart-entrypoint-args=--mock
 ./result/bin/hinteros-launcher --mock --windowed
 ```
+
+### App icons
+
+Every app tile shows the app's own icon; the letter tile is only the fallback. The daemon ships no
+logos: `apps.list`'s `icon` is an absolute path to a local image (PNG, SVG, ICO, JPEG, WebP) that
+it resolves at runtime from the app's desktop file and the icon themes, or fetches for web apps.
+It may appear later or change, and the daemon then sends `apps_changed`; the launcher subscribes,
+queries `apps.list` again, and every tile picks up the new file (the same path with new content
+too: the files are compared on every refresh).
+
+`AppIconCache` (`lib/src/data/app_icons.dart`) reads the file once and decodes it to a raster
+image of at most 512 px on the long side. An SVG is parsed with `flutter_svg` and drawn once into
+the same kind of image, so the tiles paint one cheap `RawImage` either way and nothing is
+re-rasterised per frame. Along the way it samples about 4000 pixels for the icon's dominant colour
+(saturated pixels count more than greys) and mean luminance; no `palette_generator`, and nothing
+runs per frame. A file that is missing or cannot be decoded gives no icon, and the tile falls back
+to the letter (while the first load is pending the tile shows its gradient without the letter, so
+there is no flash).
+
+**Tile** (`AppTile`, Home Continue/Apps and the Apps grid): 16:9 card; a backdrop that is a dark
+tint of the icon's colour (a vertical gradient with a soft glow behind the icon); the icon centred
+and contained (never cropped, at most 64% of the tile height) on top; the name over a dark scrim at
+the bottom, white, one line. An icon so dark that it would vanish (mean luminance under 0.2)
+gets a light neutral backdrop instead. The Running mark stays at the top left and scales down to at
+most half the tile width; the icon sits in the room to its right when it fits there at full size,
+else below it, so mark, icon and name never overlap at 1.0 to 1.6x text. High contrast keeps the
+outline. A running game keeps its header art as the tile; the close-confirm dialog shows the app's
+icon next to the title. Goldens: `home_1080p`, `apps_1080p`, the 1.6x and high-contrast variants,
+`apps_broken_icons_1080p` (letter fallback for a broken and a missing file) and
+`close_confirm_*`.
+
+### Try it on the desktop with the real daemon and a controller
+
+The daemon has a development preview that runs `hinteros-session` without gamescope or
+InputPlumber, with your real Steam library and a sample app list, and reads an Xbox controller
+straight from evdev. In one terminal:
+
+```
+nix run git+https://justsomeshed.com/JSwartz/HinterOS/hinteros-daemon.git#desktop-preview
+```
+
+It prints "hinteros-session is listening on:" and the socket path (in a temporary
+directory, such as `/run/user/1000/hinteros-preview.XXXXXX/session.sock`), and keeps running;
+stop it with Ctrl+C.
+In a second terminal, in this repo:
+
+```
+HINTEROS_SESSION_SOCKET=<printed path> nix run . -- --windowed
+```
+
+The controller works as in the session: D-pad or left stick moves, A launches, B goes back, Y closes
+a running app, X is secondary, bumpers switch tabs, the Xbox button is Home. Reading the pad needs
+access to the device (a pad on your seat has it through logind, otherwise join the `input` group).
+App icons are resolved from your desktop's icon themes and `.desktop` files, and web apps' icons
+arrive a moment after start (`apps_changed`), so the tiles fill in live.
+
+Launching an app or game from the launcher starts it for real on your desktop: Steam games go
+through your running Steam client and apps are ordinary processes. Home returns to the launcher
+but does not hide their windows, and nothing is sandboxed. Keyboard-profile apps and `keys.*` are
+off in the preview (no uinput), so TV web apps get no controller-to-keys mapping. See the daemon's
+README, "Desktop preview".
 
 ### Launching and input
 
@@ -123,6 +187,7 @@ explicit `null`) and string enums with an `unknown` fallback; `oneOf` on a param
 - `test/api/contract_test.dart` replays every method and event example of the schema through the
   mock and validates all output against the schema with the `json_schema` package.
 - `test/api/client_test.dart` runs `DaemonClient` against a scripted fake server on a real socket.
+- `test/app_icons_test.dart` covers the icon cache (PNG, SVG, dominant colour, broken files, a changed file behind the same path) and the tiles (icon vs letter, an icon arriving through `apps_changed`).
 - `test/api03_ui_test.dart` covers the 0.3 behaviour through the UI: install-state badges (also that
   they fit narrow covers at text 1.0 to 1.6x), launching and explaining games, Close with its
   confirm step, the attention banner.
@@ -130,7 +195,7 @@ explicit `null`) and string enums with an `unknown` fallback; `oneOf` on a param
   pages, and the exact backend calls for typing `P@ss-w0rd!` with D-pad presses only.
 - `test/integration/` runs the real `hinteros-session` binary: `nix build .#checks.x86_64-linux.integration`.
   It starts the daemon with `--no-gamescope --no-inputplumber`, a temp config of two command apps
-  and `--steam-dir` pointing at the daemon repo's fake Steam home, and covers the 0.4 handshake,
+  and `--steam-dir` pointing at the daemon repo's fake Steam home, and covers the 0.5 handshake (an app with an explicit `icon` path gets it back in `apps.list`),
   `apps.list` (built-in `steam` first), `apps.launch` (configured app, unknown app, spawn failure),
   `apps.running`, `app_started` / `app_exited`, `apps.close` (reason `closed`, 2001 when not
   running), `games.list` against the fixture (names, install state, artwork files that exist),
@@ -292,7 +357,7 @@ back per field:
 The UI reads through `AppsRepository` (apps, running, launch, close, Steam attention and focus) and
 `GamesRepository` (`games.list`, launch by Steam URL) in `lib/src/data/`, combined in
 `LauncherData`, which owns all daemon traffic and re-queries on connect and on events (the daemon
-does not replay them). The client speaks session API 0.4 (during 0.x the minor must match).
+does not replay them). The client speaks session API 0.5 (during 0.x the minor must match).
 
 ### Fonts
 
