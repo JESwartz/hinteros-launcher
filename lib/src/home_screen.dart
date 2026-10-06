@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:flutter/services.dart';
+
 import 'api/api.dart';
 import 'fps_overlay.dart';
 
@@ -10,8 +12,9 @@ const _cardHeight = 380.0;
 const _cardGap = 32.0;
 
 /// Home screen: a title and one horizontally scrolling row of focusable cards,
-/// one per app the daemon lists. Arrow keys move focus (stand-in for the
-/// D-pad). When the daemon is unreachable or speaks another API version, a
+/// one per app the daemon lists. Controller input arrives as `input_nav`
+/// events; arrow keys, Enter and Escape are mapped to the same [NavAction]s
+/// (see [_nav]), so there is one action layer for both. When the daemon is unreachable or speaks another API version, a
 /// message replaces the row.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.connection, this.showFps = false});
@@ -27,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _rowKey = GlobalKey<_CardRowState>();
   late ConnectionStatus _status;
   List<App>? _apps;
+  Set<String> _running = {};
   Object? _appsError;
   StreamSubscription<ConnectionStatus>? _statusSub;
   StreamSubscription<SessionEvent>? _eventSub;
@@ -37,13 +41,23 @@ class _HomeScreenState extends State<HomeScreen> {
     final c = widget.connection;
     _status = c.status;
     _statusSub = c.statusChanges.listen(_onStatus);
-    _eventSub = c.events.listen((e) {
-      // Home resets the launcher to its first card.
-      if (e is HomePressedEvent) _rowKey.currentState?.focusFirst();
-    });
+    _eventSub = c.events.listen(_onEvent);
     c.start();
-    unawaited(c.subscribeTo([EventName.homePressed]).catchError((_) {}));
-    if (_status is Connected) _refresh();
+    unawaited(
+      c
+          .subscribeTo([
+            EventName.homePressed,
+            EventName.appStarted,
+            EventName.appExited,
+            EventName.focusChanged,
+            EventName.inputNav,
+          ])
+          .catchError((_) {}),
+    );
+    if (_status is Connected) {
+      _refresh();
+      _refreshRunning();
+    }
   }
 
   @override
@@ -53,13 +67,112 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  void _onEvent(SessionEvent e) {
+    switch (e) {
+      // Home resets the launcher to its first card.
+      case HomePressedEvent():
+        _rowKey.currentState?.focusFirst();
+      case InputNavEvent():
+        _nav(e.action, e.phase);
+      // Events are not replayed; the daemon's list is the truth.
+      case AppStartedEvent() || AppExitedEvent() || FocusChangedEvent():
+        _refreshRunning();
+      default:
+        break;
+    }
+  }
+
+  /// The one action layer: controller (`input_nav`) and keyboard both end up
+  /// here. Releases never act; presses and repeats move focus, only a press
+  /// accepts (so holding A does not relaunch).
+  void _nav(NavAction action, NavPhase phase) {
+    if (phase == NavPhase.release || phase == NavPhase.unknown) return;
+    final row = _rowKey.currentState;
+    switch (action) {
+      case NavAction.left:
+        row?.move(-1);
+      case NavAction.right:
+        row?.move(1);
+      case NavAction.accept:
+        if (phase == NavPhase.press) _launchFocused();
+      default:
+        break;
+    }
+  }
+
+  static NavAction? _actionForKey(LogicalKeyboardKey k) {
+    if (k == LogicalKeyboardKey.arrowLeft) return NavAction.left;
+    if (k == LogicalKeyboardKey.arrowRight) return NavAction.right;
+    if (k == LogicalKeyboardKey.arrowUp) return NavAction.up;
+    if (k == LogicalKeyboardKey.arrowDown) return NavAction.down;
+    if (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) {
+      return NavAction.accept;
+    }
+    if (k == LogicalKeyboardKey.escape) return NavAction.back;
+    return null;
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    final action = _actionForKey(e.logicalKey);
+    if (action == null) return KeyEventResult.ignored;
+    _nav(action, switch (e) {
+      KeyDownEvent() => NavPhase.press,
+      KeyRepeatEvent() => NavPhase.repeat,
+      _ => NavPhase.release,
+    });
+    return KeyEventResult.handled;
+  }
+
+  Future<void> _launchFocused() async {
+    final i = _rowKey.currentState?.focusedIndex;
+    final apps = _apps;
+    if (i == null || apps == null || i >= apps.length) return;
+    final app = apps[i];
+    try {
+      await widget.connection.appsLaunch(AppsLaunchParams(id: app.id));
+    } catch (e) {
+      _toast("Couldn't start ${app.name}: ${_describe(e)}");
+    }
+  }
+
+  String _describe(Object e) => switch (e) {
+    ApiException() => e.message,
+    DaemonUnavailableException() => 'the HinterOS service is not connected',
+    _ => '$e',
+  };
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message, style: const TextStyle(fontSize: 28)),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+  }
+
+  Future<void> _refreshRunning() async {
+    try {
+      final r = await widget.connection.appsRunning();
+      if (!mounted) return;
+      setState(() => _running = {for (final a in r.apps) a.id});
+    } catch (_) {
+      // Best effort: the badge is decoration.
+    }
+  }
+
   void _onStatus(ConnectionStatus s) {
     if (!mounted) return;
     final wasConnected = _status is Connected;
     setState(() => _status = s);
     // Events are not replayed and state is not kept across reconnects, so
     // re-query what we show.
-    if (s is Connected && !wasConnected) _refresh();
+    if (s is Connected && !wasConnected) {
+      _refresh();
+      _refreshRunning();
+    }
   }
 
   Future<void> _refresh() async {
@@ -78,30 +191,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(96, 72, 96, 0),
-                child: Text(
-                  'HinterOS',
-                  style: TextStyle(
-                    fontSize: 96,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2,
+    return Focus(
+      onKeyEvent: _onKey,
+      child: Scaffold(
+        body: Stack(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(96, 72, 96, 0),
+                  child: Text(
+                    'HinterOS',
+                    style: TextStyle(
+                      fontSize: 96,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 2,
+                    ),
                   ),
                 ),
-              ),
-              const Spacer(),
-              _body(),
-              const Spacer(flex: 2),
-            ],
-          ),
-          if (widget.showFps) const FpsOverlay(),
-        ],
+                const Spacer(),
+                _body(),
+                const Spacer(flex: 2),
+              ],
+            ),
+            if (widget.showFps) const FpsOverlay(),
+          ],
+        ),
       ),
     );
   }
@@ -122,7 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (apps.isEmpty) {
           return const _Notice(title: 'No apps yet', detail: '');
         }
-        return CardRow(key: _rowKey, apps: apps);
+        return CardRow(key: _rowKey, apps: apps, running: _running);
       case VersionMismatch():
         return _Notice(
           title: "Launcher and system service versions don't match",
@@ -178,9 +294,12 @@ class _Notice extends StatelessWidget {
 }
 
 class CardRow extends StatefulWidget {
-  const CardRow({super.key, required this.apps});
+  const CardRow({super.key, required this.apps, this.running = const {}});
 
   final List<App> apps;
+
+  /// Ids of apps the daemon reports as running.
+  final Set<String> running;
 
   @override
   State<CardRow> createState() => _CardRowState();
@@ -193,6 +312,21 @@ class _CardRowState extends State<CardRow> {
     widget.apps.length,
     (i) => FocusNode(debugLabel: 'card $i'),
   );
+
+  /// Index of the card holding focus, if any.
+  int? get focusedIndex {
+    final i = _nodes.indexWhere((n) => n.hasFocus);
+    return i < 0 ? null : i;
+  }
+
+  /// Moves focus by [delta] cards, clamped (no wrap); focuses the first card
+  /// if none has focus.
+  void move(int delta) {
+    final i = focusedIndex;
+    if (i == null) return focusFirst();
+    final next = (i + delta).clamp(0, _nodes.length - 1);
+    _nodes[next].requestFocus();
+  }
 
   void focusFirst() {
     if (_nodes.isNotEmpty) _nodes.first.requestFocus();
@@ -245,6 +379,7 @@ class _CardRowState extends State<CardRow> {
             child: LauncherCard(
               index: i,
               app: widget.apps[i],
+              running: widget.running.contains(widget.apps[i].id),
               focusNode: _nodes[i],
             ),
           ),
@@ -260,11 +395,13 @@ class LauncherCard extends StatefulWidget {
     required this.index,
     required this.app,
     required this.focusNode,
+    this.running = false,
   });
 
   final int index;
   final App app;
   final FocusNode focusNode;
+  final bool running;
 
   @override
   State<LauncherCard> createState() => _LauncherCardState();
@@ -311,9 +448,24 @@ class _LauncherCardState extends State<LauncherCard> {
                 ? const [BoxShadow(color: Colors.black87, blurRadius: 32)]
                 : const [],
           ),
-          child: Text(
-            widget.app.name,
-            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w600),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            verticalDirection: VerticalDirection.up,
+            children: [
+              Text(
+                widget.app.name,
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (widget.running)
+                const Text(
+                  'Running',
+                  style: TextStyle(fontSize: 22, color: Colors.white70),
+                ),
+            ],
           ),
         ),
       ),
