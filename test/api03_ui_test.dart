@@ -1,6 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart';
+import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
+import 'package:hinteros_launcher/src/ui/cards.dart';
 
 import 'support/harness.dart';
 
@@ -244,5 +246,34 @@ void main() {
       await keys(t, [LogicalKeyboardKey.keyX]);
       expect(h.mock.running.single.id, 'steam');
     });
+  });
+
+  group('badges', () {
+    for (final scale in [1.0, 1.2, 1.4, 1.6]) {
+      testWidgets('install badges fit narrow Home covers at text ${scale}x', (
+        t,
+      ) async {
+        setView(t);
+        final h = Harness(settings: LauncherSettings(textScale: scale));
+        await h.pump(t);
+        // Whole words, two lines on narrow covers, never cut off.
+        for (final label in ['Update\nrequired', 'Updating']) {
+          final badge = find.text(label);
+          expect(badge, findsOneWidget, reason: label);
+          final card = find.ancestor(
+            of: badge,
+            matching: find.byType(GameCard),
+          );
+          final cover = t.getRect(card).topLeft & Size(176, 176 * 3 / 2);
+          final r = t.getRect(badge);
+          expect(
+            cover.inflate(0.5).contains(r.topLeft) &&
+                cover.inflate(0.5).contains(r.bottomRight),
+            isTrue,
+            reason: '$label at $scale: $r not inside $cover',
+          );
+        }
+      });
+    }
   });
 }

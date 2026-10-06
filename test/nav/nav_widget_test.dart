@@ -171,4 +171,28 @@ void main() {
     await keys(t, [right]);
     expect(focusLabel(), 'home/apps:1');
   });
+
+  testWidgets('Home from another tab lands on Continue when it appeared', (
+    t,
+  ) async {
+    final h = await start(t);
+    await keys(t, [up, right, right, down]); // tabs, Apps, into the grid
+    expect(focusLabel(), startsWith('apps/'));
+    // Something starts while Home is not on screen: Home gains a Continue row.
+    await h.launch(t, 'jellyfin');
+    h.mock.pressHome();
+    await t.pumpAndSettle();
+    expect(focusLabel(), 'home/continue:0');
+  });
+
+  testWidgets('Home from another tab lands on Apps when nothing runs', (
+    t,
+  ) async {
+    final h = await start(t);
+    await keys(t, [right, right, down]); // Home games row
+    await keys(t, [up, up, right, down]); // tabs, Games, grid
+    h.mock.pressHome();
+    await t.pumpAndSettle();
+    expect(focusLabel(), 'home/apps:0');
+  });
 }

@@ -257,7 +257,11 @@ class _Pill extends StatelessWidget {
       decoration: BoxDecoration(
         color: filled ? t.accent : t.surface.withValues(alpha: 0.94),
         border: filled ? null : Border.all(color: t.textDim, width: 2),
-        borderRadius: BorderRadius.circular(HinterTokens.radiusPill),
+        borderRadius: BorderRadius.circular(
+          text.contains('\n')
+              ? HinterTokens.radiusSmall
+              : HinterTokens.radiusPill,
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(
@@ -328,7 +332,11 @@ class GameCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
     final height = width * 3 / 2;
-    final badge = width < 200 ? game.shortBadge : game.badge;
+    // Narrow covers break the label over two lines ("Update" / "required")
+    // instead of cutting a word; the pill still scales down if it must.
+    final badge = width < 200
+        ? game.badge?.replaceFirst(' ', '\n')
+        : game.badge;
     final unavailable = !game.canLaunch;
     return SizedBox(
       width: width,

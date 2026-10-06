@@ -23,12 +23,6 @@ extension GameState on Game {
     InstallState.unknown => 'Updating',
   };
 
-  /// Badge text for narrow cards.
-  String? get shortBadge => switch (effectiveState) {
-    InstallState.updateRequired => 'Update',
-    _ => badge,
-  };
-
   /// Why [canLaunch] is false, for a message; null when it can launch.
   String? get cannotLaunchReason => switch (effectiveState) {
     InstallState.installed => null,

@@ -273,8 +273,13 @@ class _LauncherShellState extends State<LauncherShell> {
   /// forgets column memory; Back keeps where you were on Home.
   void _goHome({required bool reset}) {
     widget.data.cancelClose();
+    // Home is not built while another tab shows, so its rows are as old as the
+    // last visit; drop them so the reset lands on the first item of the first
+    // non-empty row once Home builds again (its build refills the rows).
+    final onHome = _section == Section.home;
     _setSection(Section.home);
     if (reset) {
+      if (!onHome) _home.setRows(const []);
       _home.reset();
       _settingsList.reset();
       _settingsDetail.reset();
