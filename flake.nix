@@ -219,6 +219,8 @@
               hinteros-daemon.packages.${system}.hinteros-session
             }/bin/hinteros-session
             export HINTEROS_STEAM_FIXTURE=${hinteros-daemon}/crates/hinteros-session/tests/fixtures/steam-home
+            export HINTEROS_SYSTEM_BIN=${hinteros-daemon.packages.${system}.hinteros-system}/bin/hinteros-system
+            export PATH=${pkgs.openssh}/bin:$PATH
             flutter test --no-pub test/integration
             runHook postCheck
           '';

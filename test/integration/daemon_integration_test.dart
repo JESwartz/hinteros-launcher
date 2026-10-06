@@ -123,7 +123,7 @@ icon = "$iconFixture"
   );
 
   test(
-    'handshake at 0.5, ping, apps.list and home_pressed (SIGUSR1)',
+    'handshake at 0.6, ping, apps.list and home_pressed (SIGUSR1)',
     () async {
       final c = client = DaemonClient(socketPath: sock);
       await c.subscribeTo([EventName.homePressed]);
