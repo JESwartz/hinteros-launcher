@@ -18,3 +18,11 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  fonts:
+    # Atkinson Hyperlegible (OFL-1.1, licence in assets/fonts/OFL.txt).
+    - family: AtkinsonHyperlegible
+      fonts:
+        - asset: assets/fonts/AtkinsonHyperlegible-Regular.otf
+        - asset: assets/fonts/AtkinsonHyperlegible-Bold.otf
+          weight: 700
