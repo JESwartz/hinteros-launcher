@@ -184,13 +184,13 @@ final icons = <String, List<Shape>>{
     ),
     Shape(disc(0.5, 0.5, 0.13), flat((0x3f, 0xd0, 0xc6))),
   ],
-  // Purple rounded square with a white triangle.
+  // Green rounded square with a white ring.
   'jellyfin': [
     Shape(
       roundRect(0.08, 0.08, 0.92, 0.92, 0.2),
-      vgrad((0x9a, 0x6b, 0xe8), (0x4d, 0x3a, 0xb8)),
+      vgrad((0x5c, 0xc4, 0x6a), (0x2a, 0x8a, 0x46)),
     ),
-    Shape(polygon([(0.38, 0.28), (0.74, 0.5), (0.38, 0.72)]), flat(white)),
+    Shape(ring(0.5, 0.5, 0.12, 0.24), flat(white)),
   ],
   // Orange hexagon with a white disc.
   'youtube': [
@@ -208,29 +208,23 @@ final icons = <String, List<Shape>>{
     ),
     Shape(disc(0.5, 0.5, 0.1), flat((0x6b, 0x72, 0x88))),
   ],
-  // Gold chevron.
+  // Magenta diamond (a rotated square): deliberately nothing that looks like
+  // a real brand mark.
   'plex': [
     Shape(
-      polygon([
-        (0.3, 0.12),
-        (0.52, 0.12),
-        (0.76, 0.5),
-        (0.52, 0.88),
-        (0.3, 0.88),
-        (0.54, 0.5),
-      ]),
-      vgrad((0xff, 0xd0, 0x4a), (0xe5, 0x9d, 0x14)),
+      polygon([(0.5, 0.1), (0.9, 0.5), (0.5, 0.9), (0.1, 0.5)]),
+      vgrad((0xe8, 0x6a, 0xb0), (0xa0, 0x2f, 0x72)),
     ),
   ],
 };
 
-/// A vector icon, for the SVG path: a rose disc with a white diamond.
+/// A vector icon, for the SVG path: a blue disc with a white diamond.
 const svgCrunchyroll = '''<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ff7a59"/>
-      <stop offset="1" stop-color="#d6336c"/>
+      <stop offset="0" stop-color="#5aa9ff"/>
+      <stop offset="1" stop-color="#2b5fd6"/>
     </linearGradient>
   </defs>
   <circle cx="128" cy="128" r="116" fill="url(#g)"/>
