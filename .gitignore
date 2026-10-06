@@ -8,3 +8,6 @@ result-*
 build/
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# git-hooks.nix
+.pre-commit-config.yaml
