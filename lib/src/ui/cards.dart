@@ -283,7 +283,7 @@ class _Pill extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               text,
-              maxLines: 1,
+              maxLines: text.contains('\n') ? 2 : 1,
               style: t.caption.copyWith(color: fg, fontWeight: FontWeight.w700),
             ),
           ],

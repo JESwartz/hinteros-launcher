@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart';
@@ -265,6 +266,12 @@ void main() {
             matching: find.byType(GameCard),
           );
           final cover = t.getRect(card).topLeft & Size(176, 176 * 3 / 2);
+          // Every line shows (no maxLines cut-off).
+          expect(
+            t.renderObject<RenderParagraph>(badge).didExceedMaxLines,
+            isFalse,
+            reason: label,
+          );
           final r = t.getRect(badge);
           expect(
             cover.inflate(0.5).contains(r.topLeft) &&

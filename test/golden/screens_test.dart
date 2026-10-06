@@ -78,6 +78,14 @@ void main() {
       keys: [down, down, right, right],
     );
   });
+  testWidgets('home games row, text 1.6x: badges fit narrow covers', (t) async {
+    await shot(
+      t,
+      'home_games_row_text160_1080p',
+      h: Harness(settings: const LauncherSettings(textScale: 1.6)),
+      keys: [down, down, right, right],
+    );
+  });
   testWidgets('games 1080p', (t) async {
     await shot(t, 'games_1080p', keys: [...toGames, right]);
   });
