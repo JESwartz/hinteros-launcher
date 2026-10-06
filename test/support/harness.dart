@@ -79,8 +79,12 @@ class Harness {
   /// Loads the icon files of the mock apps into [AppIconCache] before the first
   /// frame (the fake-async test zone has no real file IO), so tiles paint
   /// their icons at once.
-  Future<void> precacheIcons(WidgetTester tester) =>
-      loadIcons(tester, [for (final a in mock.apps) ?a.icon]);
+  Future<void> precacheIcons(WidgetTester tester) => loadIcons(tester, [
+    for (final a in mock.apps) ?a.icon,
+    // The Store resolves icons for the whole catalog.
+    for (final f in Directory(iconDir()).listSync())
+      if (f is File && f.path.endsWith('.png')) f.path,
+  ]);
 
   /// Decodes the artwork files of the mock library into the image cache
   /// before the first frame asks for them (file IO needs real async, which

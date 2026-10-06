@@ -209,7 +209,8 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
                       style: i == current && !s.finished
                           ? t.label
                           : t.bodyDim.copyWith(
-                              fontWeight: i == current && s.failed
+                              fontWeight:
+                                  _stateOf(i, current, s) == _MarkState.failed
                                   ? FontWeight.w700
                                   : FontWeight.w400,
                             ),

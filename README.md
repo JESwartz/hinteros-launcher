@@ -278,7 +278,7 @@ gamescope input method), Space included; the keyboard has no text field of its o
 
 ### Layout: top tab bar
 
-Sections are Home, Games, Apps and Settings in a **top tab bar** (wordmark left, clock right). The
+Sections are Home, Games, Apps, Store and Settings in a **top tab bar** (wordmark left, clock right). The
 Server tab (phase 2) only appears with `--server` or `HINTEROS_SERVER=1`. A top bar was chosen over
 a side rail for a TV at couch distance: content (card rows, a 6-column game grid, list-detail
 Settings) gets the full 1920 px width, the whole bar sits in one glance line with the first row
@@ -304,7 +304,9 @@ UI. Focus on a tab selects its section (like console UIs); Down enters the secti
 - **Settings:** list left, options of the highlighted entry right (list-detail). Local settings:
   text size (100/120/140/160%), high contrast, focus marker (ring/glow/bar), reduce motion.
   "Show typed text on the on-screen keyboard" (privacy; off = the keyboard's preview shows dots).
-  "System" is a placeholder (M5).
+  Below them the system sections (see "System screens"): Network, Bluetooth, Display, Audio, Power,
+  Remote access, Updates, About.
+- **Store:** see "Store". A top-level tab after Apps (see the placement note there).
 
 The layout is designed in 1920x1080 logical pixels. A 4K screen under native Wayland runs it at
 devicePixelRatio 2, so the same layout; any other size (720p TV, desktop window) is scaled uniformly
@@ -352,6 +354,65 @@ back per field:
 { "version": 1, "text_scale": 1.0, "high_contrast": false, "focus_style": "ring", "reduce_motion": false, "osk_show_typed": false }
 ```
 
+### System screens, jobs and the Store
+
+Everything below is built against **repository interfaces** (`lib/src/system/repositories.dart`)
+and driven by in-process mocks (`lib/src/system/mock_system.dart`), because the privileged service
+and its session relay (system API: `design/system-api.md` in hinteros-docs) ship in a new session API
+version that is not vendored yet. Every place the real API plugs in is marked `TODO(system-api)`.
+`main` uses `MockSystemServices` with `--mock` and, without it, `unavailableSystemServices()`, so
+the real build shows "needs a newer HinterOS service" instead of invented data.
+
+| Interface | Wraps (later) | Used by |
+|---|---|---|
+| `SystemRepository` | `system.info`, power (session side, logind), `ssh.set` | About, Power, Remote access, session restart |
+| `UpdatesRepository` | `update.check`, `update.apply`, `generations.list`, `rollback`, `channel.set`, `base.set` | Updates, reminders |
+| `JobsRepository` | `jobs.get` / `jobs.cancel`, `job_started` / `job_progress` / `job_finished` | the progress page |
+| `NetworkRepository` | NetworkManager (runtime) | Network |
+| `BluetoothRepository` | BlueZ (runtime) | Bluetooth |
+| `DisplayAudioRepository` | display modes, PipeWire | Display, Audio |
+| `StoreRepository` | the catalog index, `apps.install` / `apps.remove` (M8) | Store, Games, installer |
+
+`MockJobs` behaves like the service: one mutating job at a time (`job_busy`), stages, progress,
+cancel until activation. Tests drive it by hand (`progress`, `finish`); `--mock` lets jobs run
+through their stages by themselves.
+
+- **Modal stack** (`lib/src/ui/modal_host.dart`): dialogs and full-screen pages each own a `NavRegion`;
+  the top one takes all input, Back closes it unless it says otherwise. Regions also have
+  `interceptMove` and `onAction` hooks (the terms page scrolls on up/down and pages on L1/R1; the
+  volume row steps on left/right).
+- **Text entry:** a masked `TextField` bound to a nav row (`NavTextField`). The launcher never calls
+  `osk.show`: the daemon shows the keyboard (hold Guide, press Y) and its keystrokes land in the
+  field; on the desktop the real keyboard works. Typing Y or X into a field is not a button press.
+- **Remote access:** one SSH toggle. SSH is plain username and password for now (you log in as the
+  admin account); turning it on asks for the admin password, masked. Key import and key-only login
+  are in the backlog.
+- **Progress page** (`pages.dart`): the stages of the job kind, a percentage where the job reports one,
+  Cancel until activation ("Can't cancel now" after), "your session will restart" while running,
+  "Restart session" when `session_restart_required`, and on failure or cancel what went wrong plus
+  "Nothing was changed". Back does not leave a running job's page.
+- **Updates:** at startup the box checks once (`UpdateReminders`). Behind its channel, Home shows a
+  non-modal banner ("See update" leads to Settings, Updates) at startup and on every return to Home.
+  A **security update** (severity trailer) shows a full-screen notice instead: the severity, a
+  visible countdown, and for 5 seconds buttons, Back and Home do nothing; then "Later" (focused
+  first) and "Update now". The notice appears at startup and on a return to Home once 30 minutes have
+  passed since the last one (Home is entered after every game; a lockout each time would be punishing);
+  in between the banner says "Security update ... (severity: High)". Nothing is ever installed
+  without choosing it.
+- **Store (a top-level tab, after Apps):** categories on the left, apps on the right, an app page
+  (modal) with Install or Remove. Why a tab and not a place under Apps: it is reachable with L1/R1 and
+  from Games ("Install Steam from the Store"), has its own two-pane navigation, and keeps the Apps grid
+  as "what you have". Install: confirm (size, dependencies), then vendor terms in full when the app
+  has them (up/down scroll, L1/R1 page, "Accept and install" stays off until the end is reached; the
+  accepted version is passed to `apps.install`), then the progress page. Remove: confirm with "Also
+  delete this app's data in all profiles"; ticking it asks again (Steam: installed games go too).
+  "More apps are available after the next update" shows when the catalog changed upstream. Icons are
+  resolved at runtime (`StoreRepository.resolveIcon`); mocks use the generic placeholder icons.
+- **Installer app selection** (`lib/src/ui/app_selection.dart`): `AppSelectionController` and
+  `AppSelectionView` for the M9 installer and first-boot wizard: a checklist with YouTube and Firefox
+  ticked, "On the installer" vs "Download, size" per app, terms acceptance for ticked apps with terms,
+  Continue off until accepted. It needs a `ModalHost` above it (see `test/support/modal_host_harness.dart`).
+
 ### Data access
 
 The UI reads through `AppsRepository` (apps, running, launch, close, Steam attention and focus) and
@@ -372,7 +433,7 @@ Atkinson Hyperlegible Regular and Bold (`assets/fonts/`), SIL Open Font License 
 `test/golden/goldens/`. `test/golden/osk_test.dart` renders the on-screen keyboard at 1920x1080 over
 a checkerboard (so the transparent area and the panel's rounded corners show): letters, symbols with dots in the preview,
 the masked preview with its newest character readable, the preview with the setting on, high contrast at 1.6x with caps lock, and the bar focus marker with one-shot shift
-(`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
+(`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. `test/golden/system_test.dart` covers the system screens (`settings_sys_*`, `ssh_admin_password`, `wifi_password`, `display_*`), the progress page (`progress_*`), the security notice (`security_notice_*`, also high contrast at 1.6x, locked and unlocked), the Home reminder, the Store (`store_*`), the terms page (`terms_*`, also high contrast at 1.6x, from the top and scrolled to the end), `games_steam_missing` and `installer_app_selection`. Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
 running game, the attention banner, the close confirm and the app tiles at text 1.3x/1.6x (also high
 contrast). Tests load the bundled font explicitly (`flutter_test_config.dart`, no
 Ahem), use a fixed clock, the in-process mock, the committed placeholder art

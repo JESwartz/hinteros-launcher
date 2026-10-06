@@ -273,7 +273,7 @@ void main() {
       keys: [...toSettings, down, down, down, down],
     );
   });
-  testWidgets('settings system placeholder', (t) async {
+  testWidgets('settings, first system entry (Network)', (t) async {
     await shot(
       t,
       'settings_system_1080p',

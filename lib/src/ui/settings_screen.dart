@@ -8,6 +8,7 @@ import '../system/repositories.dart';
 import 'system/common.dart';
 import 'system/hardware_sections.dart';
 import 'system/system_sections.dart';
+import 'common.dart' show EdgeFade;
 import 'focus_frame.dart';
 import 'nav_focusable.dart';
 
@@ -198,27 +199,30 @@ class SettingsScreen extends StatelessWidget {
             children: [
               SizedBox(
                 width: 600,
-                child: SingleChildScrollView(
-                  clipBehavior: Clip.none,
-                  padding: const EdgeInsets.all(HinterTokens.s2),
-                  child: Column(
-                    children: [
-                      for (var i = 0; i < _items.length; i++) ...[
-                        if (i > 0) const SizedBox(height: HinterTokens.s2),
-                        NavFocusable(
-                          region: list,
-                          rowKey: _items[i].id,
-                          col: 0,
-                          onSelect: onEnterDetail,
-                          builder: (_, f) => _ListRow(
-                            title: _items[i].listTitle ?? _items[i].title,
-                            value: _valueOf(_items[i].id, s),
-                            focused: f,
-                            selected: _items[i] == selected,
+                child: EdgeFade(
+                  top: 24,
+                  bottom: 24,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(HinterTokens.s2),
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < _items.length; i++) ...[
+                          if (i > 0) const SizedBox(height: HinterTokens.s2),
+                          NavFocusable(
+                            region: list,
+                            rowKey: _items[i].id,
+                            col: 0,
+                            onSelect: onEnterDetail,
+                            builder: (_, f) => _ListRow(
+                              title: _items[i].listTitle ?? _items[i].title,
+                              value: _valueOf(_items[i].id, s),
+                              focused: f,
+                              selected: _items[i] == selected,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -312,39 +316,42 @@ class _Detail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
-    return SingleChildScrollView(
-      clipBehavior: Clip.none,
-      padding: const EdgeInsets.all(HinterTokens.s2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(setting.title, style: t.headline),
-          const SizedBox(height: HinterTokens.s1),
-          Text(setting.blurb, style: t.bodyDim),
-          const SizedBox(height: HinterTokens.s4),
-          if (_systemIds.contains(setting.id))
-            KeyedSubtree(
-              key: ValueKey(setting.id),
-              child: _systemSection(
-                setting.id,
-                SectionEnv(services: services, region: region),
-              ),
-            )
-          else ...[
-            for (var i = 0; i < options.length; i++) ...[
-              if (i > 0) const SizedBox(height: HinterTokens.s2),
-              NavFocusable(
-                region: region,
-                rowKey: 'o$i',
-                col: 0,
-                onSelect: () => options[i].apply(settings.value, settings),
-                builder: (_, f) => _OptionRow(option: options[i], focused: f),
-              ),
-            ],
+    return EdgeFade(
+      top: 24,
+      bottom: 24,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(HinterTokens.s2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(setting.title, style: t.headline),
+            const SizedBox(height: HinterTokens.s1),
+            Text(setting.blurb, style: t.bodyDim),
             const SizedBox(height: HinterTokens.s4),
-            _Preview(id: setting.id),
+            if (_systemIds.contains(setting.id))
+              KeyedSubtree(
+                key: ValueKey(setting.id),
+                child: _systemSection(
+                  setting.id,
+                  SectionEnv(services: services, region: region),
+                ),
+              )
+            else ...[
+              for (var i = 0; i < options.length; i++) ...[
+                if (i > 0) const SizedBox(height: HinterTokens.s2),
+                NavFocusable(
+                  region: region,
+                  rowKey: 'o$i',
+                  col: 0,
+                  onSelect: () => options[i].apply(settings.value, settings),
+                  builder: (_, f) => _OptionRow(option: options[i], focused: f),
+                ),
+              ],
+              const SizedBox(height: HinterTokens.s4),
+              _Preview(id: setting.id),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
