@@ -379,6 +379,7 @@ class _LauncherShellState extends State<LauncherShell> {
               CloseConfirm(
                 id: widget.data.closeRequest!.id,
                 name: widget.data.closeRequest!.name,
+                iconPath: widget.data.closeRequest!.iconPath,
                 region: _dialog,
                 onCancel: widget.data.cancelClose,
                 onConfirm: () => unawaited(widget.data.confirmClose()),

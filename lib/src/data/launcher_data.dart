@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../api/api.dart';
+import 'app_icons.dart';
 import 'apps_repository.dart';
 import 'games_repository.dart';
 
@@ -13,13 +14,17 @@ class ContinueEntry {
     required this.name,
     this.running,
     this.artPath,
+    this.iconPath,
   });
 
   final String id;
   final String name;
 
-  /// Landscape art: a game's header image or the app's icon.
+  /// Landscape art that fills the card: a running game's header image.
   final String? artPath;
+
+  /// The app's icon, drawn on a tinted backdrop.
+  final String? iconPath;
 
   /// Null when it is only a recent launch.
   final RunningApp? running;
@@ -50,7 +55,7 @@ class LauncherData extends ChangeNotifier {
   List<SteamWindow> steamAttention = const [];
 
   /// The running app the user is being asked to close (confirm step), if any.
-  ({String id, String name})? closeRequest;
+  ({String id, String name, String? iconPath})? closeRequest;
   List<RunningApp> running = const [];
 
   /// App ids launched this session, newest first (feeds Continue).
@@ -95,6 +100,7 @@ class LauncherData extends ChangeNotifier {
             EventName.focusChanged,
             EventName.inputNav,
             EventName.gamesChanged,
+            EventName.appsChanged,
             EventName.steamAttention,
             EventName.oskVisibility,
           ])
@@ -124,6 +130,8 @@ class LauncherData extends ChangeNotifier {
         unawaited(refreshRunning());
       case GamesChangedEvent():
         unawaited(_refreshGames());
+      case AppsChangedEvent():
+        unawaited(_refreshApps());
       case SteamAttentionEvent():
         steamAttention = e.windows;
         notifyListeners();
@@ -143,6 +151,8 @@ class LauncherData extends ChangeNotifier {
 
   Future<void> _refreshApps() async {
     try {
+      // Icon files may have changed behind the same path.
+      AppIconCache.instance.invalidate();
       final l = await apps.list();
       if (_disposed) return;
       appList = l;
@@ -200,12 +210,13 @@ class LauncherData extends ChangeNotifier {
         id: r.id,
         name: r.name,
         running: r,
-        artPath: _gameOfRunning(r.id)?.artwork.header ?? _iconOf(r.id),
+        artPath: _gameOfRunning(r.id)?.artwork.header,
+        iconPath: _iconOf(r.id),
       ),
     for (final id in _recent)
       if (!isRunning(id))
         if (appList?.where((a) => a.id == id).firstOrNull case final a?)
-          ContinueEntry(id: a.id, name: a.name, artPath: a.icon),
+          ContinueEntry(id: a.id, name: a.name, iconPath: a.icon),
   ];
 
   String? _iconOf(String id) =>
@@ -266,7 +277,7 @@ class LauncherData extends ChangeNotifier {
   /// Asks to close the running app [id] (a confirm step comes first).
   void requestClose(String id, String name) {
     if (!isRunning(id)) return;
-    closeRequest = (id: id, name: name);
+    closeRequest = (id: id, name: name, iconPath: _iconOf(id));
     notifyListeners();
   }
 

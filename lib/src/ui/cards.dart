@@ -1,10 +1,13 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../api/api.dart' show Game;
+import '../data/app_icons.dart' show AppIcon;
 import '../data/games_repository.dart';
 import '../theme/hinter_theme.dart';
+import 'app_icon_view.dart';
 import 'focus_frame.dart';
 
 /// Stable hue from a string (Dart's String.hashCode is not stable across runs;
@@ -109,23 +112,34 @@ class ArtImage extends StatelessWidget {
   }
 }
 
-/// Landscape (16:9) tile for an app or a running game: art (or a placeholder
-/// with the initial), the name along the bottom and an optional Running mark.
-/// Mark, initial and name are laid out in a column, so they cannot overlap at
-/// any text size; the initial gives way when there is no room left.
+/// Landscape (16:9) tile for an app or a running game: the app's icon centred
+/// on a backdrop tinted from the icon (or a game's header art, filling the
+/// tile), the name along the bottom and an optional Running mark. Without a
+/// usable icon the tile is a placeholder gradient with the initial.
+///
+/// Mark, icon and name keep clear of each other at any text size: the name
+/// takes the room it needs first; the icon (or the initial) gets the rest, and
+/// gives way when there is none.
 class AppTile extends StatelessWidget {
   const AppTile({
     super.key,
     required this.name,
     required this.focused,
     this.iconPath,
+    this.artPath,
     this.running = false,
     this.width = 320,
     this.large = false,
   });
 
   final String name;
+
+  /// The app's icon (a local PNG/SVG/...), shown contained on a tinted
+  /// backdrop.
   final String? iconPath;
+
+  /// Landscape art that fills the tile instead (a running game's header).
+  final String? artPath;
   final bool focused;
   final bool running;
   final double width;
@@ -135,105 +149,193 @@ class AppTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = HinterTheme.of(context);
     final height = width * 9 / 16;
-    final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
+    final art = artPath;
+    final icon = iconPath;
+    final Widget body;
+    if (art != null && art.isNotEmpty) {
+      body = _layers(
+        context,
+        ArtImage(path: art, seed: name, showInitial: false),
+        (_, _) => const SizedBox.shrink(),
+      );
+    } else if (icon != null && icon.isNotEmpty) {
+      body = AppIconLoader(
+        path: icon,
+        builder: (context, e) {
+          final loaded = e?.icon;
+          if (loaded != null) {
+            return _layers(
+              context,
+              AppIconBackdrop(icon: loaded),
+              (context, room) => _iconBox(context, loaded, height, room),
+            );
+          }
+          // Still loading: the same gradient without the letter, so there is
+          // no flash of the fallback before the icon appears.
+          return _layers(
+            context,
+            PlaceholderArt(seed: name, showInitial: false),
+            e == null ? (_, _) => const SizedBox.shrink() : _letter,
+          );
+        },
+      );
+    } else {
+      body = _layers(
+        context,
+        PlaceholderArt(seed: name, showInitial: false),
+        _letter,
+      );
+    }
     return FocusFrame(
       focused: focused,
-      child: SizedBox(
-        width: width,
-        height: height,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(HinterTokens.radiusCard),
-          child: Stack(
-            fit: StackFit.expand,
+      child: SizedBox(width: width, height: height, child: body),
+    );
+  }
+
+  String get _initial =>
+      name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
+
+  /// The letter fallback, sized to the room left.
+  Widget _letter(BuildContext context, BoxConstraints room) {
+    final t = HinterTheme.of(context);
+    final size = (room.maxHeight * 0.8).clamp(0.0, width * 9 / 16 * 0.5);
+    if (size < 32) return const SizedBox.shrink();
+    return Center(
+      child: Text(
+        _initial,
+        maxLines: 1,
+        style: t.headline.copyWith(
+          fontSize: size,
+          height: 1.0,
+          color: t.text.withValues(alpha: 0.3),
+        ),
+      ),
+    );
+  }
+
+  /// The icon, as big as the room allows (but at most 64% of the tile
+  /// height). With the Running mark: beside it, in the room to its right, when
+  /// the icon fits there at full size; else below it; and if even that leaves
+  /// less than 64px, behind it (the mark has its own solid fill).
+  Widget _iconBox(
+    BuildContext context,
+    AppIcon icon,
+    double height,
+    BoxConstraints room,
+  ) {
+    const gap = HinterTokens.s1;
+    final full = math.min(room.maxHeight - 2 * gap, height * 0.64);
+    if (full < 24) return const SizedBox.shrink();
+    if (!running) {
+      return Center(
+        child: AppIconImage(icon: icon, size: full),
+      );
+    }
+    final (pillW, pillH) = _pillSize(context);
+    final left = gap + pillW + gap;
+    if (width - left >= full + gap) {
+      return Padding(
+        padding: EdgeInsets.only(left: left),
+        child: Center(
+          child: AppIconImage(icon: icon, size: full),
+        ),
+      );
+    }
+    final top = math.min(gap + pillH + 4, math.max(gap, room.maxHeight - 64));
+    final size = math.min(room.maxHeight - top - gap, full);
+    if (size < 24) return const SizedBox.shrink();
+    return Padding(
+      padding: EdgeInsets.only(top: top, bottom: gap),
+      child: Center(
+        child: AppIconImage(icon: icon, size: size),
+      ),
+    );
+  }
+
+  /// Largest share of the tile width the Running mark may take (it scales
+  /// down to fit, so the icon keeps room at large text sizes).
+  static const _pillShare = 0.5;
+
+  /// Estimated size of the Running mark as drawn (natural size at the current
+  /// text scale, scaled down to [_pillShare] of the width).
+  (double, double) _pillSize(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final w = (scaler.scale(94) + 52) * 1.05;
+    final h = scaler.scale(HinterTokens.fsCaption) * 1.25 + 8;
+    final k = math.min(1.0, (width * _pillShare) / w);
+    return (w * k, h * k);
+  }
+
+  /// Background, the centre content in the room above the name, the scrim
+  /// with the name, the mark and (high contrast) the outline.
+  Widget _layers(
+    BuildContext context,
+    Widget background,
+    Widget Function(BuildContext, BoxConstraints) centre,
+  ) {
+    final t = HinterTheme.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(HinterTokens.radiusCard),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          background,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ArtImage(path: iconPath, seed: name, showInitial: false),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (running)
-                    Padding(
-                      padding: const EdgeInsets.all(HinterTokens.s1),
-                      child: Align(
-                        alignment: Alignment.topLeft,
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: const RunningPill(),
-                        ),
-                      ),
-                    ),
-                  // What is left between mark and name: the initial, if it
-                  // fits at a useful size.
-                  Expanded(
-                    child: iconPath == null || iconPath!.isEmpty
-                        ? LayoutBuilder(
-                            builder: (context, c) {
-                              final size = (c.maxHeight * 0.8).clamp(
-                                0.0,
-                                height * 0.5,
-                              );
-                              if (size < 32) return const SizedBox.shrink();
-                              return Center(
-                                child: Text(
-                                  initial,
-                                  maxLines: 1,
-                                  style: t.headline.copyWith(
-                                    fontSize: size,
-                                    height: 1.0,
-                                    color: t.text.withValues(alpha: 0.3),
-                                  ),
-                                ),
-                              );
-                            },
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                  // Scrim so the name reads on any art. Mark and name take
-                  // the room they need first; the initial gets the rest.
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withValues(alpha: 0.82),
-                        ],
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        HinterTokens.s2 + 4,
-                        HinterTokens.s1,
-                        HinterTokens.s2 + 4,
-                        HinterTokens.s1 + 4,
-                      ),
-                      child: Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: (large ? t.label : t.body).copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (t.highContrast)
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(
-                      HinterTokens.radiusCard,
-                    ),
-                    border: Border.all(color: t.textDim, width: 2),
+              Expanded(child: LayoutBuilder(builder: centre)),
+              // Scrim so the name reads on any art.
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.82),
+                    ],
                   ),
                 ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    HinterTokens.s2 + 4,
+                    HinterTokens.s1,
+                    HinterTokens.s2 + 4,
+                    HinterTokens.s1 + 4,
+                  ),
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: (large ? t.label : t.body).copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
-        ),
+          if (running)
+            Positioned(
+              top: HinterTokens.s1,
+              left: HinterTokens.s1,
+              width: width * _pillShare,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.topLeft,
+                child: const RunningPill(),
+              ),
+            ),
+          if (t.highContrast)
+            DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(HinterTokens.radiusCard),
+                border: Border.all(color: t.textDim, width: 2),
+              ),
+            ),
+        ],
       ),
     );
   }

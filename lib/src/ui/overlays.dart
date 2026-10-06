@@ -4,6 +4,7 @@ import '../api/api.dart';
 import '../nav/nav_controller.dart';
 import '../nav/nav_model.dart';
 import '../theme/hinter_theme.dart';
+import 'app_icon_view.dart';
 import 'focus_frame.dart';
 import 'nav_focusable.dart';
 
@@ -155,6 +156,7 @@ class CloseConfirm extends StatelessWidget {
     super.key,
     required this.id,
     required this.name,
+    this.iconPath,
     required this.region,
     required this.onCancel,
     required this.onConfirm,
@@ -162,6 +164,9 @@ class CloseConfirm extends StatelessWidget {
 
   final String id;
   final String name;
+
+  /// The app's icon, if it has one.
+  final String? iconPath;
   final NavRegion region;
   final VoidCallback onCancel;
   final VoidCallback onConfirm;
@@ -191,7 +196,20 @@ class CloseConfirm extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Close $name?', style: t.title),
+                    Row(
+                      children: [
+                        AppIconBadge(name: name, iconPath: iconPath),
+                        const SizedBox(width: HinterTokens.s3),
+                        Expanded(
+                          child: Text(
+                            'Close $name?',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: t.title,
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: HinterTokens.s2),
                     Text(
                       id == 'steam'
