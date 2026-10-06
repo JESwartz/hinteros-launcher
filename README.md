@@ -39,21 +39,27 @@ the home screen says so and the client keeps retrying with backoff.
 | `tool/gen_api.dart` | Generator: schema to `lib/src/api/generated.dart` (models, typed method stubs, sealed event class, error codes) |
 | `lib/src/api/generated.dart` | Generated, committed. Do not edit |
 | `lib/src/api/client.dart` | `DaemonClient`: handshake, request correlation, events, subscribe, reconnect |
-| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface |
+| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.3 methods and events) |
+| `tool/gen_mock_art.dart` | Draws the placeholder cover art in `test/fixtures/art/` (committed; no network, no third-party pictures) |
 
 ### Mock daemon
 
-`--mock` (or `HINTEROS_MOCK=1`) swaps the socket for the in-process mock: a fake app list that
-behaves like the 0.2 daemon (`apps.launch` starts an app and focuses it, `apps.running`,
-`apps.focus`, and the `app_started`, `app_exited`, `focus_changed` events; a `command` launch of
-`does-not-exist` fails with 2002). No daemon needed for desktop work. Dev keys, all going through
-the mock's event stream:
+`--mock` (or `HINTEROS_MOCK=1`) swaps the socket for the in-process mock, which behaves like the
+0.3 daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
+Plex), a fake Steam library of 14 games in every install state (`games.list`, sorted by name),
+`apps.launch` (by id, command or `steam://rungameid/<appid>`), `apps.running`, `apps.focus`,
+`apps.close` (then `app_exited` with reason `closed`), `steam.attention` / `steam.focus`, and the
+`app_started`, `app_exited`, `focus_changed`, `games_changed` and `steam_attention` events; a
+`command` launch of `does-not-exist` fails with 2002. No daemon needed for desktop work. Dev keys,
+all going through the mock's event stream:
 
 | Key | Does |
 |---|---|
 | Home | `home_pressed` (the launcher takes focus back first) |
-| A / D / W / S, Space, Q | `input_nav` left / right / up / down, accept, back (press, then release) |
+| A / D / W / S, Space, Q, E | `input_nav` left / right / up / down, accept, back, context (press, then release) |
 | F2 | the last started app exits |
+| F3 / F4 | Steam shows a "Steam Guard" dialog (`steam_attention`) / it goes away |
+| F5 | a game finishes its update (or, if all are installed, the first needs one): `games_changed` |
 
 While an app has focus the mock sends no `input_nav`, like the daemon. Arrow keys, Enter and
 Escape work in every mode and are the same actions as `input_nav` (see below).
@@ -69,11 +75,29 @@ flutter run -d linux --dart-entrypoint-args=--mock
 Controller input arrives as `input_nav {action, phase}` events; the keyboard maps onto the same
 `NavAction`s (arrows = directions, Enter = accept, Escape = back, PageUp/PageDown = L1/R1), and
 `NavController.dispatch` (see "Navigation rules") is the only action layer. `press` and `repeat`
-move focus (the daemon does the key repeat); `release` never acts. `accept` calls `apps.launch {id}`
-for the focused card, on `press` only; a failure (2001, 2002, not connected) shows a snackbar.
-Cards of running apps carry a "Running" mark, refreshed through `apps.running` on connect and on
-`app_started`, `app_exited` and `focus_changed`. `home_pressed` goes to Home. Other actions are
-ignored, as the schema requires of clients.
+move focus (the daemon does the key repeat); `release` never acts. `accept` launches the focused
+card, on `press` only: `apps.launch {id}` for an app, `apps.launch {url:
+"steam://rungameid/<appid>"}` for a game (it then runs as `steam-<appid>`); a failure (2001, 2002,
+not connected) shows a snackbar. Cards of running apps and games carry a "Running" mark, refreshed
+through `apps.running` on connect and on `app_started`, `app_exited` and `focus_changed`; running
+games show on the Continue row with their Steam header art. `home_pressed` goes to Home.
+
+**Close:** the `context` action (gamepad Y / Triangle; keyboard Y or the menu key; `E` with `--mock`)
+on a running app or game (Continue, Apps, Games) opens a confirm dialog "Close <name>?" over the
+screen. It takes all input until answered: Cancel is focused first, Left/Right move, Accept
+chooses, Back cancels, the Home button dismisses it, and it goes away by itself if the app ends
+meanwhile. Confirming calls `apps.close {id}`; `app_exited` (reason `closed`) updates Continue (the
+card stays as a plain recent launch for apps, and disappears for games). For Steam the dialog says
+that only Big Picture closes, as the daemon never kills the client.
+
+**Steam attention:** while `steam_attention` lists windows (also queried with `steam.attention` on
+every connect), a non-modal banner "Steam needs your attention: <title>" ("and N more" for several)
+sits between the tab bar and the content, with an "Open Steam" button that calls `steam.focus`
+(error 2003 just refreshes the banner). It is part of the vertical focus order (tab bar, banner,
+content); `secondary` (gamepad X, keyboard X) triggers the same action from anywhere. An empty list
+clears it, and focus returns to the content if it was on the banner.
+
+Other actions are ignored, as the schema requires of clients.
 
 ### Regenerating and updating the schema
 
@@ -96,12 +120,19 @@ explicit `null`) and string enums with an `unknown` fallback; `oneOf` on a param
 - `test/api/contract_test.dart` replays every method and event example of the schema through the
   mock and validates all output against the schema with the `json_schema` package.
 - `test/api/client_test.dart` runs `DaemonClient` against a scripted fake server on a real socket.
+- `test/api03_ui_test.dart` covers the 0.3 behaviour through the UI: install-state badges, launching
+  and explaining games, Close with its confirm step, the attention banner.
 - `test/integration/` runs the real `hinteros-session` binary: `nix build .#checks.x86_64-linux.integration`.
-  It starts the daemon with `--no-gamescope --no-inputplumber` and a temp config of two command
-  apps, and covers the 0.2 handshake, `apps.list`, `apps.launch` (configured app, unknown app,
-  spawn failure), `apps.running`, `app_started` and `app_exited`.
+  It starts the daemon with `--no-gamescope --no-inputplumber`, a temp config of two command apps
+  and `--steam-dir` pointing at the daemon repo's fake Steam home, and covers the 0.3 handshake,
+  `apps.list` (built-in `steam` first), `apps.launch` (configured app, unknown app, spawn failure),
+  `apps.running`, `app_started` / `app_exited`, `apps.close` (reason `closed`, 2001 when not
+  running), `games.list` against the fixture (names, install state, artwork files that exist),
+  `steam.attention` and `steam.focus` (2003) without Steam windows.
   It is a separate check and is skipped by plain `flutter test` unless `HINTEROS_SESSION_BIN`
-  points at the binary, e.g. `HINTEROS_SESSION_BIN=$(nix build ../hinteros-daemon#hinteros-session --no-link --print-out-paths)/bin/hinteros-session flutter test test/integration`.
+  points at the binary (and `HINTEROS_STEAM_FIXTURE` at `crates/hinteros-session/tests/fixtures/steam-home`
+  for the games test), e.g.
+  `HINTEROS_SESSION_BIN=$(nix build ../hinteros-daemon#hinteros-session --no-link --print-out-paths)/bin/hinteros-session HINTEROS_STEAM_FIXTURE=../hinteros-daemon/crates/hinteros-session/tests/fixtures/steam-home flutter test test/integration`.
 
 ## UI
 
@@ -115,11 +146,20 @@ instead of a column at the screen edge (where overscan and the far-left of a wid
 Up from the first row to the bar and Left/Right between tabs is the same grammar as the rest of the
 UI. Focus on a tab selects its section (like console UIs); Down enters the section where you left it.
 
-- **Home:** Continue (running apps, then this session's recent launches; hidden when empty), Apps,
-  Games (first 12), in one vertically scrolling page.
-- **Games:** grid of 2:3 covers with the title underneath; placeholder art (hue from the title, big
-  initial, drawn in code, no asset or network) when there is no image.
-- **Apps:** grid of 16:9 tiles.
+- **Home:** Continue (running apps and games, then this session's recent launches; hidden when
+  empty), Apps, Games (first 12), in one vertically scrolling page.
+- **Games:** the Steam library from `games.list` as a grid of 2:3 covers (`artwork.portrait`, loaded
+  with `Image.file`) with the title underneath. Without art, or if the file cannot be read, a
+  placeholder (hue from the title, big initial, drawn in code) shows instead. Games that are not
+  `installed` are dimmed and carry a badge ("Update required", "Updating", "Installing",
+  "Removing"; an unknown state counts as Updating); accepting one explains why it cannot start
+  instead of launching it. The list is refreshed on connect and on `games_changed`.
+- **Apps:** grid of 16:9 tiles. The built-in Steam entry (Big Picture) comes first, as the daemon
+  lists it.
+- Scrolling content (Home, the grids) dissolves into the background under the tab bar instead of
+  being cut off; grids have a fixed section header and scroll by whole rows, so a focused row is
+  never half hidden. App tiles lay out Running mark, initial and name in a column: they cannot
+  overlap at any text size (the initial gives way when there is no room).
 - **Settings:** list left, options of the highlighted entry right (list-detail). Local settings:
   text size (100/120/140/160%), high contrast, focus marker (ring/glow/bar), reduce motion.
   "System" is a placeholder (M5).
@@ -166,13 +206,12 @@ back per field:
 { "version": 1, "text_scale": 1.0, "high_contrast": false, "focus_style": "ring", "reduce_motion": false }
 ```
 
-### Data access and API 0.3
+### Data access
 
-The UI reads through `AppsRepository` and `GamesRepository` (`lib/src/data/`), combined in
-`LauncherData`. Games currently use temporary sources marked `TODO(0.3)`: `AppsBackedGamesRepository`
-(`apps.list` entries whose id starts with `steam`) against the daemon, `MockGamesRepository` with
-`--mock`. Waiting on 0.3: `games.list` with artwork paths, `apps.close` (a Close action on Continue
-cards), games-changed events, launching games by id.
+The UI reads through `AppsRepository` (apps, running, launch, close, Steam attention and focus) and
+`GamesRepository` (`games.list`, launch by Steam URL) in `lib/src/data/`, combined in
+`LauncherData`, which owns all daemon traffic and re-queries on connect and on events (the daemon
+does not replay them). The client speaks session API 0.3 (during 0.x the minor must match).
 
 ### Fonts
 
@@ -184,8 +223,11 @@ Atkinson Hyperlegible Regular and Bold (`assets/fonts/`), SIL Open Font License 
 
 `test/golden/screens_test.dart` captures every screen at 1920x1080 and Home and Games at 3840x2160
 (1920x1080 logical at DPR 2), plus Home in high contrast at 1.6x text, into
-`test/golden/goldens/`. Tests load the bundled font explicitly (`flutter_test_config.dart`, no
-Ahem), use a fixed clock, the in-process mock, locally drawn placeholder art and settle animations.
+`test/golden/goldens/`. Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
+running game, the attention banner, the close confirm and the app tiles at text 1.3x/1.6x (also high
+contrast). Tests load the bundled font explicitly (`flutter_test_config.dart`, no
+Ahem), use a fixed clock, the in-process mock, the committed placeholder art
+(`test/fixtures/art/`, decoded into the image cache before the first frame) and settle animations.
 The comparator allows 0.05% differing pixels.
 
 ```

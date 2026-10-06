@@ -190,6 +190,7 @@
             export HINTEROS_SESSION_BIN=${
               hinteros-daemon.packages.${system}.hinteros-session
             }/bin/hinteros-session
+            export HINTEROS_STEAM_FIXTURE=${hinteros-daemon}/crates/hinteros-session/tests/fixtures/steam-home
             flutter test --no-pub test/integration
             runHook postCheck
           '';
