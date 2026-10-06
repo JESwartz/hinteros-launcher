@@ -1,11 +1,10 @@
 /// What the system UI needs from the world. Screens only ever see these
-/// interfaces; `mock_system.dart` implements them with in-process fakes (like
-/// `MockDaemon`), and the real ones will sit on the new session API version
-/// (the `system.*` relay of the privileged service) and, for Wi-Fi,
-/// Bluetooth, display and audio, on whatever the daemon exposes for runtime
-/// settings.
-// TODO(system-api): a Daemon* implementation of each interface; nothing else
-// in the launcher should need to change.
+/// interfaces. `daemon_system.dart` implements the system ones (info, SSH,
+/// updates, jobs) over the session API 0.6 `system.*` relay; `mock_system.dart`
+/// has in-process fakes for all of them (like `MockDaemon`), and
+/// `unavailable_system.dart` answers "unavailable" for what the daemon does
+/// not offer yet (Wi-Fi, Bluetooth, display, audio, power: TODO(0.7); the
+/// Store: TODO(M8)).
 library;
 
 import 'models.dart';
@@ -14,38 +13,46 @@ import 'models.dart';
 abstract class JobsRepository {
   /// The job's state now, then every change, ending with the finished state.
   /// An unknown id gives a stream that errors with [SystemErrorKind.notFound].
-  // TODO(system-api): jobs.get + the three job_* events
   Stream<JobSnapshot> watch(String jobId);
 
   /// `jobs.cancel`: [SystemErrorKind.jobBusy] once activation has started.
-  // TODO(system-api): jobs.cancel
   Future<void> cancel(String jobId);
 }
 
 /// `system.info`, power, SSH.
 abstract class SystemRepository {
-  // TODO(system-api): system.info
+  /// `system.info`.
   Future<SystemInfo> info();
 
   /// Restarts the launcher session (after a job reported
   /// `session_restart_required`).
-  // TODO(system-api): session restart (api.md `system_unavailable` window)
+  // TODO(0.7): no session API method for it in 0.6
   Future<void> restartSession();
 
   /// Power goes session daemon -> logind directly (system-api.md "Power").
-  // TODO(system-api): system.power (session side)
+  // TODO(0.7): session-side power (logind)
   Future<void> power(PowerAction action);
 
-  // TODO(system-api): system.info ssh + settings.get
   Future<SshState> ssh();
+
+  /// Whether the admin password can be passed on (see `adminPasswordUi`).
+  /// When false, turning SSH on is attempted as it is and the screen explains
+  /// [SystemErrorKind.authenticationRequired].
+  bool get acceptsAdminPassword;
 
   /// Turns SSH on or off (`ssh.set`). SSH is plain username and password:
   /// you log in as the admin account. Turning it on needs the admin password
-  /// (polkit `auth_admin`): [SystemErrorKind.wrongPassword] when it is not
-  /// right. Turning it off needs none.
-  // TODO(system-api): how the password reaches polkit (an auth agent in the
-  // session daemon, or a field of the method) is still open.
+  /// (polkit `auth_admin`): without a polkit agent the service answers
+  /// [SystemErrorKind.authenticationRequired]; with one,
+  /// [SystemErrorKind.wrongPassword] means the password was not right.
+  /// Turning it off needs none. [SystemErrorKind.nothingToDo] when SSH
+  /// already is in that state.
   Future<JobHandle> setSsh(bool enable, {String? adminPassword});
+
+  /// `settings.get` then `settings.set` with the revision it returned
+  /// (retried once when it went stale). Null when there was nothing to
+  /// change.
+  Future<JobHandle?> applySettings();
 }
 
 /// Updates, rollback, channel.
@@ -80,7 +87,7 @@ abstract class UpdatesRepository {
 /// Wi-Fi through NetworkManager. System-wide connections: the password is
 /// entered once per box (threat-model decision 5).
 abstract class NetworkRepository {
-  // TODO(system-api): NetworkManager, runtime (no rebuild)
+  // TODO(0.7): NetworkManager, runtime (no rebuild)
   Future<NetworkStatus> status();
 
   /// A fresh scan, strongest first.
@@ -96,7 +103,7 @@ abstract class NetworkRepository {
 
 /// Bluetooth through BlueZ.
 abstract class BluetoothRepository {
-  // TODO(system-api): BlueZ, runtime (no rebuild)
+  // TODO(0.7): BlueZ, runtime (no rebuild)
   bool get scanning;
 
   /// Known and discovered devices; emits on every change.
@@ -112,7 +119,7 @@ abstract class BluetoothRepository {
 
 /// Display modes and audio, applied at runtime.
 abstract class DisplayAudioRepository {
-  // TODO(system-api): the session's display (gamescope/DRM) and PipeWire
+  // TODO(0.7): the session's display (gamescope/DRM) and PipeWire
   Future<List<DisplayMode>> displayModes();
   Future<void> setDisplayMode(DisplayMode mode);
 
@@ -124,7 +131,7 @@ abstract class DisplayAudioRepository {
 
 /// The Store: catalog index, installed apps, install and remove.
 abstract class StoreRepository {
-  // TODO(system-api): /run/current-system/sw/share/hinteros/catalog.json,
+  // TODO(M8): /run/current-system/sw/share/hinteros/catalog.json,
   // apps.install / apps.remove (M8), terms acceptance record
 
   Future<List<StoreApp>> catalog();

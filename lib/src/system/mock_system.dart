@@ -2,7 +2,8 @@
 /// they behave like the real service would (validation, errors, jobs with
 /// stages) and are driven from tests or `--mock`. Everything here is
 /// placeholder data: no real logos, no real vendor texts.
-// TODO(system-api): marker for the whole file: replaced by Daemon* classes.
+/// The real ones are in `daemon_system.dart` (TODO(0.7): Network, Bluetooth,
+/// DisplayAudio, power).
 library;
 
 import 'dart:async';
@@ -345,8 +346,8 @@ class MockUpdates implements UpdatesRepository {
         ];
         setStatus(
           UpdateStatus(
-            currentVersion: 'rev ${target.rev.substring(0, 7)}',
-            currentRev: target.rev,
+            currentVersion: 'rev ${shortRev(target.rev)}',
+            currentRev: target.rev ?? '',
             available: _status.available,
             checkedAt: _status.checkedAt,
           ),
@@ -426,13 +427,24 @@ UpdateStatus mockBehind(AvailableUpdate a) => UpdateStatus(
 // ---------------------------------------------------------------- system
 
 class MockSystem implements SystemRepository {
-  MockSystem(this.jobs, this.updates, {this.adminPassword = 'correct horse'});
+  MockSystem(
+    this.jobs,
+    this.updates, {
+    this.adminPassword = 'correct horse',
+    this.acceptsAdminPassword = true,
+  });
 
   final MockJobs jobs;
   final MockUpdates updates;
 
   /// The admin account's password in this mock.
   String adminPassword;
+
+  /// True: like a daemon with a polkit agent (the launcher asks for the
+  /// password first). False: like the real 0.6 daemon, `ssh.set` to on
+  /// answers `authenticationRequired` and no password is looked at.
+  @override
+  final bool acceptsAdminPassword;
   bool _enabled = false;
 
   /// Everything done to the box: `power:<action>`, `ssh:on`, ...
@@ -465,7 +477,17 @@ class MockSystem implements SystemRepository {
   Future<SshState> ssh() async => SshState(enabled: _enabled);
 
   @override
+  Future<JobHandle?> applySettings() async => null;
+
+  @override
   Future<JobHandle> setSsh(bool enable, {String? adminPassword}) async {
+    if (enable && !acceptsAdminPassword) {
+      throw const SystemException(
+        SystemErrorKind.authenticationRequired,
+        'This needs the admin password.',
+        data: {'action': 'org.hinteros.system.ssh'},
+      );
+    }
     if (enable) {
       adminAttempts.add(adminPassword ?? '');
       if (adminPassword != this.adminPassword) {
@@ -1054,13 +1076,18 @@ class MockSystemServices extends SystemServices {
     String? iconDir,
     UpdateStatus? status,
     DateTime Function()? now,
+    bool acceptsAdminPassword = true,
   }) {
     final jobs = MockJobs(autoRun: autoRunJobs);
     final updates = MockUpdates(jobs, status: status, now: now);
     return MockSystemServices._(
       mockJobs: jobs,
       mockUpdates: updates,
-      mockSystem: MockSystem(jobs, updates),
+      mockSystem: MockSystem(
+        jobs,
+        updates,
+        acceptsAdminPassword: acceptsAdminPassword,
+      ),
       mockNetwork: MockNetwork(),
       mockBluetooth: MockBluetooth(),
       mockDisplayAudio: MockDisplayAudio(),

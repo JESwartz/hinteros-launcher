@@ -1,7 +1,7 @@
-/// What the real build uses until the new session API version exists: every
-/// call fails with `unavailable`, so the system screens say so instead of
-/// showing made-up data.
-// TODO(system-api): delete when the Daemon* repositories exist.
+/// What stands in for the parts the daemon does not offer yet: every call
+/// fails with `unavailable`, so the screens say so instead of showing
+/// made-up data. (The system, updates and jobs ones are only here for tests
+/// and as the shape of the rest; the real build uses `daemon_system.dart`.)
 library;
 
 import 'models.dart';
@@ -27,7 +27,11 @@ class _UnavailableSystem implements SystemRepository {
   @override
   Future<void> power(PowerAction action) => Future.error(_gone);
   @override
+  bool get acceptsAdminPassword => false;
+  @override
   Future<SshState> ssh() => Future.error(_gone);
+  @override
+  Future<JobHandle?> applySettings() => Future.error(_gone);
   @override
   Future<JobHandle> setSsh(bool enable, {String? adminPassword}) =>
       Future.error(_gone);

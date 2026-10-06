@@ -36,6 +36,73 @@ final _hello = HelloParams(
   client: const Peer(name: 'contract-test', version: '0'),
 ).toJson();
 
+/// Puts the mock's system relay into the situation a `system.*` example
+/// describes (the examples are written against particular states of the
+/// service and use fixed job ids).
+Future<void> _prepareSystem(
+  MockDaemon mock,
+  String method,
+  Map<String, dynamic> ex,
+) async {
+  final s = mock.system;
+  final name = ex['name'] as String;
+  final err = ex['error'] as Map<String, dynamic>?;
+  const exampleJob = '3f9a0c2b7e4d1a65';
+  ApiException asException() =>
+      ApiException(err!['code'] as int, err['message'] as String, err['data']);
+  final security = AvailableUpdate(
+    rev: '9a8b7c6d5e4f30211a2b3c4d5e6f708192a3b4c5',
+    date: 1791300000,
+    summary: 'Fixes a flaw in the web engine.',
+    signer: 'release@hinteros',
+    security: Severity.high,
+    commits: 12,
+  );
+
+  /// A verified check that found [security].
+  Future<void> checked() async {
+    s.nextUpdate = security;
+    final r = await mock.rpc('system.update.check', {});
+    s.finishJob(r['job_id'] as String);
+  }
+
+  /// A rebuild job that is running with the example's job id.
+  Future<void> rebuilding([String id = exampleJob]) async {
+    s.jobIdQueue.add(id);
+    await mock.rpc('system.rebuild', {});
+  }
+
+  switch ((method, name)) {
+    case ('system.ssh.set', 'turn on'):
+      s.adminAuthorized = true;
+    case ('system.ssh.set', 'not the active seat user'):
+    case ('system.rebuild', 'low memory'):
+    case ('system.rebuild', 'too many requests'):
+      s.failNext = asException();
+    case ('system.rebuild', 'another job runs'):
+      await rebuilding(err!['data']['job_id'] as String);
+    case ('system.update.apply', 'started'):
+    case ('system.update.check', 'cached'):
+      await checked();
+    case ('system.channel.set', 'to stable without acknowledgement'):
+      s.channel = Channel.beta;
+    case ('system.jobs.get', 'failed rebuild'):
+      await rebuilding();
+      s.progressJob(exampleJob, Stage.building);
+      s.finishJob(exampleJob, ok: false);
+    case ('system.jobs.list', 'one running'):
+    case ('system.jobs.cancel', 'cancelling'):
+      await rebuilding();
+    case ('system.jobs.cancel', 'already activating'):
+      await rebuilding();
+      s.progressJob(exampleJob, Stage.activating);
+  }
+  // Jobs the call itself starts get the example's id.
+  if (method != 'system.rebuild' || name == 'started') {
+    s.jobIdQueue.add(exampleJob);
+  }
+}
+
 void main() {
   test('vendored schema is the version the client was generated for', () {
     expect(_doc['version'], apiVersion);
@@ -106,6 +173,10 @@ void main() {
           }
           if (errCode == ApiErrorCode.oskUnavailable) mock.oskEnabled = false;
 
+          if (method.startsWith('system.')) {
+            await _prepareSystem(mock, method, ex);
+          }
+
           if (ex.containsKey('error')) {
             final expected = ex['error'] as Map<String, dynamic>;
             final err = await mock
@@ -144,6 +215,23 @@ void main() {
             // The shape must survive the generated typed model unchanged.
             expect(result.keys.toSet(), (ex['result'] as Map).keys.toSet());
           }
+        });
+      }
+    }
+  });
+
+  group('the schema examples are valid', () {
+    for (final entry in _section('methods').entries) {
+      final spec = entry.value as Map<String, dynamic>;
+      for (final ex
+          in (spec['examples'] as List).cast<Map<String, dynamic>>()) {
+        if (!ex.containsKey('result')) continue;
+        test('${entry.key}: ${ex['name']} result', () {
+          _expectValid(
+            spec['result'] as Map<String, dynamic>,
+            ex['result'],
+            'example result',
+          );
         });
       }
     }

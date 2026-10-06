@@ -5,8 +5,6 @@
 /// relayed by the session daemon) and `design/catalog.md` (index entries), but
 /// the launcher only depends on these types and the repository interfaces in
 /// `repositories.dart`, not on the wire schema.
-// TODO(system-api): the generated models of the new session API version
-// replace the hand-written parsing the real repositories will need.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -47,11 +45,22 @@ enum SystemErrorKind {
   /// The admin password was wrong (polkit auth_admin said no).
   wrongPassword,
 
+  /// 3012: polkit wants the admin password and the launcher cannot pass it
+  /// on yet (no polkit authentication agent). `data['action']` names the
+  /// polkit action.
+  authenticationRequired,
+
   /// Wi-Fi / Bluetooth failures (NetworkManager, BlueZ).
   deviceFailed,
 
   /// -32602
   invalidParams,
+
+  /// The requested state already holds (a method answered `job_id: null`).
+  nothingToDo,
+
+  /// Anything else that went wrong.
+  failed,
 }
 
 class SystemException implements Exception {
@@ -69,9 +78,12 @@ class SystemException implements Exception {
 
 enum JobKind {
   update('Updating HinterOS'),
+  updateCheck('Checking for updates'),
   rollback('Rolling back'),
   rebuild('Applying changes'),
+  hardwareRedetect('Detecting hardware'),
   channel('Switching channel'),
+  base('Switching software base'),
   ssh('Changing remote access'),
   install('Installing'),
   remove('Removing');
@@ -82,7 +94,12 @@ enum JobKind {
   /// Stages a job of this kind can report, in order (system-api.md "Job
   /// model": not every job has every stage).
   List<JobStage> get stages => switch (this) {
-    update || channel => JobStage.values,
+    update || channel || base => JobStage.values,
+    updateCheck => const [
+      JobStage.preparing,
+      JobStage.fetching,
+      JobStage.verifying,
+    ],
     rollback => const [
       JobStage.preparing,
       JobStage.activating,
@@ -95,7 +112,7 @@ enum JobKind {
       JobStage.activating,
       JobStage.finishing,
     ],
-    rebuild || ssh || remove => const [
+    rebuild || hardwareRedetect || ssh || remove => const [
       JobStage.preparing,
       JobStage.building,
       JobStage.activating,
@@ -106,7 +123,12 @@ enum JobKind {
   /// Whether the session may restart when this finishes (the switch can
   /// change the session daemon itself).
   bool get mayRestartSession =>
-      this == update || this == rollback || this == rebuild || this == channel;
+      this == update ||
+      this == rollback ||
+      this == rebuild ||
+      this == hardwareRedetect ||
+      this == channel ||
+      this == base;
 }
 
 enum JobStage {
@@ -140,6 +162,7 @@ class JobSnapshot {
     this.cancelled = false,
     this.error,
     this.sessionRestartRequired = false,
+    this.result,
   });
 
   final String jobId;
@@ -155,11 +178,15 @@ class JobSnapshot {
   final JobError? error;
   final bool sessionRestartRequired;
 
+  /// `job_finished.result` (an `update_check` job: the check result as JSON).
+  final Map<String, dynamic>? result;
+
   bool get running => !finished;
   bool get failed => finished && !ok && !cancelled;
   bool get canCancel => running && stage.cancellable;
 
   JobSnapshot copyWith({
+    JobKind? kind,
     JobStage? stage,
     int? percent,
     bool clearPercent = false,
@@ -169,9 +196,10 @@ class JobSnapshot {
     bool? cancelled,
     JobError? error,
     bool? sessionRestartRequired,
+    Map<String, dynamic>? result,
   }) => JobSnapshot(
     jobId: jobId,
-    kind: kind,
+    kind: kind ?? this.kind,
     stage: stage ?? this.stage,
     percent: clearPercent ? null : (percent ?? this.percent),
     detail: detail ?? this.detail,
@@ -181,6 +209,7 @@ class JobSnapshot {
     error: error ?? this.error,
     sessionRestartRequired:
         sessionRestartRequired ?? this.sessionRestartRequired,
+    result: result ?? this.result,
   );
 }
 
@@ -302,14 +331,16 @@ class Generation {
   const Generation({
     required this.generation,
     required this.date,
-    required this.rev,
+    this.rev,
     this.current = false,
     this.booted = false,
   });
 
   final int generation;
   final DateTime date;
-  final String rev;
+
+  /// Null when the generation has no config snapshot.
+  final String? rev;
   final bool current;
   final bool booted;
 }
@@ -329,20 +360,22 @@ enum PowerAction {
 class SystemInfo {
   const SystemInfo({
     required this.version,
-    required this.channel,
     required this.base,
-    required this.rev,
-    required this.generation,
     required this.hostname,
+    this.channel,
+    this.rev,
+    this.generation,
     this.dev = false,
     this.hostKeyFingerprints = const [],
   });
 
   final String version;
-  final UpdateChannel channel;
+
+  /// Null without a locked channel (the dev box).
+  final UpdateChannel? channel;
   final NixBase base;
-  final String rev;
-  final int generation;
+  final String? rev;
+  final int? generation;
   final String hostname;
   final bool dev;
   final List<String> hostKeyFingerprints;
@@ -609,3 +642,7 @@ class StoreApp {
       ? '${(sizeMiB / 1024).toStringAsFixed(1)} GB'
       : '$sizeMiB MB';
 }
+
+/// The first [n] characters of a revision, for display ("" for none).
+String shortRev(String? rev, [int n = 7]) =>
+    rev == null ? '' : (rev.length > n ? rev.substring(0, n) : rev);

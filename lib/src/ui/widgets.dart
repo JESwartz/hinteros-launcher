@@ -558,3 +558,29 @@ class StatusLine extends StatelessWidget {
     );
   }
 }
+
+/// The "DEV" badge of a developer build (`system.info.dev`): letters, not
+/// just colour.
+class DevBadge extends StatelessWidget {
+  const DevBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HinterTheme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+      decoration: BoxDecoration(
+        color: t.accent,
+        borderRadius: BorderRadius.circular(HinterTokens.radiusPill),
+      ),
+      child: Text(
+        'DEV',
+        style: t.caption.copyWith(
+          color: t.onAccent,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 2,
+        ),
+      ),
+    );
+  }
+}

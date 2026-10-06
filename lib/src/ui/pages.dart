@@ -159,7 +159,17 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
   }
 
   Future<void> _restart() async {
-    await widget.services.system.restartSession();
+    try {
+      await widget.services.system.restartSession();
+    } on SystemException catch (e) {
+      if (mounted) {
+        setState(
+          () => _cancelNote =
+              "The session can't be restarted from here: ${e.message}",
+        );
+      }
+      return;
+    }
     widget.modal.close(_snap);
   }
 
@@ -168,10 +178,12 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
     final t = HinterTheme.of(context);
     final s = _snap;
     final region = widget.modal.region;
-    final stages = s.kind.stages;
+    // The kind's usual stages, plus the one the service reports if it is not
+    // among them (the list is a guide, the service decides).
+    final stages = _stagesOf(s);
     final current = stages.indexOf(s.stage);
     final restart = s.finished && s.ok && s.sessionRestartRequired;
-    region.setRows(const [NavRow('buttons', 1)]);
+    region.setRows([NavRow('buttons', restart ? 2 : 1)]);
 
     final String headline;
     if (!s.finished) {
@@ -202,7 +214,7 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
                 padding: const EdgeInsets.only(bottom: HinterTokens.s1),
                 child: Row(
                   children: [
-                    _StageMark(state: _stateOf(i, current, s)),
+                    _StageMark(state: _stateOf(i, current, s, stages)),
                     const SizedBox(width: HinterTokens.s2),
                     Text(
                       stages[i].label,
@@ -210,7 +222,8 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
                           ? t.label
                           : t.bodyDim.copyWith(
                               fontWeight:
-                                  _stateOf(i, current, s) == _MarkState.failed
+                                  _stateOf(i, current, s, stages) ==
+                                      _MarkState.failed
                                   ? FontWeight.w700
                                   : FontWeight.w400,
                             ),
@@ -290,7 +303,10 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
               DialogButtons(
                 region: region,
                 rowKey: 'buttons',
-                buttons: [btn('Restart session', _restart, primary: true)],
+                buttons: [
+                  btn('Restart session', _restart, primary: true),
+                  btn('Later', () => widget.modal.close(s)),
+                ],
               )
             else
               DialogButtons(
@@ -311,12 +327,24 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
     return '${e.message}$stage';
   }
 
-  static _MarkState _stateOf(int i, int current, JobSnapshot s) {
+  static List<JobStage> _stagesOf(JobSnapshot s) {
+    final base = s.kind.stages;
+    final extra = [s.stage, ?s.error?.stage].where((x) => !base.contains(x));
+    if (extra.isEmpty) return base;
+    return [...base, ...extra.toSet()]..sort((a, b) => a.index - b.index);
+  }
+
+  static _MarkState _stateOf(
+    int i,
+    int current,
+    JobSnapshot s,
+    List<JobStage> stages,
+  ) {
     if (s.finished && s.ok) return _MarkState.done;
     if (s.finished) {
       final failedAt = s.error?.stage == null
           ? current
-          : s.kind.stages.indexOf(s.error!.stage!);
+          : stages.indexOf(s.error!.stage!);
       if (s.cancelled) {
         return i < current ? _MarkState.done : _MarkState.pending;
       }

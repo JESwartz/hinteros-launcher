@@ -10,8 +10,14 @@ import 'common.dart';
 // ------------------------------------------------------------------ remote access
 
 /// SSH on or off. SSH is plain username and password for now: you log in as
-/// the admin account with its password, over the local network. Turning it
-/// on needs the admin password, typed with the on-screen keyboard (masked).
+/// the admin account with its password, over the local network.
+///
+/// Turning it on needs the admin password (polkit `auth_admin`). The launcher
+/// cannot pass a password to polkit yet, so ([SystemRepository.acceptsAdminPassword]
+/// false) it asks the daemon anyway and, on `authentication_required`, explains
+/// that an admin has to enable SSH. With a polkit agent in the session daemon
+/// the flag turns on and the password dialog below (kept, tested with the
+/// mock) asks first.
 class RemoteAccessSection extends StatelessWidget {
   const RemoteAccessSection(this.env, {super.key});
 
@@ -40,8 +46,10 @@ class RemoteAccessSection extends StatelessWidget {
           onSelect: () async {
             if (ssh.enabled) {
               await runJob(context, env.services, () => sys.setSsh(false));
-            } else {
+            } else if (sys.acceptsAdminPassword) {
               await _turnOn(context);
+            } else {
+              await _turnOnNeedsAdmin(context);
             }
             await reload();
           },
@@ -49,7 +57,9 @@ class RemoteAccessSection extends StatelessWidget {
             title: 'SSH',
             subtitle: ssh.enabled
                 ? null
-                : 'Turning it on asks for the admin password.',
+                : sys.acceptsAdminPassword
+                ? 'Turning it on asks for the admin password.'
+                : 'Turning it on needs an admin.',
             focused: f,
             trailing: ToggleMark(on: ssh.enabled),
           ),
@@ -70,6 +80,37 @@ class RemoteAccessSection extends StatelessWidget {
     );
   }
 
+  /// No way to give polkit the admin password: try, and explain the refusal.
+  Future<void> _turnOnNeedsAdmin(BuildContext context) async {
+    final JobHandle h;
+    try {
+      h = await env.services.system.setSsh(true);
+    } on SystemException catch (e) {
+      if (!context.mounted) return;
+      if (e.kind == SystemErrorKind.authenticationRequired) {
+        await showMessage(
+          context,
+          title: 'An admin has to turn on SSH',
+          body:
+              'Turning on SSH needs the admin password, and this screen cannot '
+              'ask for it yet. An admin can turn it on from the installer\'s '
+              '"Enable SSH" option, or by logging in to the admin account on '
+              'this box.',
+        );
+      } else {
+        await showMessage(
+          context,
+          title: "That didn't work",
+          body: describeError(e),
+        );
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    await showJobProgress(context, env.services, h);
+  }
+
+  /// With a polkit agent: asks for the admin password first.
   Future<void> _turnOn(BuildContext context) async {
     final sys = env.services.system;
     JobHandle? job;
@@ -207,7 +248,9 @@ class _UpdatesSectionState extends State<UpdatesSection> {
         final p = Pane(env.region);
         p.add(
           Text(
-            'HinterOS ${status.currentVersion}, ${info.channel.label} channel.',
+            info.channel == null
+                ? 'HinterOS ${status.currentVersion}. This box follows no update channel.'
+                : 'HinterOS ${status.currentVersion}, ${info.channel!.label} channel.',
             style: t.label,
           ),
         );
@@ -281,7 +324,7 @@ class _UpdatesSectionState extends State<UpdatesSection> {
           builder: (f) => SettingRow(
             title: 'Channel',
             focused: f,
-            trailing: Text(info.channel.label, style: t.bodyDim),
+            trailing: Text(info.channel?.label ?? 'None', style: t.bodyDim),
           ),
         );
         if (info.channel == UpdateChannel.stable) {
@@ -338,8 +381,8 @@ class _UpdatesSectionState extends State<UpdatesSection> {
               focused: f,
               subtitle:
                   '${g.date.year}-${g.date.month.toString().padLeft(2, '0')}-'
-                  '${g.date.day.toString().padLeft(2, '0')}, '
-                  '${g.rev.substring(0, 7)}',
+                  '${g.date.day.toString().padLeft(2, '0')}'
+                  '${g.rev == null ? '' : ', ${shortRev(g.rev)}'}',
               trailing: Text(
                 [
                   if (g.current) 'Current',
@@ -380,17 +423,23 @@ class AboutSection extends StatelessWidget {
             trailing: Text(value, style: t.bodyDim),
           ),
         );
+        if (i.dev) {
+          p.add(
+            Row(
+              children: [
+                Text('Developer build', style: t.label),
+                const SizedBox(width: HinterTokens.s2),
+                const DevBadge(),
+              ],
+            ),
+          );
+        }
         line('version', 'Version', i.version);
-        line('channel', 'Channel', i.channel.label);
+        line('channel', 'Channel', i.channel?.label ?? 'None');
         line('base', 'Software base', i.base.label);
-        line(
-          'rev',
-          'Revision',
-          i.rev.length >= 12 ? i.rev.substring(0, 12) : i.rev,
-        );
-        line('gen', 'Generation', '${i.generation}');
+        line('rev', 'Revision', i.rev == null ? 'None' : shortRev(i.rev, 12));
+        line('gen', 'Generation', i.generation?.toString() ?? 'None');
         line('host', 'Name on the network', '${i.hostname}.local');
-        if (i.dev) line('dev', 'Build', 'Developer');
         for (var k = 0; k < i.hostKeyFingerprints.length; k++) {
           p.item(
             'fp$k',

@@ -7,8 +7,8 @@ import 'osk_main.dart';
 import 'src/api/api.dart';
 import 'src/app.dart';
 import 'src/settings/launcher_settings.dart';
+import 'src/system/daemon_system.dart';
 import 'src/system/mock_system.dart';
-import 'src/system/unavailable_system.dart';
 
 export 'src/app.dart' show LauncherApp;
 
@@ -45,10 +45,17 @@ Future<void> main(List<String> args) async {
   Widget app = LauncherApp(
     data: data,
     settings: settings,
-    // TODO(system-api): the real repositories replace the unavailable ones.
+    // Real: system info, SSH, updates and jobs over the session API 0.6 relay;
+    // Wi-Fi, Bluetooth, display, audio, power and the Store are unavailable
+    // until the daemon has them (TODO(0.7), TODO(M8)). The mock behaves like
+    // the real daemon about the admin password.
     services: mock
-        ? MockSystemServices(autoRunJobs: true, iconDir: iconDir)
-        : unavailableSystemServices(),
+        ? MockSystemServices(
+            autoRunJobs: true,
+            iconDir: iconDir,
+            acceptsAdminPassword: adminPasswordUi,
+          )
+        : daemonSystemServices(connection),
     showFps: showFps,
     showServer: _flag(args, '--server', 'HINTEROS_SERVER'),
   );

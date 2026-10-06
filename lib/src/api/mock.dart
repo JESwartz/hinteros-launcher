@@ -4,6 +4,7 @@ import 'dart:io' show File;
 import 'daemon.dart';
 import 'errors.dart';
 import 'generated.dart';
+import 'mock_system_relay.dart';
 import 'version.dart';
 
 /// The default fake app list: what a fresh HinterOS has (the built-in Steam
@@ -115,8 +116,20 @@ class MockDaemon extends DaemonConnection {
     List<Game>? games,
     this.serverApiVersion = apiVersion,
     this.clientName = 'hinteros-launcher',
+    Duration? systemStepDelay,
+    DateTime Function()? now,
   }) : apps = List.of(apps),
-       _games = List.of(games ?? mockGames());
+       _games = List.of(games ?? mockGames()) {
+    system = MockSystemRelay(
+      emit: (name, params) => emitRaw(name, params),
+      now: now,
+      stepDelay: systemStepDelay,
+    );
+  }
+
+  /// The relayed system service (session API 0.6): its state, fake jobs and
+  /// switches for failures. Methods `system.*` go here.
+  late final MockSystemRelay system;
 
   final List<App> apps;
   List<Game> _games;
@@ -243,6 +256,7 @@ class MockDaemon extends DaemonConnection {
         'call hello first',
       );
     }
+    if (MockSystemRelay.handles(method)) return system.call(method, params);
     switch (method) {
       case 'ping':
         return PingResult(nonce: PingParams.fromJson(params).nonce).toJson();
@@ -636,6 +650,7 @@ class MockDaemon extends DaemonConnection {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    system.dispose();
     await _statusController.close();
     await _eventController.close();
   }

@@ -6,4 +6,5 @@ export 'daemon.dart';
 export 'errors.dart';
 export 'generated.dart';
 export 'mock.dart';
+export 'mock_system_relay.dart' show MockSystemRelay, mockStagesOf;
 export 'version.dart';
