@@ -13,7 +13,9 @@ bool _flag(List<String> args, String flag, String env) =>
 ///
 /// `--fps` (or `HINTEROS_FPS=1`) shows a frame-rate overlay. `--mock` (or
 /// `HINTEROS_MOCK=1`) uses an in-process fake daemon instead of the session
-/// socket; the Home key then stands in for the controller's Home button.
+/// socket; the Home key then stands in for the controller's Home button, A/D/W/S, Space
+/// and Q for the D-pad, accept and back (as `input_nav` events), and F2 quits the last
+/// app that was started.
 void main(List<String> args) {
   final showFps = _flag(args, '--fps', 'HINTEROS_FPS');
   final DaemonConnection connection = _flag(args, '--mock', 'HINTEROS_MOCK')
@@ -21,6 +23,16 @@ void main(List<String> args) {
       : DaemonClient(socketPath: defaultSocketPath());
   runApp(LauncherApp(connection: connection, showFps: showFps));
 }
+
+/// Dev-only keys that emit `input_nav` from the mock daemon.
+final _devPad = [
+  (LogicalKeyboardKey.keyA, NavAction.left),
+  (LogicalKeyboardKey.keyD, NavAction.right),
+  (LogicalKeyboardKey.keyW, NavAction.up),
+  (LogicalKeyboardKey.keyS, NavAction.down),
+  (LogicalKeyboardKey.space, NavAction.accept),
+  (LogicalKeyboardKey.keyQ, NavAction.back),
+];
 
 class LauncherApp extends StatelessWidget {
   const LauncherApp({
@@ -48,6 +60,17 @@ class LauncherApp extends StatelessWidget {
           ? CallbackShortcuts(
               bindings: {
                 const SingleActivator(LogicalKeyboardKey.home): c.pressHome,
+                // Fake controller, through the event path (arrows/Enter/Escape
+                // work directly, like on the real thing).
+                for (final (key, action) in _devPad)
+                  SingleActivator(key): () => c
+                    ..emitNav(action)
+                    ..emitNav(action, NavPhase.release),
+                // Fake the last app that was started quitting.
+                const SingleActivator(LogicalKeyboardKey.f2): () {
+                  final r = c.running;
+                  if (r.isNotEmpty) c.simulateExit(r.last.id);
+                },
               },
               child: Focus(
                 canRequestFocus: false,

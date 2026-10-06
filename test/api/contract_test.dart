@@ -61,6 +61,13 @@ void main() {
             'example params',
           );
           if (method != 'hello') await mock.rpc('hello', _hello);
+          // These examples describe a game that is already running (in the background).
+          if (method == 'apps.focus' || method == 'apps.running') {
+            await mock.appsLaunch(
+              const AppsLaunchParams(url: 'steam://rungameid/1000001'),
+            );
+            await mock.appsFocus(const AppsFocusParams(id: null));
+          }
 
           if (ex.containsKey('error')) {
             final expected = ex['error'] as Map<String, dynamic>;
@@ -210,6 +217,84 @@ void main() {
       );
       final typed = (await mock.appsList()).apps;
       expect(typed.map((a) => a.toJson()), raw['apps']);
+    });
+
+    group('apps and focus', () {
+      late MockDaemon mock;
+      late List<SessionEvent> seen;
+      setUp(() async {
+        mock = MockDaemon();
+        await mock.rpc('hello', _hello);
+        await mock.subscribeTo(
+          EventName.values.where((e) => e != EventName.unknown),
+        );
+        seen = [];
+        mock.events.listen(seen.add);
+      });
+      Future<void> settle() => Future<void>.delayed(Duration.zero);
+
+      test('launch emits app_started then focus_changed', () async {
+        final r = await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin'));
+        await settle();
+        expect(r.app.id, 'jellyfin');
+        expect(seen, [isA<AppStartedEvent>(), isA<FocusChangedEvent>()]);
+        expect((seen[1] as FocusChangedEvent).app, 'jellyfin');
+        final running = await mock.appsRunning();
+        expect(running.apps.map((a) => a.id), ['jellyfin']);
+        expect(running.focused, 'jellyfin');
+      });
+
+      test('launching a running app only focuses it', () async {
+        await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin'));
+        await mock.appsFocus(const AppsFocusParams(id: null));
+        await settle();
+        seen.clear();
+        await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin'));
+        await settle();
+        expect(seen, [isA<FocusChangedEvent>()]);
+        expect((await mock.appsRunning()).apps, hasLength(1));
+      });
+
+      test('launch needs exactly one of id, command, url', () async {
+        await expectLater(
+          mock.rpc('apps.launch', {}),
+          throwsA(isA<ApiException>().having((e) => e.code, 'code', -32602)),
+        );
+        await expectLater(
+          mock.rpc('apps.launch', {
+            'id': 'steam',
+            'command': ['x'],
+          }),
+          throwsA(isA<ApiException>().having((e) => e.code, 'code', -32602)),
+        );
+      });
+
+      test('exit of the focused app returns focus to the launcher', () async {
+        final app = (await mock.appsLaunch(
+          const AppsLaunchParams(command: ['firefox']),
+        )).app;
+        expect(app.id, 'cmd-1');
+        await settle();
+        seen.clear();
+        mock.simulateExit(app.id, reason: ExitReason.crashed, exitCode: 139);
+        await settle();
+        expect(seen, [isA<AppExitedEvent>(), isA<FocusChangedEvent>()]);
+        expect((seen[1] as FocusChangedEvent).app, isNull);
+        expect((await mock.appsRunning()).apps, isEmpty);
+      });
+
+      test('input_nav is only sent while the launcher has focus', () async {
+        mock.emitNav(NavAction.right);
+        await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin'));
+        await settle();
+        seen.clear();
+        mock.emitNav(NavAction.right);
+        await settle();
+        expect(seen, isEmpty);
+        mock.pressHome();
+        await settle();
+        expect(seen, [isA<FocusChangedEvent>(), isA<HomePressedEvent>()]);
+      });
     });
   });
 }

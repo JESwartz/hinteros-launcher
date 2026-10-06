@@ -28,6 +28,9 @@ class MockDaemon extends DaemonConnection {
 
   final List<App> apps;
 
+  /// A `command` launch of this program fails with app_launch_failed.
+  static const failingProgram = 'does-not-exist';
+
   /// The API version this mock claims to serve.
   final String serverApiVersion;
 
@@ -41,6 +44,10 @@ class MockDaemon extends DaemonConnection {
   final _eventController = StreamController<SessionEvent>.broadcast();
   final _subscribed = <String>[];
   final _desired = <EventName>{};
+  final _running = <RunningApp>[];
+  String? _focused;
+  int _cmdCounter = 0;
+  int _gamescopeCounter = 0;
   bool _handshaken = false;
   bool _closed = false;
 
@@ -126,8 +133,107 @@ class MockDaemon extends DaemonConnection {
         return {'events': List<String>.of(_subscribed)};
       case 'apps.list':
         return AppsListResult(apps: List.of(apps)).toJson();
+      case 'apps.launch':
+        return AppsLaunchResult(app: _launch(AppsLaunchParams.fromJson(params)))
+            .toJson();
+      case 'apps.running':
+        return AppsRunningResult(
+          apps: List.of(_running),
+          focused: _focused,
+        ).toJson();
+      case 'apps.focus':
+        if (!params.containsKey('id')) {
+          throw const ApiException(
+            ApiErrorCode.invalidParams,
+            'id is required',
+          );
+        }
+        final id = params['id'];
+        if (id != null && !_running.any((a) => a.id == id)) {
+          throw ApiException(
+            ApiErrorCode.appNotFound,
+            "no running app with id '$id'",
+          );
+        }
+        _setFocus(id as String?);
+        return const AppsFocusResult().toJson();
     }
     throw ApiException(ApiErrorCode.methodNotFound, 'unknown method $method');
+  }
+
+  RunningApp _launch(AppsLaunchParams p) {
+    final given = [p.id, p.command, p.url].where((x) => x != null).length;
+    if (given != 1) {
+      throw const ApiException(
+        ApiErrorCode.invalidParams,
+        "exactly one of 'id', 'command' or 'url' is required",
+      );
+    }
+    final RunningApp app;
+    if (p.id != null) {
+      final id = p.id!;
+      final known = apps.where((a) => a.id == id).firstOrNull;
+      if (known == null) {
+        throw ApiException(ApiErrorCode.appNotFound, "no app with id '$id'");
+      }
+      // Already running: focus it instead.
+      final running = _running.where((a) => a.id == id).firstOrNull;
+      if (running != null) {
+        _setFocus(id);
+        return running;
+      }
+      app = _newRunning(id, known.name, AppSource.command);
+    } else if (p.command != null) {
+      final program = p.command!.first;
+      if (program == failingProgram) {
+        throw ApiException(
+          ApiErrorCode.appLaunchFailed,
+          'cannot start $program: No such file or directory (os error 2)',
+        );
+      }
+      app = _newRunning(
+        'cmd-${++_cmdCounter}',
+        p.name ?? program.split('/').last,
+        AppSource.command,
+      );
+    } else {
+      final appid = int.parse(p.url!.split('/').last);
+      final id = 'steam-$appid';
+      final running = _running.where((a) => a.id == id).firstOrNull;
+      if (running != null) {
+        _setFocus(id);
+        return running;
+      }
+      app = _newRunning(
+        id,
+        'Steam game $appid',
+        AppSource.steam,
+        gamescopeAppId: appid,
+      );
+    }
+    _running.add(app);
+    emitRaw('app_started', AppStartedEvent(app: app).toJson());
+    _setFocus(app.id);
+    return app;
+  }
+
+  RunningApp _newRunning(
+    String id,
+    String name,
+    AppSource source, {
+    int? gamescopeAppId,
+  }) => RunningApp(
+    id: id,
+    name: name,
+    source: source,
+    gamescopeAppId: gamescopeAppId ?? 4100000000 + (++_gamescopeCounter),
+    pid: source == AppSource.command ? 4200 + _running.length : null,
+  );
+
+  void _setFocus(String? id) {
+    if (_focused == id) return;
+    _focused = id;
+    emitRaw('focus_changed', FocusChangedEvent(app: id).toJson());
   }
 
   List<String> _eventNames(Map<String, dynamic> params) {
@@ -163,8 +269,37 @@ class MockDaemon extends DaemonConnection {
     _eventController.add(SessionEvent.fromNotification(name, params));
   }
 
-  /// The Home button, on demand.
-  void pressHome() => emitRaw('home_pressed');
+  /// The Home button, on demand: the launcher comes to the front, then the event.
+  void pressHome() {
+    _setFocus(null);
+    emitRaw('home_pressed');
+  }
+
+  /// Simulates the running app [id] ending. If it had focus, the launcher
+  /// takes over again (app_exited, then focus_changed).
+  void simulateExit(
+    String id, {
+    ExitReason reason = ExitReason.exited,
+    int? exitCode,
+  }) {
+    if (!_running.any((a) => a.id == id)) return;
+    _running.removeWhere((a) => a.id == id);
+    emitRaw(
+      'app_exited',
+      AppExitedEvent(id: id, reason: reason, exitCode: exitCode).toJson(),
+    );
+    if (_focused == id) _setFocus(null);
+  }
+
+  /// A controller navigation intent. Like the daemon, only sent while the
+  /// launcher has focus.
+  void emitNav(NavAction action, [NavPhase phase = NavPhase.press]) {
+    if (_focused != null) return;
+    emitRaw('input_nav', InputNavEvent(action: action, phase: phase).toJson());
+  }
+
+  /// The running apps (for dev keys and tests).
+  List<RunningApp> get running => List.unmodifiable(_running);
 
   @override
   Future<void> close() async {
