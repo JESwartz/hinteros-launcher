@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.3).
+// Source: schema/session-api.json (session API 0.4).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.3';
+const apiVersion = '0.4';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -23,6 +23,11 @@ const apiMethodNames = <String>[
   'apps.running',
   'apps.focus',
   'apps.close',
+  'osk.show',
+  'osk.hide',
+  'keys.type',
+  'keys.key',
+  'keys.action',
 ];
 
 /// Event names in the schema.
@@ -34,6 +39,7 @@ const apiEventNames = <String>[
   'input_nav',
   'games_changed',
   'steam_attention',
+  'osk_visibility',
 ];
 
 /// Error name to JSON-RPC code.
@@ -49,6 +55,8 @@ const apiErrorCodesByName = <String, int>{
   'app_not_found': 2001,
   'app_launch_failed': 2002,
   'steam_no_windows': 2003,
+  'keyboard_unavailable': 2004,
+  'osk_unavailable': 2005,
 };
 
 /// JSON-RPC error codes of the session API.
@@ -85,6 +93,12 @@ abstract final class ApiErrorCode {
 
   /// steam.focus: Steam has no windows that could be shown (not running, or no gamescope).
   static const steamNoWindows = 2003;
+
+  /// keys.*: nothing can deliver the input (no virtual keyboard because /dev/uinput could not be opened, and, for text and some actions, no gamescope input method).
+  static const keyboardUnavailable = 2004;
+
+  /// osk.show: the on-screen keyboard is disabled in the daemon's config.
+  static const oskUnavailable = 2005;
 }
 
 /// MAJOR.MINOR
@@ -130,6 +144,7 @@ enum EventName {
   inputNav('input_nav'),
   gamesChanged('games_changed'),
   steamAttention('steam_attention'),
+  oskVisibility('osk_visibility'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -486,6 +501,159 @@ class Game {
 
   @override
   String toString() => 'Game(${jsonEncode(toJson())})';
+}
+
+/// A key on the daemon's virtual keyboard (US layout). Letters and digits are the unshifted keys: add the 'shift' modifier for capitals and symbols, or use keys.type for text. back, forward, refresh and the media keys are the multimedia keys of that name.
+enum Key {
+  a('a'),
+  b('b'),
+  c('c'),
+  d('d'),
+  e('e'),
+  f('f'),
+  g('g'),
+  h('h'),
+  i('i'),
+  j('j'),
+  k('k'),
+  l('l'),
+  m('m'),
+  n('n'),
+  o('o'),
+  p('p'),
+  q('q'),
+  r('r'),
+  s('s'),
+  t('t'),
+  u('u'),
+  v('v'),
+  w('w'),
+  x('x'),
+  y('y'),
+  z('z'),
+  v0('0'),
+  v1('1'),
+  v2('2'),
+  v3('3'),
+  v4('4'),
+  v5('5'),
+  v6('6'),
+  v7('7'),
+  v8('8'),
+  v9('9'),
+  f1('f1'),
+  f2('f2'),
+  f3('f3'),
+  f4('f4'),
+  f5('f5'),
+  f6('f6'),
+  f7('f7'),
+  f8('f8'),
+  f9('f9'),
+  f10('f10'),
+  f11('f11'),
+  f12('f12'),
+  enter('enter'),
+  escape('escape'),
+  backspace('backspace'),
+  tab('tab'),
+  space('space'),
+  delete('delete'),
+  insert('insert'),
+  home('home'),
+  end('end'),
+  pageUp('page_up'),
+  pageDown('page_down'),
+  up('up'),
+  down('down'),
+  left('left'),
+  right('right'),
+  minus('minus'),
+  equal('equal'),
+  leftBracket('left_bracket'),
+  rightBracket('right_bracket'),
+  backslash('backslash'),
+  semicolon('semicolon'),
+  apostrophe('apostrophe'),
+  grave('grave'),
+  comma('comma'),
+  period('period'),
+  slash('slash'),
+  capsLock('caps_lock'),
+  contextMenu('context_menu'),
+  back('back'),
+  forward('forward'),
+  refresh('refresh'),
+  playPause('play_pause'),
+  stop('stop'),
+  nextTrack('next_track'),
+  previousTrack('previous_track'),
+  volumeUp('volume_up'),
+  volumeDown('volume_down'),
+  mute('mute'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const Key(this.value);
+  final String value;
+
+  factory Key.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+/// A modifier held while a key is pressed.
+enum Modifier {
+  shift('shift'),
+  ctrl('ctrl'),
+  alt('alt'),
+  meta('meta'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const Modifier(this.value);
+  final String value;
+
+  factory Modifier.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+/// An editing action for keys.action.
+enum KeyAction {
+  backspace('backspace'),
+  delete('delete'),
+  enter('enter'),
+  tab('tab'),
+  escape('escape'),
+  space('space'),
+  left('left'),
+  right('right'),
+  up('up'),
+  down('down'),
+  home('home'),
+  end('end'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const KeyAction(this.value);
+  final String value;
+
+  factory KeyAction.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
 }
 
 /// One of Steam's own top-level windows on gamescope's Xwayland.
@@ -1137,6 +1305,232 @@ class AppsCloseResult {
   String toString() => 'AppsCloseResult(${jsonEncode(toJson())})';
 }
 
+class OskShowParams {
+  const OskShowParams();
+
+  factory OskShowParams.fromJson(Map<String, dynamic> json) => OskShowParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is OskShowParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'OskShowParams(${jsonEncode(toJson())})';
+}
+
+class OskShowResult {
+  const OskShowResult({required this.visible});
+
+  /// Whether the on-screen keyboard is now visible.
+  final bool visible;
+
+  factory OskShowResult.fromJson(Map<String, dynamic> json) =>
+      OskShowResult(visible: json['visible'] as bool);
+
+  Map<String, dynamic> toJson() => {'visible': visible};
+
+  @override
+  bool operator ==(Object other) =>
+      other is OskShowResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'OskShowResult(${jsonEncode(toJson())})';
+}
+
+class OskHideParams {
+  const OskHideParams();
+
+  factory OskHideParams.fromJson(Map<String, dynamic> json) => OskHideParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is OskHideParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'OskHideParams(${jsonEncode(toJson())})';
+}
+
+class OskHideResult {
+  const OskHideResult({required this.visible});
+
+  /// Whether the on-screen keyboard is now visible.
+  final bool visible;
+
+  factory OskHideResult.fromJson(Map<String, dynamic> json) =>
+      OskHideResult(visible: json['visible'] as bool);
+
+  Map<String, dynamic> toJson() => {'visible': visible};
+
+  @override
+  bool operator ==(Object other) =>
+      other is OskHideResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'OskHideResult(${jsonEncode(toJson())})';
+}
+
+class KeysTypeParams {
+  const KeysTypeParams({required this.text});
+
+  final String text;
+
+  factory KeysTypeParams.fromJson(Map<String, dynamic> json) =>
+      KeysTypeParams(text: json['text'] as String);
+
+  Map<String, dynamic> toJson() => {'text': text};
+
+  @override
+  bool operator ==(Object other) =>
+      other is KeysTypeParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'KeysTypeParams(${jsonEncode(toJson())})';
+}
+
+class KeysTypeResult {
+  const KeysTypeResult({required this.untypeable});
+
+  /// Characters that were skipped, in order (duplicates kept).
+  final List<String> untypeable;
+
+  factory KeysTypeResult.fromJson(Map<String, dynamic> json) => KeysTypeResult(
+    untypeable: (json['untypeable'] as List).map((x) => x as String).toList(),
+  );
+
+  Map<String, dynamic> toJson() => {'untypeable': untypeable};
+
+  @override
+  bool operator ==(Object other) =>
+      other is KeysTypeResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'KeysTypeResult(${jsonEncode(toJson())})';
+}
+
+class KeysKeyParams {
+  const KeysKeyParams({required this.key, this.modifiers});
+
+  /// A key on the daemon's virtual keyboard (US layout). Letters and digits are the unshifted keys: add the 'shift' modifier for capitals and symbols, or use keys.type for text. back, forward, refresh and the media keys are the multimedia keys of that name.
+  final Key key;
+  final List<Modifier>? modifiers;
+
+  factory KeysKeyParams.fromJson(Map<String, dynamic> json) => KeysKeyParams(
+    key: Key.fromJson(json['key'] as String),
+    modifiers: json['modifiers'] == null
+        ? null
+        : (json['modifiers'] as List)
+              .map((x) => Modifier.fromJson(x as String))
+              .toList(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'key': key.toJson(),
+    if (modifiers != null)
+      'modifiers': modifiers!.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is KeysKeyParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'KeysKeyParams(${jsonEncode(toJson())})';
+}
+
+class KeysKeyResult {
+  const KeysKeyResult();
+
+  factory KeysKeyResult.fromJson(Map<String, dynamic> json) => KeysKeyResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is KeysKeyResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'KeysKeyResult(${jsonEncode(toJson())})';
+}
+
+class KeysActionParams {
+  const KeysActionParams({required this.action});
+
+  /// An editing action for keys.action.
+  final KeyAction action;
+
+  factory KeysActionParams.fromJson(Map<String, dynamic> json) =>
+      KeysActionParams(action: KeyAction.fromJson(json['action'] as String));
+
+  Map<String, dynamic> toJson() => {'action': action.toJson()};
+
+  @override
+  bool operator ==(Object other) =>
+      other is KeysActionParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'KeysActionParams(${jsonEncode(toJson())})';
+}
+
+class KeysActionResult {
+  const KeysActionResult();
+
+  factory KeysActionResult.fromJson(Map<String, dynamic> json) =>
+      KeysActionResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is KeysActionResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'KeysActionResult(${jsonEncode(toJson())})';
+}
+
 /// The global Home button was pressed. The launcher brings itself to the front.
 final class HomePressedEvent extends SessionEvent {
   const HomePressedEvent();
@@ -1270,7 +1664,7 @@ final class FocusChangedEvent extends SessionEvent {
   String toString() => 'FocusChangedEvent(${jsonEncode(toJson())})';
 }
 
-/// A controller navigation intent, sent only while the launcher has focus.
+/// A controller navigation intent, sent to the launcher while it has focus, or only to the on-screen keyboard while it is visible.
 final class InputNavEvent extends SessionEvent {
   const InputNavEvent({required this.action, required this.phase});
 
@@ -1370,6 +1764,35 @@ final class SteamAttentionEvent extends SessionEvent {
   String toString() => 'SteamAttentionEvent(${jsonEncode(toJson())})';
 }
 
+/// The on-screen keyboard was shown or hidden (osk.show/osk.hide, the controller chord, Home, or a focus change).
+final class OskVisibilityEvent extends SessionEvent {
+  const OskVisibilityEvent({required this.visible});
+
+  final bool visible;
+
+  factory OskVisibilityEvent.fromJson(Map<String, dynamic> json) =>
+      OskVisibilityEvent(visible: json['visible'] as bool);
+
+  Map<String, dynamic> toJson() => {'visible': visible};
+
+  @override
+  String get name => 'osk_visibility';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is OskVisibilityEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'OskVisibilityEvent(${jsonEncode(toJson())})';
+}
+
 class VersionMismatchData {
   const VersionMismatchData({
     required this.clientApiVersion,
@@ -1414,7 +1837,7 @@ mixin SessionApiMethods {
 
   /// Version handshake. Must be the first request on a connection.
   ///
-  /// The client sends the API version it was built against. Majors must match (during 0.x the minor must match too). The result carries the negotiated version: min(client, server). On a mismatch the server answers with version_mismatch and closes the connection.
+  /// The client sends the API version it was built against. Majors must match (during 0.x the minor must match too). The result carries the negotiated version: min(client, server). On a mismatch the server answers with version_mismatch and closes the connection. The client name 'hinteros-osk' is reserved for the on-screen keyboard: such connections receive input_nav while the keyboard is visible, and only then.
   Future<HelloResult> hello(HelloParams params) async =>
       HelloResult.fromJson(await rpc('hello', params.toJson()));
 
@@ -1489,6 +1912,38 @@ mixin SessionApiMethods {
   /// A 'command' app gets SIGTERM (through its reaper, to its process group), and after the close timeout (default 5 s) everything still running under its reaper gets SIGKILL. A Steam game: every process under Steam's reaper for that app id gets SIGTERM, then SIGKILL after the timeout; Steam itself keeps running. A Steam game that has no processes yet (still being prepared by Steam) just stops being tracked. Steam ('steam_client'): Big Picture is asked to close (steam://close/bigpicture); Steam keeps running in the background. Closing an app that is already closing does nothing. If the app had focus, the launcher gets it back when it exits.
   Future<AppsCloseResult> appsClose(AppsCloseParams params) async =>
       AppsCloseResult.fromJson(await rpc('apps.close', params.toJson()));
+
+  /// Show the on-screen keyboard over whatever has focus.
+  ///
+  /// The on-screen keyboard is a separate client (hinteros-osk) whose window the daemon shows as a gamescope overlay; it never takes focus, so typed keys reach the focused app. While it is visible, InputPlumber is in intercept mode ALL and input_nav goes only to the connection whose hello client name is 'hinteros-osk' (not to the launcher). osk_visibility follows if the visibility changed. Showing it again does nothing. The user can also summon it with the controller (Guide + Y by default).
+  Future<OskShowResult> oskShow([
+    OskShowParams params = const OskShowParams(),
+  ]) async => OskShowResult.fromJson(await rpc('osk.show', params.toJson()));
+
+  /// Hide the on-screen keyboard.
+  ///
+  /// Restores the previous input routing: InputPlumber's mode for whatever has focus, input_nav to the launcher while it has focus. osk_visibility follows if the visibility changed. Home and focus changes also hide it.
+  Future<OskHideResult> oskHide([
+    OskHideParams params = const OskHideParams(),
+  ]) async => OskHideResult.fromJson(await rpc('osk.hide', params.toJson()));
+
+  /// Type text into the focused app (never into the on-screen keyboard).
+  ///
+  /// Characters on the US keyboard layout are typed through the daemon's virtual keyboard (uinput, with Shift for capitals and symbols; newline = Enter, tab = Tab); others go through gamescope's input method, one character at a time. Returns at once; typing happens in the background in order with other keys.* calls. Characters neither path can type are skipped and listed in 'untypeable'.
+  Future<KeysTypeResult> keysType(KeysTypeParams params) async =>
+      KeysTypeResult.fromJson(await rpc('keys.type', params.toJson()));
+
+  /// Press and release one key, optionally with modifiers, in the focused app.
+  ///
+  /// For keys that are not text (function keys, shortcuts such as ctrl+l). Needs the virtual keyboard (uinput). Returns at once; the key is sent in order with other keys.* calls.
+  Future<KeysKeyResult> keysKey(KeysKeyParams params) async =>
+      KeysKeyResult.fromJson(await rpc('keys.key', params.toJson()));
+
+  /// An editing action in the focused app: backspace, enter, cursor movement, ...
+  ///
+  /// Sent as the matching key through the virtual keyboard; without it, backspace, delete, enter and the arrows fall back to gamescope's input method. Returns at once.
+  Future<KeysActionResult> keysAction(KeysActionParams params) async =>
+      KeysActionResult.fromJson(await rpc('keys.action', params.toJson()));
 }
 
 /// A server-pushed notification of the session API.
@@ -1513,6 +1968,7 @@ sealed class SessionEvent {
     'input_nav' => InputNavEvent.fromJson(params),
     'games_changed' => GamesChangedEvent.fromJson(params),
     'steam_attention' => SteamAttentionEvent.fromJson(params),
+    'osk_visibility' => OskVisibilityEvent.fromJson(params),
     _ => UnknownSessionEvent(name, params),
   };
 }
