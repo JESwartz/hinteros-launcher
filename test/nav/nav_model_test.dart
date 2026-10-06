@@ -144,4 +144,44 @@ void main() {
       expect(m.move(NavDir.down).edge, NavDir.down);
     });
   });
+
+  group('spans (unequal items)', () {
+    // 10 narrow keys over a row of 3: a wide key in the middle.
+    NavGridModel keys() => NavGridModel(rememberPerRow: false)
+      ..setRows(const [
+        NavRow('top', 10, spans: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2]),
+        NavRow('bottom', 3, spans: [3, 14, 3]),
+      ]);
+
+    test('down goes to the item below, not the same index', () {
+      final m = keys();
+      m.goTo(0, 1);
+      m.move(NavDir.down);
+      expect(m.col, 1, reason: 'x=3 is under the wide key');
+      m.goTo(0, 9);
+      m.move(NavDir.down);
+      expect(m.col, 2, reason: 'x=19 is under the last key');
+      m.goTo(0, 0);
+      m.move(NavDir.down);
+      expect(m.col, 0);
+    });
+
+    test('the aimed position is kept across rows', () {
+      final m = keys();
+      m.goTo(0, 6); // x = 13
+      m.move(NavDir.down);
+      expect(m.col, 1);
+      m.move(NavDir.up);
+      expect(m.col, 6, reason: 'back above where you started');
+    });
+
+    test('moving sideways re-aims', () {
+      final m = keys();
+      m.goTo(0, 6);
+      m.move(NavDir.down);
+      m.move(NavDir.right); // last key, x = 18.5
+      m.move(NavDir.up);
+      expect(m.col, 9);
+    });
+  });
 }
