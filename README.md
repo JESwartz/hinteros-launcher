@@ -43,13 +43,37 @@ the home screen says so and the client keeps retrying with backoff.
 
 ### Mock daemon
 
-`--mock` (or `HINTEROS_MOCK=1`) swaps the socket for the in-process mock: a fake app list, and the
-**Home** key emits `home_pressed`. No daemon needed for desktop work:
+`--mock` (or `HINTEROS_MOCK=1`) swaps the socket for the in-process mock: a fake app list that
+behaves like the 0.2 daemon (`apps.launch` starts an app and focuses it, `apps.running`,
+`apps.focus`, and the `app_started`, `app_exited`, `focus_changed` events; a `command` launch of
+`does-not-exist` fails with 2002). No daemon needed for desktop work. Dev keys, all going through
+the mock's event stream:
+
+| Key | Does |
+|---|---|
+| Home | `home_pressed` (the launcher takes focus back first) |
+| A / D / W / S, Space, Q | `input_nav` left / right / up / down, accept, back (press, then release) |
+| F2 | the last started app exits |
+
+While an app has focus the mock sends no `input_nav`, like the daemon. Arrow keys, Enter and
+Escape work in every mode and are the same actions as `input_nav` (see below).
+
 
 ```
 flutter run -d linux --dart-entrypoint-args=--mock
 ./result/bin/hinteros-launcher --mock --windowed
 ```
+
+### Launching and input
+
+Home shows one card per `apps.list` entry. Controller input arrives as `input_nav {action, phase}`
+events, and the keyboard maps onto the same `NavAction`s (arrows = directions, Enter = accept,
+Escape = back), so `HomeScreen._nav` is the only action layer. `press` and `repeat` move focus
+(the daemon does the key repeat); `release` never acts. `accept` calls `apps.launch {id}` for the
+focused card, on `press` only; a failure (2001, 2002, not connected) shows a snackbar. Cards of
+running apps carry a "Running" mark, refreshed through `apps.running` on connect and on
+`app_started`, `app_exited` and `focus_changed`. `home_pressed` resets focus to the first card.
+Other actions are ignored, as the schema requires of clients.
 
 ### Regenerating and updating the schema
 
@@ -62,7 +86,10 @@ nix run .#update-schema           # copy its schema into schema/ and regenerate;
 
 `nix flake check` fails (`schema-vendored`) while `schema/session-api.json` differs from the
 schema in the pinned `hinteros-daemon` input, and fails (`generated`) while the generated file
-is stale. After re-vendoring, the mock and contract test must cover any new methods.
+is stale. After re-vendoring, the mock and contract test must cover any new methods. The generator
+handles `$ref` unions (`oneOf [X, null]` becomes `X?`), required-but-nullable fields (sent as
+explicit `null`) and string enums with an `unknown` fallback; `oneOf` on a params object (as in
+`apps.launch`) is not modelled, so all its fields are optional in Dart and the daemon validates.
 
 ### Tests
 
@@ -70,5 +97,8 @@ is stale. After re-vendoring, the mock and contract test must cover any new meth
   mock and validates all output against the schema with the `json_schema` package.
 - `test/api/client_test.dart` runs `DaemonClient` against a scripted fake server on a real socket.
 - `test/integration/` runs the real `hinteros-session` binary: `nix build .#checks.x86_64-linux.integration`.
+  It starts the daemon with `--no-gamescope --no-inputplumber` and a temp config of two command
+  apps, and covers the 0.2 handshake, `apps.list`, `apps.launch` (configured app, unknown app,
+  spawn failure), `apps.running`, `app_started` and `app_exited`.
   It is a separate check and is skipped by plain `flutter test` unless `HINTEROS_SESSION_BIN`
   points at the binary, e.g. `HINTEROS_SESSION_BIN=$(nix build ../hinteros-daemon#hinteros-session --no-link --print-out-paths)/bin/hinteros-session flutter test test/integration`.

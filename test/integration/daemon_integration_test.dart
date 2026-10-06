@@ -19,7 +19,28 @@ void main() {
   setUp(() async {
     dir = Directory.systemTemp.createTempSync('session_it');
     sock = '${dir.path}/run/session.sock';
-    daemon = await Process.start(_bin!, ['--socket', sock]);
+    // A dev-desktop session: no gamescope, no InputPlumber, and two configured
+    // apps that exit by themselves (`sleep` keeps running until the test ends).
+    final config = File('${dir.path}/session.toml')
+      ..writeAsStringSync('''
+[[apps]]
+id = "sleeper"
+name = "Sleeper"
+command = ["sleep", "60"]
+
+[[apps]]
+id = "crasher"
+name = "Crasher"
+command = ["sh", "-c", "exit 3"]
+''');
+    daemon = await Process.start(_bin!, [
+      '--socket',
+      sock,
+      '--config',
+      config.path,
+      '--no-gamescope',
+      '--no-inputplumber',
+    ]);
     for (final s in [daemon.stdout, daemon.stderr]) {
       s.transform(utf8.decoder).listen(log.write);
     }
@@ -46,26 +67,88 @@ void main() {
     log.clear();
   });
 
-  test('handshake, ping, apps.list and home_pressed (SIGUSR1)', () async {
+  test(
+    'handshake at 0.2, ping, apps.list and home_pressed (SIGUSR1)',
+    () async {
+      final c = client = DaemonClient(socketPath: sock);
+      await c.subscribeTo([EventName.homePressed]);
+      final connected = await c.waitConnected();
+      expect(connected.apiVersion, apiVersion);
+      expect(connected.server.name, 'hinteros-session');
+
+      expect((await c.ping(const PingParams(nonce: 'hi'))).nonce, 'hi');
+
+      final apps = (await c.appsList()).apps;
+      expect(apps, isNotEmpty);
+      expect(apps.map((a) => a.id), ['sleeper', 'crasher']);
+
+      final home = c.events.firstWhere((e) => e is HomePressedEvent);
+      // Subscription is acknowledged by now; the daemon turns SIGUSR1 into the event.
+      daemon.kill(ProcessSignal.sigusr1);
+      expect(
+        await home.timeout(const Duration(seconds: 10)),
+        isA<HomePressedEvent>(),
+      );
+    },
+    skip: _bin == null ? 'HINTEROS_SESSION_BIN not set' : null,
+  );
+
+  test('apps.launch, apps.running, app_started and app_exited', () async {
     final c = client = DaemonClient(socketPath: sock);
-    await c.subscribeTo([EventName.homePressed]);
-    final connected = await c.waitConnected();
-    expect(connected.apiVersion, apiVersion);
-    expect(connected.server.name, 'hinteros-session');
+    await c.subscribeTo([
+      EventName.appStarted,
+      EventName.appExited,
+      EventName.focusChanged,
+    ]);
+    await c.waitConnected();
+    const wait = Duration(seconds: 10);
 
-    expect((await c.ping(const PingParams(nonce: 'hi'))).nonce, 'hi');
-
-    final apps = (await c.appsList()).apps;
-    expect(apps, isNotEmpty);
-    expect(apps.map((a) => a.id), contains('steam'));
-
-    final home = c.events.firstWhere((e) => e is HomePressedEvent);
-    // Subscription is acknowledged by now; the daemon turns SIGUSR1 into the event.
-    daemon.kill(ProcessSignal.sigusr1);
-    expect(
-      await home.timeout(const Duration(seconds: 10)),
-      isA<HomePressedEvent>(),
+    // Errors carry their codes.
+    await expectLater(
+      c.appsLaunch(const AppsLaunchParams(id: 'nope')),
+      throwsA(
+        isA<ApiException>().having(
+          (e) => e.code,
+          'code',
+          ApiErrorCode.appNotFound,
+        ),
+      ),
     );
+    await expectLater(
+      c.appsLaunch(const AppsLaunchParams(command: ['does-not-exist'])),
+      throwsA(
+        isA<ApiException>().having(
+          (e) => e.code,
+          'code',
+          ApiErrorCode.appLaunchFailed,
+        ),
+      ),
+    );
+
+    // A configured app starts and is listed as running.
+    final started = c.events.firstWhere((e) => e is AppStartedEvent);
+    final app = (await c.appsLaunch(const AppsLaunchParams(id: 'sleeper'))).app;
+    expect(app.id, 'sleeper');
+    expect(app.source, AppSource.command);
+    expect((await started.timeout(wait) as AppStartedEvent).app.id, 'sleeper');
+    expect((await c.appsRunning()).apps.map((a) => a.id), ['sleeper']);
+
+    // One that exits non-zero is reported as crashed with its status.
+    final exited = c.events.firstWhere(
+      (e) => e is AppExitedEvent && e.id != 'sleeper',
+    );
+    await c.appsLaunch(const AppsLaunchParams(id: 'crasher'));
+    final e = await exited.timeout(wait) as AppExitedEvent;
+    expect(e.id, 'crasher');
+    expect(e.reason, ExitReason.crashed);
+    expect(e.exitCode, 3);
+
+    // Focusing an app that is not running is an error; the launcher is fine.
+    await expectLater(
+      c.appsFocus(const AppsFocusParams(id: 'crasher')),
+      throwsA(isA<ApiException>()),
+    );
+    await c.appsFocus(const AppsFocusParams(id: null));
   }, skip: _bin == null ? 'HINTEROS_SESSION_BIN not set' : null);
 
   test(
