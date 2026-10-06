@@ -89,6 +89,13 @@ void main() {
             }
           }
 
+          // The 0.4 error examples describe a daemon without the feature.
+          final errCode = (ex['error'] as Map?)?['code'];
+          if (errCode == ApiErrorCode.keyboardUnavailable) {
+            mock.keyboardAvailable = false;
+          }
+          if (errCode == ApiErrorCode.oskUnavailable) mock.oskEnabled = false;
+
           if (ex.containsKey('error')) {
             final expected = ex['error'] as Map<String, dynamic>;
             final err = await mock
@@ -401,6 +408,67 @@ void main() {
           (g) => g.installState == InstallState.installed,
         );
         expect(installed.map((g) => g.name), contains('Factorio'));
+      });
+
+      test('osk.show/hide emit osk_visibility once per change', () async {
+        await mock.oskShow();
+        await mock.oskShow();
+        await settle();
+        expect(seen.whereType<OskVisibilityEvent>().map((e) => e.visible), [
+          true,
+        ]);
+        await mock.oskHide();
+        await settle();
+        expect(seen.whereType<OskVisibilityEvent>().map((e) => e.visible), [
+          true,
+          false,
+        ]);
+      });
+
+      test(
+        'while the OSK is up, input_nav goes only to hinteros-osk',
+        () async {
+          final osk = MockDaemon(clientName: 'hinteros-osk');
+          await osk.rpc('hello', _hello);
+          await osk.subscribeTo([EventName.inputNav]);
+          final oskSeen = <SessionEvent>[];
+          osk.events.listen(oskSeen.add);
+          // Each mock is one connection; both have the keyboard up.
+          await mock.oskShow();
+          await osk.oskShow();
+          osk.emitNav(NavAction.right);
+          mock.emitNav(NavAction.up);
+          await settle();
+          expect(oskSeen.whereType<InputNavEvent>().map((e) => e.action), [
+            NavAction.right,
+          ]);
+          expect(seen.whereType<InputNavEvent>(), isEmpty);
+        },
+      );
+
+      test('Home and a focus change hide the OSK', () async {
+        await mock.oskShow();
+        mock.pressHome();
+        expect(mock.oskVisible, isFalse);
+        await mock.oskShow();
+        await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin'));
+        expect(mock.oskVisible, isFalse);
+      });
+
+      test('keys.* log, untypeable characters and invalid keys', () async {
+        expect(
+          (await mock.keysType(const KeysTypeParams(text: 'aé'))).untypeable,
+          ['é'],
+        );
+        await mock.keysKey(
+          const KeysKeyParams(key: Key.l, modifiers: [Modifier.ctrl]),
+        );
+        await mock.keysAction(const KeysActionParams(action: KeyAction.enter));
+        expect(mock.keyLog, ['type:a', 'key:l+ctrl', 'action:enter']);
+        await expectLater(
+          mock.rpc('keys.key', {'key': 'nope'}),
+          throwsA(isA<ApiException>().having((e) => e.code, 'code', -32602)),
+        );
       });
 
       test('input_nav is only sent while the launcher has focus', () async {

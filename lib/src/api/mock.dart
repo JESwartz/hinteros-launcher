@@ -91,6 +91,7 @@ class MockDaemon extends DaemonConnection {
     List<App> apps = mockApps,
     List<Game>? games,
     this.serverApiVersion = apiVersion,
+    this.clientName = 'hinteros-launcher',
   }) : apps = List.of(apps),
        _games = List.of(games ?? mockGames());
 
@@ -106,6 +107,33 @@ class MockDaemon extends DaemonConnection {
 
   /// The API version this mock claims to serve.
   final String serverApiVersion;
+
+  /// The hello client name. `hinteros-osk` marks the on-screen keyboard's
+  /// connection, which alone gets `input_nav` while the keyboard is visible.
+  final String clientName;
+
+  /// Config: the on-screen keyboard exists (`osk.show` else osk_unavailable).
+  bool oskEnabled = true;
+
+  /// Config: a virtual keyboard exists (`keys.*` else keyboard_unavailable).
+  bool keyboardAvailable = true;
+
+  bool _oskVisible = false;
+
+  /// Whether the on-screen keyboard is shown (`osk.show`, `osk_visibility`).
+  bool get oskVisible => _oskVisible;
+
+  final List<String> _keyLog = [];
+
+  /// What `keys.*` was asked to send, in order: `type:<text>`,
+  /// `key:<key>[+mod...]`, `action:<name>`.
+  List<String> get keyLog => List.unmodifiable(_keyLog);
+
+  /// Everything `keys.type` typed (without the untypeable characters).
+  String get typedText => _keyLog
+      .where((c) => c.startsWith('type:'))
+      .map((c) => c.substring(5))
+      .join();
 
   static const serverPeer = Peer(
     name: 'hinteros-session-mock',
@@ -145,7 +173,7 @@ class MockDaemon extends DaemonConnection {
       'hello',
       HelloParams(
         apiVersion: apiVersion,
-        client: const Peer(name: 'hinteros-launcher', version: '0.1.0'),
+        client: Peer(name: clientName, version: '0.1.0'),
       ).toJson(),
     ).then((_) {
       if (_desired.isNotEmpty) {
@@ -229,6 +257,45 @@ class MockDaemon extends DaemonConnection {
           apps: List.of(_running),
           focused: _focused,
         ).toJson();
+      case 'osk.show':
+        if (!oskEnabled) {
+          throw const ApiException(
+            ApiErrorCode.oskUnavailable,
+            'the on-screen keyboard is disabled ([osk] enable = false)',
+          );
+        }
+        _setOsk(true);
+        return const OskShowResult(visible: true).toJson();
+      case 'osk.hide':
+        _setOsk(false);
+        return const OskHideResult(visible: false).toJson();
+      case 'keys.type':
+        return _keysType(KeysTypeParams.fromJson(params)).toJson();
+      case 'keys.key':
+        final k = KeysKeyParams.fromJson(params);
+        if (k.key == Key.unknown ||
+            (k.modifiers ?? []).contains(Modifier.unknown)) {
+          throw const ApiException(
+            ApiErrorCode.invalidParams,
+            'unknown key or modifier',
+          );
+        }
+        _needKeyboard();
+        _keyLog.add(
+          'key:${[k.key.value, ...?k.modifiers?.map((m) => m.value)].join('+')}',
+        );
+        return const KeysKeyResult().toJson();
+      case 'keys.action':
+        final a = KeysActionParams.fromJson(params).action;
+        if (a == KeyAction.unknown) {
+          throw const ApiException(
+            ApiErrorCode.invalidParams,
+            'unknown action',
+          );
+        }
+        _needKeyboard();
+        _keyLog.add('action:${a.value}');
+        return const KeysActionResult().toJson();
       case 'apps.focus':
         if (!params.containsKey('id')) {
           throw const ApiException(
@@ -247,6 +314,35 @@ class MockDaemon extends DaemonConnection {
         return const AppsFocusResult().toJson();
     }
     throw ApiException(ApiErrorCode.methodNotFound, 'unknown method $method');
+  }
+
+  void _setOsk(bool visible) {
+    if (_oskVisible == visible) return;
+    _oskVisible = visible;
+    emitRaw('osk_visibility', OskVisibilityEvent(visible: visible).toJson());
+  }
+
+  void _needKeyboard() {
+    if (!keyboardAvailable) {
+      throw const ApiException(
+        ApiErrorCode.keyboardUnavailable,
+        'no virtual keyboard (/dev/uinput)',
+      );
+    }
+  }
+
+  /// Like the daemon with a US uinput keyboard and no input method: printable
+  /// ASCII types, anything else is untypeable.
+  KeysTypeResult _keysType(KeysTypeParams p) {
+    _needKeyboard();
+    final ok = StringBuffer();
+    final bad = <String>[];
+    for (final r in p.text.runes) {
+      final c = String.fromCharCode(r);
+      (r >= 0x20 && r < 0x7f ? ok.write(c) : bad.add(c));
+    }
+    _keyLog.add('type:$ok');
+    return KeysTypeResult(untypeable: bad);
   }
 
   RunningApp _launch(AppsLaunchParams p) {
@@ -371,6 +467,7 @@ class MockDaemon extends DaemonConnection {
   void _setFocus(String? id) {
     if (_focused == id) return;
     _focused = id;
+    _setOsk(false);
     emitRaw('focus_changed', FocusChangedEvent(app: id).toJson());
   }
 
@@ -455,6 +552,7 @@ class MockDaemon extends DaemonConnection {
   /// The Home button, on demand: the launcher comes to the front, then the event.
   void pressHome() {
     _setFocus(null);
+    _setOsk(false);
     emitRaw('home_pressed');
   }
 
@@ -477,7 +575,8 @@ class MockDaemon extends DaemonConnection {
   /// A controller navigation intent. Like the daemon, only sent while the
   /// launcher has focus.
   void emitNav(NavAction action, [NavPhase phase = NavPhase.press]) {
-    if (_focused != null) return;
+    // While the keyboard is up, only its own connection gets input.
+    if (_oskVisible ? clientName != 'hinteros-osk' : _focused != null) return;
     emitRaw('input_nav', InputNavEvent(action: action, phase: phase).toJson());
   }
 
