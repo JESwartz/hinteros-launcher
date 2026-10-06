@@ -37,6 +37,7 @@
           ./pubspec.lock
           ./analysis_options.yaml
           ./lib
+          ./assets
           ./linux
           ./test
           ./schema
@@ -93,6 +94,26 @@
       packages.${system} = {
         inherit (pkgs) hinteros-launcher;
         default = pkgs.hinteros-launcher;
+
+        # Golden PNGs rendered inside the Nix sandbox, the same environment as
+        # the `test` check (which compares against the committed ones).
+        # `nix run .#update-goldens` copies them into test/golden/goldens.
+        goldens = pkgs.hinteros-launcher.overrideAttrs (old: {
+          pname = "hinteros-launcher-goldens";
+          doCheck = true;
+          checkPhase = ''
+            runHook preCheck
+            export HOME=$TMPDIR
+            flutter test --no-pub --update-goldens test/golden
+            mkdir -p $TMPDIR/goldens-out
+            cp test/golden/goldens/*.png $TMPDIR/goldens-out/
+            runHook postCheck
+          '';
+          postInstall = ''
+            mkdir -p $out/goldens
+            cp $TMPDIR/goldens-out/*.png $out/goldens/
+          '';
+        });
       };
 
       devShells.${system}.default = pkgs.mkShell {
@@ -176,7 +197,7 @@
       };
 
       # Copies the pinned daemon's schema into schema/ and regenerates the Dart API.
-      apps.${system}.update-schema = {
+      apps.x86_64-linux.update-schema = {
         type = "app";
         meta.description = "Re-vendor the daemon schema and regenerate the Dart API";
         program = pkgs.lib.getExe (
@@ -191,6 +212,29 @@
               install -m 644 ${hinteros-daemon}/schema/session-api.json schema/session-api.json
               dart tool/gen_api.dart
               echo "Re-vendored schema/session-api.json and regenerated lib/src/api/generated.dart; commit both."
+            '';
+          }
+        );
+      };
+
+      # Regenerates the golden screenshots in the sandbox and copies them here.
+      apps.x86_64-linux.update-goldens = {
+        type = "app";
+        meta.description = "Regenerate the golden test images (in the Nix sandbox, as the check sees them)";
+        program = pkgs.lib.getExe (
+          pkgs.writeShellApplication {
+            name = "update-goldens";
+            runtimeInputs = [
+              pkgs.nix
+              pkgs.coreutils
+            ];
+            text = ''
+              [ -f flake.nix ] || { echo "run from the launcher repo root" >&2; exit 1; }
+              out=$(nix build .#goldens --no-link --print-out-paths)
+              mkdir -p test/golden/goldens
+              rm -f test/golden/goldens/*.png
+              install -m 644 "$out"/goldens/*.png test/golden/goldens/
+              echo "Updated test/golden/goldens; review the images and commit them."
             '';
           }
         );
