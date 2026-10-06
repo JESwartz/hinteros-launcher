@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart';
 import 'package:hinteros_launcher/src/nav/nav_controller.dart';
 import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
+import 'package:hinteros_launcher/src/system/daemon_system.dart';
 import 'package:hinteros_launcher/src/system/mock_system.dart';
 import 'package:hinteros_launcher/src/system/models.dart';
 import 'package:hinteros_launcher/src/ui/app_selection.dart';
@@ -76,8 +77,9 @@ void main() {
         'settings_sys_updates_1080p',
         h,
         run: (t) async {
-          await enterSettingsEntry(t, 'updates');
-          await press(t, [kEnter, kDown]);
+          // The startup check found the update: Home shows the reminder
+          // banner, whose "See update" opens Settings > Updates.
+          await press(t, [kUp, kEnter]);
         },
       );
     });
@@ -103,6 +105,48 @@ void main() {
           await t.enterText(find.byType(TextField), 'secret');
           await t.pumpAndSettle();
         },
+      );
+    });
+    testWidgets('SSH needs an admin (the real daemon, no polkit agent)', (
+      t,
+    ) async {
+      final mock = MockDaemon(
+        apps: appsWithIcons(),
+        games: gamesWithArt(),
+        now: fixedNow,
+      );
+      await shot(
+        t,
+        'ssh_needs_admin_1080p',
+        Harness(mock: mock, realServices: daemonSystemServices(mock)),
+        run: (t) async {
+          await enterSettingsEntry(t, 'ssh');
+          await press(t, [kEnter]);
+        },
+      );
+    });
+    testWidgets('About on a developer build: DEV badge, host keys', (t) async {
+      final h = harness();
+      h.services.mockSystem.dev = true;
+      await shot(
+        t,
+        'about_dev_1080p',
+        h,
+        run: (t) => enterSettingsEntry(t, 'about'),
+      );
+    });
+    testWidgets('settings unavailable (the system service is down)', (t) async {
+      final mock = MockDaemon(
+        apps: appsWithIcons(),
+        games: gamesWithArt(),
+        now: fixedNow,
+      );
+      mock.system.unavailable = SystemUnavailableDataReason.down;
+      await shot(
+        t,
+        'settings_unavailable_1080p',
+        Harness(mock: mock, realServices: daemonSystemServices(mock)),
+        run: (t) => enterSettingsEntry(t, 'about'),
       );
     });
     testWidgets('Wi-Fi password dialog', (t) async {
@@ -163,6 +207,20 @@ void main() {
             percent: 40,
             detail: '212 of 530 MB',
           );
+          await t.pumpAndSettle();
+        },
+      );
+    });
+    testWidgets('done, session restart offered', (t) async {
+      final h = harness();
+      h.services.mockJobs.restartNext = true;
+      await shot(
+        t,
+        'progress_restart_session_1080p',
+        h,
+        run: (t) async {
+          await startUpdate(t, h);
+          h.services.mockJobs.finish(h.services.mockJobs.started.single.jobId);
           await t.pumpAndSettle();
         },
       );
