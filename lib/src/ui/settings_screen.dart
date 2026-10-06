@@ -4,6 +4,10 @@ import '../nav/nav_controller.dart';
 import '../nav/nav_model.dart';
 import '../settings/launcher_settings.dart';
 import '../theme/hinter_theme.dart';
+import '../system/repositories.dart';
+import 'system/common.dart';
+import 'system/hardware_sections.dart';
+import 'system/system_sections.dart';
 import 'focus_frame.dart';
 import 'nav_focusable.dart';
 
@@ -47,10 +51,25 @@ const _items = [
     'Typed text on keyboard',
   ),
   _Setting(
-    'system',
-    'System',
-    'Network, Bluetooth, audio, display, updates and rollback.',
+    'net',
+    'Network',
+    'Wi-Fi networks. Connect once; every profile uses it.',
   ),
+  _Setting('bt', 'Bluetooth', 'Pair controllers and headsets.'),
+  _Setting(
+    'display',
+    'Display',
+    'Resolution and refresh rate, and a check for overscan.',
+  ),
+  _Setting('audio', 'Audio', 'Where sound plays, and how loud.'),
+  _Setting('power', 'Power', 'Sleep, restart or shut down.'),
+  _Setting('ssh', 'Remote access', 'Log in from another computer over SSH.'),
+  _Setting(
+    'updates',
+    'Updates',
+    'Channel, updates, rollback and the versions on this box.',
+  ),
+  _Setting('about', 'About', 'Version and identity of this box.'),
 ];
 
 class _Option {
@@ -141,12 +160,14 @@ class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
     super.key,
     required this.settings,
+    required this.services,
     required this.list,
     required this.detail,
     required this.onEnterDetail,
   });
 
   final SettingsController settings;
+  final SystemServices services;
   final NavRegion list;
   final NavRegion detail;
 
@@ -208,6 +229,7 @@ class SettingsScreen extends StatelessWidget {
                   options: options,
                   region: detail,
                   settings: settings,
+                  services: services,
                 ),
               ),
             ],
@@ -278,12 +300,14 @@ class _Detail extends StatelessWidget {
     required this.options,
     required this.region,
     required this.settings,
+    required this.services,
   });
 
   final _Setting setting;
   final List<_Option> options;
   final NavRegion region;
   final SettingsController settings;
+  final SystemServices services;
 
   @override
   Widget build(BuildContext context) {
@@ -298,9 +322,14 @@ class _Detail extends StatelessWidget {
           const SizedBox(height: HinterTokens.s1),
           Text(setting.blurb, style: t.bodyDim),
           const SizedBox(height: HinterTokens.s4),
-          if (setting.id == 'system')
-            // M5: Wi-Fi, Bluetooth, audio, display, updates, rollback.
-            _Placeholder(t: t)
+          if (_systemIds.contains(setting.id))
+            KeyedSubtree(
+              key: ValueKey(setting.id),
+              child: _systemSection(
+                setting.id,
+                SectionEnv(services: services, region: region),
+              ),
+            )
           else ...[
             for (var i = 0; i < options.length; i++) ...[
               if (i > 0) const SizedBox(height: HinterTokens.s2),
@@ -432,22 +461,28 @@ class _Preview extends StatelessWidget {
   }
 }
 
-class _Placeholder extends StatelessWidget {
-  const _Placeholder({required this.t});
+/// The entries that show a system section instead of local options.
+const _systemIds = {
+  'net',
+  'bt',
+  'display',
+  'audio',
+  'power',
+  'ssh',
+  'updates',
+  'about',
+};
 
-  final HinterTokens t;
+Widget _systemSection(String id, SectionEnv env) => switch (id) {
+  'net' => NetworkSection(env),
+  'bt' => BluetoothSection(env),
+  'display' => DisplaySection(env),
+  'audio' => AudioSection(env),
+  'power' => PowerSection(env),
+  'ssh' => RemoteAccessSection(env),
+  'updates' => UpdatesSection(env),
+  _ => AboutSection(env),
+};
 
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: t.surface,
-        borderRadius: BorderRadius.circular(HinterTokens.radiusCard),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(HinterTokens.s4),
-        child: Text('System settings arrive with milestone M5.', style: t.body),
-      ),
-    );
-  }
-}
+/// Ids of the settings entries, in list order.
+List<String> get settingsEntryIds => [for (final i in _items) i.id];

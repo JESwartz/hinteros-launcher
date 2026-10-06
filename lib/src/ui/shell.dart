@@ -9,19 +9,27 @@ import '../fps_overlay.dart';
 import '../nav/nav_controller.dart';
 import '../nav/nav_model.dart';
 import '../settings/launcher_settings.dart';
+import '../system/models.dart';
+import '../system/repositories.dart';
+import '../updates/reminder.dart';
 import '../theme/hinter_theme.dart';
 import 'apps_screen.dart';
 import 'common.dart';
 import 'games_screen.dart';
 import 'home_screen.dart';
+import 'modal_host.dart';
 import 'overlays.dart';
 import 'settings_screen.dart';
+import 'store_screen.dart';
+import 'update_banner.dart';
+import 'pages.dart';
 import 'tab_bar.dart';
 
 enum Section {
   home('Home'),
   games('Games'),
   apps('Apps'),
+  store('Store'),
   // Phase 2: only shown with the server flag.
   server('Server'),
   settings('Settings');
@@ -52,6 +60,7 @@ class LauncherShell extends StatefulWidget {
     super.key,
     required this.data,
     required this.settings,
+    required this.services,
     this.now,
     this.showFps = false,
     this.showServer = false,
@@ -59,6 +68,7 @@ class LauncherShell extends StatefulWidget {
 
   final LauncherData data;
   final SettingsController settings;
+  final SystemServices services;
 
   /// Clock source; null means the real clock, ticking. A fixed function is
   /// for tests and goldens (no timer).
@@ -78,12 +88,21 @@ class _LauncherShellState extends State<LauncherShell> {
   final _home = NavRegion('home');
   final _games = NavRegion('games', rememberPerRow: false);
   final _apps = NavRegion('apps', rememberPerRow: false);
+  final _store = NavRegion('store-cats');
+  final _storeGrid = NavRegion('store-grid', rememberPerRow: false);
+  final _updateBanner = NavRegion('update-banner', rememberPerRow: false);
   final _settingsList = NavRegion('settings-list');
   final _settingsDetail = NavRegion('settings-detail');
   final _server = NavRegion('server');
   final _banner = NavRegion('banner', rememberPerRow: false);
   final _dialog = NavRegion('dialog', rememberPerRow: false);
+  late final _modals = ModalController(_nav);
   bool _bannerVisible = false;
+  bool _updateBannerVisible = false;
+  late final UpdateReminders _reminders = UpdateReminders(
+    widget.services.updates,
+    now: widget.now,
+  );
   bool _dialogOpen = false;
   NavRegion? _beforeDialog;
 
@@ -100,6 +119,7 @@ class _LauncherShellState extends State<LauncherShell> {
     Section.home => _home,
     Section.games => _games,
     Section.apps => _apps,
+    Section.store => _store,
     Section.settings => _settingsList,
     Section.server => _server,
   };
@@ -112,6 +132,9 @@ class _LauncherShellState extends State<LauncherShell> {
       _home,
       _games,
       _apps,
+      _store,
+      _storeGrid,
+      _updateBanner,
       _settingsList,
       _settingsDetail,
       _server,
@@ -122,6 +145,9 @@ class _LauncherShellState extends State<LauncherShell> {
     }
     _tabs.setRows([NavRow('tabs', _sections.length)]);
     _relink();
+    _store.neighbors[NavDir.right] = _storeGrid;
+    _storeGrid.neighbors[NavDir.left] = _store;
+    _storeGrid.backTarget = _store;
     _settingsList.neighbors[NavDir.right] = _settingsDetail;
     _settingsDetail.neighbors[NavDir.left] = _settingsList;
     _settingsDetail.backTarget = _settingsList;
@@ -140,7 +166,7 @@ class _LauncherShellState extends State<LauncherShell> {
       return true;
     };
     _nav.onOther = (a) {
-      if (_dialogOpen) return;
+      if (_dialogOpen || _modals.isOpen) return;
       if (a == NavAction.secondary && _bannerVisible) {
         unawaited(widget.data.focusSteam());
       }
@@ -153,37 +179,58 @@ class _LauncherShellState extends State<LauncherShell> {
     d.start();
     d.addListener(_onData);
     _subs.add(d.messages.listen(_toast));
-    _subs.add(d.homePressed.listen((_) => _goHome(reset: true)));
+    _subs.add(
+      d.homePressed.listen((_) {
+        // A modal (a security notice, a job in progress) is not dismissed by Home.
+        if (!_modals.isOpen) _goHome(reset: true);
+      }),
+    );
     _subs.add(d.inputNav.listen((e) => _onAction(e.action, e.phase)));
+    _subs.add(
+      widget.services.store.changes.listen((_) {
+        if (mounted) setState(() {});
+      }),
+    );
+    _reminders.addListener(_onReminders);
+    unawaited(_reminders.start().then((_) => _homeEntered()));
     if (widget.now == null) {
       _clock = Timer.periodic(const Duration(seconds: 20), (_) {
         if (mounted) setState(() => _time = DateTime.now());
       });
     }
     // First item focused, as soon as Home has items (the daemon answers later).
-    _nav.fallback = () => _contentOf(_section);
+    _nav.fallback = () => _modals.topRegion ?? _contentOf(_section);
     _home.addListener(_initialFocus);
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialFocus());
   }
 
-  /// Where up and down lead from and to the tab bar, which depends on the
-  /// banner being there.
+  /// Where up and down lead between the tab bar, the banners (Steam, update;
+  /// each only while visible) and the content.
   void _relink() {
     final content = _contentOf(_section);
-    final above = _bannerVisible ? _banner : _tabs;
+    final chain = <NavRegion>[
+      _tabs,
+      if (_bannerVisible) _banner,
+      if (_updateBannerVisible) _updateBanner,
+      content,
+    ];
+    for (var i = 0; i < chain.length - 1; i++) {
+      chain[i].neighbors[NavDir.down] = chain[i + 1];
+      chain[i + 1].neighbors[NavDir.up] = chain[i];
+    }
+    final above = chain[chain.length - 2];
     for (final r in [
       _home,
       _games,
       _apps,
+      _store,
+      _storeGrid,
       _settingsList,
       _settingsDetail,
       _server,
     ]) {
       r.neighbors[NavDir.up] = above;
     }
-    _banner.neighbors[NavDir.up] = _tabs;
-    _banner.neighbors[NavDir.down] = content;
-    _tabs.neighbors[NavDir.down] = above == _banner ? _banner : content;
   }
 
   /// The data layer changed: the banner and the close dialog follow it.
@@ -231,6 +278,8 @@ class _LauncherShellState extends State<LauncherShell> {
 
   @override
   void dispose() {
+    _reminders.removeListener(_onReminders);
+    _reminders.dispose();
     widget.data.removeListener(_onData);
     _clock?.cancel();
     for (final s in _subs) {
@@ -241,6 +290,9 @@ class _LauncherShellState extends State<LauncherShell> {
       _home,
       _games,
       _apps,
+      _store,
+      _storeGrid,
+      _updateBanner,
       _settingsList,
       _settingsDetail,
       _server,
@@ -252,10 +304,91 @@ class _LauncherShellState extends State<LauncherShell> {
     super.dispose();
   }
 
+  bool _noticeOpen = false;
+
+  /// The reminder banner shows on Home while the box is behind (not while the
+  /// full-screen notice is up).
+  void _syncUpdateBanner() {
+    final want = _section == Section.home && _reminders.behind && !_noticeOpen;
+    if (want == _updateBannerVisible) return;
+    final wasActive = _nav.active == _updateBanner;
+    _updateBannerVisible = want;
+    _updateBanner.setRows(want ? [const NavRow('update-banner', 1)] : const []);
+    _relink();
+    if (!want && wasActive && !_modals.isOpen) {
+      _nav.focusRegion(_contentOf(_section));
+    }
+  }
+
+  void _onReminders() {
+    if (!mounted) return;
+    setState(_syncUpdateBanner);
+  }
+
+  /// Home was entered (startup, a return from another tab, the Home button):
+  /// a security update that is due shows its full-screen notice.
+  void _homeEntered() {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _section != Section.home) return;
+      if (_modals.isOpen || _dialogOpen || _noticeOpen) return;
+      if (!_reminders.securityNoticeDue()) return;
+      unawaited(_showSecurityNotice());
+    });
+  }
+
+  Future<void> _showSecurityNotice() async {
+    final u = _reminders.update;
+    if (u == null) return;
+    setState(() {
+      _noticeOpen = true;
+      _syncUpdateBanner();
+    });
+    final choice = await _modals.show<SecurityChoice>(
+      (c, m) => SecurityNotice(modal: m, update: u),
+    );
+    if (!mounted) return;
+    setState(() {
+      _noticeOpen = false;
+      _syncUpdateBanner();
+    });
+    if (choice != SecurityChoice.updateNow) return;
+    try {
+      final h = await widget.services.updates.apply(u.rev);
+      if (!mounted) return;
+      await _modals.show<JobSnapshot>(
+        (c, m) =>
+            JobProgressScreen(modal: m, services: widget.services, job: h),
+      );
+    } on SystemException catch (e) {
+      _toast("Couldn't start the update: ${e.message}");
+    }
+  }
+
+  /// Banner "See update": Settings, on the Updates entry.
+  void _openUpdates() {
+    _setSection(Section.settings);
+    _settingsList.model.goTo(settingsEntryIds.indexOf('updates'), 0);
+    _settingsList.changed();
+    _tabs.changed();
+    _nav.focusRegion(_settingsList);
+  }
+
+  /// The Store tab (the Games tab's "install Steam" prompt leads here).
+  void _openStore() {
+    _setSection(Section.store);
+    _tabs.changed();
+    _nav.focusRegion(_store);
+  }
+
   /// Switches the visible section (tab focus, L1/R1, Back, Home).
   void _setSection(Section s) {
     if (s == _section) return;
-    setState(() => _section = s);
+    setState(() {
+      _section = s;
+      _syncUpdateBanner();
+    });
+    if (s == Section.home) _homeEntered();
     _relink();
     _tabs.model.goTo(0, _sections.indexOf(s));
   }
@@ -273,6 +406,7 @@ class _LauncherShellState extends State<LauncherShell> {
   /// forgets column memory; Back keeps where you were on Home.
   void _goHome({required bool reset}) {
     widget.data.cancelClose();
+    _homeEntered();
     // Home is not built while another tab shows, so its rows are as old as the
     // last visit; drop them so the reset lands on the first item of the first
     // non-empty row once Home builds again (its build refills the rows).
@@ -311,9 +445,19 @@ class _LauncherShellState extends State<LauncherShell> {
     return null;
   }
 
+  bool _typingInField() =>
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<EditableText>() !=
+      null;
+
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
     final action = _actionForKey(e.logicalKey);
     if (action == null) return KeyEventResult.ignored;
+    // Typing into a text field: letters are letters, not Y/X buttons.
+    if (_typingInField() &&
+        (action == NavAction.context || action == NavAction.secondary)) {
+      return KeyEventResult.ignored;
+    }
     _onAction(action, switch (e) {
       KeyDownEvent() => NavPhase.press,
       KeyRepeatEvent() => NavPhase.repeat,
@@ -331,10 +475,21 @@ class _LauncherShellState extends State<LauncherShell> {
 
   Widget _content() => switch (_section) {
     Section.home => HomeScreen(data: widget.data, region: _home),
-    Section.games => GamesScreen(data: widget.data, region: _games),
+    Section.games => GamesScreen(
+      data: widget.data,
+      region: _games,
+      steamMissing: !widget.services.store.installed.contains('steam'),
+      onOpenStore: _openStore,
+    ),
+    Section.store => StoreScreen(
+      services: widget.services,
+      cats: _store,
+      grid: _storeGrid,
+    ),
     Section.apps => AppsScreen(data: widget.data, region: _apps),
     Section.settings => SettingsScreen(
       settings: widget.settings,
+      services: widget.services,
       list: _settingsList,
       detail: _settingsDetail,
       onEnterDetail: () => _nav.focusRegion(_settingsDetail),
@@ -354,38 +509,47 @@ class _LauncherShellState extends State<LauncherShell> {
       onKeyEvent: _onKey,
       child: Scaffold(
         backgroundColor: t.background,
-        body: Stack(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TopBar(
-                  region: _tabs,
-                  labels: [for (final s in _sections) s.label],
-                  selected: _sections.indexOf(_section),
-                  onFocusTab: (i) => _setSection(_sections[i]),
-                  time: _time,
-                ),
-                if (_bannerVisible)
-                  SteamBanner(
-                    windows: widget.data.steamAttention,
-                    region: _banner,
-                    onOpen: () => unawaited(widget.data.focusSteam()),
+        body: ModalHost(
+          controller: _modals,
+          child: Stack(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TopBar(
+                    region: _tabs,
+                    labels: [for (final s in _sections) s.label],
+                    selected: _sections.indexOf(_section),
+                    onFocusTab: (i) => _setSection(_sections[i]),
+                    time: _time,
                   ),
-                Expanded(child: _content()),
-              ],
-            ),
-            if (_dialogOpen && widget.data.closeRequest != null)
-              CloseConfirm(
-                id: widget.data.closeRequest!.id,
-                name: widget.data.closeRequest!.name,
-                iconPath: widget.data.closeRequest!.iconPath,
-                region: _dialog,
-                onCancel: widget.data.cancelClose,
-                onConfirm: () => unawaited(widget.data.confirmClose()),
+                  if (_updateBannerVisible && _reminders.update != null)
+                    UpdateBanner(
+                      update: _reminders.update!,
+                      region: _updateBanner,
+                      onOpen: _openUpdates,
+                    ),
+                  if (_bannerVisible)
+                    SteamBanner(
+                      windows: widget.data.steamAttention,
+                      region: _banner,
+                      onOpen: () => unawaited(widget.data.focusSteam()),
+                    ),
+                  Expanded(child: _content()),
+                ],
               ),
-            if (widget.showFps) const FpsOverlay(),
-          ],
+              if (_dialogOpen && widget.data.closeRequest != null)
+                CloseConfirm(
+                  id: widget.data.closeRequest!.id,
+                  name: widget.data.closeRequest!.name,
+                  iconPath: widget.data.closeRequest!.iconPath,
+                  region: _dialog,
+                  onCancel: widget.data.cancelClose,
+                  onConfirm: () => unawaited(widget.data.confirmClose()),
+                ),
+              if (widget.showFps) const FpsOverlay(),
+            ],
+          ),
         ),
       ),
     );

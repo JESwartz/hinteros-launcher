@@ -7,6 +7,8 @@ import 'osk_main.dart';
 import 'src/api/api.dart';
 import 'src/app.dart';
 import 'src/settings/launcher_settings.dart';
+import 'src/system/mock_system.dart';
+import 'src/system/unavailable_system.dart';
 
 export 'src/app.dart' show LauncherApp;
 
@@ -43,6 +45,10 @@ Future<void> main(List<String> args) async {
   Widget app = LauncherApp(
     data: data,
     settings: settings,
+    // TODO(system-api): the real repositories replace the unavailable ones.
+    services: mock
+        ? MockSystemServices(autoRunJobs: true, iconDir: iconDir)
+        : unavailableSystemServices(),
     showFps: showFps,
     showServer: _flag(args, '--server', 'HINTEROS_SERVER'),
   );

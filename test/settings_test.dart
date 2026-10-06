@@ -89,6 +89,7 @@ void main() {
       LogicalKeyboardKey.arrowRight,
       LogicalKeyboardKey.arrowRight,
       LogicalKeyboardKey.arrowRight,
+      LogicalKeyboardKey.arrowRight,
       LogicalKeyboardKey.arrowDown,
       LogicalKeyboardKey.arrowRight,
       LogicalKeyboardKey.arrowDown,
@@ -113,6 +114,7 @@ void main() {
       // Settings > the fifth entry (on-screen keyboard text) > On
       for (final k in [
         LogicalKeyboardKey.arrowUp,
+        LogicalKeyboardKey.arrowRight,
         LogicalKeyboardKey.arrowRight,
         LogicalKeyboardKey.arrowRight,
         LogicalKeyboardKey.arrowRight,

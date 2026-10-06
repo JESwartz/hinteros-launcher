@@ -4,6 +4,7 @@ import 'api/api.dart';
 import 'data/apps_repository.dart';
 import 'data/games_repository.dart';
 import 'data/launcher_data.dart';
+import 'system/repositories.dart';
 import 'settings/launcher_settings.dart';
 import 'theme/hinter_theme.dart';
 import 'ui/shell.dart';
@@ -18,6 +19,7 @@ class LauncherApp extends StatelessWidget {
     super.key,
     required this.data,
     required this.settings,
+    required this.services,
     this.now,
     this.showFps = false,
     this.showServer = false,
@@ -25,6 +27,7 @@ class LauncherApp extends StatelessWidget {
 
   final LauncherData data;
   final SettingsController settings;
+  final SystemServices services;
   final DateTime Function()? now;
   final bool showFps;
   final bool showServer;
@@ -53,6 +56,7 @@ class LauncherApp extends StatelessWidget {
           home: LauncherShell(
             data: data,
             settings: settings,
+            services: services,
             now: now,
             showFps: showFps,
             showServer: showServer,

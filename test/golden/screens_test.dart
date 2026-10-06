@@ -47,7 +47,7 @@ void main() {
   const toGames = [up, right, down];
   // With something running, Home has a Continue row above Apps.
   const toAppsRunning = [up, up, right, right, down];
-  const toSettings = [up, right, right, right, down];
+  const toSettings = [up, right, right, right, right, down];
 
   testWidgets('home 1080p', (t) async {
     await shot(t, 'home_1080p', setup: running, keys: [right]);

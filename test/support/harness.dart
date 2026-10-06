@@ -8,6 +8,7 @@ import 'package:hinteros_launcher/src/app.dart';
 import 'package:hinteros_launcher/src/data/app_icons.dart';
 import 'package:hinteros_launcher/src/data/launcher_data.dart';
 import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
+import 'package:hinteros_launcher/src/system/mock_system.dart';
 
 /// Directory of the committed placeholder artwork (tool/gen_mock_art.dart).
 String artDir() => '${Directory.current.path}/test/fixtures/art';
@@ -42,14 +43,18 @@ class Harness {
   Harness({
     MockDaemon? mock,
     LauncherSettings settings = const LauncherSettings(),
+    MockSystemServices? services,
     this.showServer = false,
-  }) : mock = mock ?? MockDaemon(apps: appsWithIcons(), games: gamesWithArt()),
+  }) : services =
+           services ?? MockSystemServices(iconDir: iconDir(), now: fixedNow),
+       mock = mock ?? MockDaemon(apps: appsWithIcons(), games: gamesWithArt()),
        storage = MemorySettingsStorage(settings) {
     this.settings = SettingsController(storage, settings);
     data = buildData(this.mock);
   }
 
   final MockDaemon mock;
+  final MockSystemServices services;
   final MemorySettingsStorage storage;
   late final SettingsController settings;
   final bool showServer;
@@ -58,6 +63,7 @@ class Harness {
   Widget get app => LauncherApp(
     data: data,
     settings: settings,
+    services: services,
     now: fixedNow,
     showServer: showServer,
   );

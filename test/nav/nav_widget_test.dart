@@ -59,8 +59,7 @@ void main() {
     await keys(t, [up]);
     expect(focusLabel(), 'tabs/tabs:0');
     await keys(t, [left]);
-    expect(focusLabel(), 'tabs/tabs:3', reason: 'wraps to Settings');
-    expect(find.text('System'), findsOneWidget);
+    expect(focusLabel(), 'tabs/tabs:4', reason: 'wraps to Settings');
     await keys(t, [right]);
     expect(focusLabel(), 'tabs/tabs:0');
     await keys(t, [down]);
@@ -118,7 +117,7 @@ void main() {
     t,
   ) async {
     final h = await start(t);
-    await keys(t, [up, right, right, right, down]);
+    await keys(t, [up, right, right, right, right, down]);
     expect(focusLabel(), 'settings-list/text:0');
     await keys(t, [right]);
     expect(focusLabel(), 'settings-detail/o0:0');
@@ -132,24 +131,20 @@ void main() {
     expect(focusLabel(), startsWith('home/'));
   });
 
-  testWidgets('system placeholder has no detail to enter', (t) async {
+  testWidgets('settings: a system section opens, Back returns to the list', (
+    t,
+  ) async {
     await start(t);
-    await keys(t, [
-      up,
-      right,
-      right,
-      right,
-      down,
-      down,
-      down,
-      down,
-      down,
-      down,
-    ]);
-    expect(focusLabel(), 'settings-list/system:0');
-    await keys(t, [right, enter]);
-    expect(focusLabel(), 'settings-list/system:0');
-    expect(find.textContaining('M5'), findsOneWidget);
+    await keys(t, [up, right, right, right, right, down]);
+    await keys(
+      t,
+      List.filled(5, down),
+    ); // text, contrast, focus, motion, osk, then Network
+    expect(focusLabel(), 'settings-list/net:0');
+    await keys(t, [right]);
+    expect(focusLabel(), 'settings-detail/wifi:0');
+    await keys(t, [escape]);
+    expect(focusLabel(), 'settings-list/net:0');
   });
 
   testWidgets('page right/left switch tabs from anywhere', (t) async {

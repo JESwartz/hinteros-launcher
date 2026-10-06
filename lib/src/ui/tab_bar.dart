@@ -27,6 +27,8 @@ class TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
+    // Five tabs plus the clock: at large text sizes everything gets tighter.
+    final big = MediaQuery.textScalerOf(context).scale(1) > 1.1;
     final hh = time.hour.toString().padLeft(2, '0');
     final mm = time.minute.toString().padLeft(2, '0');
     return Padding(
@@ -39,7 +41,8 @@ class TopBar extends StatelessWidget {
       child: Row(
         children: [
           // The wordmark makes way for the tabs at large text sizes.
-          if (MediaQuery.textScalerOf(context).scale(1) <= 1.3) ...[
+          if (MediaQuery.textScalerOf(context).scale(1) <= 1.0 &&
+              labels.length <= 5) ...[
             Text(
               'HinterOS',
               style: t.label.copyWith(color: t.accent, letterSpacing: 1),
@@ -47,7 +50,7 @@ class TopBar extends StatelessWidget {
             const SizedBox(width: HinterTokens.s6),
           ],
           for (var i = 0; i < labels.length; i++) ...[
-            if (i > 0) const SizedBox(width: HinterTokens.s2),
+            if (i > 0) SizedBox(width: big ? HinterTokens.s1 : HinterTokens.s2),
             NavFocusable(
               region: region,
               rowKey: 'tabs',
@@ -58,11 +61,17 @@ class TopBar extends StatelessWidget {
                 label: labels[i],
                 selected: i == selected,
                 focused: focused,
+                compact: big,
               ),
             ),
           ],
           const Spacer(),
-          Text('$hh:$mm', style: t.title.copyWith(fontWeight: FontWeight.w400)),
+          Text(
+            '$hh:$mm',
+            style: (big ? t.label : t.title).copyWith(
+              fontWeight: FontWeight.w400,
+            ),
+          ),
         ],
       ),
     );
@@ -74,11 +83,13 @@ class _Tab extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.focused,
+    this.compact = false,
   });
 
   final String label;
   final bool selected;
   final bool focused;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -90,8 +101,8 @@ class _Tab extends StatelessWidget {
       // The bar style would collide with the selected-tab bar.
       style: t.focusStyle == FocusStyle.bar ? FocusStyle.ring : null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: HinterTokens.s3,
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? HinterTokens.s2 : HinterTokens.s3,
           vertical: HinterTokens.s1,
         ),
         child: Column(
@@ -99,7 +110,7 @@ class _Tab extends StatelessWidget {
           children: [
             Text(
               label,
-              style: t.label.copyWith(
+              style: (compact ? t.body : t.label).copyWith(
                 color: selected ? t.text : t.textDim,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
               ),
