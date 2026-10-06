@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart';
 import 'package:hinteros_launcher/src/data/apps_repository.dart';
 import 'package:hinteros_launcher/src/data/games_repository.dart';
+import 'package:hinteros_launcher/src/osk/osk_backend.dart';
 
 final _bin = Platform.environment['HINTEROS_SESSION_BIN'];
 
@@ -25,6 +26,7 @@ String? _skip({bool needsSteam = false}) => _bin == null
 void main() {
   late Directory dir;
   late String sock;
+  late File keyLog;
   late Process daemon;
   final log = StringBuffer();
   DaemonClient? client;
@@ -32,10 +34,15 @@ void main() {
   setUp(() async {
     dir = Directory.systemTemp.createTempSync('session_it');
     sock = '${dir.path}/run/session.sock';
+    keyLog = File('${dir.path}/keys.log');
     // A dev-desktop session: no gamescope, no InputPlumber, and two configured
     // apps that exit by themselves (`sleep` keeps running until the test ends).
     final config = File('${dir.path}/session.toml')
       ..writeAsStringSync('''
+[osk]
+# No keyboard process to start; the daemon still tracks its visibility.
+command = []
+
 [[apps]]
 id = "sleeper"
 name = "Sleeper"
@@ -53,6 +60,8 @@ command = ["sh", "-c", "exit 3"]
       config.path,
       '--no-gamescope',
       '--no-inputplumber',
+      '--fake-keyboard',
+      keyLog.path,
       if (_steamHome != null) ...[
         '--steam-dir',
         '$_steamHome/.local/share/Steam',
@@ -85,7 +94,7 @@ command = ["sh", "-c", "exit 3"]
   });
 
   test(
-    'handshake at 0.3, ping, apps.list and home_pressed (SIGUSR1)',
+    'handshake at 0.4, ping, apps.list and home_pressed (SIGUSR1)',
     () async {
       final c = client = DaemonClient(socketPath: sock);
       await c.subscribeTo([EventName.homePressed]);
@@ -255,4 +264,160 @@ command = ["sh", "-c", "exit 3"]
     },
     skip: _skip(),
   );
+
+  group('on-screen keyboard and keys (API 0.4)', () {
+    // A second daemon that the group tears down itself (no fake keyboard, so
+    // keys.* answers keyboard_unavailable; or the keyboard disabled).
+    Future<String> extraDaemon(List<String> args, {String config = ''}) async {
+      final cfg = File('${dir.path}/extra.toml')..writeAsStringSync(config);
+      final s = '${dir.path}/extra/session.sock';
+      final p = await Process.start(_bin!, [
+        '--socket',
+        s,
+        '--config',
+        cfg.path,
+        '--no-gamescope',
+        '--no-inputplumber',
+        ...args,
+      ]);
+      addTearDown(() async {
+        p.kill(ProcessSignal.sigterm);
+        await p.exitCode.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            p.kill(ProcessSignal.sigkill);
+            return -1;
+          },
+        );
+      });
+      for (final st in [p.stdout, p.stderr]) {
+        st.drain<void>();
+      }
+      final deadline = DateTime.now().add(const Duration(seconds: 20));
+      while (FileSystemEntity.typeSync(s) == FileSystemEntityType.notFound) {
+        if (DateTime.now().isAfter(deadline)) fail('extra daemon did not bind');
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      return s;
+    }
+
+    Future<String> keyLogIs(String expected) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      var got = '';
+      while (DateTime.now().isBefore(deadline)) {
+        got = keyLog.existsSync() ? keyLog.readAsStringSync() : '';
+        if (got == expected) return got;
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      return got;
+    }
+
+    test(
+      'hinteros-osk: show and hide reach every client as osk_visibility',
+      () async {
+        final osk = DaemonOskBackend(
+          DaemonClient(socketPath: sock, clientInfo: DaemonOskBackend.oskPeer),
+        );
+        addTearDown(osk.dispose);
+        final launcher = client = DaemonClient(socketPath: sock);
+        await launcher.subscribeTo([EventName.oskVisibility]);
+        await launcher.waitConnected();
+        await osk.connection.waitConnected();
+        expect(
+          (osk.connection as DaemonClient).clientInfo.name,
+          'hinteros-osk',
+        );
+
+        final oskSeen = <bool>[];
+        osk.visibility.listen(oskSeen.add);
+        final launcherSeen = <bool>[];
+        launcher.events
+            .where((e) => e is OskVisibilityEvent)
+            .listen((e) => launcherSeen.add((e as OskVisibilityEvent).visible));
+        // Subscriptions are acknowledged before the first request returns.
+        await launcher.ping(const PingParams(nonce: 'sync'));
+
+        expect((await launcher.oskShow()).visible, isTrue);
+        await osk.hide();
+        const wait = Duration(milliseconds: 100);
+        for (
+          var i = 0;
+          i < 100 && (oskSeen.length < 2 || launcherSeen.length < 2);
+          i++
+        ) {
+          await Future<void>.delayed(wait);
+        }
+        expect(oskSeen, [true, false]);
+        expect(launcherSeen, [true, false]);
+      },
+      skip: _skip(),
+    );
+
+    test('keys.type, keys.key and keys.action write key events to the fake keyboard', () async {
+      final osk = DaemonOskBackend(
+        DaemonClient(socketPath: sock, clientInfo: DaemonOskBackend.oskPeer),
+      );
+      addTearDown(osk.dispose);
+      await osk.connection.waitConnected();
+
+      expect(await osk.type('a:'), isEmpty);
+      await osk.key(Key.l, modifiers: [Modifier.ctrl]);
+      await osk.action(OskAction.backspace);
+      // a, then shift+; (colon), ctrl+l, backspace: Linux key codes.
+      expect(
+        await keyLogIs(
+          'down 30\nup 30\ndown 42\ndown 39\nup 39\nup 42\n'
+          'down 29\ndown 38\nup 38\nup 29\ndown 14\nup 14\n',
+        ),
+        'down 30\nup 30\ndown 42\ndown 39\nup 39\nup 42\n'
+        'down 29\ndown 38\nup 38\nup 29\ndown 14\nup 14\n',
+      );
+    }, skip: _skip());
+
+    test('keys.type of non-US text reports untypeable characters', () async {
+      // No gamescope input method here, so the é cannot be typed; the rest is.
+      final c = client = DaemonClient(socketPath: sock);
+      await c.waitConnected();
+      final r = await c.keysType(const KeysTypeParams(text: 'aé'));
+      expect(r.untypeable, ['é']);
+      expect(await keyLogIs('down 30\nup 30\n'), 'down 30\nup 30\n');
+    }, skip: _skip());
+
+    test('without a virtual keyboard keys.* is keyboard_unavailable', () async {
+      final s = await extraDaemon(['--no-uinput']);
+      final backend = DaemonOskBackend(
+        DaemonClient(socketPath: s, clientInfo: DaemonOskBackend.oskPeer),
+      );
+      addTearDown(backend.dispose);
+      await backend.connection.waitConnected();
+      Matcher unavailable() => throwsA(
+        isA<ApiException>().having(
+          (e) => e.code,
+          'code',
+          ApiErrorCode.keyboardUnavailable,
+        ),
+      );
+      await expectLater(backend.type('x'), unavailable());
+      await expectLater(backend.action(OskAction.tab), unavailable());
+      await expectLater(backend.key(Key.escape), unavailable());
+    }, skip: _skip());
+
+    test('osk.show is osk_unavailable when the keyboard is disabled', () async {
+      final s = await extraDaemon([
+        '--no-uinput',
+      ], config: '[osk]\nenable = false\n');
+      final c = client = DaemonClient(socketPath: s);
+      await c.waitConnected();
+      await expectLater(
+        c.oskShow(),
+        throwsA(
+          isA<ApiException>().having(
+            (e) => e.code,
+            'code',
+            ApiErrorCode.oskUnavailable,
+          ),
+        ),
+      );
+    }, skip: _skip());
+  });
 }

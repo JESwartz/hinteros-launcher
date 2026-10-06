@@ -29,7 +29,12 @@ Future<void> runOsk(List<String> args) async {
   if (mock) {
     backend = MockOskBackend()..onCall = (c) => debugPrint('osk: $c');
   } else {
-    backend = DaemonOskBackend(DaemonClient(socketPath: defaultSocketPath()));
+    backend = DaemonOskBackend(
+      DaemonClient(
+        socketPath: defaultSocketPath(),
+        clientInfo: DaemonOskBackend.oskPeer,
+      ),
+    );
   }
   final storage = FileSettingsStorage.xdg();
   final settings = ValueNotifier(await storage.load());

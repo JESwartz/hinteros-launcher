@@ -10,16 +10,15 @@ enum OskAction {
 
   const OskAction(this.wire);
 
-  /// The value of `keys.action {action}`.
-  // TODO(0.4): confirm the wire names against the schema.
+  /// The value of `keys.action {action}` (a `KeyAction` of the schema).
   final String wire;
 }
 
 /// What the on-screen keyboard needs from the daemon (API 0.4: `osk.hide`,
 /// `keys.type`, `keys.key`, `keys.action`, the `osk_visibility` event, and
-/// `input_nav` while the OSK is up). The UI only ever sees this interface;
-/// wiring 0.4 later is [DaemonOskBackend] filling in its TODO(0.4) spots, and
-/// [MockOskBackend] stands in until then (and in tests).
+/// `input_nav` while the OSK is up). The UI only ever sees this interface:
+/// [DaemonOskBackend] is the real one, [MockOskBackend] stands in for `--mock`
+/// and tests.
 abstract class OskBackend {
   /// `input_nav` events. The daemon routes them to the OSK client only while
   /// the OSK is visible.
@@ -30,15 +29,16 @@ abstract class OskBackend {
   Stream<bool> get visibility;
 
   /// `keys.type {text}`: characters (the daemon picks uinput or the
-  /// gamescope input method per character).
-  Future<void> type(String text);
+  /// gamescope input method per character). Returns the characters it could
+  /// not type (`untypeable`), usually none.
+  Future<List<String>> type(String text);
 
   /// `keys.action {action}`: backspace, enter, tab.
   Future<void> action(OskAction action);
 
   /// `keys.key {key, modifiers}`: a named key with modifiers (shortcuts).
   /// Not used by the current layout; part of the interface for later pages.
-  Future<void> key(String key, {List<String> modifiers = const []});
+  Future<void> key(Key key, {List<Modifier> modifiers = const []});
 
   /// `osk.hide`: the Done key.
   Future<void> hide();
@@ -58,6 +58,9 @@ class MockOskBackend implements OskBackend {
 
   /// When set, calls throw it (to test the error display).
   Object? failWith;
+
+  /// Characters `keys.type` reports as untypeable (the mock's US keyboard).
+  Set<String> untypeable = {};
 
   /// Called for every recorded call (the dev window prints them).
   void Function(String call)? onCall;
@@ -88,15 +91,21 @@ class MockOskBackend implements OskBackend {
   Stream<bool> get visibility => _visibility.stream;
 
   @override
-  Future<void> type(String text) async => _record('type:$text');
+  Future<List<String>> type(String text) async {
+    _record('type:$text');
+    return [
+      for (final c in text.runes.map(String.fromCharCode))
+        if (untypeable.contains(c)) c,
+    ];
+  }
 
   @override
   Future<void> action(OskAction action) async =>
       _record('action:${action.wire}');
 
   @override
-  Future<void> key(String key, {List<String> modifiers = const []}) async =>
-      _record('key:${[key, ...modifiers].join('+')}');
+  Future<void> key(Key key, {List<Modifier> modifiers = const []}) async =>
+      _record('key:${[key.value, ...modifiers.map((m) => m.value)].join('+')}');
 
   @override
   Future<void> hide() async {
@@ -111,14 +120,21 @@ class MockOskBackend implements OskBackend {
   }
 }
 
-/// The real thing over the session socket. API 0.3 has `input_nav` (only while
-/// the launcher has focus) and nothing else, so the calls are not wired yet.
+/// The real thing over the session socket. It connects as the client named
+/// `hinteros-osk` (build the [DaemonClient] with [oskPeer]): while the
+/// keyboard is visible the daemon sends `input_nav` to this connection only.
 class DaemonOskBackend implements OskBackend {
   DaemonOskBackend(this.connection) {
     connection.start();
-    // TODO(0.4): also subscribe to EventName.oskVisibility.
-    connection.subscribeTo([EventName.inputNav]);
+    unawaited(
+      connection
+          .subscribeTo([EventName.inputNav, EventName.oskVisibility])
+          .catchError((_) {}),
+    );
   }
+
+  /// The hello client name the daemon recognises as the on-screen keyboard.
+  static const oskPeer = Peer(name: 'hinteros-osk', version: '0.1.0');
 
   final DaemonConnection connection;
 
@@ -126,29 +142,33 @@ class DaemonOskBackend implements OskBackend {
   Stream<InputNavEvent> get nav =>
       connection.events.where((e) => e is InputNavEvent).cast();
 
-  // TODO(0.4): map OskVisibilityEvent to this stream.
   @override
-  Stream<bool> get visibility => const Stream.empty();
+  Stream<bool> get visibility => connection.events
+      .where((e) => e is OskVisibilityEvent)
+      .map((e) => (e as OskVisibilityEvent).visible);
 
-  static UnsupportedError _notYet(String what) =>
-      UnsupportedError('$what needs session API 0.4');
-
-  // TODO(0.4): connection.keysType(KeysTypeParams(text: text)).
   @override
-  Future<void> type(String text) => Future.error(_notYet('keys.type'));
+  Future<List<String>> type(String text) async =>
+      (await connection.keysType(KeysTypeParams(text: text))).untypeable;
 
-  // TODO(0.4): connection.keysAction(KeysActionParams(action: ...)).
   @override
-  Future<void> action(OskAction action) => Future.error(_notYet('keys.action'));
+  Future<void> action(OskAction action) async {
+    await connection.keysAction(
+      KeysActionParams(action: KeyAction.fromJson(action.wire)),
+    );
+  }
 
-  // TODO(0.4): connection.keysKey(KeysKeyParams(key: key, modifiers: ...)).
   @override
-  Future<void> key(String key, {List<String> modifiers = const []}) =>
-      Future.error(_notYet('keys.key'));
+  Future<void> key(Key key, {List<Modifier> modifiers = const []}) async {
+    await connection.keysKey(
+      KeysKeyParams(key: key, modifiers: modifiers.isEmpty ? null : modifiers),
+    );
+  }
 
-  // TODO(0.4): connection.oskHide().
   @override
-  Future<void> hide() => Future.error(_notYet('osk.hide'));
+  Future<void> hide() async {
+    await connection.oskHide();
+  }
 
   @override
   Future<void> dispose() => connection.close();

@@ -134,7 +134,18 @@ void main() {
 
   testWidgets('system placeholder has no detail to enter', (t) async {
     await start(t);
-    await keys(t, [up, right, right, right, down, down, down, down, down]);
+    await keys(t, [
+      up,
+      right,
+      right,
+      right,
+      down,
+      down,
+      down,
+      down,
+      down,
+      down,
+    ]);
     expect(focusLabel(), 'settings-list/system:0');
     await keys(t, [right, enter]);
     expect(focusLabel(), 'settings-list/system:0');
@@ -161,6 +172,33 @@ void main() {
     h.mock.emitNav(NavAction.right);
     await t.pumpAndSettle();
     expect(focusLabel(), 'tabs/tabs:1');
+  });
+
+  testWidgets('input_nav is ignored while the on-screen keyboard is visible', (
+    t,
+  ) async {
+    setView(t);
+    final h = Harness();
+    await h.pump(t);
+    final before = focusLabel();
+    await h.mock.oskShow();
+    await t.pumpAndSettle();
+    // The daemon would not send this to the launcher; if one arrived anyway
+    // (a race), it must not move the launcher's focus behind the keyboard.
+    h.mock.emitRaw(
+      'input_nav',
+      const InputNavEvent(
+        action: NavAction.right,
+        phase: NavPhase.press,
+      ).toJson(),
+    );
+    await t.pumpAndSettle();
+    expect(focusLabel(), before);
+    await h.mock.oskHide();
+    await t.pumpAndSettle();
+    h.mock.emitNav(NavAction.right);
+    await t.pumpAndSettle();
+    expect(focusLabel(), isNot(before));
   });
 
   testWidgets('reduce motion: no scale, same navigation', (t) async {

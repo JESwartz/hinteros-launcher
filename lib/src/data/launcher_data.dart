@@ -71,6 +71,10 @@ class LauncherData extends ChangeNotifier {
 
   StreamSubscription<ConnectionStatus>? _statusSub;
   StreamSubscription<SessionEvent>? _eventSub;
+
+  /// The on-screen keyboard is up (`osk_visibility`). The daemon then sends
+  /// `input_nav` only to the keyboard, so this is a second line of defence.
+  bool oskVisible = false;
   bool _disposed = false;
 
   bool _started = false;
@@ -92,6 +96,7 @@ class LauncherData extends ChangeNotifier {
             EventName.inputNav,
             EventName.gamesChanged,
             EventName.steamAttention,
+            EventName.oskVisibility,
           ])
           .catchError((_) {}),
     );
@@ -102,6 +107,7 @@ class LauncherData extends ChangeNotifier {
     if (_disposed) return;
     final was = status is Connected;
     status = s;
+    if (s is! Connected) oskVisible = false;
     notifyListeners();
     if (s is Connected && !was) _refreshAll();
   }
@@ -110,8 +116,10 @@ class LauncherData extends ChangeNotifier {
     switch (e) {
       case HomePressedEvent():
         _homePressed.add(null);
+      case OskVisibilityEvent():
+        oskVisible = e.visible;
       case InputNavEvent():
-        _nav.add(e);
+        if (!oskVisible) _nav.add(e);
       case AppStartedEvent() || AppExitedEvent() || FocusChangedEvent():
         unawaited(refreshRunning());
       case GamesChangedEvent():
