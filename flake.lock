@@ -1,5 +1,20 @@
 {
   "nodes": {
+    "crane": {
+      "locked": {
+        "lastModified": 1790899423,
+        "narHash": "sha256-THGtz65UGJU+sonZidRboyCMk+9DclpMF7pwL4uDV4M=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "47b6b27ed9a3a9181415e4367d0c30ab2a0e0250",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ipetkov",
+        "repo": "crane",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -37,6 +52,30 @@
         "type": "github"
       }
     },
+    "hinteros-daemon": {
+      "inputs": {
+        "crane": "crane",
+        "git-hooks": [
+          "git-hooks"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791279850,
+        "narHash": "sha256-pXRMWPfCazcfEPTygp3eZkJ6anoLKXaDv3DZR50pRrI=",
+        "ref": "refs/heads/main",
+        "rev": "ff06c251981391a66c6603c232ea26ca2008c90e",
+        "revCount": 7,
+        "type": "git",
+        "url": "https://justsomeshed.com/JSwartz/HinterOS/hinteros-daemon.git"
+      },
+      "original": {
+        "type": "git",
+        "url": "https://justsomeshed.com/JSwartz/HinterOS/hinteros-daemon.git"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1791179034,
@@ -56,6 +95,7 @@
     "root": {
       "inputs": {
         "git-hooks": "git-hooks",
+        "hinteros-daemon": "hinteros-daemon",
         "nixpkgs": "nixpkgs"
       }
     }
