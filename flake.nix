@@ -178,6 +178,7 @@
       # Copies the pinned daemon's schema into schema/ and regenerates the Dart API.
       apps.${system}.update-schema = {
         type = "app";
+        meta.description = "Re-vendor the daemon schema and regenerate the Dart API";
         program = pkgs.lib.getExe (
           pkgs.writeShellApplication {
             name = "update-schema";
