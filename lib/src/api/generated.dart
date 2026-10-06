@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.4).
+// Source: schema/session-api.json (session API 0.5).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.4';
+const apiVersion = '0.5';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -38,6 +38,7 @@ const apiEventNames = <String>[
   'focus_changed',
   'input_nav',
   'games_changed',
+  'apps_changed',
   'steam_attention',
   'osk_visibility',
 ];
@@ -143,6 +144,7 @@ enum EventName {
   focusChanged('focus_changed'),
   inputNav('input_nav'),
   gamesChanged('games_changed'),
+  appsChanged('apps_changed'),
   steamAttention('steam_attention'),
   oskVisibility('osk_visibility'),
 
@@ -340,7 +342,7 @@ class App {
   /// How the app is launched. Clients must treat unknown values like 'native'.
   final AppKind kind;
 
-  /// Absolute path to an icon file, if any.
+  /// Absolute path to a local icon image file (PNG, SVG, ICO, JPEG, WebP), if any. Resolved by the daemon at runtime: an explicit path from the config, else the icon the app's .desktop file names, found in the installed icon themes, else (web apps) a cached download of the site's own icon. It may appear later (see apps_changed) or change. Absent: draw a placeholder, e.g. the first letter of the name.
   final String? icon;
 
   factory App.fromJson(Map<String, dynamic> json) => App(
@@ -1727,6 +1729,33 @@ final class GamesChangedEvent extends SessionEvent {
   String toString() => 'GamesChangedEvent(${jsonEncode(toJson())})';
 }
 
+/// An app's resolved icon became available or changed (for example a web app's icon finished downloading). Call apps.list again.
+final class AppsChangedEvent extends SessionEvent {
+  const AppsChangedEvent();
+
+  factory AppsChangedEvent.fromJson(Map<String, dynamic> json) =>
+      AppsChangedEvent();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  String get name => 'apps_changed';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppsChangedEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppsChangedEvent(${jsonEncode(toJson())})';
+}
+
 /// The list of Steam windows waiting to be seen changed (see steam.attention). An empty list means nothing needs attention any more.
 final class SteamAttentionEvent extends SessionEvent {
   const SteamAttentionEvent({required this.windows});
@@ -1967,6 +1996,7 @@ sealed class SessionEvent {
     'focus_changed' => FocusChangedEvent.fromJson(params),
     'input_nav' => InputNavEvent.fromJson(params),
     'games_changed' => GamesChangedEvent.fromJson(params),
+    'apps_changed' => AppsChangedEvent.fromJson(params),
     'steam_attention' => SteamAttentionEvent.fromJson(params),
     'osk_visibility' => OskVisibilityEvent.fromJson(params),
     _ => UnknownSessionEvent(name, params),
