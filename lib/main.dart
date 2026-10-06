@@ -5,8 +5,6 @@ import 'package:flutter/services.dart';
 
 import 'src/api/api.dart';
 import 'src/app.dart';
-import 'src/data/apps_repository.dart';
-import 'src/data/games_repository.dart';
 import 'src/settings/launcher_settings.dart';
 
 export 'src/app.dart' show LauncherApp;
@@ -17,10 +15,12 @@ bool _flag(List<String> args, String flag, String env) =>
 /// Entry point.
 ///
 /// `--fps` (or `HINTEROS_FPS=1`) shows a frame-rate overlay. `--mock` (or
-/// `HINTEROS_MOCK=1`) uses an in-process fake daemon (and fake games) instead
-/// of the session socket; the Home key then stands in for the controller's
-/// Home button, A/D/W/S, Space and Q for the D-pad, accept and back (as
-/// `input_nav` events), and F2 quits the last app that was started.
+/// `HINTEROS_MOCK=1`) uses an in-process fake daemon (with a fake Steam
+/// library) instead of the session socket; the Home key then stands in for
+/// the controller's Home button, A/D/W/S, Space, Q and E for the D-pad,
+/// accept, back and context (as `input_nav` events), F2 quits the last app
+/// that was started, F3/F4 make Steam ask for attention / stop, F5 finishes
+/// or restarts a game update.
 /// `--server` (or `HINTEROS_SERVER=1`) shows the phase 2 Server tab.
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,13 +30,7 @@ Future<void> main(List<String> args) async {
       ? MockDaemon()
       : DaemonClient(socketPath: defaultSocketPath());
   final settings = await SettingsController.load(FileSettingsStorage.xdg());
-  final data = buildData(
-    connection,
-    // TODO(0.3): the real games.list repository replaces both.
-    mock
-        ? MockGamesRepository()
-        : AppsBackedGamesRepository(AppsRepository(connection)),
-  );
+  final data = buildData(connection);
   Widget app = LauncherApp(
     data: data,
     settings: settings,
@@ -55,6 +49,7 @@ final _devPad = [
   (LogicalKeyboardKey.keyS, NavAction.down),
   (LogicalKeyboardKey.space, NavAction.accept),
   (LogicalKeyboardKey.keyQ, NavAction.back),
+  (LogicalKeyboardKey.keyE, NavAction.context),
 ];
 
 class _DevKeys extends StatelessWidget {
@@ -80,6 +75,14 @@ class _DevKeys extends StatelessWidget {
           final r = c.running;
           if (r.isNotEmpty) c.simulateExit(r.last.id);
         },
+        // Steam pops up a dialog while something else has focus / it goes.
+        const SingleActivator(LogicalKeyboardKey.f3): () => c.setSteamAttention(
+          const [SteamWindow(window: 6291459, title: 'Steam Guard', pid: 2412)],
+        ),
+        const SingleActivator(LogicalKeyboardKey.f4): () =>
+            c.setSteamAttention(const []),
+        // A game update finishes (or starts again): games_changed.
+        const SingleActivator(LogicalKeyboardKey.f5): c.toggleFirstUpdate,
       },
       child: Focus(canRequestFocus: false, child: child),
     );

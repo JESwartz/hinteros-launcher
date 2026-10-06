@@ -8,10 +8,18 @@ import 'games_repository.dart';
 
 /// One card of the Continue row.
 class ContinueEntry {
-  const ContinueEntry({required this.id, required this.name, this.running});
+  const ContinueEntry({
+    required this.id,
+    required this.name,
+    this.running,
+    this.artPath,
+  });
 
   final String id;
   final String name;
+
+  /// Landscape art: a game's header image or the app's icon.
+  final String? artPath;
 
   /// Null when it is only a recent launch.
   final RunningApp? running;
@@ -37,6 +45,12 @@ class LauncherData extends ChangeNotifier {
   List<App>? appList;
   Object? appsError;
   List<Game> gameList = const [];
+
+  /// Steam windows waiting to be seen (empty: nothing needs attention).
+  List<SteamWindow> steamAttention = const [];
+
+  /// The running app the user is being asked to close (confirm step), if any.
+  ({String id, String name})? closeRequest;
   List<RunningApp> running = const [];
 
   /// App ids launched this session, newest first (feeds Continue).
@@ -76,6 +90,8 @@ class LauncherData extends ChangeNotifier {
             EventName.appExited,
             EventName.focusChanged,
             EventName.inputNav,
+            EventName.gamesChanged,
+            EventName.steamAttention,
           ])
           .catchError((_) {}),
     );
@@ -98,13 +114,23 @@ class LauncherData extends ChangeNotifier {
         _nav.add(e);
       case AppStartedEvent() || AppExitedEvent() || FocusChangedEvent():
         unawaited(refreshRunning());
+      case GamesChangedEvent():
+        unawaited(_refreshGames());
+      case SteamAttentionEvent():
+        steamAttention = e.windows;
+        notifyListeners();
       default:
         break;
     }
   }
 
   Future<void> _refreshAll() async {
-    await Future.wait([_refreshApps(), refreshRunning(), _refreshGames()]);
+    await Future.wait([
+      _refreshApps(),
+      refreshRunning(),
+      _refreshGames(),
+      _refreshAttention(),
+    ]);
   }
 
   Future<void> _refreshApps() async {
@@ -120,7 +146,6 @@ class LauncherData extends ChangeNotifier {
     notifyListeners();
   }
 
-  // TODO(0.3): refresh again on a games-changed event.
   Future<void> _refreshGames() async {
     try {
       final g = await games.list();
@@ -132,11 +157,25 @@ class LauncherData extends ChangeNotifier {
     }
   }
 
+  Future<void> _refreshAttention() async {
+    try {
+      final w = await apps.steamAttention();
+      if (_disposed) return;
+      steamAttention = w;
+      notifyListeners();
+    } catch (_) {
+      // Best effort: the banner just does not show.
+    }
+  }
+
   Future<void> refreshRunning() async {
     try {
       final r = await apps.running();
       if (_disposed) return;
       running = r;
+      if (closeRequest != null && !isRunning(closeRequest!.id)) {
+        closeRequest = null; // it ended by itself
+      }
       notifyListeners();
     } catch (_) {
       // Best effort: the badge is decoration.
@@ -148,12 +187,29 @@ class LauncherData extends ChangeNotifier {
   /// Running apps first, then this session's recent launches that are not
   /// running (when still listed).
   List<ContinueEntry> get continueEntries => [
-    for (final r in running) ContinueEntry(id: r.id, name: r.name, running: r),
+    for (final r in running)
+      ContinueEntry(
+        id: r.id,
+        name: r.name,
+        running: r,
+        artPath: _gameOfRunning(r.id)?.artwork.header ?? _iconOf(r.id),
+      ),
     for (final id in _recent)
       if (!isRunning(id))
         if (appList?.where((a) => a.id == id).firstOrNull case final a?)
-          ContinueEntry(id: a.id, name: a.name),
+          ContinueEntry(id: a.id, name: a.name, artPath: a.icon),
   ];
+
+  String? _iconOf(String id) =>
+      appList?.where((a) => a.id == id).firstOrNull?.icon;
+
+  /// The library game behind a running id `steam-<appid>`, if known.
+  Game? _gameOfRunning(String id) {
+    final m = RegExp(r'^steam-(\d+)$').firstMatch(id);
+    if (m == null) return null;
+    final appid = int.parse(m[1]!);
+    return gameList.where((g) => g.appid == appid).firstOrNull;
+  }
 
   Future<void> launchApp(String id, String name) async {
     try {
@@ -168,12 +224,76 @@ class LauncherData extends ChangeNotifier {
     }
   }
 
+  /// A Continue card: running games and command apps are not in `apps.list`,
+  /// so those are focused; everything else launches by id.
+  Future<void> launchEntry(ContinueEntry e) async {
+    if (e.isRunning && appList?.any((a) => a.id == e.id) != true) {
+      try {
+        await apps.focus(e.id);
+      } catch (err) {
+        _toast("Couldn't switch to ${e.name}: ${describe(err)}");
+      }
+      return;
+    }
+    await launchApp(e.id, e.name);
+  }
+
   Future<void> launchGame(Game g) async {
+    final why = g.cannotLaunchReason;
+    if (why != null) {
+      _toast(why);
+      return;
+    }
     try {
       await games.launch(g);
       unawaited(refreshRunning());
     } catch (e) {
-      _toast("Couldn't start ${g.title}: ${describe(e)}");
+      _toast("Couldn't start ${g.name}: ${describe(e)}");
+    }
+  }
+
+  /// The running app behind game [g], if it runs.
+  bool isGameRunning(Game g) => isRunning(g.runningId);
+
+  /// Asks to close the running app [id] (a confirm step comes first).
+  void requestClose(String id, String name) {
+    if (!isRunning(id)) return;
+    closeRequest = (id: id, name: name);
+    notifyListeners();
+  }
+
+  void cancelClose() {
+    if (closeRequest == null) return;
+    closeRequest = null;
+    notifyListeners();
+  }
+
+  /// The user confirmed: close the app. Continue follows `app_exited`.
+  Future<void> confirmClose() async {
+    final r = closeRequest;
+    if (r == null) return;
+    closeRequest = null;
+    notifyListeners();
+    try {
+      await apps.close(r.id);
+      unawaited(refreshRunning());
+    } catch (e) {
+      _toast("Couldn't close ${r.name}: ${describe(e)}");
+    }
+  }
+
+  /// "Open Steam" on the attention banner.
+  Future<void> focusSteam() async {
+    try {
+      await apps.focusSteam();
+      unawaited(refreshRunning());
+    } catch (e) {
+      if (e is ApiException && e.code == ApiErrorCode.steamNoWindows) {
+        // Gone already: refresh the banner.
+        unawaited(_refreshAttention());
+        return;
+      }
+      _toast("Couldn't open Steam: ${describe(e)}");
     }
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/api.dart';
+import '../data/games_repository.dart';
 import '../data/launcher_data.dart';
 import '../nav/nav_controller.dart';
 import '../nav/nav_model.dart';
@@ -62,88 +63,105 @@ class HomeScreen extends StatelessWidget {
                 'The HinterOS service did not answer. Retrying on reconnect.',
           );
         }
-        return SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: HinterTokens.s5),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (cont.isNotEmpty) ...[
-                RowHeader('Continue', key: const ValueKey('h-continue')),
+        return EdgeFade(
+          top: 28,
+          bottom: 24,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(
+              top: HinterTokens.s2,
+              bottom: HinterTokens.s5,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (cont.isNotEmpty) ...[
+                  RowHeader('Continue', key: const ValueKey('h-continue')),
+                  _HRow(
+                    key: const ValueKey('continue'),
+                    children: [
+                      for (var i = 0; i < cont.length; i++)
+                        NavFocusable(
+                          key: ValueKey('continue:$i'),
+                          region: region,
+                          rowKey: 'continue',
+                          col: i,
+                          onSelect: () => data.launchEntry(cont[i]),
+                          onContext: cont[i].isRunning
+                              ? () =>
+                                    data.requestClose(cont[i].id, cont[i].name)
+                              : null,
+                          builder: (_, f) => AppTile(
+                            name: cont[i].name,
+                            focused: f,
+                            running: cont[i].isRunning,
+                            width: 384,
+                            large: true,
+                            iconPath: cont[i].artPath,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+                RowHeader('Apps', key: const ValueKey('h-apps')),
                 _HRow(
-                  key: const ValueKey('continue'),
+                  key: const ValueKey('apps'),
                   children: [
-                    for (var i = 0; i < cont.length; i++)
+                    for (var i = 0; i < apps.length; i++)
                       NavFocusable(
-                        key: ValueKey('continue:$i'),
+                        key: ValueKey('apps:$i'),
                         region: region,
-                        rowKey: 'continue',
+                        rowKey: 'apps',
                         col: i,
                         onSelect: () =>
-                            data.launchApp(cont[i].id, cont[i].name),
+                            data.launchApp(apps[i].id, apps[i].name),
+                        onContext: data.isRunning(apps[i].id)
+                            ? () => data.requestClose(apps[i].id, apps[i].name)
+                            : null,
                         builder: (_, f) => AppTile(
-                          name: cont[i].name,
+                          name: apps[i].name,
                           focused: f,
-                          running: cont[i].isRunning,
-                          width: 384,
-                          large: true,
-                          iconPath: _iconOf(apps, cont[i].id),
+                          iconPath: apps[i].icon,
+                          running: data.isRunning(apps[i].id),
+                          width: 288,
                         ),
                       ),
                   ],
                 ),
-              ],
-              RowHeader('Apps', key: const ValueKey('h-apps')),
-              _HRow(
-                key: const ValueKey('apps'),
-                children: [
-                  for (var i = 0; i < apps.length; i++)
-                    NavFocusable(
-                      key: ValueKey('apps:$i'),
-                      region: region,
-                      rowKey: 'apps',
-                      col: i,
-                      onSelect: () => data.launchApp(apps[i].id, apps[i].name),
-                      builder: (_, f) => AppTile(
-                        name: apps[i].name,
-                        focused: f,
-                        iconPath: apps[i].icon,
-                        running: data.isRunning(apps[i].id),
-                        width: 288,
-                      ),
-                    ),
+                if (games.isNotEmpty) ...[
+                  RowHeader('Games', key: const ValueKey('h-games')),
+                  _HRow(
+                    key: const ValueKey('games'),
+                    children: [
+                      for (var i = 0; i < games.length; i++)
+                        NavFocusable(
+                          key: ValueKey('games:$i'),
+                          region: region,
+                          rowKey: 'games',
+                          col: i,
+                          onSelect: () => data.launchGame(games[i]),
+                          onContext: data.isGameRunning(games[i])
+                              ? () => data.requestClose(
+                                  games[i].runningId,
+                                  games[i].name,
+                                )
+                              : null,
+                          builder: (_, f) => GameCard(
+                            game: games[i],
+                            running: data.isGameRunning(games[i]),
+                            focused: f,
+                            width: 176,
+                          ),
+                        ),
+                    ],
+                  ),
                 ],
-              ),
-              if (games.isNotEmpty) ...[
-                RowHeader('Games', key: const ValueKey('h-games')),
-                _HRow(
-                  key: const ValueKey('games'),
-                  children: [
-                    for (var i = 0; i < games.length; i++)
-                      NavFocusable(
-                        key: ValueKey('games:$i'),
-                        region: region,
-                        rowKey: 'games',
-                        col: i,
-                        onSelect: () => data.launchGame(games[i]),
-                        builder: (_, f) => GameCard(
-                          title: games[i].title,
-                          artworkPath: games[i].artworkPath,
-                          focused: f,
-                          width: 176,
-                        ),
-                      ),
-                  ],
-                ),
               ],
-            ],
+            ),
           ),
         );
       },
     );
   }
-
-  static String? _iconOf(List<App> apps, String id) =>
-      apps.where((a) => a.id == id).firstOrNull?.icon;
 }
 
 /// A horizontally scrolling row with room around it for the focus ring and

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../nav/nav_controller.dart';
 import '../nav/nav_model.dart';
 import '../theme/hinter_theme.dart';
+import 'common.dart';
 import 'nav_focusable.dart';
 
 /// A vertically scrolling grid of fixed-size cells bound to a [NavRegion]
@@ -20,6 +21,7 @@ class NavGridView extends StatefulWidget {
     required this.cellHeight,
     required this.itemBuilder,
     this.onSelect,
+    this.onContext,
     this.gap = HinterTokens.s4,
   });
 
@@ -34,6 +36,9 @@ class NavGridView extends StatefulWidget {
   itemBuilder;
   final void Function(int index)? onSelect;
 
+  /// The context button (Y/Triangle) on item [index]; null: nothing happens.
+  final VoidCallback? Function(int index)? onContext;
+
   @override
   State<NavGridView> createState() => _NavGridViewState();
 }
@@ -44,19 +49,27 @@ class _NavGridViewState extends State<NavGridView> {
   // Room for the focus ring and scale-up above and below each row.
   static const _vPad = HinterTokens.s3;
 
+  /// Empty space above the first row of a scroll position, so a row that is
+  /// scrolled to the top sits clear of the fade below the header.
+  static const _padTop = HinterTokens.s4;
+
+  /// Fade at the top edge of the viewport: it covers the empty space above an
+  /// aligned row, so rows scrolled further up dissolve instead of being cut.
+  static const _fadeTop = _padTop + _vPad;
+  static const _fadeBottom = HinterTokens.s4;
+
   double get _rowExtent => widget.cellHeight + 2 * _vPad;
 
-  /// Scrolls by whole rows, the least needed to show [row] completely.
+  /// Scrolls so that [row] is completely visible: when it is not, it becomes
+  /// the top row, aligned below the fade (or as close as the end allows).
   void _showRow(int row, {required bool animate}) {
     if (!_scroll.hasClients) return;
     final pos = _scroll.position;
     final top = row * _rowExtent;
-    final bottom = top + _rowExtent;
+    final bottom = top + _padTop + _rowExtent;
     double? target;
-    if (top < pos.pixels) {
+    if (top < pos.pixels || bottom > pos.pixels + pos.viewportDimension) {
       target = top;
-    } else if (bottom > pos.pixels + pos.viewportDimension) {
-      target = bottom - pos.viewportDimension;
     }
     if (target == null) return;
     target = target.clamp(0.0, pos.maxScrollExtent);
@@ -107,11 +120,11 @@ class _NavGridViewState extends State<NavGridView> {
               r < rows - 1 ? cols : widget.itemCount - (rows - 1) * cols,
             ),
         ]);
-        return ListView.builder(
+        final list = ListView.builder(
           controller: _scroll,
           itemExtent: _rowExtent,
           itemCount: rows,
-          padding: const EdgeInsets.only(bottom: HinterTokens.s4),
+          padding: const EdgeInsets.only(top: _padTop, bottom: HinterTokens.s4),
           itemBuilder: (context, r) {
             final n = math.min(cols, widget.itemCount - r * cols);
             return Padding(
@@ -132,6 +145,7 @@ class _NavGridViewState extends State<NavGridView> {
                       onSelect: widget.onSelect == null
                           ? null
                           : () => widget.onSelect!(r * cols + k),
+                      onContext: widget.onContext?.call(r * cols + k),
                       builder: (ctx, f) =>
                           widget.itemBuilder(ctx, r * cols + k, f),
                     ),
@@ -141,6 +155,7 @@ class _NavGridViewState extends State<NavGridView> {
             );
           },
         );
+        return EdgeFade(top: _fadeTop, bottom: _fadeBottom, child: list);
       },
     );
   }

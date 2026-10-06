@@ -88,10 +88,9 @@ class _DesignScale extends StatelessWidget {
   }
 }
 
-/// Builds the data layer on top of [connection] with [games].
-LauncherData buildData(DaemonConnection connection, GamesRepository games) =>
-    LauncherData(
-      connection: connection,
-      apps: AppsRepository(connection),
-      games: games,
-    );
+/// Builds the data layer on top of [connection].
+LauncherData buildData(DaemonConnection connection) => LauncherData(
+  connection: connection,
+  apps: AppsRepository(connection),
+  games: GamesRepository(connection),
+);

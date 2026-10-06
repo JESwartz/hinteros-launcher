@@ -5,17 +5,81 @@ import 'errors.dart';
 import 'generated.dart';
 import 'version.dart';
 
-/// The default fake app list.
+/// The default fake app list: what a fresh HinterOS has (the built-in Steam
+/// entry first, then the default apps; Plex is a Store app).
 const mockApps = <App>[
   App(id: 'steam', name: 'Steam', kind: AppKind.native),
   App(id: 'jellyfin', name: 'Jellyfin', kind: AppKind.native),
   App(id: 'youtube', name: 'YouTube', kind: AppKind.web),
-  App(id: 'plex', name: 'Plex', kind: AppKind.native),
-  App(id: 'kodi', name: 'Kodi', kind: AppKind.native),
-  App(id: 'netflix', name: 'Netflix', kind: AppKind.web),
-  App(id: 'spotify', name: 'Spotify', kind: AppKind.web),
+  App(id: 'crunchyroll', name: 'Crunchyroll', kind: AppKind.web),
   App(id: 'firefox', name: 'Firefox', kind: AppKind.native),
+  App(id: 'plex', name: 'Plex', kind: AppKind.native),
 ];
+
+/// A fake Steam library, sorted by name like the daemon does. With [artDir]
+/// (holding `<slug>_portrait.png` and `<slug>_header.png`, made by
+/// `tool/gen_mock_art.dart`) a few games get local artwork; the others have
+/// none, like freshly installed ones.
+List<Game> mockGames({String? artDir}) {
+  GameArtwork art(String slug, {bool header = true}) => GameArtwork(
+    portrait: artDir == null ? null : '$artDir/${slug}_portrait.png',
+    header: artDir == null || !header ? null : '$artDir/${slug}_header.png',
+    hero: null,
+    logo: null,
+    icon: null,
+  );
+  const none = GameArtwork(
+    portrait: null,
+    header: null,
+    hero: null,
+    logo: null,
+    icon: null,
+  );
+  Game g(
+    int appid,
+    String name,
+    GameArtwork artwork, {
+    InstallState state = InstallState.installed,
+    double gb = 4.2,
+    int? lastPlayed,
+  }) => Game(
+    appid: appid,
+    name: name,
+    installState: state,
+    sizeBytes: (gb * 1e9).round(),
+    lastPlayed: lastPlayed,
+    artwork: artwork,
+  );
+  return [
+    g(2379780, 'Balatro', none, gb: 0.1, lastPlayed: 1790000000),
+    g(504230, 'Celeste', art('celeste'), gb: 1.2, lastPlayed: 1789000000),
+    g(268910, 'Cuphead', none, gb: 3.5),
+    g(588650, 'Dead Cells', none, gb: 0.5, lastPlayed: 1786000000),
+    g(632470, 'Disco Elysium', none, gb: 21),
+    g(427520, 'Factorio', none, state: InstallState.updating, gb: 2.1),
+    g(
+      1145360,
+      'Hades',
+      art('hades'),
+      state: InstallState.updateRequired,
+      gb: 15,
+      lastPlayed: 1788000000,
+    ),
+    g(
+      367520,
+      'Hollow Knight',
+      art('hollow', header: false),
+      gb: 9,
+      lastPlayed: 1787000000,
+    ),
+    g(620, 'Portal 2', art('portal'), gb: 13, lastPlayed: 1786300589),
+    g(252950, 'Rocket League', none, gb: 20),
+    g(646570, 'Slay the Spire', none, gb: 0.6),
+    g(413150, 'Stardew Valley', none, gb: 0.7, lastPlayed: 1785000000),
+    g(105600, 'Terraria', none, state: InstallState.installing, gb: 0.3),
+    g(1794680, 'Vampire Survivors', none, gb: 0.2),
+  ];
+}
 
 /// In-process stand-in for `hinteros-session`, for widget tests and desktop
 /// development (`--mock`). It follows the same rules as the real daemon:
@@ -23,13 +87,22 @@ const mockApps = <App>[
 /// events only for subscribed names. [rpc] speaks the wire shapes, so the
 /// contract test can replay schema examples straight through it.
 class MockDaemon extends DaemonConnection {
-  MockDaemon({List<App> apps = mockApps, this.serverApiVersion = apiVersion})
-    : apps = List.of(apps);
+  MockDaemon({
+    List<App> apps = mockApps,
+    List<Game>? games,
+    this.serverApiVersion = apiVersion,
+  }) : apps = List.of(apps),
+       _games = List.of(games ?? mockGames());
 
   final List<App> apps;
+  List<Game> _games;
+  List<SteamWindow> _attention = const [];
 
   /// A `command` launch of this program fails with app_launch_failed.
   static const failingProgram = 'does-not-exist';
+
+  /// Steam's own gamescope app id.
+  static const steamGamescopeAppId = 769;
 
   /// The API version this mock claims to serve.
   final String serverApiVersion;
@@ -133,6 +206,21 @@ class MockDaemon extends DaemonConnection {
         return {'events': List<String>.of(_subscribed)};
       case 'apps.list':
         return AppsListResult(apps: List.of(apps)).toJson();
+      case 'games.list':
+        return GamesListResult(games: List.of(_games)).toJson();
+      case 'steam.attention':
+        return SteamAttentionResult(windows: List.of(_attention)).toJson();
+      case 'steam.focus':
+        return SteamFocusResult(app: _focusSteam()).toJson();
+      case 'apps.close':
+        if (params['id'] is! String) {
+          throw const ApiException(
+            ApiErrorCode.invalidParams,
+            'id is required',
+          );
+        }
+        _close(params['id'] as String);
+        return const AppsCloseResult().toJson();
       case 'apps.launch':
         return AppsLaunchResult(app: _launch(AppsLaunchParams.fromJson(params)))
             .toJson();
@@ -182,7 +270,14 @@ class MockDaemon extends DaemonConnection {
         _setFocus(id);
         return running;
       }
-      app = _newRunning(id, known.name, AppSource.command);
+      app = id == 'steam'
+          ? _newRunning(
+              id,
+              known.name,
+              AppSource.steamClient,
+              gamescopeAppId: steamGamescopeAppId,
+            )
+          : _newRunning(id, known.name, AppSource.command);
     } else if (p.command != null) {
       final program = p.command!.first;
       if (program == failingProgram) {
@@ -197,7 +292,14 @@ class MockDaemon extends DaemonConnection {
         AppSource.command,
       );
     } else {
-      final appid = int.parse(p.url!.split('/').last);
+      final m = RegExp(r'^steam://rungameid/(\d+)$').firstMatch(p.url!);
+      if (m == null) {
+        throw const ApiException(
+          ApiErrorCode.invalidParams,
+          "url must be steam://rungameid/<appid>",
+        );
+      }
+      final appid = int.parse(m[1]!);
       final id = 'steam-$appid';
       final running = _running.where((a) => a.id == id).firstOrNull;
       if (running != null) {
@@ -206,7 +308,8 @@ class MockDaemon extends DaemonConnection {
       }
       app = _newRunning(
         id,
-        'Steam game $appid',
+        _games.where((g) => g.appid == appid).firstOrNull?.name ??
+            'Steam game $appid',
         AppSource.steam,
         gamescopeAppId: appid,
       );
@@ -229,6 +332,41 @@ class MockDaemon extends DaemonConnection {
     gamescopeAppId: gamescopeAppId ?? 4100000000 + (++_gamescopeCounter),
     pid: source == AppSource.command ? 4200 + _running.length : null,
   );
+
+  /// apps.close: the app goes away, `app_exited` says `closed`.
+  void _close(String id) {
+    if (!_running.any((a) => a.id == id)) {
+      throw ApiException(
+        ApiErrorCode.appNotFound,
+        "no running app with id '$id'",
+      );
+    }
+    simulateExit(id, reason: ExitReason.closed);
+  }
+
+  /// steam.focus: Steam's windows come to the front as the app `steam`.
+  RunningApp _focusSteam() {
+    if (_attention.isEmpty) {
+      throw const ApiException(
+        ApiErrorCode.steamNoWindows,
+        'Steam has no windows to show',
+      );
+    }
+    var app = _running.where((a) => a.id == 'steam').firstOrNull;
+    if (app == null) {
+      app = _newRunning(
+        'steam',
+        'Steam',
+        AppSource.steamClient,
+        gamescopeAppId: steamGamescopeAppId,
+      );
+      _running.add(app);
+      emitRaw('app_started', AppStartedEvent(app: app).toJson());
+    }
+    _setFocus('steam');
+    setSteamAttention(const []);
+    return app;
+  }
 
   void _setFocus(String? id) {
     if (_focused == id) return;
@@ -268,6 +406,51 @@ class MockDaemon extends DaemonConnection {
     if (_closed || !_subscribed.contains(name)) return;
     _eventController.add(SessionEvent.fromNotification(name, params));
   }
+
+  /// The Steam library changed (a game finished updating, was installed...).
+  void setGames(List<Game> games) {
+    _games = List.of(games);
+    emitRaw('games_changed');
+  }
+
+  List<Game> get games => List.unmodifiable(_games);
+
+  /// Dev key: the first game that is not installed finishes its update; if
+  /// all are installed, the first one needs an update again.
+  void toggleFirstUpdate() {
+    final i = _games.indexWhere(
+      (g) => g.installState != InstallState.installed,
+    );
+    final j = i >= 0 ? i : 0;
+    final g = _games[j];
+    final next = List.of(_games);
+    next[j] = Game(
+      appid: g.appid,
+      name: g.name,
+      installState: i >= 0
+          ? InstallState.installed
+          : InstallState.updateRequired,
+      sizeBytes: g.sizeBytes,
+      lastPlayed: g.lastPlayed,
+      artwork: g.artwork,
+    );
+    setGames(next);
+  }
+
+  /// Steam shows dialogs that wait to be seen (empty: none any more).
+  void setSteamAttention(List<SteamWindow> windows) {
+    if (_attention.length == windows.length &&
+        _attention.every(windows.contains)) {
+      return;
+    }
+    _attention = List.of(windows);
+    emitRaw(
+      'steam_attention',
+      SteamAttentionEvent(windows: _attention).toJson(),
+    );
+  }
+
+  List<SteamWindow> get attention => List.unmodifiable(_attention);
 
   /// The Home button, on demand: the launcher comes to the front, then the event.
   void pressHome() {

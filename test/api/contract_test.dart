@@ -69,6 +69,26 @@ void main() {
             await mock.appsFocus(const AppsFocusParams(id: null));
           }
 
+          // apps.close examples close a command app (cmd-1) and a Steam game.
+          if (method == 'apps.close') {
+            await mock.appsLaunch(const AppsLaunchParams(command: ['sleep']));
+            await mock.appsLaunch(
+              const AppsLaunchParams(url: 'steam://rungameid/620'),
+            );
+          }
+          // Steam has dialogs open in the examples that return windows or an app.
+          if (method == 'steam.attention' || method == 'steam.focus') {
+            final shown =
+                (ex['result'] as Map?)?['windows'] != null &&
+                    ((ex['result'] as Map)['windows'] as List).isNotEmpty ||
+                (method == 'steam.focus' && !ex.containsKey('error'));
+            if (shown) {
+              mock.setSteamAttention(const [
+                SteamWindow(window: 6291459, title: 'Steam Guard', pid: 2412),
+              ]);
+            }
+          }
+
           if (ex.containsKey('error')) {
             final expected = ex['error'] as Map<String, dynamic>;
             final err = await mock
@@ -219,6 +239,31 @@ void main() {
       expect(typed.map((a) => a.toJson()), raw['apps']);
     });
 
+    test('games.list output validates and matches the typed model', () async {
+      final mock = MockDaemon(games: mockGames(artDir: '/art'));
+      await mock.rpc('hello', _hello);
+      final raw = await mock.rpc('games.list', {});
+      _expectValid(
+        (_section('methods')['games.list'] as Map<String, dynamic>)['result']
+            as Map<String, dynamic>,
+        raw,
+        'games.list result',
+      );
+      final games = (await mock.gamesList()).games;
+      expect(games.map((g) => g.toJson()), raw['games']);
+      expect(games.map((g) => g.name), [...games.map((g) => g.name)]..sort());
+      // Every install state the schema knows is in the fake library.
+      expect(
+        games.map((g) => g.installState).toSet(),
+        containsAll([
+          InstallState.installed,
+          InstallState.updateRequired,
+          InstallState.updating,
+          InstallState.installing,
+        ]),
+      );
+    });
+
     group('apps and focus', () {
       late MockDaemon mock;
       late List<SessionEvent> seen;
@@ -281,6 +326,81 @@ void main() {
         expect(seen, [isA<AppExitedEvent>(), isA<FocusChangedEvent>()]);
         expect((seen[1] as FocusChangedEvent).app, isNull);
         expect((await mock.appsRunning()).apps, isEmpty);
+      });
+
+      test('apps.close ends the app with reason closed', () async {
+        final app = (await mock.appsLaunch(
+          const AppsLaunchParams(command: ['firefox']),
+        )).app;
+        await settle();
+        seen.clear();
+        await mock.appsClose(AppsCloseParams(id: app.id));
+        await settle();
+        expect(seen, [isA<AppExitedEvent>(), isA<FocusChangedEvent>()]);
+        expect((seen[0] as AppExitedEvent).reason, ExitReason.closed);
+        expect((await mock.appsRunning()).apps, isEmpty);
+        await expectLater(
+          mock.appsClose(AppsCloseParams(id: app.id)),
+          throwsA(isA<ApiException>().having((e) => e.code, 'code', 2001)),
+        );
+      });
+
+      test('a game launches by Steam URL as steam-<appid>', () async {
+        final app = (await mock.appsLaunch(
+          const AppsLaunchParams(url: 'steam://rungameid/620'),
+        )).app;
+        expect(app.id, 'steam-620');
+        expect(app.name, 'Portal 2');
+        expect(app.source, AppSource.steam);
+        await expectLater(
+          mock.rpc('apps.launch', {'url': 'https://example.com'}),
+          throwsA(isA<ApiException>().having((e) => e.code, 'code', -32602)),
+        );
+      });
+
+      test('the built-in steam app runs as steam_client', () async {
+        expect((await mock.appsList()).apps.first.id, 'steam');
+        final app = (await mock.appsLaunch(const AppsLaunchParams(id: 'steam')))
+            .app;
+        expect(app.source, AppSource.steamClient);
+        expect(app.gamescopeAppId, 769);
+      });
+
+      test('steam attention: event, query, focus clears it', () async {
+        await expectLater(
+          mock.steamFocus(),
+          throwsA(isA<ApiException>().having((e) => e.code, 'code', 2003)),
+        );
+        mock.setSteamAttention(const [
+          SteamWindow(window: 1, title: 'Steam Guard'),
+        ]);
+        await settle();
+        expect(seen.single, isA<SteamAttentionEvent>());
+        expect(
+          (await mock.steamAttention()).windows.single.title,
+          'Steam Guard',
+        );
+        seen.clear();
+        final app = (await mock.steamFocus()).app;
+        await settle();
+        expect(app.id, 'steam');
+        expect(seen.map((e) => e.runtimeType), [
+          AppStartedEvent,
+          FocusChangedEvent,
+          SteamAttentionEvent,
+        ]);
+        expect((seen.last as SteamAttentionEvent).windows, isEmpty);
+        expect((await mock.steamAttention()).windows, isEmpty);
+      });
+
+      test('games_changed follows a library change', () async {
+        mock.toggleFirstUpdate();
+        await settle();
+        expect(seen, [isA<GamesChangedEvent>()]);
+        final installed = (await mock.gamesList()).games.where(
+          (g) => g.installState == InstallState.installed,
+        );
+        expect(installed.map((g) => g.name), contains('Factorio'));
       });
 
       test('input_nav is only sent while the launcher has focus', () async {

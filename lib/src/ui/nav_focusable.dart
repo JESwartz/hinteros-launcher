@@ -15,6 +15,7 @@ class NavFocusable extends StatefulWidget {
     required this.col,
     required this.builder,
     this.onSelect,
+    this.onContext,
     this.onFocused,
     this.scrollIntoView = true,
   });
@@ -26,6 +27,9 @@ class NavFocusable extends StatefulWidget {
 
   /// What accept does.
   final VoidCallback? onSelect;
+
+  /// What the context button (Y/Triangle) does, if anything.
+  final VoidCallback? onContext;
 
   /// Called when this item gains focus.
   final VoidCallback? onFocused;
@@ -42,6 +46,7 @@ class _NavFocusableState extends State<NavFocusable> {
   void initState() {
     super.initState();
     widget.region.registerSelect(widget.rowKey, widget.col, widget.onSelect);
+    widget.region.registerContext(widget.rowKey, widget.col, widget.onContext);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.region.itemBuilt(widget.rowKey, widget.col);
     });
@@ -54,13 +59,16 @@ class _NavFocusableState extends State<NavFocusable> {
         old.rowKey != widget.rowKey ||
         old.col != widget.col) {
       old.region.unregisterSelect(old.rowKey, old.col);
+      old.region.registerContext(old.rowKey, old.col, null);
     }
     widget.region.registerSelect(widget.rowKey, widget.col, widget.onSelect);
+    widget.region.registerContext(widget.rowKey, widget.col, widget.onContext);
   }
 
   @override
   void dispose() {
     widget.region.unregisterSelect(widget.rowKey, widget.col);
+    widget.region.registerContext(widget.rowKey, widget.col, null);
     super.dispose();
   }
 

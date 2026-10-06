@@ -51,7 +51,7 @@ void main() {
     await keys(t, [left, left]);
     expect(focusLabel(), 'home/apps:0');
     await keys(t, List.filled(20, right));
-    expect(focusLabel(), 'home/apps:7');
+    expect(focusLabel(), 'home/apps:5');
   });
 
   testWidgets('up from the top row goes to the tabs; tabs wrap', (t) async {

@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../api/api.dart' show Game;
+import '../data/games_repository.dart';
 import '../theme/hinter_theme.dart';
 import 'focus_frame.dart';
 
@@ -24,12 +26,17 @@ class PlaceholderArt extends StatelessWidget {
     required this.seed,
     this.initialSize = 96,
     this.alignment = Alignment.center,
+    this.showInitial = true,
   });
 
   final Alignment alignment;
 
   final String seed;
   final double initialSize;
+
+  /// False when the caller lays out its own initial (the app tile does, so
+  /// the letter can make room for the name and the badge).
+  final bool showInitial;
 
   @override
   Widget build(BuildContext context) {
@@ -50,16 +57,18 @@ class PlaceholderArt extends StatelessWidget {
           colors: [a, b],
         ),
       ),
-      child: Align(
-        alignment: alignment,
-        child: Text(
-          initial,
-          style: t.headline.copyWith(
-            fontSize: initialSize,
-            color: t.text.withValues(alpha: 0.3),
-          ),
-        ),
-      ),
+      child: showInitial
+          ? Align(
+              alignment: alignment,
+              child: Text(
+                initial,
+                style: t.headline.copyWith(
+                  fontSize: initialSize,
+                  color: t.text.withValues(alpha: 0.3),
+                ),
+              ),
+            )
+          : null,
     );
   }
 }
@@ -73,9 +82,11 @@ class ArtImage extends StatelessWidget {
     required this.seed,
     this.initialSize = 96,
     this.alignment = Alignment.center,
+    this.showInitial = true,
   });
 
   final Alignment alignment;
+  final bool showInitial;
   final String? path;
   final String seed;
   final double initialSize;
@@ -86,6 +97,7 @@ class ArtImage extends StatelessWidget {
       seed: seed,
       initialSize: initialSize,
       alignment: alignment,
+      showInitial: showInitial,
     );
     final p = path;
     if (p == null || p.isEmpty) return placeholder;
@@ -97,8 +109,10 @@ class ArtImage extends StatelessWidget {
   }
 }
 
-/// Landscape (16:9) tile for an app, with its name over the art and an
-/// optional Running mark.
+/// Landscape (16:9) tile for an app or a running game: art (or a placeholder
+/// with the initial), the name along the bottom and an optional Running mark.
+/// Mark, initial and name are laid out in a column, so they cannot overlap at
+/// any text size; the initial gives way when there is no room left.
 class AppTile extends StatelessWidget {
   const AppTile({
     super.key,
@@ -123,6 +137,7 @@ class AppTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
     final height = width * 9 / 16;
+    final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
     return FocusFrame(
       focused: focused,
       child: SizedBox(
@@ -133,48 +148,80 @@ class AppTile extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              ArtImage(path: iconPath, seed: name, initialSize: height * 0.5),
-              // Scrim so the name reads on any art.
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.82),
-                      ],
+              ArtImage(path: iconPath, seed: name, showInitial: false),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (running)
+                    Padding(
+                      padding: const EdgeInsets.all(HinterTokens.s1),
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: const RunningPill(),
+                        ),
+                      ),
                     ),
+                  // What is left between mark and name: the initial, if it
+                  // fits at a useful size.
+                  Expanded(
+                    child: iconPath == null || iconPath!.isEmpty
+                        ? LayoutBuilder(
+                            builder: (context, c) {
+                              final size = (c.maxHeight * 0.8).clamp(
+                                0.0,
+                                height * 0.5,
+                              );
+                              if (size < 32) return const SizedBox.shrink();
+                              return Center(
+                                child: Text(
+                                  initial,
+                                  maxLines: 1,
+                                  style: t.headline.copyWith(
+                                    fontSize: size,
+                                    height: 1.0,
+                                    color: t.text.withValues(alpha: 0.3),
+                                  ),
+                                ),
+                              );
+                            },
+                          )
+                        : const SizedBox.shrink(),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      HinterTokens.s2 + 4,
-                      HinterTokens.s4,
-                      HinterTokens.s2 + 4,
-                      HinterTokens.s2,
+                  // Scrim so the name reads on any art. Mark and name take
+                  // the room they need first; the initial gets the rest.
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.82),
+                        ],
+                      ),
                     ),
-                    child: Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: (large ? t.label : t.body).copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        HinterTokens.s2 + 4,
+                        HinterTokens.s1,
+                        HinterTokens.s2 + 4,
+                        HinterTokens.s1 + 4,
+                      ),
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: (large ? t.label : t.body).copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
-              if (running)
-                Positioned(
-                  top: HinterTokens.s2,
-                  left: HinterTokens.s2,
-                  child: RunningPill(),
-                ),
               if (t.highContrast)
                 DecoratedBox(
                   decoration: BoxDecoration(
@@ -192,16 +239,24 @@ class AppTile extends StatelessWidget {
   }
 }
 
-/// "Running" mark: a dot shape plus text, not colour alone.
-class RunningPill extends StatelessWidget {
-  const RunningPill({super.key});
+/// A small status mark on a card: a shape plus text, not colour alone.
+class _Pill extends StatelessWidget {
+  const _Pill({required this.text, required this.filled});
+
+  final String text;
+
+  /// Filled dot on the accent colour (Running) or a hollow ring on a dark
+  /// pill (install states).
+  final bool filled;
 
   @override
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
+    final fg = filled ? t.onAccent : t.text;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: t.accent,
+        color: filled ? t.accent : t.surface.withValues(alpha: 0.94),
+        border: filled ? null : Border.all(color: t.textDim, width: 2),
         borderRadius: BorderRadius.circular(HinterTokens.radiusPill),
       ),
       child: Padding(
@@ -216,17 +271,16 @@ class RunningPill extends StatelessWidget {
               width: 12,
               height: 12,
               decoration: BoxDecoration(
-                color: t.onAccent,
+                color: filled ? fg : null,
+                border: filled ? null : Border.all(color: fg, width: 2.5),
                 shape: BoxShape.circle,
               ),
             ),
             const SizedBox(width: 8),
             Text(
-              'Running',
-              style: t.caption.copyWith(
-                color: t.onAccent,
-                fontWeight: FontWeight.w700,
-              ),
+              text,
+              maxLines: 1,
+              style: t.caption.copyWith(color: fg, fontWeight: FontWeight.w700),
             ),
           ],
         ),
@@ -235,13 +289,23 @@ class RunningPill extends StatelessWidget {
   }
 }
 
-/// Portrait (2:3) game cover with the title underneath.
+/// "Running" mark: a dot shape plus text, not colour alone.
+class RunningPill extends StatelessWidget {
+  const RunningPill({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      const _Pill(text: 'Running', filled: true);
+}
+
+/// Portrait (2:3) game cover with the title underneath. A game that cannot be
+/// started (update, install...) is dimmed and says why in a badge.
 class GameCard extends StatelessWidget {
   const GameCard({
     super.key,
-    required this.title,
+    required this.game,
     required this.focused,
-    this.artworkPath,
+    this.running = false,
     this.width = 256,
   });
 
@@ -255,8 +319,8 @@ class GameCard extends StatelessWidget {
   /// Space between art and title, enough for the scaled-up focus ring.
   static const titleGap = 28.0;
 
-  final String title;
-  final String? artworkPath;
+  final Game game;
+  final bool running;
   final bool focused;
   final double width;
 
@@ -264,6 +328,8 @@ class GameCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
     final height = width * 3 / 2;
+    final badge = width < 200 ? game.shortBadge : game.badge;
+    final unavailable = !game.canLaunch;
     return SizedBox(
       width: width,
       child: Column(
@@ -281,10 +347,28 @@ class GameCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     ArtImage(
-                      path: artworkPath,
-                      seed: title,
+                      path: game.artwork.portrait,
+                      seed: game.name,
                       initialSize: width * 0.45,
                     ),
+                    if (unavailable)
+                      ColoredBox(color: Colors.black.withValues(alpha: 0.5)),
+                    if (running || badge != null)
+                      Positioned(
+                        top: HinterTokens.s1,
+                        left: HinterTokens.s1,
+                        right: HinterTokens.s1,
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.topLeft,
+                            child: running
+                                ? const RunningPill()
+                                : _Pill(text: badge!, filled: false),
+                          ),
+                        ),
+                      ),
                     if (t.highContrast)
                       DecoratedBox(
                         decoration: BoxDecoration(
@@ -303,7 +387,7 @@ class GameCard extends StatelessWidget {
           SizedBox(
             height: titleHeight(context) - titleGap,
             child: Text(
-              title,
+              game.name,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: t.caption.copyWith(

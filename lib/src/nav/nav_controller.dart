@@ -39,6 +39,7 @@ class NavRegion extends ChangeNotifier {
 
   final Map<String, FocusNode> _nodes = {};
   final Map<String, VoidCallback?> _selects = {};
+  final Map<String, VoidCallback?> _contexts = {};
   bool _pendingFocus = false;
   bool _awaitingRows = false;
   NavController? _controller;
@@ -78,6 +79,16 @@ class NavRegion extends ChangeNotifier {
 
   void unregisterSelect(String rowKey, int col) =>
       _selects.remove('$rowKey:$col');
+
+  /// Registered by items that have a context action (the `context` button,
+  /// Y/Triangle): what it does on them.
+  void registerContext(String rowKey, int col, VoidCallback? onContext) {
+    if (onContext == null) {
+      _contexts.remove('$rowKey:$col');
+    } else {
+      _contexts['$rowKey:$col'] = onContext;
+    }
+  }
 
   /// An item received focus (by us or otherwise): the model follows.
   void noteFocused(String rowKey, int col) {
@@ -212,6 +223,13 @@ class NavController {
         final cur = region.model.currentRow;
         if (cur == null) return false;
         final cb = region._selects['${cur.key}:${region.model.col}'];
+        cb?.call();
+        return cb != null;
+      case NavAction.context:
+        if (phase != NavPhase.press || region == null) return false;
+        final cur = region.model.currentRow;
+        if (cur == null) return false;
+        final cb = region._contexts['${cur.key}:${region.model.col}'];
         cb?.call();
         return cb != null;
       case NavAction.back:

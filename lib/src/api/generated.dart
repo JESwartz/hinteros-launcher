@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.2).
+// Source: schema/session-api.json (session API 0.3).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.2';
+const apiVersion = '0.3';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -16,9 +16,13 @@ const apiMethodNames = <String>[
   'subscribe',
   'unsubscribe',
   'apps.list',
+  'games.list',
+  'steam.attention',
+  'steam.focus',
   'apps.launch',
   'apps.running',
   'apps.focus',
+  'apps.close',
 ];
 
 /// Event names in the schema.
@@ -28,6 +32,8 @@ const apiEventNames = <String>[
   'app_exited',
   'focus_changed',
   'input_nav',
+  'games_changed',
+  'steam_attention',
 ];
 
 /// Error name to JSON-RPC code.
@@ -42,6 +48,7 @@ const apiErrorCodesByName = <String, int>{
   'already_handshaken': 1003,
   'app_not_found': 2001,
   'app_launch_failed': 2002,
+  'steam_no_windows': 2003,
 };
 
 /// JSON-RPC error codes of the session API.
@@ -70,21 +77,27 @@ abstract final class ApiErrorCode {
   /// 'hello' was called twice on one connection.
   static const alreadyHandshaken = 1003;
 
-  /// No such app (apps.launch: not in apps.list; apps.focus: not running).
+  /// No such app (apps.launch: not in apps.list; apps.focus, apps.close: not running).
   static const appNotFound = 2001;
 
   /// The app could not be started (spawn failed, or it has nothing to launch).
   static const appLaunchFailed = 2002;
+
+  /// steam.focus: Steam has no windows that could be shown (not running, or no gamescope).
+  static const steamNoWindows = 2003;
 }
 
 /// MAJOR.MINOR
 typedef ApiVersion = String;
 
-/// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'.
+/// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'. 'steam' is Steam itself (Big Picture and its other windows).
 typedef AppId = String;
 
 /// A running app's id, or null for the launcher.
 typedef FocusTarget = String;
+
+/// Absolute path of an image file in Steam's library cache (readable by the session user), or null if Steam has not cached it.
+typedef ArtworkPath = String;
 
 /// Name and build version of one side of the connection (informational, for logs).
 class Peer {
@@ -115,6 +128,8 @@ enum EventName {
   appExited('app_exited'),
   focusChanged('focus_changed'),
   inputNav('input_nav'),
+  gamesChanged('games_changed'),
+  steamAttention('steam_attention'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -130,10 +145,11 @@ enum EventName {
   String toJson() => value;
 }
 
-/// How a running app was started. Clients must treat unknown values like 'command'.
+/// How a running app was started: 'command' (an argv under the daemon's reaper), 'steam' (a Steam game), 'steam_client' (Steam's own windows: Big Picture, dialogs). Clients must treat unknown values like 'command'.
 enum AppSource {
   command('command'),
   steam('steam'),
+  steamClient('steam_client'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -158,16 +174,16 @@ class RunningApp {
     this.pid,
   });
 
-  /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'.
+  /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'. 'steam' is Steam itself (Big Picture and its other windows).
   final String id;
 
   /// Display name.
   final String name;
 
-  /// How a running app was started. Clients must treat unknown values like 'command'.
+  /// How a running app was started: 'command' (an argv under the daemon's reaper), 'steam' (a Steam game), 'steam_client' (Steam's own windows: Big Picture, dialogs). Clients must treat unknown values like 'command'.
   final AppSource source;
 
-  /// The app id gamescope knows its windows by (the Steam app id for Steam games). For diagnostics.
+  /// The app id gamescope knows its windows by (the Steam app id for Steam games, 769 for Steam itself). For diagnostics.
   final int gamescopeAppId;
 
   /// Process the daemon started for it, if it tracks one.
@@ -200,11 +216,12 @@ class RunningApp {
   String toString() => 'RunningApp(${jsonEncode(toJson())})';
 }
 
-/// Why an app ended: 'exited' normally (status 0, or a Steam game's windows closed), 'crashed' (non-zero status or killed), 'launch_timeout' (a Steam game never showed a window). Clients must treat unknown values like 'exited'.
+/// Why an app ended: 'exited' normally (status 0, or a Steam game's windows closed), 'crashed' (non-zero status or killed), 'launch_timeout' (a Steam game never showed a window), 'closed' (ended after apps.close, however it ended). Clients must treat unknown values like 'exited'.
 enum ExitReason {
   exited('exited'),
   crashed('crashed'),
   launchTimeout('launch_timeout'),
+  closed('closed'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -334,6 +351,178 @@ class App {
 
   @override
   String toString() => 'App(${jsonEncode(toJson())})';
+}
+
+/// A game's install state, from its manifest's StateFlags: 'installed' (ready), 'update_required' (installed; Steam updates it before it starts, launching works), 'updating' (installed; an update is downloading or being applied), 'installing' (not fully installed yet: first download in progress or paused), 'uninstalling'. Clients must treat unknown values like 'updating' (installed, but maybe not launchable right now).
+enum InstallState {
+  installed('installed'),
+  updateRequired('update_required'),
+  updating('updating'),
+  installing('installing'),
+  uninstalling('uninstalling'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const InstallState(this.value);
+  final String value;
+
+  factory InstallState.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+/// Steam's library artwork: 'portrait' (2:3 capsule, 300x450 or 600x900), 'header' (460x215), 'hero' (wide background, e.g. 1920x620), 'logo' (transparent PNG to draw over the hero), 'icon' (small square, e.g. 32x32).
+class GameArtwork {
+  const GameArtwork({
+    required this.portrait,
+    required this.header,
+    required this.hero,
+    required this.logo,
+    required this.icon,
+  });
+
+  /// Absolute path of an image file in Steam's library cache (readable by the session user), or null if Steam has not cached it.
+  final String? portrait;
+
+  /// Absolute path of an image file in Steam's library cache (readable by the session user), or null if Steam has not cached it.
+  final String? header;
+
+  /// Absolute path of an image file in Steam's library cache (readable by the session user), or null if Steam has not cached it.
+  final String? hero;
+
+  /// Absolute path of an image file in Steam's library cache (readable by the session user), or null if Steam has not cached it.
+  final String? logo;
+
+  /// Absolute path of an image file in Steam's library cache (readable by the session user), or null if Steam has not cached it.
+  final String? icon;
+
+  factory GameArtwork.fromJson(Map<String, dynamic> json) => GameArtwork(
+    portrait: json['portrait'] == null ? null : json['portrait'] as String,
+    header: json['header'] == null ? null : json['header'] as String,
+    hero: json['hero'] == null ? null : json['hero'] as String,
+    logo: json['logo'] == null ? null : json['logo'] as String,
+    icon: json['icon'] == null ? null : json['icon'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'portrait': portrait,
+    'header': header,
+    'hero': hero,
+    'logo': logo,
+    'icon': icon,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is GameArtwork &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'GameArtwork(${jsonEncode(toJson())})';
+}
+
+/// An installed Steam game.
+class Game {
+  const Game({
+    required this.appid,
+    required this.name,
+    required this.installState,
+    required this.sizeBytes,
+    required this.lastPlayed,
+    required this.artwork,
+  });
+
+  /// Steam app id. Launch with apps.launch {url: 'steam://rungameid/&lt;appid&gt;'}; it then runs as 'steam-&lt;appid&gt;'.
+  final int appid;
+
+  /// Display name from the manifest.
+  final String name;
+
+  /// A game's install state, from its manifest's StateFlags: 'installed' (ready), 'update_required' (installed; Steam updates it before it starts, launching works), 'updating' (installed; an update is downloading or being applied), 'installing' (not fully installed yet: first download in progress or paused), 'uninstalling'. Clients must treat unknown values like 'updating' (installed, but maybe not launchable right now).
+  final InstallState installState;
+
+  /// Size on disk (0 if unknown).
+  final int sizeBytes;
+
+  /// When it was last played (Unix time, seconds), or null if never or unknown.
+  final int? lastPlayed;
+
+  /// Steam's library artwork: 'portrait' (2:3 capsule, 300x450 or 600x900), 'header' (460x215), 'hero' (wide background, e.g. 1920x620), 'logo' (transparent PNG to draw over the hero), 'icon' (small square, e.g. 32x32).
+  final GameArtwork artwork;
+
+  factory Game.fromJson(Map<String, dynamic> json) => Game(
+    appid: json['appid'] as int,
+    name: json['name'] as String,
+    installState: InstallState.fromJson(json['install_state'] as String),
+    sizeBytes: json['size_bytes'] as int,
+    lastPlayed: json['last_played'] == null ? null : json['last_played'] as int,
+    artwork: GameArtwork.fromJson(
+      (json['artwork'] as Map).cast<String, dynamic>(),
+    ),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'appid': appid,
+    'name': name,
+    'install_state': installState.toJson(),
+    'size_bytes': sizeBytes,
+    'last_played': lastPlayed,
+    'artwork': artwork.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is Game && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'Game(${jsonEncode(toJson())})';
+}
+
+/// One of Steam's own top-level windows on gamescope's Xwayland.
+class SteamWindow {
+  const SteamWindow({required this.window, required this.title, this.pid});
+
+  /// X window id (diagnostics; stable while the window exists).
+  final int window;
+
+  /// Window title as Steam set it (may be empty).
+  final String title;
+
+  /// Process that owns the window (steam or steamwebhelper), if known.
+  final int? pid;
+
+  factory SteamWindow.fromJson(Map<String, dynamic> json) => SteamWindow(
+    window: json['window'] as int,
+    title: json['title'] as String,
+    pid: json['pid'] == null ? null : json['pid'] as int,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'window': window,
+    'title': title,
+    'pid': ?pid,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SteamWindow &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SteamWindow(${jsonEncode(toJson())})';
 }
 
 class HelloParams {
@@ -599,10 +788,152 @@ class AppsListResult {
   String toString() => 'AppsListResult(${jsonEncode(toJson())})';
 }
 
+class GamesListParams {
+  const GamesListParams();
+
+  factory GamesListParams.fromJson(Map<String, dynamic> json) =>
+      GamesListParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is GamesListParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'GamesListParams(${jsonEncode(toJson())})';
+}
+
+class GamesListResult {
+  const GamesListResult({required this.games});
+
+  final List<Game> games;
+
+  factory GamesListResult.fromJson(Map<String, dynamic> json) =>
+      GamesListResult(
+        games: (json['games'] as List)
+            .map((x) => Game.fromJson((x as Map).cast<String, dynamic>()))
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'games': games.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is GamesListResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'GamesListResult(${jsonEncode(toJson())})';
+}
+
+class SteamAttentionParams {
+  const SteamAttentionParams();
+
+  factory SteamAttentionParams.fromJson(Map<String, dynamic> json) =>
+      SteamAttentionParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SteamAttentionParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SteamAttentionParams(${jsonEncode(toJson())})';
+}
+
+class SteamAttentionResult {
+  const SteamAttentionResult({required this.windows});
+
+  final List<SteamWindow> windows;
+
+  factory SteamAttentionResult.fromJson(Map<String, dynamic> json) =>
+      SteamAttentionResult(
+        windows: (json['windows'] as List)
+            .map(
+              (x) => SteamWindow.fromJson((x as Map).cast<String, dynamic>()),
+            )
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'windows': windows.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SteamAttentionResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SteamAttentionResult(${jsonEncode(toJson())})';
+}
+
+class SteamFocusParams {
+  const SteamFocusParams();
+
+  factory SteamFocusParams.fromJson(Map<String, dynamic> json) =>
+      SteamFocusParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SteamFocusParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SteamFocusParams(${jsonEncode(toJson())})';
+}
+
+class SteamFocusResult {
+  const SteamFocusResult({required this.app});
+
+  final RunningApp app;
+
+  factory SteamFocusResult.fromJson(Map<String, dynamic> json) =>
+      SteamFocusResult(
+        app: RunningApp.fromJson((json['app'] as Map).cast<String, dynamic>()),
+      );
+
+  Map<String, dynamic> toJson() => {'app': app.toJson()};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SteamFocusResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SteamFocusResult(${jsonEncode(toJson())})';
+}
+
 class AppsLaunchParams {
   const AppsLaunchParams({this.id, this.command, this.url, this.name});
 
-  /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'.
+  /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'. 'steam' is Steam itself (Big Picture and its other windows).
   final String? id;
 
   /// Program and arguments. The program is looked up in the daemon's PATH.
@@ -763,6 +1094,49 @@ class AppsFocusResult {
   String toString() => 'AppsFocusResult(${jsonEncode(toJson())})';
 }
 
+class AppsCloseParams {
+  const AppsCloseParams({required this.id});
+
+  /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'. 'steam' is Steam itself (Big Picture and its other windows).
+  final String id;
+
+  factory AppsCloseParams.fromJson(Map<String, dynamic> json) =>
+      AppsCloseParams(id: json['id'] as String);
+
+  Map<String, dynamic> toJson() => {'id': id};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppsCloseParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppsCloseParams(${jsonEncode(toJson())})';
+}
+
+class AppsCloseResult {
+  const AppsCloseResult();
+
+  factory AppsCloseResult.fromJson(Map<String, dynamic> json) =>
+      AppsCloseResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppsCloseResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppsCloseResult(${jsonEncode(toJson())})';
+}
+
 /// The global Home button was pressed. The launcher brings itself to the front.
 final class HomePressedEvent extends SessionEvent {
   const HomePressedEvent();
@@ -825,10 +1199,10 @@ final class AppStartedEvent extends SessionEvent {
 final class AppExitedEvent extends SessionEvent {
   const AppExitedEvent({required this.id, required this.reason, this.exitCode});
 
-  /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'.
+  /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'. 'steam' is Steam itself (Big Picture and its other windows).
   final String id;
 
-  /// Why an app ended: 'exited' normally (status 0, or a Steam game's windows closed), 'crashed' (non-zero status or killed), 'launch_timeout' (a Steam game never showed a window). Clients must treat unknown values like 'exited'.
+  /// Why an app ended: 'exited' normally (status 0, or a Steam game's windows closed), 'crashed' (non-zero status or killed), 'launch_timeout' (a Steam game never showed a window), 'closed' (ended after apps.close, however it ended). Clients must treat unknown values like 'exited'.
   final ExitReason reason;
 
   /// Exit status of the app's main process, if known (128 + signal number if it was killed).
@@ -932,6 +1306,70 @@ final class InputNavEvent extends SessionEvent {
   String toString() => 'InputNavEvent(${jsonEncode(toJson())})';
 }
 
+/// The Steam library changed (a game was installed, removed or updated, or its artwork arrived). Call games.list again.
+final class GamesChangedEvent extends SessionEvent {
+  const GamesChangedEvent();
+
+  factory GamesChangedEvent.fromJson(Map<String, dynamic> json) =>
+      GamesChangedEvent();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  String get name => 'games_changed';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is GamesChangedEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'GamesChangedEvent(${jsonEncode(toJson())})';
+}
+
+/// The list of Steam windows waiting to be seen changed (see steam.attention). An empty list means nothing needs attention any more.
+final class SteamAttentionEvent extends SessionEvent {
+  const SteamAttentionEvent({required this.windows});
+
+  final List<SteamWindow> windows;
+
+  factory SteamAttentionEvent.fromJson(Map<String, dynamic> json) =>
+      SteamAttentionEvent(
+        windows: (json['windows'] as List)
+            .map(
+              (x) => SteamWindow.fromJson((x as Map).cast<String, dynamic>()),
+            )
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'windows': windows.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  String get name => 'steam_attention';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is SteamAttentionEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SteamAttentionEvent(${jsonEncode(toJson())})';
+}
+
 class VersionMismatchData {
   const VersionMismatchData({
     required this.clientApiVersion,
@@ -992,14 +1430,41 @@ mixin SessionApiMethods {
   Future<UnsubscribeResult> unsubscribe(UnsubscribeParams params) async =>
       UnsubscribeResult.fromJson(await rpc('unsubscribe', params.toJson()));
 
-  /// Apps the launcher can show and launch: the apps from the daemon's config, or a fixed stub list when none are configured.
+  /// Apps the launcher can show and launch: the built-in 'steam' entry (Steam's Big Picture mode, since 0.3), then the apps from the daemon's config, or a fixed stub list when none are configured.
+  ///
+  /// Installed Steam games are listed by games.list, not here.
   Future<AppsListResult> appsList([
     AppsListParams params = const AppsListParams(),
   ]) async => AppsListResult.fromJson(await rpc('apps.list', params.toJson()));
 
+  /// Installed Steam games of the session user, read from Steam's library on disk.
+  ///
+  /// Read from the Steam directory (~/.local/share/Steam, else ~/.steam/steam; configurable): every library in steamapps/libraryfolders.vdf and its steamapps/appmanifest_&lt;appid&gt;.acf files. Steam tools (Proton, Steam Linux Runtime, Steamworks Common Redistributables, ...) are left out. Empty when Steam is not installed. Sorted by name. Launch a game with apps.launch {url: 'steam://rungameid/&lt;appid&gt;'}. games_changed says when to query again.
+  Future<GamesListResult> gamesList([
+    GamesListParams params = const GamesListParams(),
+  ]) async =>
+      GamesListResult.fromJson(await rpc('games.list', params.toJson()));
+
+  /// Steam's own windows that appeared while something else had focus and still wait to be seen (Steam Guard, update prompts, cloud-save conflicts, sign-in, ...).
+  ///
+  /// The same list steam_attention sends. A window stops needing attention when it closes or once Steam has had focus while it was open (steam.focus, apps.launch/apps.focus 'steam'). Always empty without gamescope.
+  Future<SteamAttentionResult> steamAttention([
+    SteamAttentionParams params = const SteamAttentionParams(),
+  ]) async => SteamAttentionResult.fromJson(
+    await rpc('steam.attention', params.toJson()),
+  );
+
+  /// Bring Steam's own windows to the front (e.g. after steam_attention). Controller input goes to Steam.
+  ///
+  /// Steam then runs as the app 'steam' (source 'steam_client'; app_started if it was not running) and has focus; its pending windows no longer need attention. When Steam's windows close, focus returns to the app that had it before (or the launcher). Home brings the launcher back as usual.
+  Future<SteamFocusResult> steamFocus([
+    SteamFocusParams params = const SteamFocusParams(),
+  ]) async =>
+      SteamFocusResult.fromJson(await rpc('steam.focus', params.toJson()));
+
   /// Start an app and give it focus. Returns once it is spawned, before it shows a window.
   ///
-  /// Exactly one of: 'id' (an app from apps.list), 'command' (argv, run as the session user), or 'url' (a Steam game, handed to the running Steam client). If the app is already running it is focused instead and the result describes the running instance. Its windows are shown as soon as they appear; until then the launcher stays visible. Progress is reported through app_started, focus_changed and app_exited.
+  /// Exactly one of: 'id' (an app from apps.list), 'command' (argv, run as the session user), or 'url' (a Steam game, handed to the running Steam client; use it for games.list entries). If the app is already running it is focused instead and the result describes the running instance. Its windows are shown as soon as they appear; until then the launcher stays visible. Progress is reported through app_started, focus_changed and app_exited. The built-in id 'steam' opens Steam's Big Picture mode (steam://open/bigpicture, or 'steam -gamepadui' when Steam is not running) and shows Steam's own windows; it runs as the app 'steam' with source 'steam_client'. A Steam game's name comes from its Steam library manifest when it is installed.
   Future<AppsLaunchResult> appsLaunch([
     AppsLaunchParams params = const AppsLaunchParams(),
   ]) async =>
@@ -1018,6 +1483,12 @@ mixin SessionApiMethods {
   /// Focusing the launcher does not stop the app that had focus. Controller input goes to whatever has focus; while the launcher has focus it arrives as input_nav events.
   Future<AppsFocusResult> appsFocus(AppsFocusParams params) async =>
       AppsFocusResult.fromJson(await rpc('apps.focus', params.toJson()));
+
+  /// Ask a running app to quit; force it after a timeout. Returns at once, app_exited (reason 'closed') follows.
+  ///
+  /// A 'command' app gets SIGTERM (through its reaper, to its process group), and after the close timeout (default 5 s) everything still running under its reaper gets SIGKILL. A Steam game: every process under Steam's reaper for that app id gets SIGTERM, then SIGKILL after the timeout; Steam itself keeps running. A Steam game that has no processes yet (still being prepared by Steam) just stops being tracked. Steam ('steam_client'): Big Picture is asked to close (steam://close/bigpicture); Steam keeps running in the background. Closing an app that is already closing does nothing. If the app had focus, the launcher gets it back when it exits.
+  Future<AppsCloseResult> appsClose(AppsCloseParams params) async =>
+      AppsCloseResult.fromJson(await rpc('apps.close', params.toJson()));
 }
 
 /// A server-pushed notification of the session API.
@@ -1040,6 +1511,8 @@ sealed class SessionEvent {
     'app_exited' => AppExitedEvent.fromJson(params),
     'focus_changed' => FocusChangedEvent.fromJson(params),
     'input_nav' => InputNavEvent.fromJson(params),
+    'games_changed' => GamesChangedEvent.fromJson(params),
+    'steam_attention' => SteamAttentionEvent.fromJson(params),
     _ => UnknownSessionEvent(name, params),
   };
 }

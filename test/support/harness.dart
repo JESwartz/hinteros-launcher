@@ -1,12 +1,18 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart';
 import 'package:hinteros_launcher/src/app.dart';
-import 'package:hinteros_launcher/src/data/games_repository.dart';
 import 'package:hinteros_launcher/src/data/launcher_data.dart';
 import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
+
+/// Directory of the committed placeholder artwork (tool/gen_mock_art.dart).
+String artDir() => '${Directory.current.path}/test/fixtures/art';
+
+/// The mock library with local artwork for a few games.
+List<Game> gamesWithArt() => mockGames(artDir: artDir());
 
 /// Fixed clock for widget tests and goldens.
 DateTime fixedNow() => DateTime(2026, 10, 6, 20, 30);
@@ -28,18 +34,15 @@ class StuckConnection extends MockDaemon {
 class Harness {
   Harness({
     MockDaemon? mock,
-    GamesRepository? games,
     LauncherSettings settings = const LauncherSettings(),
     this.showServer = false,
-  }) : mock = mock ?? MockDaemon(),
-       games = games ?? MockGamesRepository(),
+  }) : mock = mock ?? MockDaemon(games: gamesWithArt()),
        storage = MemorySettingsStorage(settings) {
     this.settings = SettingsController(storage, settings);
-    data = buildData(this.mock, this.games);
+    data = buildData(this.mock);
   }
 
   final MockDaemon mock;
-  final GamesRepository games;
   final MemorySettingsStorage storage;
   late final SettingsController settings;
   final bool showServer;
@@ -54,8 +57,33 @@ class Harness {
 
   /// Pumps the app and lets everything settle.
   Future<void> pump(WidgetTester tester) async {
+    await precacheArt(tester);
     await tester.pumpWidget(app);
     await tester.pumpAndSettle();
+  }
+
+  /// Decodes the artwork files of the mock library into the image cache
+  /// before the first frame asks for them (file IO needs real async, which
+  /// the fake-async test zone does not give), so the frame paints them.
+  Future<void> precacheArt(WidgetTester tester) async {
+    final paths = {
+      for (final g in mock.games)
+        for (final p in [g.artwork.portrait, g.artwork.header]) ?p,
+    };
+    await tester.runAsync(() async {
+      for (final p in paths) {
+        final done = Completer<void>();
+        FileImage(File(p))
+            .resolve(ImageConfiguration.empty)
+            .addListener(
+              ImageStreamListener(
+                (_, _) => done.isCompleted ? null : done.complete(),
+                onError: (e, _) => done.completeError(e),
+              ),
+            );
+        await done.future;
+      }
+    });
   }
 }
 

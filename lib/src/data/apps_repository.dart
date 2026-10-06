@@ -16,6 +16,21 @@ class AppsRepository {
   Future<RunningApp> launch(String id) async =>
       (await connection.appsLaunch(AppsLaunchParams(id: id))).app;
 
-  // TODO(0.3): Future<void> close(String id) once apps.close exists, for a
-  // "Close" action on Continue cards.
+  /// Brings the running app [id] to the front.
+  Future<void> focus(String id) async {
+    await connection.appsFocus(AppsFocusParams(id: id));
+  }
+
+  /// Asks the running app [id] to quit; `app_exited` (reason `closed`)
+  /// follows. For Steam this closes Big Picture, not the client.
+  Future<void> close(String id) async {
+    await connection.appsClose(AppsCloseParams(id: id));
+  }
+
+  /// Steam's windows that are waiting to be seen (empty: none).
+  Future<List<SteamWindow>> steamAttention() async =>
+      (await connection.steamAttention()).windows;
+
+  /// Brings Steam's windows to the front; throws 2003 when there are none.
+  Future<RunningApp> focusSteam() async => (await connection.steamFocus()).app;
 }

@@ -1,73 +1,58 @@
-import 'apps_repository.dart';
+import '../api/api.dart';
 
-/// A game as the Games section shows it.
-class Game {
-  const Game({required this.id, required this.title, this.artworkPath});
+/// Whether a game can be started right now. Only an installed game can; Steam
+/// itself would update or finish a game first, which the launcher cannot show.
+extension GameState on Game {
+  bool get canLaunch => installState == InstallState.installed;
 
-  final String id;
-  final String title;
+  /// Unknown states (a newer daemon) are treated like an update in progress.
+  InstallState get effectiveState => installState == InstallState.unknown
+      ? InstallState.updating
+      : installState;
 
-  /// Absolute path to cover art (2:3), if the daemon has some.
-  final String? artworkPath;
+  /// The id the daemon gives this game while it runs.
+  String get runningId => 'steam-$appid';
+
+  /// Short badge text for the card, null for an installed game.
+  String? get badge => switch (effectiveState) {
+    InstallState.installed => null,
+    InstallState.updateRequired => 'Update required',
+    InstallState.updating => 'Updating',
+    InstallState.installing => 'Installing',
+    InstallState.uninstalling => 'Removing',
+    InstallState.unknown => 'Updating',
+  };
+
+  /// Badge text for narrow cards.
+  String? get shortBadge => switch (effectiveState) {
+    InstallState.updateRequired => 'Update',
+    _ => badge,
+  };
+
+  /// Why [canLaunch] is false, for a message; null when it can launch.
+  String? get cannotLaunchReason => switch (effectiveState) {
+    InstallState.installed => null,
+    InstallState.updateRequired =>
+      '$name needs an update first. Open Steam to update it.',
+    InstallState.updating =>
+      '$name is updating. You can play it when that is done.',
+    InstallState.installing =>
+      '$name is still installing. You can play it when that is done.',
+    InstallState.uninstalling => '$name is being removed.',
+    InstallState.unknown => '$name is updating.',
+  };
 }
 
-abstract class GamesRepository {
-  Future<List<Game>> list();
+/// The Steam library through `games.list`, and launching its games.
+class GamesRepository {
+  GamesRepository(this.connection);
 
-  /// Starts [game]; throws like [AppsRepository.launch].
-  Future<void> launch(Game game);
+  final DaemonConnection connection;
+
+  Future<List<Game>> list() async => (await connection.gamesList()).games;
+
+  /// Starts [game] through Steam (or focuses it when it already runs).
+  Future<RunningApp> launch(Game game) async => (await connection.appsLaunch(
+    AppsLaunchParams(url: 'steam://rungameid/${game.appid}'),
+  )).app;
 }
-
-/// TODO(0.3): replace with a repository over `games.list` (artwork paths,
-/// launch by Steam app id). Until then the only "game" the 0.2 daemon can know
-/// about is the Steam app itself, so this lists the `apps.list` entries whose
-/// id starts with `steam`.
-class AppsBackedGamesRepository implements GamesRepository {
-  AppsBackedGamesRepository(this._apps);
-
-  final AppsRepository _apps;
-
-  @override
-  Future<List<Game>> list() async => [
-    for (final a in await _apps.list())
-      if (a.id.startsWith('steam'))
-        Game(id: a.id, title: a.name, artworkPath: a.icon),
-  ];
-
-  @override
-  Future<void> launch(Game game) async {
-    await _apps.launch(game.id);
-  }
-}
-
-/// TODO(0.3): drop once the real library is available; used by `--mock`,
-/// widget tests and goldens so the Games grid has something to show.
-class MockGamesRepository implements GamesRepository {
-  MockGamesRepository({this.games = mockGames});
-
-  final List<Game> games;
-  final launched = <String>[];
-
-  @override
-  Future<List<Game>> list() async => games;
-
-  @override
-  Future<void> launch(Game game) async => launched.add(game.id);
-}
-
-const mockGames = <Game>[
-  Game(id: 'g1', title: 'Hollow Knight'),
-  Game(id: 'g2', title: 'Celeste'),
-  Game(id: 'g3', title: 'Hades'),
-  Game(id: 'g4', title: 'Stardew Valley'),
-  Game(id: 'g5', title: 'Portal 2'),
-  Game(id: 'g6', title: 'Cuphead'),
-  Game(id: 'g7', title: 'Dead Cells'),
-  Game(id: 'g8', title: 'Terraria'),
-  Game(id: 'g9', title: 'Disco Elysium'),
-  Game(id: 'g10', title: 'Rocket League'),
-  Game(id: 'g11', title: 'Slay the Spire'),
-  Game(id: 'g12', title: 'Vampire Survivors'),
-  Game(id: 'g13', title: 'Balatro'),
-  Game(id: 'g14', title: 'Factorio'),
-];

@@ -30,19 +30,30 @@ class AppsScreen extends StatelessWidget {
               );
         }
         const width = 320.0;
-        return NavGridView(
-          region: region,
-          itemCount: apps.length,
-          cellWidth: width,
-          cellHeight: width * 9 / 16,
-          onSelect: (i) => data.launchApp(apps[i].id, apps[i].name),
-          itemBuilder: (_, i, focused) => AppTile(
-            name: apps[i].name,
-            iconPath: apps[i].icon,
-            focused: focused,
-            running: data.isRunning(apps[i].id),
-            width: width,
-          ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            RowHeader('Apps'),
+            Expanded(
+              child: NavGridView(
+                region: region,
+                itemCount: apps.length,
+                cellWidth: width,
+                cellHeight: width * 9 / 16,
+                onSelect: (i) => data.launchApp(apps[i].id, apps[i].name),
+                onContext: (i) => data.isRunning(apps[i].id)
+                    ? () => data.requestClose(apps[i].id, apps[i].name)
+                    : null,
+                itemBuilder: (_, i, focused) => AppTile(
+                  name: apps[i].name,
+                  iconPath: apps[i].icon,
+                  focused: focused,
+                  running: data.isRunning(apps[i].id),
+                  width: width,
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
