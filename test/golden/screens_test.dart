@@ -221,6 +221,40 @@ void main() {
       keys: [...toAppsRunning, right],
     );
   });
+  testWidgets('apps with a broken and a missing icon file, letter tiles', (
+    t,
+  ) async {
+    final apps = [
+      for (final a in appsWithIcons())
+        switch (a.id) {
+          'firefox' => App(
+            id: a.id,
+            name: a.name,
+            kind: a.kind,
+            icon: '${iconDir()}/broken.png',
+          ),
+          'youtube' => App(
+            id: a.id,
+            name: a.name,
+            kind: a.kind,
+            icon: '${iconDir()}/not-there.png',
+          ),
+          _ => a,
+        },
+    ];
+    await shot(
+      t,
+      'apps_broken_icons_1080p',
+      h: Harness(
+        mock: MockDaemon(apps: apps, games: gamesWithArt()),
+      ),
+      setup: (t, h) => loadIcons(t, [
+        '${iconDir()}/broken.png',
+        '${iconDir()}/not-there.png',
+      ]),
+      keys: [up, right, right, down, right, right],
+    );
+  });
   testWidgets('settings 1080p', (t) async {
     await shot(t, 'settings_1080p', keys: [...toSettings, down, down]);
   });
