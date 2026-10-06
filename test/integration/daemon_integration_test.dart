@@ -24,6 +24,9 @@ String? _skip({bool needsSteam = false}) => _bin == null
     : null;
 
 void main() {
+  // A generic picture from the repo (tool/gen_mock_icons.dart).
+  final iconFixture =
+      '${Directory.current.path}/test/fixtures/icons/jellyfin.png';
   late Directory dir;
   late String sock;
   late File keyLog;
@@ -52,6 +55,13 @@ command = ["sleep", "60"]
 id = "crasher"
 name = "Crasher"
 command = ["sh", "-c", "exit 3"]
+
+# An explicit icon path (a generic fixture picture), returned as is.
+[[apps]]
+id = "iconic"
+name = "Iconic"
+command = ["sleep", "60"]
+icon = "$iconFixture"
 ''');
     daemon = await Process.start(_bin!, [
       '--socket',
@@ -94,7 +104,26 @@ command = ["sh", "-c", "exit 3"]
   });
 
   test(
-    'handshake at 0.4, ping, apps.list and home_pressed (SIGUSR1)',
+    'apps.list returns an app\'s icon path; apps_changed is a known event',
+    () async {
+      final c = client = DaemonClient(socketPath: sock);
+      await c.subscribeTo([EventName.appsChanged]);
+      await c.waitConnected();
+      final apps = (await c.appsList()).apps;
+      final iconic = apps.firstWhere((a) => a.id == 'iconic');
+      expect(iconic.icon, iconFixture);
+      expect(File(iconic.icon!).existsSync(), isTrue);
+      // The built-in Steam entry and apps without a config icon: whatever the
+      // box offers (a desktop file or a theme), never a made-up path.
+      for (final a in apps) {
+        if (a.icon != null) expect(a.icon, startsWith('/'));
+      }
+    },
+    skip: _skip(),
+  );
+
+  test(
+    'handshake at 0.5, ping, apps.list and home_pressed (SIGUSR1)',
     () async {
       final c = client = DaemonClient(socketPath: sock);
       await c.subscribeTo([EventName.homePressed]);
@@ -107,7 +136,7 @@ command = ["sh", "-c", "exit 3"]
       final apps = (await c.appsList()).apps;
       expect(apps, isNotEmpty);
       // The built-in Steam entry comes first (Big Picture).
-      expect(apps.map((a) => a.id), ['steam', 'sleeper', 'crasher']);
+      expect(apps.map((a) => a.id), ['steam', 'sleeper', 'crasher', 'iconic']);
 
       final home = c.events.firstWhere((e) => e is HomePressedEvent);
       // Subscription is acknowledged by now; the daemon turns SIGUSR1 into the event.
