@@ -161,12 +161,16 @@ class Generator {
     return _reserved.contains(r) || extra.contains(r) ? '${r}_' : r;
   }
 
+  /// Doc comments are markdown: keep `<n>` from reading as HTML.
+  static String _escapeDoc(String s) =>
+      s.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+
   static String doc_(String? text, [String indent = '']) {
     if (text == null || text.trim().isEmpty) return '';
     final lines = text
         .trim()
         .split('\n')
-        .map((l) => '$indent/// ${l.trim()}'.trimRight())
+        .map((l) => '$indent/// ${_escapeDoc(l.trim())}'.trimRight())
         .join('\n');
     return '$lines\n';
   }
@@ -217,6 +221,10 @@ class Generator {
 
   Shape _namedShape(Map<String, dynamic> s, String name) {
     if (s[r'$ref'] != null) return shapeOf(s, name);
+    // A named alias for a union, e.g. FocusTarget = oneOf [AppId, null].
+    if (s['type'] == null && (s['oneOf'] != null || s['anyOf'] != null)) {
+      return shapeOf(s, name);
+    }
     final type = s['type'];
     if (s['enum'] is List && type == 'string') {
       _emitEnum(name, s);
@@ -379,8 +387,8 @@ class Generator {
       } else {
         b.writeln('  const $name({');
         for (final f in fields) {
-          final nonNull = f.required && !f.shape.nullable;
-          b.writeln('    ${nonNull ? 'required ' : ''}this.${f.dart},');
+          final isRequired = f.required;
+          b.writeln('    ${isRequired ? 'required ' : ''}this.${f.dart},');
         }
         b.writeln('  });');
       }
@@ -405,7 +413,15 @@ class Generator {
       // toJson
       b.writeln('  Map<String, dynamic> toJson() => {');
       for (final f in fields) {
-        if (f.shape.nullable) {
+        if (f.shape.nullable && f.required) {
+          // Required but nullable: null goes on the wire explicitly.
+          final plain = encode(f.shape, f.dart) == f.dart;
+          b.writeln(
+            plain
+                ? "    '${f.json}': ${f.dart},"
+                : "    '${f.json}': ${f.dart} == null ? null : ${encode(f.shape, '${f.dart}!')},",
+          );
+        } else if (f.shape.nullable) {
           final plain = encode(f.shape, f.dart) == f.dart;
           b.writeln(
             plain
