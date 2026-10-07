@@ -97,6 +97,9 @@ class MockSystemRelay {
   String hostname = 'hinteros';
   bool dev = false;
   bool sshEnabled = false;
+
+  /// Catalog ids installed from the Store (`settings.get`, state.json apps).
+  final List<String> installedApps = ['steam'];
   List<String> hostKeyFingerprints = [
     'SHA256:2CixtE95MNbZHanQGv6hP2D3qfguu9QZfjca2OaupKI',
   ];
@@ -215,6 +218,7 @@ class MockSystemRelay {
           settings: SystemSettingsGetResultSettings(
             base: base,
             ssh: SystemSettingsGetResultSettingsSsh(enabled: sshEnabled),
+            apps: List.of(installedApps),
           ),
         ).toJson();
       case 'system.settings.set':

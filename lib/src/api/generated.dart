@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.7).
+// Source: schema/session-api.json (session API 0.8).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.7';
+const apiVersion = '0.8';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -40,6 +40,8 @@ const apiMethodNames = <String>[
   'system.update.apply',
   'system.channel.set',
   'system.base.set',
+  'system.apps.install',
+  'system.apps.remove',
   'system.jobs.get',
   'system.jobs.list',
   'system.jobs.cancel',
@@ -70,6 +72,10 @@ const apiMethodNames = <String>[
   'power.suspend',
   'power.reboot',
   'power.poweroff',
+  'auth.respond',
+  'auth.cancel',
+  'session.restart',
+  'store.list',
 ];
 
 /// Event names in the schema.
@@ -91,6 +97,9 @@ const apiEventNames = <String>[
   'bluetooth_changed',
   'bluetooth_confirm',
   'audio_changed',
+  'authentication_requested',
+  'authentication_finished',
+  'store_changed',
 ];
 
 /// Error name to JSON-RPC code.
@@ -119,6 +128,8 @@ const apiErrorCodesByName = <String, int>{
   'not_found': 3010,
   'needs_acknowledgement': 3011,
   'authentication_required': 3012,
+  'app_conflict': 3013,
+  'terms_required': 3014,
   'system_unavailable': 3001,
   'unavailable': 4001,
   'device_failed': 4002,
@@ -192,19 +203,25 @@ abstract final class ApiErrorCode {
   /// The channel tip is unsigned, signed by an unknown signer, or does not descend from the locked revision.
   static const updateVerificationFailed = 3009;
 
-  /// Unknown generation or job; for runtime settings: a Wi-Fi network not in range, a Bluetooth device, an audio output or a display mode that does not exist, or a bluetooth.confirm with nothing waiting.
+  /// Unknown generation or job; for runtime settings: a Wi-Fi network not in range, a Bluetooth device, an audio output or a display mode that does not exist, or a bluetooth.confirm with nothing waiting; system.apps.install: an id not in the running generation's catalog; system.apps.remove: an id that is not installed; auth.respond, auth.cancel: no such authentication request (or it is over).
   static const notFound = 3010;
 
   /// A downgrading channel or base switch without acknowledge_downgrade: true.
   static const needsAcknowledgement = 3011;
 
-  /// polkit would allow the action only after interactive authentication (auth_admin: the admin password). No agent is involved yet: the call is refused, and the launcher can ask for the password once one exists.
+  /// polkit would allow the action only after interactive authentication (auth_admin: the admin password), and it did not happen: no authentication agent is registered for the caller (no session daemon agent, or another client than the session daemon called), or the user cancelled the prompt or did not answer in time.
   static const authenticationRequired = 3012;
+
+  /// apps.install: id conflicts with conflicts_with (installed or also requested). apps.remove: conflicts_with, which stays installed, depends on id.
+  static const appConflict = 3013;
+
+  /// apps.install: app id has vendor terms and accepted_terms does not name their current version (show the terms, then retry with it).
+  static const termsRequired = 3014;
 
   /// A relayed method could not reach the system service: it is down (reason down) or speaks another system API version (reason version_mismatch, e.g. after a switch until the session restarts). The session API keeps working.
   static const systemUnavailable = 3001;
 
-  /// A runtime-settings method needs a service that is not there (not installed, not running, no permission to reach it, or no such hardware).
+  /// A runtime-settings method needs a service that is not there (not installed, not running, no permission to reach it, or no such hardware). Also store.list without a readable catalog index (service catalog), session.restart without a greetd session on seat0 (service logind), and auth.respond when polkit's agent helper cannot be run (service polkit).
   static const unavailable = 4001;
 
   /// The service accepted the request but the operation failed (a connection or pairing attempt, a mode change). The message says why in words; reason is for code.
@@ -213,7 +230,7 @@ abstract final class ApiErrorCode {
   /// wifi.connect: the network refused the password.
   static const wrongPassword = 4003;
 
-  /// The service's polkit policy refused the session user (not the active local session, or the system's polkit rules are missing).
+  /// The service's polkit policy refused the session user (not the active local session, or the system's polkit rules are missing); auth.respond and auth.cancel from a client other than the launcher.
   static const notAuthorized = 4004;
 
   /// logind refused suspend, reboot or power off because an inhibitor lock blocks it (a system job is switching over). The message is logind's.
@@ -242,6 +259,15 @@ typedef Rev = String;
 typedef Revision = String;
 typedef Fingerprint = String;
 typedef PolkitAction = String;
+
+/// Catalog app id (state.json apps).
+typedef CatalogId = String;
+
+/// A vendor terms version from the catalog.
+typedef TermsVersion = String;
+
+/// polkit's cookie for one authentication request.
+typedef AuthCookie = String;
 
 /// A Bluetooth address, upper case.
 typedef BtAddress = String;
@@ -287,6 +313,9 @@ enum EventName {
   bluetoothChanged('bluetooth_changed'),
   bluetoothConfirm('bluetooth_confirm'),
   audioChanged('audio_changed'),
+  authenticationRequested('authentication_requested'),
+  authenticationFinished('authentication_finished'),
+  storeChanged('store_changed'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -881,6 +910,8 @@ enum JobKind {
   rollback('rollback'),
   channel('channel'),
   base('base'),
+  appsInstall('apps_install'),
+  appsRemove('apps_remove'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -894,6 +925,345 @@ enum JobKind {
   );
 
   String toJson() => value;
+}
+
+class CatalogApp {
+  const CatalogApp({required this.id, required this.name});
+
+  /// Catalog app id (state.json apps).
+  final String id;
+  final String name;
+
+  factory CatalogApp.fromJson(Map<String, dynamic> json) =>
+      CatalogApp(id: json['id'] as String, name: json['name'] as String);
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name};
+
+  @override
+  bool operator ==(Object other) =>
+      other is CatalogApp && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'CatalogApp(${jsonEncode(toJson())})';
+}
+
+class RemovedApp {
+  const RemovedApp({
+    required this.id,
+    required this.name,
+    required this.reason,
+  });
+
+  /// Catalog app id (state.json apps).
+  final String id;
+  final String name;
+
+  /// The catalog's statusReason.
+  final String? reason;
+
+  factory RemovedApp.fromJson(Map<String, dynamic> json) => RemovedApp(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    reason: json['reason'] == null ? null : json['reason'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'reason': reason};
+
+  @override
+  bool operator ==(Object other) =>
+      other is RemovedApp && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'RemovedApp(${jsonEncode(toJson())})';
+}
+
+enum AuthOutcome {
+  authorized('authorized'),
+  failed('failed'),
+  cancelled('cancelled'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const AuthOutcome(this.value);
+  final String value;
+
+  factory AuthOutcome.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+enum StoreState {
+  available('available'),
+  installed('installed'),
+  installing('installing'),
+  removing('removing'),
+  retired('retired'),
+  unavailable('unavailable'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const StoreState(this.value);
+  final String value;
+
+  factory StoreState.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+enum CatalogStatus {
+  available('available'),
+  retired('retired'),
+  removed('removed'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const CatalogStatus(this.value);
+  final String value;
+
+  factory CatalogStatus.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+/// Where the real icon is (HinterOS ships no logos): the installed app's desktop file, the vendor's logo URL, discovery on site_url, or the kiosk profile's favicon.
+class StoreAppIcon {
+  const StoreAppIcon({
+    this.desktopId,
+    this.siteUrl,
+    this.iconUrl,
+    required this.firefoxProfile,
+  });
+
+  final String? desktopId;
+  final String? siteUrl;
+  final String? iconUrl;
+  final bool firefoxProfile;
+
+  factory StoreAppIcon.fromJson(Map<String, dynamic> json) => StoreAppIcon(
+    desktopId: json['desktop_id'] == null ? null : json['desktop_id'] as String,
+    siteUrl: json['site_url'] == null ? null : json['site_url'] as String,
+    iconUrl: json['icon_url'] == null ? null : json['icon_url'] as String,
+    firefoxProfile: json['firefox_profile'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'desktop_id': ?desktopId,
+    'site_url': ?siteUrl,
+    'icon_url': ?iconUrl,
+    'firefox_profile': firefoxProfile,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is StoreAppIcon &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'StoreAppIcon(${jsonEncode(toJson())})';
+}
+
+class StoreAppTerms {
+  const StoreAppTerms({
+    required this.title,
+    required this.version,
+    required this.url,
+    required this.retrieved,
+    required this.file,
+  });
+
+  final String title;
+
+  /// A vendor terms version from the catalog.
+  final String version;
+  final String url;
+  final String retrieved;
+
+  /// Absolute path of the plain UTF-8 text on this box.
+  final String file;
+
+  factory StoreAppTerms.fromJson(Map<String, dynamic> json) => StoreAppTerms(
+    title: json['title'] as String,
+    version: json['version'] as String,
+    url: json['url'] as String,
+    retrieved: json['retrieved'] as String,
+    file: json['file'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'version': version,
+    'url': url,
+    'retrieved': retrieved,
+    'file': file,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is StoreAppTerms &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'StoreAppTerms(${jsonEncode(toJson())})';
+}
+
+/// A catalog entry (hinteros-catalog index version 2, fields in snake_case) with its state on this box. Removed entries (tombstones) only have id, name and status_reason; the other fields are empty.
+class StoreApp {
+  const StoreApp({
+    required this.id,
+    required this.name,
+    required this.summary,
+    required this.description,
+    required this.category,
+    required this.homepage,
+    required this.kind,
+    required this.sizeMib,
+    required this.icon,
+    required this.requires,
+    required this.depends,
+    required this.conflicts,
+    required this.installer,
+    required this.onIso,
+    required this.installerDefault,
+    required this.dataPaths,
+    required this.terms,
+    required this.buildsOnDevice,
+    required this.free,
+    required this.redistributable,
+    required this.status,
+    required this.statusReason,
+    required this.state,
+  });
+
+  /// Catalog app id (state.json apps).
+  final String id;
+  final String name;
+  final String summary;
+  final String description;
+
+  /// games, video, music, photos, utilities; anything else: Other.
+  final String category;
+  final String homepage;
+
+  /// How the app is launched. Clients must treat unknown values like 'native'.
+  final AppKind kind;
+
+  /// Approximate download plus disk use.
+  final int sizeMib;
+
+  /// Where the real icon is (HinterOS ships no logos): the installed app's desktop file, the vendor's logo URL, discovery on site_url, or the kiosk profile's favicon.
+  final StoreAppIcon icon;
+  final List<String> requires;
+  final List<String> depends;
+  final List<String> conflicts;
+  final bool installer;
+  final bool onIso;
+  final bool installerDefault;
+
+  /// Deleted in every profile's home by system.apps.remove {delete_data: true}.
+  final List<String> dataPaths;
+
+  /// The vendor's terms, shown in full before install; null if none.
+  final StoreAppTerms? terms;
+
+  /// Fetched from the vendor and prepared on this box during install (a few minutes, needs internet).
+  final bool buildsOnDevice;
+  final bool free;
+  final bool redistributable;
+  final CatalogStatus status;
+  final String? statusReason;
+  final StoreState state;
+
+  factory StoreApp.fromJson(Map<String, dynamic> json) => StoreApp(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    summary: json['summary'] as String,
+    description: json['description'] as String,
+    category: json['category'] as String,
+    homepage: json['homepage'] as String,
+    kind: AppKind.fromJson(json['kind'] as String),
+    sizeMib: json['size_mib'] as int,
+    icon: StoreAppIcon.fromJson((json['icon'] as Map).cast<String, dynamic>()),
+    requires: (json['requires'] as List).map((x) => x as String).toList(),
+    depends: (json['depends'] as List).map((x) => x as String).toList(),
+    conflicts: (json['conflicts'] as List).map((x) => x as String).toList(),
+    installer: json['installer'] as bool,
+    onIso: json['on_iso'] as bool,
+    installerDefault: json['installer_default'] as bool,
+    dataPaths: (json['data_paths'] as List).map((x) => x as String).toList(),
+    terms: json['terms'] == null
+        ? null
+        : StoreAppTerms.fromJson(
+            (json['terms'] as Map).cast<String, dynamic>(),
+          ),
+    buildsOnDevice: json['builds_on_device'] as bool,
+    free: json['free'] as bool,
+    redistributable: json['redistributable'] as bool,
+    status: CatalogStatus.fromJson(json['status'] as String),
+    statusReason: json['status_reason'] == null
+        ? null
+        : json['status_reason'] as String,
+    state: StoreState.fromJson(json['state'] as String),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'summary': summary,
+    'description': description,
+    'category': category,
+    'homepage': homepage,
+    'kind': kind.toJson(),
+    'size_mib': sizeMib,
+    'icon': icon.toJson(),
+    'requires': requires,
+    'depends': depends,
+    'conflicts': conflicts,
+    'installer': installer,
+    'on_iso': onIso,
+    'installer_default': installerDefault,
+    'data_paths': dataPaths,
+    'terms': terms == null ? null : terms!.toJson(),
+    'builds_on_device': buildsOnDevice,
+    'free': free,
+    'redistributable': redistributable,
+    'status': status.toJson(),
+    'status_reason': statusReason,
+    'state': state.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is StoreApp && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'StoreApp(${jsonEncode(toJson())})';
 }
 
 enum JobState {
@@ -1036,6 +1406,8 @@ class AvailableUpdate {
     required this.signer,
     required this.security,
     required this.commits,
+    required this.newApps,
+    required this.removedApps,
   });
 
   /// A full git commit id.
@@ -1054,6 +1426,12 @@ class AvailableUpdate {
   final Severity? security;
   final int commits;
 
+  /// Apps the update makes installable (in the target's catalog, not available in the running one), by id; null if the target's catalog could not be read (since 0.3). The Store says 'More apps are available after the next update'.
+  final List<CatalogApp>? newApps;
+
+  /// Installed apps the update takes away (removed from, or missing in, the target's catalog); null if unknown (since 0.3). The update screen names them with the reason.
+  final List<RemovedApp>? removedApps;
+
   factory AvailableUpdate.fromJson(Map<String, dynamic> json) =>
       AvailableUpdate(
         rev: json['rev'] as String,
@@ -1064,6 +1442,22 @@ class AvailableUpdate {
             ? null
             : Severity.fromJson(json['security'] as String),
         commits: json['commits'] as int,
+        newApps: json['new_apps'] == null
+            ? null
+            : (json['new_apps'] as List)
+                  .map(
+                    (x) =>
+                        CatalogApp.fromJson((x as Map).cast<String, dynamic>()),
+                  )
+                  .toList(),
+        removedApps: json['removed_apps'] == null
+            ? null
+            : (json['removed_apps'] as List)
+                  .map(
+                    (x) =>
+                        RemovedApp.fromJson((x as Map).cast<String, dynamic>()),
+                  )
+                  .toList(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -1073,6 +1467,12 @@ class AvailableUpdate {
     'signer': signer,
     'security': security == null ? null : security!.toJson(),
     'commits': commits,
+    'new_apps': newApps == null
+        ? null
+        : newApps!.map((x) => x.toJson()).toList(),
+    'removed_apps': removedApps == null
+        ? null
+        : removedApps!.map((x) => x.toJson()).toList(),
   };
 
   @override
@@ -2887,21 +3287,30 @@ class SystemSettingsGetResultSettingsSsh {
 class SystemSettingsGetResultSettings {
   const SystemSettingsGetResultSettings({
     required this.base,
+    required this.apps,
     required this.ssh,
   });
 
   final Base base;
+
+  /// Catalog app ids installed from the Store (state.json apps), in install order (since 0.3).
+  final List<String> apps;
   final SystemSettingsGetResultSettingsSsh ssh;
 
   factory SystemSettingsGetResultSettings.fromJson(Map<String, dynamic> json) =>
       SystemSettingsGetResultSettings(
         base: Base.fromJson(json['base'] as String),
+        apps: (json['apps'] as List).map((x) => x as String).toList(),
         ssh: SystemSettingsGetResultSettingsSsh.fromJson(
           (json['ssh'] as Map).cast<String, dynamic>(),
         ),
       );
 
-  Map<String, dynamic> toJson() => {'base': base.toJson(), 'ssh': ssh.toJson()};
+  Map<String, dynamic> toJson() => {
+    'base': base.toJson(),
+    'apps': apps,
+    'ssh': ssh.toJson(),
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -3482,6 +3891,136 @@ class SystemBaseSetResult {
 
   @override
   String toString() => 'SystemBaseSetResult(${jsonEncode(toJson())})';
+}
+
+class SystemAppsInstallParams {
+  const SystemAppsInstallParams({
+    required this.ids,
+    required this.revision,
+    this.acceptedTerms,
+  });
+
+  final List<String> ids;
+
+  /// SHA-256 of state.json, hex.
+  final String revision;
+
+  /// App id to the terms version the user accepted (after reading the full text).
+  final Map<String, Object?>? acceptedTerms;
+
+  factory SystemAppsInstallParams.fromJson(Map<String, dynamic> json) =>
+      SystemAppsInstallParams(
+        ids: (json['ids'] as List).map((x) => x as String).toList(),
+        revision: json['revision'] as String,
+        acceptedTerms: json['accepted_terms'] == null
+            ? null
+            : (json['accepted_terms'] as Map).cast<String, Object?>(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'ids': ids,
+    'revision': revision,
+    'accepted_terms': ?acceptedTerms,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAppsInstallParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAppsInstallParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemAppsInstallResult {
+  const SystemAppsInstallResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemAppsInstallResult.fromJson(Map<String, dynamic> json) =>
+      SystemAppsInstallResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAppsInstallResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAppsInstallResult(${jsonEncode(toJson())})';
+}
+
+class SystemAppsRemoveParams {
+  const SystemAppsRemoveParams({
+    required this.ids,
+    required this.revision,
+    required this.deleteData,
+  });
+
+  final List<String> ids;
+
+  /// SHA-256 of state.json, hex.
+  final String revision;
+  final bool deleteData;
+
+  factory SystemAppsRemoveParams.fromJson(Map<String, dynamic> json) =>
+      SystemAppsRemoveParams(
+        ids: (json['ids'] as List).map((x) => x as String).toList(),
+        revision: json['revision'] as String,
+        deleteData: json['delete_data'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'ids': ids,
+    'revision': revision,
+    'delete_data': deleteData,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAppsRemoveParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAppsRemoveParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemAppsRemoveResult {
+  const SystemAppsRemoveResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemAppsRemoveResult.fromJson(Map<String, dynamic> json) =>
+      SystemAppsRemoveResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAppsRemoveResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAppsRemoveResult(${jsonEncode(toJson())})';
 }
 
 class SystemJobsGetParams {
@@ -5266,6 +5805,200 @@ class PowerPoweroffResult {
   String toString() => 'PowerPoweroffResult(${jsonEncode(toJson())})';
 }
 
+class AuthRespondParams {
+  const AuthRespondParams({required this.cookie, required this.password});
+
+  /// polkit's cookie for one authentication request.
+  final String cookie;
+  final String password;
+
+  factory AuthRespondParams.fromJson(Map<String, dynamic> json) =>
+      AuthRespondParams(
+        cookie: json['cookie'] as String,
+        password: json['password'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'cookie': cookie, 'password': password};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AuthRespondParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AuthRespondParams(${jsonEncode(toJson())})';
+}
+
+class AuthRespondResult {
+  const AuthRespondResult({required this.ok, required this.attemptsLeft});
+
+  final bool ok;
+  final int attemptsLeft;
+
+  factory AuthRespondResult.fromJson(Map<String, dynamic> json) =>
+      AuthRespondResult(
+        ok: json['ok'] as bool,
+        attemptsLeft: json['attempts_left'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {'ok': ok, 'attempts_left': attemptsLeft};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AuthRespondResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AuthRespondResult(${jsonEncode(toJson())})';
+}
+
+class AuthCancelParams {
+  const AuthCancelParams({required this.cookie});
+
+  /// polkit's cookie for one authentication request.
+  final String cookie;
+
+  factory AuthCancelParams.fromJson(Map<String, dynamic> json) =>
+      AuthCancelParams(cookie: json['cookie'] as String);
+
+  Map<String, dynamic> toJson() => {'cookie': cookie};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AuthCancelParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AuthCancelParams(${jsonEncode(toJson())})';
+}
+
+class AuthCancelResult {
+  const AuthCancelResult();
+
+  factory AuthCancelResult.fromJson(Map<String, dynamic> json) =>
+      AuthCancelResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AuthCancelResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AuthCancelResult(${jsonEncode(toJson())})';
+}
+
+class SessionRestartParams {
+  const SessionRestartParams();
+
+  factory SessionRestartParams.fromJson(Map<String, dynamic> json) =>
+      SessionRestartParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SessionRestartParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SessionRestartParams(${jsonEncode(toJson())})';
+}
+
+class SessionRestartResult {
+  const SessionRestartResult();
+
+  factory SessionRestartResult.fromJson(Map<String, dynamic> json) =>
+      SessionRestartResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SessionRestartResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SessionRestartResult(${jsonEncode(toJson())})';
+}
+
+class StoreListParams {
+  const StoreListParams();
+
+  factory StoreListParams.fromJson(Map<String, dynamic> json) =>
+      StoreListParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is StoreListParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'StoreListParams(${jsonEncode(toJson())})';
+}
+
+class StoreListResult {
+  const StoreListResult({
+    required this.indexVersion,
+    required this.apps,
+    required this.moreAfterUpdate,
+  });
+
+  final int indexVersion;
+  final List<StoreApp> apps;
+  final bool moreAfterUpdate;
+
+  factory StoreListResult.fromJson(Map<String, dynamic> json) =>
+      StoreListResult(
+        indexVersion: json['index_version'] as int,
+        apps: (json['apps'] as List)
+            .map((x) => StoreApp.fromJson((x as Map).cast<String, dynamic>()))
+            .toList(),
+        moreAfterUpdate: json['more_after_update'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'index_version': indexVersion,
+    'apps': apps.map((x) => x.toJson()).toList(),
+    'more_after_update': moreAfterUpdate,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is StoreListResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'StoreListResult(${jsonEncode(toJson())})';
+}
+
 /// The global Home button was pressed. The launcher brings itself to the front.
 final class HomePressedEvent extends SessionEvent {
   const HomePressedEvent();
@@ -5977,6 +6710,158 @@ final class AudioChangedEvent extends SessionEvent {
   String toString() => 'AudioChangedEvent(${jsonEncode(toJson())})';
 }
 
+class AuthenticationRequestedEventIdentitiesItem {
+  const AuthenticationRequestedEventIdentitiesItem({
+    required this.uid,
+    required this.name,
+  });
+
+  final int uid;
+  final String name;
+
+  factory AuthenticationRequestedEventIdentitiesItem.fromJson(
+    Map<String, dynamic> json,
+  ) => AuthenticationRequestedEventIdentitiesItem(
+    uid: json['uid'] as int,
+    name: json['name'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {'uid': uid, 'name': name};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AuthenticationRequestedEventIdentitiesItem &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'AuthenticationRequestedEventIdentitiesItem(${jsonEncode(toJson())})';
+}
+
+/// polkit needs the admin password for an action the launcher asked for (for example system.ssh.set): show the password dialog. Sent only to the launcher (hello client name hinteros-launcher).
+final class AuthenticationRequestedEvent extends SessionEvent {
+  const AuthenticationRequestedEvent({
+    required this.cookie,
+    required this.action,
+    required this.message,
+    required this.identities,
+  });
+
+  /// polkit's cookie for one authentication request.
+  final String cookie;
+  final String action;
+  final String message;
+  final List<AuthenticationRequestedEventIdentitiesItem> identities;
+
+  factory AuthenticationRequestedEvent.fromJson(Map<String, dynamic> json) =>
+      AuthenticationRequestedEvent(
+        cookie: json['cookie'] as String,
+        action: json['action'] as String,
+        message: json['message'] as String,
+        identities: (json['identities'] as List)
+            .map(
+              (x) => AuthenticationRequestedEventIdentitiesItem.fromJson(
+                (x as Map).cast<String, dynamic>(),
+              ),
+            )
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'cookie': cookie,
+    'action': action,
+    'message': message,
+    'identities': identities.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  String get name => 'authentication_requested';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is AuthenticationRequestedEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AuthenticationRequestedEvent(${jsonEncode(toJson())})';
+}
+
+/// An authentication request is over: authorized, failed (too many wrong passwords) or cancelled (auth.cancel, polkit, or 2 minutes without an answer). Sent only to the launcher.
+final class AuthenticationFinishedEvent extends SessionEvent {
+  const AuthenticationFinishedEvent({
+    required this.cookie,
+    required this.outcome,
+  });
+
+  /// polkit's cookie for one authentication request.
+  final String cookie;
+  final AuthOutcome outcome;
+
+  factory AuthenticationFinishedEvent.fromJson(Map<String, dynamic> json) =>
+      AuthenticationFinishedEvent(
+        cookie: json['cookie'] as String,
+        outcome: AuthOutcome.fromJson(json['outcome'] as String),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'cookie': cookie,
+    'outcome': outcome.toJson(),
+  };
+
+  @override
+  String get name => 'authentication_finished';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is AuthenticationFinishedEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AuthenticationFinishedEvent(${jsonEncode(toJson())})';
+}
+
+/// What store.list returns may have changed: an apps job started or finished, any other job that switched the system finished, or an update check changed more_after_update. Query store.list again.
+final class StoreChangedEvent extends SessionEvent {
+  const StoreChangedEvent();
+
+  factory StoreChangedEvent.fromJson(Map<String, dynamic> json) =>
+      StoreChangedEvent();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  String get name => 'store_changed';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is StoreChangedEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'StoreChangedEvent(${jsonEncode(toJson())})';
+}
+
 class InvalidParamsData {
   const InvalidParamsData({required this.field, required this.reason});
 
@@ -6347,6 +7232,64 @@ class AuthenticationRequiredData {
   String toString() => 'AuthenticationRequiredData(${jsonEncode(toJson())})';
 }
 
+class AppConflictData {
+  const AppConflictData({required this.id, required this.conflictsWith});
+
+  /// Catalog app id (state.json apps).
+  final String id;
+
+  /// Catalog app id (state.json apps).
+  final String conflictsWith;
+
+  factory AppConflictData.fromJson(Map<String, dynamic> json) =>
+      AppConflictData(
+        id: json['id'] as String,
+        conflictsWith: json['conflicts_with'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'id': id, 'conflicts_with': conflictsWith};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppConflictData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppConflictData(${jsonEncode(toJson())})';
+}
+
+class TermsRequiredData {
+  const TermsRequiredData({required this.id, required this.version});
+
+  /// Catalog app id (state.json apps).
+  final String id;
+
+  /// A vendor terms version from the catalog.
+  final String version;
+
+  factory TermsRequiredData.fromJson(Map<String, dynamic> json) =>
+      TermsRequiredData(
+        id: json['id'] as String,
+        version: json['version'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'id': id, 'version': version};
+
+  @override
+  bool operator ==(Object other) =>
+      other is TermsRequiredData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'TermsRequiredData(${jsonEncode(toJson())})';
+}
+
 enum SystemUnavailableDataReason {
   down('down'),
   versionMismatch('version_mismatch'),
@@ -6396,6 +7339,8 @@ enum UnavailableDataService {
   audio('audio'),
   display('display'),
   logind('logind'),
+  catalog('catalog'),
+  polkit('polkit'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -6629,7 +7574,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's ssh.set. Turn SSH (sshd) on or off (job). Action org.hinteros.system.ssh, which needs the admin password (auth_admin).
   ///
-  /// Login over SSH is the admin account with its password; the system repo configures sshd. polkit's default for this action is auth_admin, so without an authorization the call gets authentication_required (the launcher will ask for the admin password once a polkit agent exists). Returns job_id null if SSH already is in that state.
+  /// Login over SSH is the admin account with its password; the system repo configures sshd. polkit's default for this action is auth_admin. The service checks it with AllowUserInteraction (since 0.3): polkit asks the authentication agent registered for the calling process (the session daemon's, which shows the launcher a password prompt) and the call waits until the user answered (at most 5 minutes). Without an agent the call gets authentication_required; a cancelled or timed-out prompt also gives authentication_required, too many wrong passwords permission_denied (reason polkit). Returns job_id null if SSH already is in that state.
   Future<SystemSshSetResult> systemSshSet(SystemSshSetParams params) async =>
       SystemSshSetResult.fromJson(await rpc('system.ssh.set', params.toJson()));
 
@@ -6693,6 +7638,24 @@ mixin SessionApiMethods {
       SystemBaseSetResult.fromJson(
         await rpc('system.base.set', params.toJson()),
       );
+
+  /// Relayed to the system service's apps.install. Install Store apps (job). Action org.hinteros.system.apps.
+  ///
+  /// ids (1 to 8 catalog ids) must be in the running generation's catalog index (/run/current-system/sw/share/hinteros/catalog.json, never the caller's copy) with status available; their depends are added (transitively). Ids already installed are skipped; if nothing is left the result is job_id null. A conflict between a new app and an installed or requested one is app_conflict. Every new app with vendor terms needs accepted_terms[id] equal to the catalog's terms.version, else terms_required (the box records the acceptance: id, version, time, uid and profile, in the audit log and /var/lib/hinteros/terms-accepted.json). revision must be settings.get's (state_conflict otherwise). Free disk space must cover the new apps' sizeMiB plus the usual rebuild margin (insufficient_resources). The job writes state.json's apps from the service's typed state and runs the apply flow.
+  Future<SystemAppsInstallResult> systemAppsInstall(
+    SystemAppsInstallParams params,
+  ) async => SystemAppsInstallResult.fromJson(
+    await rpc('system.apps.install', params.toJson()),
+  );
+
+  /// Relayed to the system service's apps.remove. Remove installed Store apps (job), optionally with their data. Action org.hinteros.system.apps.
+  ///
+  /// ids (1 to 8) must be installed (not_found otherwise). An app that another installed app depends on cannot be removed alone (app_conflict, conflicts_with names the dependent). The job writes state.json without them and runs the apply flow. With delete_data, after a successful switch the job deletes each removed app's dataPaths (from the running generation's catalog) in every profile's home, as root without following symlinks (each path component is opened with O_NOFOLLOW relative to the home; nothing outside the home and no other filesystem is touched) and logs what it deleted. The launcher closes running apps first.
+  Future<SystemAppsRemoveResult> systemAppsRemove(
+    SystemAppsRemoveParams params,
+  ) async => SystemAppsRemoveResult.fromJson(
+    await rpc('system.apps.remove', params.toJson()),
+  );
 
   /// Relayed to the system service's jobs.get. One job: running or among the last 10 finished. Read-only.
   Future<SystemJobsGetResult> systemJobsGet(SystemJobsGetParams params) async =>
@@ -6908,6 +7871,35 @@ mixin SessionApiMethods {
   ]) async => PowerPoweroffResult.fromJson(
     await rpc('power.poweroff', params.toJson()),
   );
+
+  /// Answer an authentication_requested prompt with the password. Only the launcher (hello client name hinteros-launcher) may call it.
+  ///
+  /// The daemon runs polkit's agent helper (polkit-agent-helper-1, or polkit's helper socket) for the request's first identity with this password; the helper checks it with PAM and tells polkit. ok true: polkit authorizes the action, and the call that needed it (for example system.ssh.set) goes on; authentication_finished {outcome: authorized} follows. ok false: wrong password; the prompt stays open while attempts_left &gt; 0 (3 tries), then the request fails (authentication_finished {outcome: failed}) and the waiting call gets permission_denied. The password is only passed to the helper: never logged, never stored, wiped from the daemon's memory after use. At most 511 bytes, no newline or NUL (invalid_params).
+  Future<AuthRespondResult> authRespond(AuthRespondParams params) async =>
+      AuthRespondResult.fromJson(await rpc('auth.respond', params.toJson()));
+
+  /// Dismiss an authentication_requested prompt. Only the launcher may call it.
+  ///
+  /// polkit then refuses the action; the waiting call gets authentication_required. authentication_finished {outcome: cancelled} follows.
+  Future<AuthCancelResult> authCancel(AuthCancelParams params) async =>
+      AuthCancelResult.fromJson(await rpc('auth.cancel', params.toJson()));
+
+  /// Restart the TV session: the compositor, the launcher and everything started in it, and the session daemon itself.
+  ///
+  /// For job_finished {session_restart_required: true} (and system_unavailable {reason: version_mismatch}). The daemon answers first, then asks logind to terminate the user's graphical session on seat0 (a greetd session: greetd's default_session starts it again at once, with the new generation's programs), then asks the user's systemd to restart the session daemon's own unit. Apps the daemon started end with it. Only a session started by greetd is ever terminated (never a desktop session). unavailable {service: logind}: no such session, or logind cannot be reached.
+  Future<SessionRestartResult> sessionRestart([
+    SessionRestartParams params = const SessionRestartParams(),
+  ]) async => SessionRestartResult.fromJson(
+    await rpc('session.restart', params.toJson()),
+  );
+
+  /// The App Store: the running generation's catalog, merged with what is installed.
+  ///
+  /// From the catalog index of the running generation (/run/current-system/sw/share/hinteros/catalog.json) and system.settings.get's installed apps. Lists available apps and installed ones whatever their catalog status (retired: still works, can be removed; removed: the next update takes it away), sorted by name; apps being installed or removed through this daemon have state installing/removing. Terms carry the full text's path on this box, so the launcher can show it offline before system.apps.install. more_after_update: the last update check found apps that the next update makes installable. unavailable {service: catalog}: no index, or an index version this daemon does not read.
+  Future<StoreListResult> storeList([
+    StoreListParams params = const StoreListParams(),
+  ]) async =>
+      StoreListResult.fromJson(await rpc('store.list', params.toJson()));
 }
 
 /// A server-pushed notification of the session API.
@@ -6942,6 +7934,9 @@ sealed class SessionEvent {
     'bluetooth_changed' => BluetoothChangedEvent.fromJson(params),
     'bluetooth_confirm' => BluetoothConfirmEvent.fromJson(params),
     'audio_changed' => AudioChangedEvent.fromJson(params),
+    'authentication_requested' => AuthenticationRequestedEvent.fromJson(params),
+    'authentication_finished' => AuthenticationFinishedEvent.fromJson(params),
+    'store_changed' => StoreChangedEvent.fromJson(params),
     _ => UnknownSessionEvent(name, params),
   };
 }

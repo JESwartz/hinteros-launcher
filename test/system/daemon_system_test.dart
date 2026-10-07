@@ -15,6 +15,8 @@ api.AvailableUpdate _update({api.Severity? security}) => api.AvailableUpdate(
   signer: 'release@hinteros',
   security: security,
   commits: 3,
+  newApps: null,
+  removedApps: null,
 );
 
 Future<(api.MockDaemon, SystemServices)> _setup() async {

@@ -58,6 +58,8 @@ Future<void> _prepareSystem(
     signer: 'release@hinteros',
     security: Severity.high,
     commits: 12,
+    newApps: null,
+    removedApps: null,
   );
 
   /// A verified check that found [security].

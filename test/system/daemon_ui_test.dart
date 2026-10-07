@@ -168,6 +168,8 @@ void main() {
         signer: 'release@hinteros',
         security: api.Severity.high,
         commits: 3,
+        newApps: null,
+        removedApps: null,
       );
       await h.pump(t);
       // The startup check finds the update; the reminder shows the notice.
