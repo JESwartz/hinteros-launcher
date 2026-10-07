@@ -4,6 +4,7 @@ import 'dart:io' show File;
 import 'daemon.dart';
 import 'errors.dart';
 import 'generated.dart';
+import 'mock_runtime.dart';
 import 'mock_system_relay.dart';
 import 'version.dart';
 
@@ -125,11 +126,17 @@ class MockDaemon extends DaemonConnection {
       now: now,
       stepDelay: systemStepDelay,
     );
+    runtime = MockRuntime(emit: (name, params) => emitRaw(name, params));
   }
 
   /// The relayed system service (session API 0.6): its state, fake jobs and
   /// switches for failures. Methods `system.*` go here.
   late final MockSystemRelay system;
+
+  /// The runtime settings (session API 0.7): Wi-Fi, Bluetooth, audio,
+  /// display and power, with switches for failures. Methods `network.*`,
+  /// `wifi.*`, `bluetooth.*`, `audio.*`, `display.*` and `power.*` go here.
+  late final MockRuntime runtime;
 
   final List<App> apps;
   List<Game> _games;
@@ -257,6 +264,7 @@ class MockDaemon extends DaemonConnection {
       );
     }
     if (MockSystemRelay.handles(method)) return system.call(method, params);
+    if (MockRuntime.handles(method)) return runtime.call(method, params);
     switch (method) {
       case 'ping':
         return PingResult(nonce: PingParams.fromJson(params).nonce).toJson();

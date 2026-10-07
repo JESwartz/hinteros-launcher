@@ -1,6 +1,7 @@
 // Contract test: every example in the vendored schema is replayed through the
 // mock daemon, and everything the mock produces is validated against the
 // schema's JSON Schema payloads (via the json_schema package).
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -103,6 +104,90 @@ Future<void> _prepareSystem(
   }
 }
 
+/// Puts the mock's runtime settings into the situation a 0.7 example
+/// describes (the examples are written against particular states of NetworkManager,
+/// BlueZ, PipeWire, gamescope and logind).
+Future<void> _prepareRuntime(
+  MockDaemon mock,
+  String method,
+  Map<String, dynamic> ex,
+) async {
+  final r = mock.runtime;
+  final name = ex['name'] as String;
+  final err = ex['error'] as Map<String, dynamic>?;
+  final data = err?['data'] as Map?;
+
+  switch (err?['code']) {
+    case ApiErrorCode.unavailable:
+      r.setUnavailable(
+        data!['service'] as String,
+        reason: data['reason'] as String,
+      );
+    case ApiErrorCode.deviceFailed:
+      switch (data!['reason']) {
+        case 'wifi_disabled':
+          r.wifiEnabled = false;
+        case 'no_adapter':
+          r.bluetoothAdapter = false;
+        case 'rejected':
+          r.rejectPairing = true;
+        case 'not_applied':
+          r.displayIgnoresMode = true;
+      }
+    case ApiErrorCode.powerInhibited:
+      r.inhibited = true;
+      r.inhibitor = data!['who'] as String;
+      r.inhibitorReason = data['why'] as String;
+    case ApiErrorCode.notAuthorized:
+      r.notAuthorized = true;
+  }
+
+  // The examples differ in what they leave out: no battery report, a cable
+  // and no Wi-Fi.
+  final result = ex['result'];
+  if (result is Map &&
+      result.containsKey('address') &&
+      result['kind'] != null) {
+    if (!result.containsKey('battery')) {
+      for (final d in r.devices) {
+        d.battery = null;
+      }
+    }
+  }
+  if (method == 'network.status' && name == 'cable only' ||
+      method == 'wifi.enable') {
+    r
+      ..ethernet = true
+      ..address = '10.0.0.5';
+    if (method == 'network.status') {
+      r
+        ..wifiAvailable = false
+        ..wifiEnabled = false;
+    }
+  }
+
+  switch ((method, name)) {
+    // A network that is not stored needs its password.
+    case ('wifi.connect', 'password missing'):
+      await mock.rpc('wifi.forget', {'ssid': 'Home'});
+    // The devices a scan finds.
+    case ('bluetooth.pair', _) || ('bluetooth.connect', _):
+      if (err?['code'] != ApiErrorCode.notFound) {
+        await mock.rpc('bluetooth.scan', {'enabled': true});
+      }
+    case ('bluetooth.confirm', 'accepted'):
+      await mock.rpc('bluetooth.scan', {'enabled': true});
+      unawaited(mock.rpc('bluetooth.pair', {'address': 'AA:BB:CC:DD:EE:03'}));
+      await Future<void>.delayed(Duration.zero);
+    case ('display.revert', 'reverted'):
+      await mock.rpc('display.set_mode', {
+        'width': 1920,
+        'height': 1080,
+        'refresh': 60,
+      });
+  }
+}
+
 void main() {
   test('vendored schema is the version the client was generated for', () {
     expect(_doc['version'], apiVersion);
@@ -175,6 +260,9 @@ void main() {
 
           if (method.startsWith('system.')) {
             await _prepareSystem(mock, method, ex);
+          }
+          if (MockRuntime.handles(method)) {
+            await _prepareRuntime(mock, method, ex);
           }
 
           if (ex.containsKey('error')) {
