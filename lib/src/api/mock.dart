@@ -132,6 +132,20 @@ class MockDaemon extends DaemonConnection {
       stepDelay: systemStepDelay,
       authorize: (action, message) =>
           auth.authorize(action: action, message: message),
+      onAppsInstalled: (added) {
+        var changed = false;
+        for (final a in added) {
+          if (this.apps.any((x) => x.id == a.id)) continue;
+          this.apps.add(App(id: a.id, name: a.name, kind: a.kind));
+          changed = true;
+        }
+        if (changed) emitRaw('apps_changed');
+      },
+      onAppsRemoved: (ids) {
+        final n = this.apps.length;
+        this.apps.removeWhere((a) => ids.contains(a.id));
+        if (this.apps.length != n) emitRaw('apps_changed');
+      },
     );
     runtime = MockRuntime(emit: (name, params) => emitRaw(name, params));
   }

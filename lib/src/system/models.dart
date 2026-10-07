@@ -726,7 +726,12 @@ class StoreIcon {
     this.iconUrl,
     this.siteUrl,
     this.firefoxProfile = false,
+    this.path,
   });
+
+  /// The icon the daemon resolved on this box (0.9, `icon.path`): an
+  /// absolute path to an image, absent until there is one.
+  final String? path;
 
   final String? desktopId;
   final String? iconUrl;

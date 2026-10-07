@@ -1,5 +1,5 @@
-/// The Store over session API 0.8: `store.list` (the running generation's
-/// catalog merged with what is installed), `store_changed`, and the relayed
+/// The Store over session API 0.8 and 0.9 (icons): `store.list` (the running
+/// generation's catalog merged with what is installed), `store_changed`, and the relayed
 /// `system.apps.install` / `system.apps.remove` with their job events.
 library;
 
@@ -161,6 +161,7 @@ class DaemonStore implements StoreRepository {
         iconUrl: a.icon.iconUrl,
         siteUrl: a.icon.siteUrl,
         firefoxProfile: a.icon.firefoxProfile,
+        path: a.icon.path,
       ),
       removeDataWarning: removeDataWarningFor(a.dataPaths),
       state: state,
@@ -168,11 +169,14 @@ class DaemonStore implements StoreRepository {
     );
   }
 
-  /// The icon the daemon resolved for an installed app (`apps.list`); the
-  /// launcher never fetches an icon itself, so an app that is not installed
-  /// has none and gets the letter tile.
+  /// The icon the daemon resolved: `store.list`'s `icon.path` (0.9, installed
+  /// or not; `store_changed` says when one arrives), else the app's own icon
+  /// from `apps.list`. The launcher never fetches an icon itself, so an app
+  /// with neither gets the letter tile.
   @override
   Future<String?> resolveIcon(StoreApp app) async {
+    final path = app.icon.path;
+    if (path != null) return path;
     final icons = _icons ??= _loadIcons();
     return (await icons)[app.id];
   }

@@ -1072,6 +1072,7 @@ class MockStore implements StoreRepository {
 
   @override
   Future<String?> resolveIcon(StoreApp app) async {
+    if (app.icon.path != null) return app.icon.path;
     final d = iconDir;
     if (d == null) return null;
     for (final ext in ['png', 'svg']) {

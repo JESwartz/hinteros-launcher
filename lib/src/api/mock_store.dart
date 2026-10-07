@@ -97,6 +97,7 @@ List<StoreApp> _fixtureApps(String? dir) {
             siteUrl: i['siteUrl'] as String?,
             iconUrl: i['iconUrl'] as String?,
             firefoxProfile: i['firefoxProfile'] == true,
+            path: i['path'] as String?,
           );
         }(),
         requires: [...(a['requires'] as List? ?? []).cast<String>()],

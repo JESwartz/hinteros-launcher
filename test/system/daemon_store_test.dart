@@ -461,4 +461,37 @@ void main() {
       );
     });
   });
+
+  group('session API 0.9: icon.path', () {
+    test(
+      'comes with store.list, also for apps that are not installed',
+      () async {
+        final (mock, services) = await _setup();
+        final store = services.store;
+        await store.catalog();
+        expect(_app(store.apps, 'moonlight').icon.path, isNull);
+        expect(await store.resolveIcon(_app(store.apps, 'moonlight')), isNull);
+        var changes = 0;
+        final sub = store.changes.listen((_) => changes++);
+        addTearDown(sub.cancel);
+        mock.system.setStoreIcon('moonlight', '/icons/moonlight.png');
+        await _settle();
+        await _settle();
+        expect(changes, greaterThan(0));
+        final a = _app(store.apps, 'moonlight');
+        expect(a.state, StoreState.available);
+        expect(a.icon.path, '/icons/moonlight.png');
+        expect(await store.resolveIcon(a), '/icons/moonlight.png');
+      },
+    );
+
+    test('an installed app'
+        's apps.list icon is the fallback', () async {
+      final (_, services) = await _setup();
+      await services.store.catalog();
+      final steam = _app(services.store.apps, 'steam');
+      expect(steam.icon.path, isNull);
+      expect(await services.store.resolveIcon(steam), isNull);
+    });
+  });
 }

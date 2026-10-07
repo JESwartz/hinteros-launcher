@@ -72,6 +72,8 @@ class MockSystemRelay {
     this.stepDelay,
     this.authorize,
     List<StoreApp>? catalog,
+    this.onAppsInstalled,
+    this.onAppsRemoved,
   }) : _now = now ?? DateTime.now,
        catalog = catalog ?? mockStoreCatalog() {
     generations = [
@@ -110,6 +112,11 @@ class MockSystemRelay {
   bool dev = false;
   bool sshEnabled = false;
 
+  /// An apps job finished: the box's app list changes (the daemon reloads it
+  /// and sends `apps_changed`, 0.9).
+  final void Function(List<StoreApp> apps)? onAppsInstalled;
+  final void Function(List<String> ids)? onAppsRemoved;
+
   /// Catalog ids installed from the Store (`settings.get`, state.json apps).
   final List<String> installedApps = ['steam'];
 
@@ -119,6 +126,18 @@ class MockSystemRelay {
 
   /// No catalog index on this system (`store.list` is `unavailable`).
   bool catalogMissing = false;
+
+  /// The daemon resolved a catalog icon (0.9): `icon.path` appears and
+  /// `store_changed` is sent.
+  void setStoreIcon(String id, String? path) {
+    final i = catalog.indexWhere((a) => a.id == id);
+    if (i < 0) return;
+    final j = catalog[i].toJson();
+    final icon = {...(j['icon'] as Map<String, dynamic>)};
+    path == null ? icon.remove('path') : icon['path'] = path;
+    catalog[i] = StoreApp.fromJson({...j, 'icon': icon});
+    emit('store_changed', const {});
+  }
 
   /// Free disk space, for `apps.install`.
   int freeDiskMib = 100000;
@@ -640,6 +659,7 @@ class MockSystemRelay {
       apps: want,
       onSuccess: () {
         installedApps.addAll(want);
+        onAppsInstalled?.call([for (final id in want) _catalogApp(id)]);
         _bumpRevision();
       },
     );
@@ -670,6 +690,7 @@ class MockSystemRelay {
       apps: List.of(p.ids),
       onSuccess: () {
         installedApps.removeWhere(p.ids.contains);
+        onAppsRemoved?.call(List.of(p.ids));
         _bumpRevision();
       },
     );
