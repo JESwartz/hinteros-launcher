@@ -194,6 +194,7 @@ params/result schemas that are a `$ref` (the relayed `system.*` results; `displa
   confirm step, the attention banner.
 - `test/system/daemon_runtime_test.dart` runs the real network, Bluetooth, display/audio and power repositories over the mock's runtime (mapping, events, the 4xxx errors). `test/system/runtime_ui_test.dart` is the same through the Settings screens: Wi-Fi with a wrong password then the right one, Bluetooth pairing with a passkey (Accept, Reject, the code shown for a device that shows none), the display keep or revert dialog with its 15 seconds (`display.keep` / `display.revert`), `can_set` false, power refused while an update is being applied, and one section unavailable while the others work.
 - `test/system/daemon_system_test.dart` runs the real repositories (`DaemonSystem`, `DaemonUpdates`, `DaemonJobs`) over `MockDaemon`'s relay: error mapping, jobs from events, cancel, downgrade acknowledgement, the update check and its cache, `settings.set` with a revision. `test/system/daemon_ui_test.dart` is the same through the Settings screens (SSH without a polkit agent, settings unavailable, About with the DEV badge, a security update through to "Restart session"). `test/osk/osk_auto_show_test.dart`: the keyboard opens and closes with the launcher's text fields.
+- `test/installer/` covers the installer: `flow_test.dart` walks the screens with a fake backend (disk filtering and the two confirmations, password mismatch, SSH off by default, offline disabling the online-only apps, the plan JSON for several choices, progress, exit status 2 and 1 with their codes, typing with the pad on the in-app keyboard), `plan_test.dart`, `progress_test.dart`, `parsers_test.dart` (lsblk, nmcli, catalog index fixtures), `process_backend_test.dart` (the real backend class against a stand-in script: the plan arrives on stdin, never in the arguments), `gamepad_test.dart`, `first_boot_test.dart`.
 - `test/osk/` drives the on-screen keyboard with the mock backend: layout, D-pad navigation, shift,
   pages, and the exact backend calls for typing `P@ss-w0rd!` with D-pad presses only.
 - `test/integration/` runs the real `hinteros-session` binary: `nix build .#checks.x86_64-linux.integration`.
@@ -227,6 +228,98 @@ params/result schemas that are a `$ref` (the relayed `system.*` results; `displa
   points at the binary (and `HINTEROS_SYSTEM_BIN` at `hinteros-system`) (and `HINTEROS_STEAM_FIXTURE` at `crates/hinteros-session/tests/fixtures/steam-home`
   for the games test), e.g.
   `HINTEROS_SESSION_BIN=$(nix build ../hinteros-daemon#hinteros-session --no-link --print-out-paths)/bin/hinteros-session HINTEROS_STEAM_FIXTURE=../hinteros-daemon/crates/hinteros-session/tests/fixtures/steam-home flutter test test/integration`.
+
+## Installer mode and first-boot wizard
+
+The same binary is the installer UI for the ISO (roadmap M9): `hinteros-launcher --installer`
+(or `HINTEROS_INSTALLER=1`). It is controller-only and talks to no session daemon: it runs the
+system repo's `hinteros-install` backend. `--first-boot` (or `HINTEROS_FIRST_BOOT=1`) is the
+wizard for a box that is already installed (see "First-boot wizard" below).
+
+Screens: Welcome, Internet (cable status; Wi-Fi list and join through `nmcli`; or carry on
+offline), Disk (internal disks from `lsblk --json`; removable, in-use and under 16 GiB disks are
+listed with the reason and cannot be picked; a full-screen warning and then a second "last check"),
+Admin account (user name, password and the password again, typed on the in-app keyboard), Options
+(computer name, default `hinteros`; Enable SSH, off by default, with what it means; update
+channel stable or beta), Apps (`AppSelectionView`: YouTube and Firefox ticked, apps that need a
+download disabled with "Needs internet" while offline, vendor terms read and accepted), Summary,
+Installing (`hinteros-install --validate-only`, then the install, with the stages in plain words,
+a percentage and the warnings; on an error the explanation of its code, the log path
+`/var/log/hinteros-install.log`, Try again or Change my choices) and Done (remove the stick,
+Restart now = `systemctl reboot`).
+
+Try it on the desktop with a scripted backend that touches nothing:
+
+```
+flutter run -d linux --dart-entrypoint-args=--installer,--mock,--windowed
+# or: nix build && ./result/bin/hinteros-launcher --installer --mock --windowed
+./result/bin/hinteros-launcher --installer --mock --mock-scenario=refused --windowed
+```
+
+The arrow keys, Enter, Escape (B), X and Y stand in for the pad, F1 for the View button that
+cancels the keyboard. `--mock-scenario=` is `ok` (default: no network, Wi-Fi "Living Room" with
+the password `correct horse`, a successful install after about ten seconds), `online` (a cable is
+plugged in), `refused` (`hinteros-install` exits 2 with `disk-in-use`) or `failed` (exit 1 with
+`install-failed`). The fake backend never runs a program. Without `--mock` the real backend
+runs `lsblk`, `nmcli`, `hinteros-install` and `systemctl`: do not do that on a machine you care
+about, the install erases the disk.
+
+### How it works
+
+| Path | What |
+|---|---|
+| `lib/src/installer/backend.dart` | `InstallerBackend`: network, Wi-Fi, disks, catalog, `validate(plan)`, `install(plan)` (an `InstallRun`: progress events plus the exit status), `reboot()` |
+| `lib/src/installer/process_backend.dart` | The real one. Every command is an executable with a fixed argument list, no shell. The plan, with the admin password, goes to `hinteros-install --plan -` on stdin; a Wi-Fi password goes to `nmcli --ask` on stdin; nothing on a command line, nothing the tools print on stderr is kept or logged |
+| `lib/src/installer/fake_backend.dart` | The fake: scripted progress, refusals (exit 2), failures (exit 1), the plans it was given, a mock machine (disks, Wi-Fi, catalog with placeholder vendor terms) |
+| `lib/src/installer/plan.dart` | `InstallPlan`: the JSON the backend wants (`disk`, `hostname`, `admin {user, password}`, `ssh {enable}`, `channel`, `base`, `network`, `apps`, `wifi {ssid, psk}`), and the UI checks that mirror the backend's |
+| `lib/src/installer/progress.dart` | The stdout lines `{stage, percent, level, message, code?}`, the verdict (exit 0 and a `done` line is success; 2 is "refused, nothing was touched"; 1 or anything else is "failed part-way"; exit 0 with an error line is a failure too), and the plain-words text for every error code |
+| `lib/src/installer/parsers.dart` | `lsblk --json -b` and `nmcli -t` output (`\:` escapes), the catalog index |
+| `lib/src/installer/gamepad.dart` | Controller input without the daemon: reads the evdev gamepads under `/dev/input` (A accepts, B back, X/Y, bumpers, View/Menu, D-pad with repeat) |
+| `lib/src/installer/flow.dart` | `InstallerFlow`: the answers, the steps, the install run |
+| `lib/src/installer/ui/` | The screens, the shared input host (`host.dart`), the in-app keyboard (`text_entry.dart`), the first-boot wizard |
+
+**Keyboard.** There is no daemon on the ISO to type for us, so the installer shows the same
+on-screen keyboard (`OskScreen`, same layouts) with an `InProcessKeyboard` as its `OskBackend`: the
+keys go into the field instead of into uinput. Done or Enter saves, View cancels.
+
+**Catalog.** The app list comes from `/run/current-system/sw/share/hinteros/catalog.json` on the
+ISO (`indexVersion` 1, design/catalog.md): the ids the plan accepts (`jellyfin`, `youtube`,
+`crunchyroll`, `firefox` on the ISO, `steam`, `plex-htpc`, `moonlight` downloaded), with the vendor
+`terms {vendor, version, sourceUrl, text}` an unfree entry carries. An unfree entry without terms is
+not offered. Without an index the four ISO apps are offered and nothing else.
+TODO(M8): the index with terms is the catalog repo's job; until it exists on the ISO, Steam and
+Plex are not selectable in the real installer. Also TODO: the plan has no field for the accepted
+terms (version, date), so the acceptance is not recorded on the box yet.
+
+### What the system repo must set
+
+- `hinteros.installer.ui.command` to the launcher in installer mode, for example
+  `hinteros-launcher --installer`, started under cage (the same `--windowed`-less fullscreen mode
+  as on the box: one fullscreen window).
+- Run it as **root**. It reads the gamepads from `/dev/input`, runs `nmcli` (Wi-Fi) and
+  `systemctl reboot` and starts `hinteros-install`, which needs root itself (`not-root` is exit 2).
+  A narrowly scoped sudo rule is possible instead but needs exactly: `hinteros-install --plan -`,
+  `hinteros-install --plan - --validate-only` and `systemctl reboot`; the UI never builds a command
+  from typed text, so the rule can name those argument lists literally. Gamepad access then needs
+  group `input`.
+- On `PATH`: `hinteros-install`, `lsblk` and `nmcli` (NetworkManager running on the ISO),
+  `systemctl`. `hinteros-install` is looked up by name.
+- Fonts: the launcher bundles Atkinson Hyperlegible, so no font package is needed. Flutter
+  under cage needs working GL (the GPU driver, or Mesa's software renderer for a machine without
+  one); this has not been tried on the ISO yet.
+- The catalog index at the path above, once the catalog repo ships it.
+- Network: NetworkManager with `connectivity` checking on (`general CONNECTIVITY` is how the UI
+  knows it is online). Without checking, a connected cable or Wi-Fi counts as online and the
+  backend's own probe of cache.nixos.org has the last word.
+
+### First-boot wizard
+
+`--first-boot` shows the wizard on the running system: Welcome, Internet, Controllers
+(Bluetooth pairing through the existing `BluetoothRepository`), a display check, All set. It is a
+skeleton: the first profile, the update channel, the app step (`apps.install`, needs M8), a
+display mode picker with keep and revert, skipping steps that are already done, and handing the
+session over to the launcher are TODOs listed in `lib/src/installer/ui/first_boot.dart`. It uses the
+daemon's runtime settings (`daemonSystemServices`), or the mock with `--mock`.
 
 ## On-screen keyboard
 
@@ -481,7 +574,7 @@ Atkinson Hyperlegible Regular and Bold (`assets/fonts/`), SIL Open Font License 
 `test/golden/goldens/`. `test/golden/osk_test.dart` renders the on-screen keyboard at 1920x1080 over
 a checkerboard (so the transparent area and the panel's rounded corners show): letters, symbols with dots in the preview,
 the masked preview with its newest character readable, the preview with the setting on, high contrast at 1.6x with caps lock, and the bar focus marker with one-shot shift
-(`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. `test/golden/runtime_test.dart` covers the runtime settings on the real repositories over the mock daemon (`bt_pair_*` for the passkey modal, `wifi_wrong_password`, `settings_bt_unavailable`, `settings_display_cannot_set`, `display_keep_daemon`, `power_inhibited`, `settings_power_restricted`, `settings_net_no_internet`). `test/golden/system_test.dart` covers the system screens (`settings_sys_*`, `ssh_admin_password`, `wifi_password`, `display_*`), the progress page (`progress_*`), the security notice (`security_notice_*`, also high contrast at 1.6x, locked and unlocked), the Home reminder, the Store (`store_*`), the terms page (`terms_*`, also high contrast at 1.6x, from the top and scrolled to the end), `games_steam_missing` and `installer_app_selection`. Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
+(`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. `test/golden/runtime_test.dart` covers the runtime settings on the real repositories over the mock daemon (`bt_pair_*` for the passkey modal, `wifi_wrong_password`, `settings_bt_unavailable`, `settings_display_cannot_set`, `display_keep_daemon`, `power_inhibited`, `settings_power_restricted`, `settings_net_no_internet`). `test/golden/system_test.dart` covers the system screens (`settings_sys_*`, `ssh_admin_password`, `wifi_password`, `display_*`), the progress page (`progress_*`), the security notice (`security_notice_*`, also high contrast at 1.6x, locked and unlocked), the Home reminder, the Store (`store_*`), the terms page (`terms_*`, also high contrast at 1.6x, from the top and scrolled to the end), `games_steam_missing` and `installer_app_selection`. `test/golden/installer_test.dart` has `installer_*_1080p.png` for every installer screen (welcome, network, disk, the disk warning and the second confirmation, the warning in high contrast at 1.4x text, account, keyboard, options, apps offline and online, summary, progress, both failures, done). Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
 running game, the attention banner, the close confirm and the app tiles at text 1.3x/1.6x (also high
 contrast). Tests load the bundled font explicitly (`flutter_test_config.dart`, no
 Ahem), use a fixed clock, the in-process mock, the committed placeholder art
