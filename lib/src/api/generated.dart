@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.8).
+// Source: schema/session-api.json (session API 0.9).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.8';
+const apiVersion = '0.9';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -1050,6 +1050,7 @@ class StoreAppIcon {
     this.siteUrl,
     this.iconUrl,
     required this.firefoxProfile,
+    this.path,
   });
 
   final String? desktopId;
@@ -1057,11 +1058,15 @@ class StoreAppIcon {
   final String? iconUrl;
   final bool firefoxProfile;
 
+  /// 0.9: the resolved icon on this box (absolute path to an image), when there is one: the installed app's desktop file and icon theme, or downloaded from icon_url / site_url and cached (https only; same cache, size limits and refresh as apps.list icons). Absent until resolved; store_changed is sent when it appears.
+  final String? path;
+
   factory StoreAppIcon.fromJson(Map<String, dynamic> json) => StoreAppIcon(
     desktopId: json['desktop_id'] == null ? null : json['desktop_id'] as String,
     siteUrl: json['site_url'] == null ? null : json['site_url'] as String,
     iconUrl: json['icon_url'] == null ? null : json['icon_url'] as String,
     firefoxProfile: json['firefox_profile'] as bool,
+    path: json['path'] == null ? null : json['path'] as String,
   );
 
   Map<String, dynamic> toJson() => {
@@ -1069,6 +1074,7 @@ class StoreAppIcon {
     'site_url': ?siteUrl,
     'icon_url': ?iconUrl,
     'firefox_profile': firefoxProfile,
+    'path': ?path,
   };
 
   @override
@@ -6195,7 +6201,7 @@ final class GamesChangedEvent extends SessionEvent {
   String toString() => 'GamesChangedEvent(${jsonEncode(toJson())})';
 }
 
-/// An app's resolved icon became available or changed (for example a web app's icon finished downloading). Call apps.list again.
+/// The apps.list result changed: an app's resolved icon became available or changed (for example a web app's icon finished downloading), or (0.9) the daemon reloaded its app list after a switch installed or removed apps. Call apps.list again.
 final class AppsChangedEvent extends SessionEvent {
   const AppsChangedEvent();
 
@@ -6835,7 +6841,7 @@ final class AuthenticationFinishedEvent extends SessionEvent {
   String toString() => 'AuthenticationFinishedEvent(${jsonEncode(toJson())})';
 }
 
-/// What store.list returns may have changed: an apps job started or finished, any other job that switched the system finished, or an update check changed more_after_update. Query store.list again.
+/// What store.list returns may have changed: an apps job started or finished, any other job that switched the system finished, or an update check changed more_after_update, or (0.9) a catalog app's icon was resolved (icon.path). Query store.list again.
 final class StoreChangedEvent extends SessionEvent {
   const StoreChangedEvent();
 
