@@ -178,6 +178,14 @@ class OskState extends ChangeNotifier {
 
   void space() => _text(' ');
 
+  /// Starts the preview with text that is already in the field (the in-app
+  /// keyboard of the installer edits existing values), so Backspace and the
+  /// preview agree with the field.
+  void seed(String text) {
+    _typed = text;
+    notifyListeners();
+  }
+
   void backspace() {
     _send(() => backend.action(OskAction.backspace));
     _reveal = false;

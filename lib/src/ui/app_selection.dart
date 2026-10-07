@@ -83,6 +83,19 @@ class AppSelectionController extends ChangeNotifier {
   }
 
   bool get needsNetwork => downloadMiB > 0;
+
+  /// Unticks every app that is not on the ISO (the box is, or went,
+  /// offline), withdrawing their terms acceptance.
+  void dropDownloads() {
+    var changed = false;
+    for (final a in apps) {
+      if (!a.onIso && _selected.remove(a.id)) {
+        _accepted.remove(a.id);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
 }
 
 /// The step's screen content: a checklist of apps (each saying whether it is
@@ -122,21 +135,31 @@ class AppSelectionView extends StatelessWidget {
         final p = Pane(region);
         for (var i = 0; i < c.apps.length; i++) {
           final a = c.apps[i];
+          // Offline, apps that need a download cannot be picked (they can be
+          // added later from the Store). The row stays focusable so the
+          // reason can be read.
+          final blocked = !a.onIso && !online;
           p.item(
             'a$i',
-            onSelect: () => c.toggle(a.id),
+            onSelect: blocked ? null : () => c.toggle(a.id),
             builder: (f) => SettingRow(
               title: a.name,
               focused: f,
+              dim: blocked,
               leading: CheckMark(checked: c.isSelected(a.id)),
               subtitle: [
                 a.summary,
                 if (a.hasTerms) 'Vendor terms apply.',
               ].join(' '),
               trailing: Text(
-                a.onIso ? 'On the installer' : 'Download, ${_size(a.sizeMiB)}',
+                a.onIso
+                    ? 'On the installer'
+                    : blocked
+                    ? 'Needs internet'
+                    : 'Download, ${_size(a.sizeMiB)}',
                 style: t.caption.copyWith(
-                  color: !a.onIso && !online ? t.danger : t.textDim,
+                  color: blocked ? t.danger : t.textDim,
+                  fontWeight: blocked ? FontWeight.w700 : null,
                 ),
               ),
             ),

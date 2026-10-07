@@ -50,7 +50,7 @@ class LauncherApp extends StatelessWidget {
             ),
             child: HinterTheme(
               tokens: tokens,
-              child: _DesignScale(child: child!),
+              child: DesignScale(child: child!),
             ),
           ),
           home: LauncherShell(
@@ -67,8 +67,10 @@ class LauncherApp extends StatelessWidget {
   }
 }
 
-class _DesignScale extends StatelessWidget {
-  const _DesignScale({required this.child});
+/// Lays the 1920x1080 design out on any screen size (also used by the
+/// installer).
+class DesignScale extends StatelessWidget {
+  const DesignScale({super.key, required this.child});
 
   final Widget child;
 

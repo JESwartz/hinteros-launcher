@@ -107,9 +107,18 @@ class _DesignScale extends StatelessWidget {
 /// pages, `secondary` is Space, L1/R1 (`page_left`/`page_right`) switch to
 /// letters / symbols.
 class OskScreen extends StatefulWidget {
-  const OskScreen({super.key, required this.backend, this.showTyped = false});
+  const OskScreen({
+    super.key,
+    required this.backend,
+    this.showTyped = false,
+    this.initialText = '',
+  });
 
   final OskBackend backend;
+
+  /// Text the field already holds (shown in the preview, taken off by
+  /// Backspace). Empty for the daemon-backed keyboard.
+  final String initialText;
 
   /// The "Show typed text on the on-screen keyboard" setting; off masks the
   /// preview strip.
@@ -121,7 +130,8 @@ class OskScreen extends StatefulWidget {
 
 class _OskScreenState extends State<OskScreen> {
   late final OskState _state = OskState(widget.backend)
-    ..showTyped = widget.showTyped;
+    ..showTyped = widget.showTyped
+    ..seed(widget.initialText);
   final _nav = NavController();
   final _region = NavRegion('osk', rememberPerRow: false, wrapHorizontal: true);
   StreamSubscription<InputNavEvent>? _sub;

@@ -108,12 +108,18 @@ void main() {
       expect(c.acceptances, isEmpty);
     });
 
-    testWidgets('offline, downloads are flagged and can wait for the Store', (
-      t,
-    ) async {
+    testWidgets('offline, apps that need a download are disabled', (t) async {
       await start(t, online: false);
-      await host.act(t, accept);
-      expect(find.textContaining('not online'), findsOneWidget);
+      expect(
+        find.text('Needs internet'),
+        findsNWidgets(c.apps.where((a) => !a.onIso).length),
+      );
+      await host.act(t, accept); // Steam: refused
+      expect(c.isSelected('steam'), isFalse);
+      expect(find.text('Read and accept'), findsNothing);
+      c.toggle('plex');
+      c.dropDownloads();
+      expect(c.selected, {'youtube', 'firefox'});
     });
 
     testWidgets('Continue calls back when allowed', (t) async {
