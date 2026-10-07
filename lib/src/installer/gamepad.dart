@@ -5,7 +5,9 @@
 ///
 /// Mapping (Linux gamepad button codes, Xbox-style layout): A accepts, B
 /// goes back, Y is context, X is secondary, the bumpers are page left/right,
-/// View/Menu are `view`/`menu`, the D-pad moves.
+/// View/Menu are `view`/`menu`. The D-pad (hat switch or `BTN_DPAD_*`) and
+/// the left stick move; the right stick, triggers and the Guide button are
+/// ignored. Held directions repeat like the daemon's (400 ms, then 120 ms).
 library;
 
 import 'dart:async';
@@ -13,11 +15,14 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import '../api/api.dart' show NavAction, NavPhase;
+import 'evdev_ioctl.dart';
 
 typedef PadEvent = (NavAction, NavPhase);
 
 const _evKey = 0x01;
 const _evAbs = 0x03;
+const _absX = 0x00;
+const _absY = 0x01;
 const _absHat0X = 0x10;
 const _absHat0Y = 0x11;
 const _btnSouth = 0x130;
@@ -25,11 +30,51 @@ const _btnSouth = 0x130;
 /// Size of `struct input_event` on 64-bit Linux.
 const inputEventSize = 24;
 
+/// How far the stick must be pushed (0..1 of its half range) to count as a
+/// direction, and how far back it must come to let go (hysteresis, so a
+/// stick resting near the edge does not flutter).
+const stickPress = 0.5;
+const stickRelease = 0.35;
+
+/// The daemon's key repeat for a held direction.
+const padRepeatDelay = Duration(milliseconds: 400);
+const padRepeatEvery = Duration(milliseconds: 120);
+
+/// The range an absolute axis reports (from `EVIOCGABS`).
+class AxisRange {
+  const AxisRange(this.min, this.max);
+  final int min;
+  final int max;
+
+  /// A typical Xbox stick, used when the device cannot be asked.
+  static const xbox = AxisRange(-32768, 32767);
+
+  /// -1..1 (0 at rest) for a raw [value].
+  double normalise(int value) {
+    final half = (max - min) / 2;
+    if (half <= 0) return 0;
+    return ((value - (min + max) / 2) / half).clamp(-1.0, 1.0);
+  }
+}
+
+const _dirs = [NavAction.up, NavAction.down, NavAction.left, NavAction.right];
+const _srcHat = 1, _srcStick = 2, _srcButton = 4;
+
 /// Turns raw `(type, code, value)` events into navigation presses and
-/// releases. Pure, so it can be tested without a device.
+/// releases. Pure, so it can be tested without a device. A direction is held
+/// while any of the hat switch, the left stick or a `BTN_DPAD_*` button holds
+/// it, so two sources never produce a double press.
 class PadMapper {
-  int _hatX = 0;
-  int _hatY = 0;
+  PadMapper({AxisRange? stickX, AxisRange? stickY})
+    : _rangeX = stickX ?? AxisRange.xbox,
+      _rangeY = stickY ?? AxisRange.xbox;
+
+  final AxisRange _rangeX;
+  final AxisRange _rangeY;
+  final _held = <NavAction, int>{};
+  double _nx = 0;
+  double _ny = 0;
+  NavAction? _stick;
 
   static NavAction? _button(int code) => switch (code) {
     0x130 => NavAction.accept, // BTN_SOUTH (A)
@@ -40,6 +85,10 @@ class PadMapper {
     0x137 => NavAction.pageRight, // BTN_TR
     0x13a => NavAction.view, // BTN_SELECT
     0x13b => NavAction.menu, // BTN_START
+    _ => null,
+  };
+
+  static NavAction? _dpadButton(int code) => switch (code) {
     0x220 => NavAction.up, // BTN_DPAD_UP
     0x221 => NavAction.down,
     0x222 => NavAction.left,
@@ -49,37 +98,103 @@ class PadMapper {
 
   List<PadEvent> map(int type, int code, int value) {
     if (type == _evKey) {
+      if (value == 2) return const []; // the kernel's own repeat
+      final d = _dpadButton(code);
+      if (d != null) {
+        return _update(_srcButton, {d}, value != 0 ? {d} : const {});
+      }
       final a = _button(code);
-      if (a == null || value == 2) return const [];
+      if (a == null) return const [];
       return [(a, value == 0 ? NavPhase.release : NavPhase.press)];
     }
-    if (type == _evAbs && (code == _absHat0X || code == _absHat0Y)) {
-      final out = <PadEvent>[];
-      final v = value.sign;
-      if (code == _absHat0X) {
-        _edge(out, _hatX, v, NavAction.left, NavAction.right);
-        _hatX = v;
-      } else {
-        _edge(out, _hatY, v, NavAction.up, NavAction.down);
-        _hatY = v;
-      }
-      return out;
+    if (type != _evAbs) return const [];
+    switch (code) {
+      case _absHat0X:
+        return _update(
+          _srcHat,
+          {NavAction.left, NavAction.right},
+          {if (value < 0) NavAction.left, if (value > 0) NavAction.right},
+        );
+      case _absHat0Y:
+        return _update(
+          _srcHat,
+          {NavAction.up, NavAction.down},
+          {if (value < 0) NavAction.up, if (value > 0) NavAction.down},
+        );
+      case _absX:
+        _nx = _rangeX.normalise(value);
+        return _updateStick();
+      case _absY:
+        _ny = _rangeY.normalise(value);
+        return _updateStick();
     }
     return const [];
   }
 
-  static void _edge(
-    List<PadEvent> out,
-    int old,
-    int now,
-    NavAction neg,
-    NavAction pos,
+  /// The one direction the stick says, with hysteresis; on a diagonal the
+  /// axis that got there first holds, unless the other one is stronger.
+  List<PadEvent> _updateStick() {
+    NavAction pick(double v, NavAction neg, NavAction pos) => v < 0 ? neg : pos;
+    final cur = _stick;
+    NavAction? next;
+    if (cur != null) {
+      final horizontal = cur == NavAction.left || cur == NavAction.right;
+      final negative = cur == NavAction.left || cur == NavAction.up;
+      final mag = (horizontal ? _nx : _ny) * (negative ? -1 : 1);
+      if (mag >= stickRelease) {
+        next = cur;
+        final other = horizontal ? _ny : _nx;
+        if (other.abs() >= stickPress && other.abs() > mag) {
+          next = horizontal
+              ? pick(other, NavAction.up, NavAction.down)
+              : pick(other, NavAction.left, NavAction.right);
+        }
+      }
+    }
+    if (next == null) {
+      final ax = _nx.abs(), ay = _ny.abs();
+      if (ax >= stickPress || ay >= stickPress) {
+        next = ax >= ay
+            ? pick(_nx, NavAction.left, NavAction.right)
+            : pick(_ny, NavAction.up, NavAction.down);
+      }
+    }
+    _stick = next;
+    return _update(_srcStick, _dirs.toSet(), {?next});
+  }
+
+  /// Sets what [source] holds among [scope] to [active]; returns the events
+  /// for the directions that really changed (releases first).
+  List<PadEvent> _update(
+    int source,
+    Set<NavAction> scope,
+    Set<NavAction> active,
   ) {
-    if (old == now) return;
-    if (old < 0) out.add((neg, NavPhase.release));
-    if (old > 0) out.add((pos, NavPhase.release));
-    if (now < 0) out.add((neg, NavPhase.press));
-    if (now > 0) out.add((pos, NavPhase.press));
+    final releases = <PadEvent>[], presses = <PadEvent>[];
+    for (final d in scope) {
+      final before = _held[d] ?? 0;
+      final after = active.contains(d) ? before | source : before & ~source;
+      if (after == 0) {
+        _held.remove(d);
+      } else {
+        _held[d] = after;
+      }
+      if (before == 0 && after != 0) presses.add((d, NavPhase.press));
+      if (before != 0 && after == 0) releases.add((d, NavPhase.release));
+    }
+    return [...releases, ...presses];
+  }
+
+  /// Lets go of everything (the device went away).
+  List<PadEvent> releaseAll() {
+    final out = <PadEvent>[
+      for (final d in _dirs)
+        if (_held.containsKey(d)) (d, NavPhase.release),
+    ];
+    _held.clear();
+    _stick = null;
+    _nx = _ny = 0;
+    return out;
   }
 }
 
@@ -118,105 +233,222 @@ bool sysfsBitSet(String bitmap, int bit) {
   return (w >> (bit % 64)) & BigInt.one == BigInt.one;
 }
 
-/// Reads every gamepad it finds under `/dev/input` and emits their presses.
-/// Devices plugged in later are picked up (a rescan every few seconds).
-// TODO(hardware): untested against real controllers; analog sticks are not
-// mapped (the D-pad is enough to drive the installer).
-class EvdevPad {
-  EvdevPad({
+/// Gives held directions the daemon's key repeat: the first repeat after
+/// [delay], then one every [every]. The most recently pressed direction that
+/// is still held repeats. Feed it every event; it calls [emit] for the
+/// repeats only.
+class PadRepeater {
+  PadRepeater(
+    this.emit, {
+    this.delay = padRepeatDelay,
+    this.every = padRepeatEvery,
+  });
+
+  final void Function(PadEvent) emit;
+  final Duration delay;
+  final Duration every;
+
+  final _held = <NavAction>[];
+  Timer? _timer;
+
+  void add(PadEvent e) {
+    final (a, phase) = e;
+    if (!_dirs.contains(a)) return;
+    if (phase == NavPhase.press) {
+      _held
+        ..remove(a)
+        ..add(a);
+      _restart();
+    } else if (phase == NavPhase.release && _held.remove(a)) {
+      _restart();
+    }
+  }
+
+  void _restart() {
+    _timer?.cancel();
+    _timer = null;
+    if (_held.isEmpty) return;
+    _timer = Timer(delay, () {
+      _timer = Timer.periodic(every, (_) {
+        if (_held.isNotEmpty) emit((_held.last, NavPhase.repeat));
+      });
+      if (_held.isNotEmpty) emit((_held.last, NavPhase.repeat));
+    });
+  }
+
+  void dispose() {
+    _timer?.cancel();
+    _timer = null;
+    _held.clear();
+  }
+}
+
+/// What [EvdevPad] needs to know about one input device.
+class PadDeviceInfo {
+  const PadDeviceInfo({this.stickX, this.stickY});
+  final AxisRange? stickX;
+  final AxisRange? stickY;
+}
+
+/// The machine side of [EvdevPad], so tests can fake devices.
+abstract class PadBackend {
+  /// Names of the event nodes (`event3`). May throw [FileSystemException].
+  List<String> list();
+
+  /// What the device is: null if it is not a gamepad (or cannot be told).
+  PadDeviceInfo? probe(String name);
+
+  /// The device's raw `input_event` bytes. Errors (permission denied, the
+  /// device unplugged) arrive as stream errors or as the stream's end.
+  Stream<List<int>> open(String name);
+}
+
+/// The real thing: sysfs for what a device is, `/dev/input` for its events,
+/// `EVIOCGABS` for the stick ranges.
+class LinuxPadBackend implements PadBackend {
+  LinuxPadBackend({
     this.sysClassInput = '/sys/class/input',
     this.devInput = '/dev/input',
-    this.rescan = const Duration(seconds: 3),
-    this.repeatDelay = const Duration(milliseconds: 420),
-    this.repeatEvery = const Duration(milliseconds: 110),
   });
 
   final String sysClassInput;
   final String devInput;
+
+  static final _eventNode = RegExp(r'^event\d+$');
+
+  @override
+  List<String> list() => [
+    for (final e in Directory(devInput).listSync())
+      if (_eventNode.hasMatch(
+        e.uri.pathSegments.lastWhere((s) => s.isNotEmpty),
+      ))
+        e.uri.pathSegments.lastWhere((s) => s.isNotEmpty),
+  ];
+
+  String? _caps(String name, String file) {
+    try {
+      return File('$sysClassInput/$name/device/capabilities/$file')
+          .readAsStringSync();
+    } on FileSystemException {
+      return null;
+    }
+  }
+
+  @override
+  PadDeviceInfo? probe(String name) {
+    final ev = _caps(name, 'ev'), key = _caps(name, 'key');
+    if (ev == null || key == null) return null;
+    if (!sysfsBitSet(ev, _evKey) || !sysfsBitSet(ev, _evAbs)) return null;
+    // BTN_GAMEPAD is BTN_SOUTH.
+    if (!sysfsBitSet(key, _btnSouth)) return null;
+    final abs = _caps(name, 'abs') ?? '';
+    AxisRange? range(int code) {
+      if (!sysfsBitSet(abs, code)) return null;
+      final r = readAbsRange('$devInput/$name', code);
+      return r == null ? null : AxisRange(r.$1, r.$2);
+    }
+
+    return PadDeviceInfo(stickX: range(_absX), stickY: range(_absY));
+  }
+
+  @override
+  Stream<List<int>> open(String name) => File('$devInput/$name').openRead();
+}
+
+/// Reads every gamepad it finds under `/dev/input` and emits their presses.
+/// Devices plugged in later are picked up (a rescan every [rescan]); a device
+/// that goes away, or that cannot be opened (no permission), never crashes
+/// anything: its held directions are released and it is tried again at the
+/// next scan.
+class EvdevPad {
+  EvdevPad({
+    PadBackend? backend,
+    this.rescan = const Duration(seconds: 2),
+    Duration repeatDelay = padRepeatDelay,
+    Duration repeatEvery = padRepeatEvery,
+  }) : backend = backend ?? LinuxPadBackend() {
+    _repeater = PadRepeater(_add, delay: repeatDelay, every: repeatEvery);
+  }
+
+  final PadBackend backend;
   final Duration rescan;
-  final Duration repeatDelay;
-  final Duration repeatEvery;
 
   final _out = StreamController<PadEvent>.broadcast();
-  final _open = <String, StreamSubscription<List<int>>>{};
+  final _open = <String, _OpenPad>{};
+  late final PadRepeater _repeater;
   Timer? _scanTimer;
-  Timer? _repeat;
-  NavAction? _held;
 
   Stream<PadEvent> get events => _out.stream;
+
+  /// The event nodes currently being read.
+  Set<String> get devices => _open.keys.toSet();
 
   void start() {
     _scan();
     _scanTimer = Timer.periodic(rescan, (_) => _scan());
   }
 
-  bool _isGamepad(String name) {
-    try {
-      final caps = File('$sysClassInput/$name/device/capabilities/key')
-          .readAsStringSync();
-      return sysfsBitSet(caps, _btnSouth);
-    } on FileSystemException {
-      return false;
-    }
-  }
-
   void _scan() {
-    final Iterable<FileSystemEntity> entries;
+    final List<String> names;
     try {
-      entries = Directory(sysClassInput).listSync();
-    } on FileSystemException {
-      return;
+      names = backend.list();
+    } on Object {
+      return; // no /dev/input (yet), or not allowed
     }
-    for (final e in entries) {
-      final name = e.uri.pathSegments.where((s) => s.isNotEmpty).last;
-      if (!RegExp(r'^event\d+$').hasMatch(name) || _open.containsKey(name)) {
-        continue;
+    for (final name in names) {
+      if (_open.containsKey(name)) continue;
+      try {
+        final info = backend.probe(name);
+        if (info == null) continue;
+        final pad = _OpenPad(
+          PadMapper(stickX: info.stickX, stickY: info.stickY),
+        );
+        _open[name] = pad;
+        pad.sub = backend
+            .open(name)
+            .listen(
+              (chunk) => pad.decoder.add(chunk).forEach(_emit),
+              onError: (Object _) => _lost(name, pad),
+              onDone: () => _lost(name, pad),
+              cancelOnError: true,
+            );
+      } on Object {
+        _open.remove(name); // permission denied and the like: next scan
       }
-      if (!_isGamepad(name)) continue;
-      final dec = EvdevDecoder();
-      _open[name] = File('$devInput/$name').openRead().listen(
-        (chunk) => dec.add(chunk).forEach(_emit),
-        onError: (_) => _open.remove(name),
-        onDone: () => _open.remove(name),
-        cancelOnError: true,
-      );
     }
   }
 
-  static bool _moves(NavAction a) =>
-      a == NavAction.up ||
-      a == NavAction.down ||
-      a == NavAction.left ||
-      a == NavAction.right;
+  void _lost(String name, _OpenPad pad) {
+    if (_open[name] != pad) return;
+    _open.remove(name);
+    pad.sub?.cancel();
+    pad.mapper.releaseAll().forEach(_emit);
+  }
 
   void _emit(PadEvent e) {
     if (_out.isClosed) return;
     _out.add(e);
-    final (a, phase) = e;
-    if (!_moves(a)) return;
-    // Pads send no key repeat: hold a direction to keep moving.
-    if (phase == NavPhase.press) {
-      _held = a;
-      _repeat?.cancel();
-      _repeat = Timer(repeatDelay, () {
-        _repeat = Timer.periodic(repeatEvery, (_) {
-          final h = _held;
-          if (h != null) _out.add((h, NavPhase.repeat));
-        });
-      });
-    } else if (_held == a) {
-      _held = null;
-      _repeat?.cancel();
-    }
+    _repeater.add(e);
+  }
+
+  void _add(PadEvent e) {
+    if (!_out.isClosed) _out.add(e);
   }
 
   Future<void> dispose() async {
     _scanTimer?.cancel();
-    _repeat?.cancel();
-    for (final s in _open.values) {
-      await s.cancel();
+    _repeater.dispose();
+    for (final p in _open.values) {
+      await p.sub?.cancel();
     }
     _open.clear();
     await _out.close();
   }
+}
+
+class _OpenPad {
+  _OpenPad(this.mapper) : decoder = EvdevDecoder(mapper);
+  final PadMapper mapper;
+  final EvdevDecoder decoder;
+  StreamSubscription<List<int>>? sub;
 }
