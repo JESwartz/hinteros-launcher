@@ -14,6 +14,7 @@ import 'dart:async';
 
 import 'errors.dart';
 import 'generated.dart';
+import 'mock_store.dart';
 
 /// Wire stages of each kind of job (system-api.md "Job model").
 List<Stage> mockStagesOf(JobKind kind) => switch (kind) {
@@ -59,6 +60,9 @@ class _Job {
   Object? result;
   bool restart = false;
   Timer? timer;
+
+  /// The catalog ids an apps job installs or removes.
+  List<String> apps = const [];
 }
 
 class MockSystemRelay {
@@ -66,7 +70,10 @@ class MockSystemRelay {
     required this.emit,
     DateTime Function()? now,
     this.stepDelay,
-  }) : _now = now ?? DateTime.now {
+    this.authorize,
+    List<StoreApp>? catalog,
+  }) : _now = now ?? DateTime.now,
+       catalog = catalog ?? mockStoreCatalog() {
     generations = [
       for (var g = generation!; g > generation! - 3; g--)
         Generation(
@@ -82,6 +89,11 @@ class MockSystemRelay {
   /// Sends an event to the launcher (the daemon's `emitRaw`).
   final void Function(String name, Map<String, dynamic> params) emit;
   final DateTime Function() _now;
+
+  /// Asks polkit for the admin password for an interactive action (the
+  /// authentication agent): completes when authorized, throws
+  /// `authentication_required` or `permission_denied`. Null: no agent.
+  final Future<void> Function(String action, String message)? authorize;
 
   /// Time between stages when a job runs by itself; null: tests step jobs
   /// with [progressJob] and [finishJob].
@@ -100,6 +112,16 @@ class MockSystemRelay {
 
   /// Catalog ids installed from the Store (`settings.get`, state.json apps).
   final List<String> installedApps = ['steam'];
+
+  /// The catalog of the running generation (`store.list`). Entries are wire
+  /// apps; the `state` is worked out on every call.
+  List<StoreApp> catalog;
+
+  /// No catalog index on this system (`store.list` is `unavailable`).
+  bool catalogMissing = false;
+
+  /// Free disk space, for `apps.install`.
+  int freeDiskMib = 100000;
   List<String> hostKeyFingerprints = [
     'SHA256:2CixtE95MNbZHanQGv6hP2D3qfguu9QZfjca2OaupKI',
   ];
@@ -147,9 +169,13 @@ class MockSystemRelay {
 
   // ---- dispatch
 
-  static bool handles(String method) => method.startsWith('system.');
+  static bool handles(String method) =>
+      method.startsWith('system.') || method == 'store.list';
 
-  Map<String, dynamic> call(String method, Map<String, dynamic> params) {
+  Future<Map<String, dynamic>> call(
+    String method,
+    Map<String, dynamic> params,
+  ) async {
     final u = unavailable;
     if (u != null) {
       throw ApiException(
@@ -161,7 +187,7 @@ class MockSystemRelay {
       );
     }
     try {
-      return _dispatch(method, params);
+      return await _dispatch(method, params);
     } on ApiException {
       rethrow;
     } on TypeError catch (e) {
@@ -194,7 +220,10 @@ class MockSystemRelay {
     }
   }
 
-  Map<String, dynamic> _dispatch(String method, Map<String, dynamic> p) {
+  Future<Map<String, dynamic>> _dispatch(
+    String method,
+    Map<String, dynamic> p,
+  ) async {
     switch (method) {
       case 'system.info':
         _closed(p, const []);
@@ -245,10 +274,17 @@ class MockSystemRelay {
         final enable = SystemSshSetParams.fromJson(p).enabled;
         _mutating('ssh.set:${enable ? 'on' : 'off'}');
         if (enable && !adminAuthorized) {
-          throw const ApiException(
-            ApiErrorCode.authenticationRequired,
-            'org.hinteros.system.ssh needs interactive authentication',
-            {'action': 'org.hinteros.system.ssh'},
+          final ask = authorize;
+          if (ask == null) {
+            throw const ApiException(
+              ApiErrorCode.authenticationRequired,
+              'org.hinteros.system.ssh needs interactive authentication',
+              {'action': 'org.hinteros.system.ssh'},
+            );
+          }
+          await ask(
+            'org.hinteros.system.ssh',
+            'Authentication is required to turn remote login (SSH) on or off',
           );
         }
         if (enable == sshEnabled) return const JobRef(jobId: null).toJson();
@@ -259,6 +295,15 @@ class MockSystemRelay {
             _bumpRevision();
           },
         );
+      case 'store.list':
+        _closed(p, const []);
+        return _storeList().toJson();
+      case 'system.apps.install':
+        _closed(p, const ['ids', 'revision', 'accepted_terms']);
+        return _appsInstall(SystemAppsInstallParams.fromJson(p));
+      case 'system.apps.remove':
+        _closed(p, const ['ids', 'revision', 'delete_data']);
+        return _appsRemove(SystemAppsRemoveParams.fromJson(p));
       case 'system.generations.list':
         _closed(p, const []);
         return SystemGenerationsListResult(generations: List.of(generations))
@@ -439,6 +484,190 @@ class MockSystemRelay {
     throw ApiException(ApiErrorCode.methodNotFound, 'unknown method $method');
   }
 
+  // ---- the Store
+
+  StoreApp _catalogApp(String id) => catalog.firstWhere(
+    (a) => a.id == id,
+    orElse: () => throw ApiException(
+      ApiErrorCode.notFound,
+      '$id is not in this system\'s catalog',
+    ),
+  );
+
+  Set<String> _jobApps(JobKind kind) => {
+    for (final j in _jobs.values)
+      if (j.state == JobState.running && j.kind == kind) ...j.apps,
+  };
+
+  bool get _moreAfterUpdate =>
+      _lastCheck?.available?.newApps?.isNotEmpty ?? false;
+  bool _lastMore = false;
+
+  StoreListResult _storeList() {
+    if (catalogMissing) {
+      throw const ApiException(
+        ApiErrorCode.unavailable,
+        'no catalog index on this system',
+        {'service': 'catalog', 'reason': 'missing'},
+      );
+    }
+    final installing = _jobApps(JobKind.appsInstall);
+    final removing = _jobApps(JobKind.appsRemove);
+    StoreApp with_(StoreApp a, StoreState s) =>
+        StoreApp.fromJson({...a.toJson(), 'state': s.value});
+    final apps = <StoreApp>[];
+    for (final a in catalog) {
+      final installed = installedApps.contains(a.id);
+      if (a.status != CatalogStatus.available && !installed) continue;
+      apps.add(
+        with_(
+          a,
+          installing.contains(a.id) && !installed
+              ? StoreState.installing
+              : removing.contains(a.id) && installed
+              ? StoreState.removing
+              : !installed
+              ? StoreState.available
+              : switch (a.status) {
+                  CatalogStatus.available => StoreState.installed,
+                  CatalogStatus.removed => StoreState.unavailable,
+                  _ => StoreState.retired,
+                },
+        ),
+      );
+    }
+    // Installed but unknown to this catalog: shown so it can be removed.
+    for (final id in installedApps) {
+      if (catalog.any((a) => a.id == id)) continue;
+      apps.add(
+        with_(
+          mockStoreApp(id: id, name: id, status: CatalogStatus.removed),
+          removing.contains(id) ? StoreState.removing : StoreState.unavailable,
+        ),
+      );
+    }
+    apps.sort((a, b) {
+      final c = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      return c != 0 ? c : a.id.compareTo(b.id);
+    });
+    return StoreListResult(
+      indexVersion: 2,
+      apps: apps,
+      moreAfterUpdate: _moreAfterUpdate,
+    );
+  }
+
+  void _staleRevision(String revision) {
+    if (revision != this.revision) {
+      throw const ApiException(
+        ApiErrorCode.stateConflict,
+        'state.json changed since settings.get',
+        {'reason': 'revision'},
+      );
+    }
+  }
+
+  Map<String, dynamic> _appsInstall(SystemAppsInstallParams p) {
+    _mutating('apps.install:${p.ids.join(',')}');
+    _staleRevision(p.revision);
+    for (final id in p.ids) {
+      final a = _catalogApp(id);
+      if (a.status != CatalogStatus.available && !installedApps.contains(id)) {
+        throw ApiException(ApiErrorCode.invalidParams, '$id is not available', {
+          'field': 'ids',
+          'reason': 'not_available',
+        });
+      }
+    }
+    // What gets installed: the request and its depends, transitively, minus
+    // what is installed already.
+    final want = <String>[];
+    void add(String id) {
+      if (installedApps.contains(id) || want.contains(id)) return;
+      want.add(id);
+      _catalogApp(id).depends.forEach(add);
+    }
+
+    p.ids.forEach(add);
+    if (want.isEmpty) return const JobRef(jobId: null).toJson();
+    final all = {...installedApps, ...want};
+    for (final id in want) {
+      final a = _catalogApp(id);
+      for (final other in all) {
+        if (other == id) continue;
+        final b = catalog.where((x) => x.id == other).firstOrNull;
+        if (a.conflicts.contains(other) ||
+            (b?.conflicts.contains(id) ?? false)) {
+          throw ApiException(
+            ApiErrorCode.appConflict,
+            '$id conflicts with $other',
+            AppConflictData(id: id, conflictsWith: other).toJson(),
+          );
+        }
+      }
+    }
+    for (final id in want) {
+      final t = _catalogApp(id).terms;
+      if (t != null && p.acceptedTerms?[id] != t.version) {
+        throw ApiException(
+          ApiErrorCode.termsRequired,
+          '$id needs its terms accepted (version ${t.version})',
+          TermsRequiredData(id: id, version: t.version).toJson(),
+        );
+      }
+    }
+    final needed = want.fold<int>(0, (n, id) => n + _catalogApp(id).sizeMib);
+    if (needed > freeDiskMib) {
+      throw ApiException(
+        ApiErrorCode.insufficientResources,
+        'not enough free disk space',
+        InsufficientResourcesData(
+          kind: InsufficientResourcesDataKind.disk,
+          neededBytes: needed << 20,
+          availableBytes: freeDiskMib << 20,
+        ).toJson(),
+      );
+    }
+    return _started(
+      JobKind.appsInstall,
+      apps: want,
+      onSuccess: () {
+        installedApps.addAll(want);
+        _bumpRevision();
+      },
+    );
+  }
+
+  Map<String, dynamic> _appsRemove(SystemAppsRemoveParams p) {
+    _mutating('apps.remove:${p.ids.join(',')}:data=${p.deleteData}');
+    _staleRevision(p.revision);
+    for (final id in p.ids) {
+      if (!installedApps.contains(id)) {
+        throw ApiException(ApiErrorCode.notFound, '$id is not installed');
+      }
+    }
+    for (final other in installedApps.where((i) => !p.ids.contains(i))) {
+      final b = catalog.where((x) => x.id == other).firstOrNull;
+      for (final id in p.ids) {
+        if (b?.depends.contains(id) ?? false) {
+          throw ApiException(
+            ApiErrorCode.appConflict,
+            '$other depends on $id',
+            AppConflictData(id: id, conflictsWith: other).toJson(),
+          );
+        }
+      }
+    }
+    return _started(
+      JobKind.appsRemove,
+      apps: List.of(p.ids),
+      onSuccess: () {
+        installedApps.removeWhere(p.ids.contains);
+        _bumpRevision();
+      },
+    );
+  }
+
   // ---- jobs
 
   int _nowSeconds() => _now().millisecondsSinceEpoch ~/ 1000;
@@ -456,10 +685,19 @@ class MockSystemRelay {
     return j;
   }
 
-  Map<String, dynamic> _started(JobKind kind, {void Function()? onSuccess}) =>
-      JobRef(jobId: _start(kind, onSuccess: onSuccess)).toJson();
+  Map<String, dynamic> _started(
+    JobKind kind, {
+    void Function()? onSuccess,
+    List<String> apps = const [],
+  }) => JobRef(
+    jobId: _start(kind, onSuccess: onSuccess, apps: apps),
+  ).toJson();
 
-  String _start(JobKind kind, {void Function()? onSuccess}) {
+  String _start(
+    JobKind kind, {
+    void Function()? onSuccess,
+    List<String> apps = const [],
+  }) {
     final running = runningJobId;
     if (running != null) {
       throw ApiException(
@@ -472,13 +710,17 @@ class MockSystemRelay {
         ? jobIdQueue.removeAt(0)
         : (0x3f9a0c2b7e4d1a65 + ++_n * 7919).toRadixString(16).padLeft(16, '0');
     final j = _Job(id, kind, _nowSeconds(), onSuccess: onSuccess)
-      ..restart = restartNext;
+      ..restart = restartNext
+      ..apps = apps;
     restartNext = false;
     _jobs[id] = j;
     emit(
       'job_started',
       JobStartedEvent(jobId: id, kind: kind, uid: 1000).toJson(),
     );
+    if (kind == JobKind.appsInstall || kind == JobKind.appsRemove) {
+      emit('store_changed', const {});
+    }
     if (stepDelay != null) _autoRun(j);
     return id;
   }
@@ -577,6 +819,14 @@ class MockSystemRelay {
         sessionRestartRequired: restart,
       ).toJson(),
     );
+    final more = _moreAfterUpdate;
+    if (j.kind == JobKind.appsInstall ||
+        j.kind == JobKind.appsRemove ||
+        (ok && j.kind != JobKind.updateCheck) ||
+        more != _lastMore) {
+      emit('store_changed', const {});
+    }
+    _lastMore = more;
   }
 
   Job _wire(_Job j) => Job(

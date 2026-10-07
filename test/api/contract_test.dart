@@ -78,6 +78,8 @@ Future<void> _prepareSystem(
   switch ((method, name)) {
     case ('system.ssh.set', 'turn on'):
       s.adminAuthorized = true;
+    case ('system.ssh.set', 'needs the admin password'):
+      mock.auth.agentRegistered = false;
     case ('system.ssh.set', 'not the active seat user'):
     case ('system.rebuild', 'low memory'):
     case ('system.rebuild', 'too many requests'):
@@ -99,11 +101,51 @@ Future<void> _prepareSystem(
     case ('system.jobs.cancel', 'already activating'):
       await rebuilding();
       s.progressJob(exampleJob, Stage.activating);
+    // The 0.8 Store examples are written against particular installs.
+    case ('system.apps.install', 'install Steam, terms accepted'):
+      s.installedApps.remove('steam');
+    case ('system.apps.install', 'already installed'):
+      s.installedApps.add('moonlight');
+    case ('system.apps.install', 'conflict'):
+      s.installedApps.add('jellyfin');
+    case ('system.apps.remove', 'remove, keep data'):
+      s.installedApps.add('moonlight');
+    case ('system.apps.remove', 'needed by another app'):
+      s.installedApps.addAll(['firefox', 'youtube']);
+      s.catalog = [
+        for (final a in s.catalog)
+          a.id == 'youtube'
+              ? StoreApp.fromJson({
+                  ...a.toJson(),
+                  'depends': ['firefox'],
+                })
+              : a,
+      ];
+    case ('store.list', 'no catalog'):
+      s.catalogMissing = true;
   }
   // Jobs the call itself starts get the example's id.
   if (method != 'system.rebuild' || name == 'started') {
     s.jobIdQueue.add(exampleJob);
   }
+}
+
+/// Puts the mock's authentication agent into the situation an `auth.*` example
+/// describes: a prompt that waits (fixed cookie), or none.
+Future<void> _prepareAuth(MockDaemon mock, Map<String, dynamic> ex) async {
+  final cookie = (ex['params'] as Map)['cookie'] as String;
+  final name = ex['name'] as String;
+  if (name == 'no such prompt' || name == 'already over') return;
+  unawaited(
+    mock.auth
+        .authorize(
+          action: 'org.hinteros.system.ssh',
+          message: 'Authentication is required',
+          cookie: cookie,
+        )
+        .then((_) {}, onError: (Object _) {}),
+  );
+  await Future<void>.delayed(Duration.zero);
 }
 
 /// Puts the mock's runtime settings into the situation a 0.7 example
@@ -211,6 +253,9 @@ void main() {
           // (upstream left them at 0.4 in the 0.5 schema): play them against
           // a mock that serves that version.
           final mock = MockDaemon(
+            clientName: ex['name'] == 'not the launcher'
+                ? 'someone-else'
+                : 'hinteros-launcher',
             serverApiVersion:
                 ((ex['result'] as Map?)?['api_version'] ??
                         ((ex['error'] as Map?)?['data']
@@ -261,6 +306,13 @@ void main() {
           if (errCode == ApiErrorCode.oskUnavailable) mock.oskEnabled = false;
 
           if (method.startsWith('system.')) {
+            await _prepareSystem(mock, method, ex);
+          }
+          if (MockAuthAgent.handles(method)) await _prepareAuth(mock, ex);
+          if (method == 'session.restart' && ex.containsKey('error')) {
+            mock.sessionRestartAvailable = false;
+          }
+          if (method == 'store.list') {
             await _prepareSystem(mock, method, ex);
           }
           if (MockRuntime.handles(method)) {

@@ -34,6 +34,7 @@ class DaemonClient extends DaemonConnection {
     this.initialBackoff = const Duration(milliseconds: 250),
     this.maxBackoff = const Duration(seconds: 5),
     this.requestTimeout = const Duration(seconds: 10),
+    this.interactiveTimeout = const Duration(seconds: 340),
   });
 
   final String? socketPath;
@@ -42,6 +43,12 @@ class DaemonClient extends DaemonConnection {
   final Duration initialBackoff;
   final Duration maxBackoff;
   final Duration requestTimeout;
+
+  /// How long a relayed call may wait for the admin password (the system
+  /// service waits up to 300 s, the daemon up to 330 s): `system.ssh.set`.
+  final Duration interactiveTimeout;
+
+  static const _interactive = {'system.ssh.set'};
 
   ConnectionStatus _status = const Connecting();
   final _statusController = StreamController<ConnectionStatus>.broadcast();
@@ -177,7 +184,11 @@ class DaemonClient extends DaemonConnection {
     if (conn == null || !conn.handshaken) {
       return Future.error(const DaemonUnavailableException());
     }
-    return conn.request(method, params);
+    return conn.request(
+      method,
+      params,
+      timeout: _interactive.contains(method) ? interactiveTimeout : null,
+    );
   }
 
   @override
@@ -237,8 +248,9 @@ class _Connection {
 
   Future<Map<String, dynamic>> request(
     String method,
-    Map<String, dynamic> params,
-  ) {
+    Map<String, dynamic> params, {
+    Duration? timeout,
+  }) {
     if (_done.isCompleted) {
       return Future.error(
         const DaemonUnavailableException('connection closed'),
@@ -255,11 +267,12 @@ class _Connection {
       _pending.remove(id);
       return Future.error(DaemonUnavailableException('$e'));
     }
+    final limit = timeout ?? _timeout;
     return c.future.timeout(
-      _timeout,
+      limit,
       onTimeout: () {
         _pending.remove(id);
-        throw TimeoutException('$method timed out', _timeout);
+        throw TimeoutException('$method timed out', limit);
       },
     );
   }

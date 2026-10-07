@@ -4,6 +4,7 @@ import 'dart:io' show File;
 import 'daemon.dart';
 import 'errors.dart';
 import 'generated.dart';
+import 'mock_auth.dart';
 import 'mock_runtime.dart';
 import 'mock_system_relay.dart';
 import 'version.dart';
@@ -121,13 +122,23 @@ class MockDaemon extends DaemonConnection {
     DateTime Function()? now,
   }) : apps = List.of(apps),
        _games = List.of(games ?? mockGames()) {
+    auth = MockAuthAgent(
+      emit: (name, params) => emitRaw(name, params),
+      isLauncher: () => clientName == 'hinteros-launcher',
+    );
     system = MockSystemRelay(
       emit: (name, params) => emitRaw(name, params),
       now: now,
       stepDelay: systemStepDelay,
+      authorize: (action, message) =>
+          auth.authorize(action: action, message: message),
     );
     runtime = MockRuntime(emit: (name, params) => emitRaw(name, params));
   }
+
+  /// The polkit authentication agent (session API 0.8): the admin password
+  /// prompt of relayed calls, `auth.respond` and `auth.cancel`.
+  late final MockAuthAgent auth;
 
   /// The relayed system service (session API 0.6): its state, fake jobs and
   /// switches for failures. Methods `system.*` go here.
@@ -160,6 +171,13 @@ class MockDaemon extends DaemonConnection {
 
   /// Config: a virtual keyboard exists (`keys.*` else keyboard_unavailable).
   bool keyboardAvailable = true;
+
+  /// Config: the graphical session was started by greetd, so
+  /// `session.restart` can end it (else `unavailable {service: logind}`).
+  bool sessionRestartAvailable = true;
+
+  /// How many times `session.restart` was accepted.
+  int sessionRestarts = 0;
 
   bool _oskVisible = false;
 
@@ -263,9 +281,20 @@ class MockDaemon extends DaemonConnection {
         'call hello first',
       );
     }
+    if (MockAuthAgent.handles(method)) return auth.call(method, params);
     if (MockSystemRelay.handles(method)) return system.call(method, params);
     if (MockRuntime.handles(method)) return runtime.call(method, params);
     switch (method) {
+      case 'session.restart':
+        if (!sessionRestartAvailable) {
+          throw const ApiException(
+            ApiErrorCode.unavailable,
+            'the graphical session was not started by greetd',
+            {'service': 'logind', 'reason': 'not_greetd'},
+          );
+        }
+        sessionRestarts++;
+        return const SessionRestartResult().toJson();
       case 'ping':
         return PingResult(nonce: PingParams.fromJson(params).nonce).toJson();
       case 'subscribe':
