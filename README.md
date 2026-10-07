@@ -41,7 +41,7 @@ the home screen says so and the client keeps retrying with backoff.
 | `tool/gen_api.dart` | Generator: schema to `lib/src/api/generated.dart` (models, typed method stubs, sealed event class, error codes) |
 | `lib/src/api/generated.dart` | Generated, committed. Do not edit |
 | `lib/src/api/client.dart` | `DaemonClient`: handshake, request correlation, events, subscribe, reconnect |
-| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.6 methods and events, the relayed `system.*` API included) |
+| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.7 methods and events: the relayed `system.*` API and the runtime settings) |
 | `lib/src/osk/` | The on-screen keyboard: `OskBackend` (+ mock), layouts, state, UI |
 | `tool/gen_mock_art.dart` | Draws the placeholder cover art in `test/fixtures/art/` (committed; no network, no third-party pictures) |
 | `tool/gen_mock_icons.dart` | Draws the generic placeholder app icons in `test/fixtures/icons/` (plain shapes, PNG and one SVG; no logos, no network) |
@@ -50,12 +50,12 @@ the home screen says so and the client keeps retrying with backoff.
 ### Mock daemon
 
 `--mock` (or `HINTEROS_MOCK=1`) swaps the socket for the in-process mock, which behaves like the
-0.6 daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
+0.7 daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
 Plex), a fake Steam library of 14 games in every install state (`games.list`, sorted by name),
 `apps.launch` (by id, command or `steam://rungameid/<appid>`), `apps.running`, `apps.focus`,
 `apps.close` (then `app_exited` with reason `closed`), `steam.attention` / `steam.focus`, and the
 `app_started`, `app_exited`, `focus_changed`, `games_changed`, `steam_attention` and `osk_visibility` events; a
-`command` launch of `does-not-exist` fails with 2002. 0.5: the apps have generic local icons (`test/fixtures/icons`, found from the repo root or `HINTEROS_MOCK_ICONS=<dir>`), except YouTube and Plex, whose icons arrive later (F6, `apps_changed`); `MockDaemon.setAppIcon` does the same in tests. 0.4: `osk.show` / `osk.hide` (event only on a change; Home and a focus change hide it; `oskEnabled = false` gives 2005), `keys.type` (printable ASCII types, anything else comes back as `untypeable`), `keys.key`, `keys.action` (all logged in `MockDaemon.keyLog`; `keyboardAvailable = false` gives 2004), and, while the keyboard is visible, `input_nav` only to a mock constructed with `clientName: 'hinteros-osk'`. 0.6: the relayed system service (`MockDaemon.system`, `lib/src/api/mock_system_relay.dart`): `system.info`, `settings.get` / `set`, `ssh.set` (`authentication_required` until `system.adminAuthorized = true`), `generations.list`, `rebuild`, `hardware.redetect`, `rollback`, `update.check` (a job, 60 s cache), `update.apply` (only the last checked rev), `channel.set` / `base.set` (`needs_acknowledgement` for downgrades), `jobs.get` / `list` / `cancel`, and the `job_started` / `job_progress` / `job_finished` events. One mutating job at a time (`job_busy`); jobs step through their stages by themselves with `systemStepDelay`, or a test drives them (`progressJob`, `finishJob`); `unavailable = SystemUnavailableDataReason.down` gives `system_unavailable`; `failNext` injects any error (rate limit, low memory...). No daemon needed for desktop work. Dev keys,
+`command` launch of `does-not-exist` fails with 2002. 0.5: the apps have generic local icons (`test/fixtures/icons`, found from the repo root or `HINTEROS_MOCK_ICONS=<dir>`), except YouTube and Plex, whose icons arrive later (F6, `apps_changed`); `MockDaemon.setAppIcon` does the same in tests. 0.4: `osk.show` / `osk.hide` (event only on a change; Home and a focus change hide it; `oskEnabled = false` gives 2005), `keys.type` (printable ASCII types, anything else comes back as `untypeable`), `keys.key`, `keys.action` (all logged in `MockDaemon.keyLog`; `keyboardAvailable = false` gives 2004), and, while the keyboard is visible, `input_nav` only to a mock constructed with `clientName: 'hinteros-osk'`. 0.6: the relayed system service (`MockDaemon.system`, `lib/src/api/mock_system_relay.dart`): `system.info`, `settings.get` / `set`, `ssh.set` (`authentication_required` until `system.adminAuthorized = true`), `generations.list`, `rebuild`, `hardware.redetect`, `rollback`, `update.check` (a job, 60 s cache), `update.apply` (only the last checked rev), `channel.set` / `base.set` (`needs_acknowledgement` for downgrades), `jobs.get` / `list` / `cancel`, and the `job_started` / `job_progress` / `job_finished` events. One mutating job at a time (`job_busy`); jobs step through their stages by themselves with `systemStepDelay`, or a test drives them (`progressJob`, `finishJob`); `unavailable = SystemUnavailableDataReason.down` gives `system_unavailable`; `failNext` injects any error (rate limit, low memory...). 0.7: the runtime settings (`MockDaemon.runtime`, `lib/src/api/mock_runtime.dart`): `network.status`, `wifi.scan` / `list` / `connect` / `disconnect` / `forget` / `enable` (a stored network joins without a password, a wrong password is `wrong_password` and stores nothing, WEP and 802.1X are refused, `keyChanged` makes a stored password stale), `bluetooth.*` (devices appear on the first scan; a controller pairs without a prompt, a `confirm` device sends `bluetooth_confirm` and waits for `bluetooth.confirm`, a `display` device waits for `finishDisplayPairing()`), `audio.*` (every call returns the state and sends `audio_changed`), `display.modes` / `set_mode` / `keep` / `revert` (the replaced mode is remembered until kept or reverted; `displayCanSet`, `displayIgnoresMode`), `power.*` (`inhibited = true` gives `power_inhibited`, `powerCapabilities`, `notAuthorized`), and `network_changed`, `wifi_list_changed`, `bluetooth_changed`, `bluetooth_confirm`, `audio_changed` after every change. `runtime.setUnavailable('bluez')` (also `networkmanager`, `audio`, `display`, `logind`) makes one service answer `unavailable` and leaves the rest working. No daemon needed for desktop work. Dev keys,
 all going through the mock's event stream:
 
 | Key | Does |
@@ -180,7 +180,7 @@ schema in the pinned `hinteros-daemon` input, and fails (`generated`) while the 
 is stale. After re-vendoring, the mock and contract test must cover any new methods. The generator
 handles `$ref` unions (`oneOf [X, null]` becomes `X?`), required-but-nullable fields (sent as
 explicit `null`) and string enums (with or without `type: string`) with an `unknown` fallback, and
-params/result schemas that are a `$ref` (the relayed `system.*` results); `oneOf` on a params object (as in
+params/result schemas that are a `$ref` (the relayed `system.*` results; `display.set_mode`'s params, whose required fields mean the stub has no default argument); `oneOf` on a params object (as in
 `apps.launch`) is not modelled, so all its fields are optional in Dart and the daemon validates.
 
 ### Tests
@@ -192,12 +192,13 @@ params/result schemas that are a `$ref` (the relayed `system.*` results); `oneOf
 - `test/api03_ui_test.dart` covers the 0.3 behaviour through the UI: install-state badges (also that
   they fit narrow covers at text 1.0 to 1.6x), launching and explaining games, Close with its
   confirm step, the attention banner.
+- `test/system/daemon_runtime_test.dart` runs the real network, Bluetooth, display/audio and power repositories over the mock's runtime (mapping, events, the 4xxx errors). `test/system/runtime_ui_test.dart` is the same through the Settings screens: Wi-Fi with a wrong password then the right one, Bluetooth pairing with a passkey (Accept, Reject, the code shown for a device that shows none), the display keep or revert dialog with its 15 seconds (`display.keep` / `display.revert`), `can_set` false, power refused while an update is being applied, and one section unavailable while the others work.
 - `test/system/daemon_system_test.dart` runs the real repositories (`DaemonSystem`, `DaemonUpdates`, `DaemonJobs`) over `MockDaemon`'s relay: error mapping, jobs from events, cancel, downgrade acknowledgement, the update check and its cache, `settings.set` with a revision. `test/system/daemon_ui_test.dart` is the same through the Settings screens (SSH without a polkit agent, settings unavailable, About with the DEV badge, a security update through to "Restart session"). `test/osk/osk_auto_show_test.dart`: the keyboard opens and closes with the launcher's text fields.
 - `test/osk/` drives the on-screen keyboard with the mock backend: layout, D-pad navigation, shift,
   pages, and the exact backend calls for typing `P@ss-w0rd!` with D-pad presses only.
 - `test/integration/` runs the real `hinteros-session` binary: `nix build .#checks.x86_64-linux.integration`.
   It starts the daemon with `--no-gamescope --no-inputplumber`, a temp config of two command apps
-  and `--steam-dir` pointing at the daemon repo's fake Steam home, and covers the 0.6 handshake (an app with an explicit `icon` path gets it back in `apps.list`),
+  and `--steam-dir` pointing at the daemon repo's fake Steam home, and covers the 0.7 handshake (an app with an explicit `icon` path gets it back in `apps.list`),
   `apps.list` (built-in `steam` first), `apps.launch` (configured app, unknown app, spawn failure),
   `apps.running`, `app_started` / `app_exited`, `apps.close` (reason `closed`, 2001 when not
   running), `games.list` against the fixture (names, install state, artwork files that exist),
@@ -221,6 +222,7 @@ params/result schemas that are a `$ref` (the relayed `system.*` results); `oneOf
   the daemon repo (`crates/hinteros-system/tests/common`), which cannot be used from Dart; those
   paths (`ssh.set` to `authentication_required`, jobs and their events) are covered against the
   mock daemon's relay, whose answers the contract test checks against the schema.
+  `runtime_integration_test.dart`: the launcher and the on-screen keyboard say hello at 0.7; with `--no-runtime` every Wi-Fi, Bluetooth, audio, display and power method answers `unavailable` naming its service (`networkmanager`, `bluez`, `audio`, `display`, `logind`) while ping and `apps.list` work, and the real repositories say "<service> isn't available on this box". **Not covered:** `--runtime-bus` with fake NetworkManager, BlueZ, logind, PipeWire and gamescope. The daemon's fakes are Rust test helpers inside its own integration tests (`crates/hinteros-session/tests/runtime_*`), not programs, so nothing from Dart can start them; those paths (wrong password, pairing with a passkey, keep and revert, `power_inhibited`) run against the mock daemon, whose answers the contract test checks against every schema example. The other integration tests start the daemon with `--no-runtime`, so they never reach the host's system bus.
   It is a separate check and is skipped by plain `flutter test` unless `HINTEROS_SESSION_BIN`
   points at the binary (and `HINTEROS_SYSTEM_BIN` at `hinteros-system`) (and `HINTEROS_STEAM_FIXTURE` at `crates/hinteros-session/tests/fixtures/steam-home`
   for the games test), e.g.
@@ -373,21 +375,38 @@ back per field:
 Everything below is built against **repository interfaces** (`lib/src/system/repositories.dart`).
 Since session API 0.6 the daemon relays the privileged system service (`system.*`, design in
 `design/system-api.md` in hinteros-docs), and `lib/src/system/daemon_system.dart` implements
-`SystemRepository` (info, SSH), `UpdatesRepository` and `JobsRepository` over it
-(`daemonSystemServices(connection)`, what `main` uses). `--mock` uses the in-process fakes of
-`lib/src/system/mock_system.dart` (all repositories). The rest is still unavailable in the real
+`SystemRepository` (info, SSH, power), `UpdatesRepository` and `JobsRepository` over it. Since 0.7
+the runtime settings (Wi-Fi, Bluetooth, audio, display, power) are served by the session daemon
+itself, and `lib/src/system/daemon_runtime.dart` implements `NetworkRepository`,
+`BluetoothRepository` and `DisplayAudioRepository` over them (`daemonSystemServices(connection)`,
+what `main` uses; the error mapping is in `daemon_errors.dart`). `--mock` uses the in-process fakes of
+`lib/src/system/mock_system.dart` (all repositories). Only the Store is still unavailable in the real
 build (the screens say "needs a newer HinterOS service" instead of showing invented data):
-Network, Bluetooth, Display, Audio and Power wait for the session API 0.7 (`TODO(0.7)`), the Store
-for `apps.install` / `apps.remove` (`TODO(M8)`).
+`apps.install` / `apps.remove` (`TODO(M8)`), and restarting the session (`TODO(session-restart)`, no
+session API method yet).
+
+**What the screens do with the daemon's answers**
+
+| Answer | The screen |
+|---|---|
+| `wrong_password` (4003) | The Wi-Fi password dialog stays open with "That password was not accepted. Try again." and the on-screen keyboard comes back. A saved password the network no longer takes asks for the new one |
+| `unavailable` (4001) | That section shows "<service> isn't available on this box." (Wi-Fi, Bluetooth, Audio, Display control, Power control) with Try again; the other sections are not touched |
+| `bluetooth_confirm` (mode `confirm`) | A modal with the passkey and Reject / Accept (`bluetooth.confirm`); Back or a timeout rejects. Mode `display`: only the code, "Type this code on <device>", and the modal closes by itself when the pairing ends |
+| `power_inhibited` (4005) | "Not right now": "Can't do that while an update is being applied." |
+| `device_failed` (4002) | The daemon's message; for the display `not_applied` explains that HinterOS may be started with a fixed resolution |
+| `not_authorized` (4004) | "HinterOS isn't allowed to change that on this box." |
+| Display: `set_mode` | The existing 15 second "Keep this resolution?" dialog: Keep calls `display.keep`, Go back, Back or the countdown call `display.revert`. `can_set` false: the section says the resolution can't be changed from here and the modes explain instead of switching |
+| Power: `power.capabilities` | An action logind answers `no`, `challenge` or `na` for is marked "Not allowed on this box" and explains when chosen |
+| Events | `network_changed`, `wifi_list_changed`, `bluetooth_changed` and `audio_changed` update the open section (a scan finishing, a controller connecting, the volume changed by a headset) |
 
 | Interface | Wraps (later) | Used by |
 |---|---|---|
-| `SystemRepository` | `system.info`, `ssh.set`, `settings.get` / `set` (with `revision`); power and session restart: TODO(0.7) | About, Power, Remote access, session restart |
+| `SystemRepository` | `system.info`, `ssh.set`, `settings.get` / `set` (with `revision`), `power.capabilities` / `suspend` / `reboot` / `poweroff`; session restart: TODO(session-restart) | About, Power, Remote access, session restart |
 | `UpdatesRepository` | `update.check`, `update.apply`, `generations.list`, `rollback`, `channel.set`, `base.set` | Updates, reminders |
 | `JobsRepository` | `jobs.get` / `jobs.cancel`, `job_started` / `job_progress` / `job_finished` | the progress page |
-| `NetworkRepository` | NetworkManager (runtime), TODO(0.7) | Network |
-| `BluetoothRepository` | BlueZ (runtime), TODO(0.7) | Bluetooth |
-| `DisplayAudioRepository` | display modes, PipeWire | Display, Audio |
+| `NetworkRepository` | `network.status`, `wifi.*`, `network_changed`, `wifi_list_changed` | Network |
+| `BluetoothRepository` | `bluetooth.*`, `bluetooth_changed`, `bluetooth_confirm` | Bluetooth |
+| `DisplayAudioRepository` | `display.modes` / `set_mode` / `keep` / `revert`, `audio.*`, `audio_changed` | Display, Audio |
 | `StoreRepository` | the catalog index, `apps.install` / `apps.remove` (M8) | Store, Games, installer |
 
 `MockJobs` behaves like the service: one mutating job at a time (`job_busy`), stages, progress,
@@ -447,7 +466,7 @@ through their stages by themselves.
 The UI reads through `AppsRepository` (apps, running, launch, close, Steam attention and focus) and
 `GamesRepository` (`games.list`, launch by Steam URL) in `lib/src/data/`, combined in
 `LauncherData`, which owns all daemon traffic and re-queries on connect and on events (the daemon
-does not replay them). The client speaks session API 0.6 (during 0.x the minor must match).
+does not replay them). The client speaks session API 0.7 (during 0.x the minor must match); the on-screen keyboard's connection too.
 
 ### Fonts
 
@@ -462,7 +481,7 @@ Atkinson Hyperlegible Regular and Bold (`assets/fonts/`), SIL Open Font License 
 `test/golden/goldens/`. `test/golden/osk_test.dart` renders the on-screen keyboard at 1920x1080 over
 a checkerboard (so the transparent area and the panel's rounded corners show): letters, symbols with dots in the preview,
 the masked preview with its newest character readable, the preview with the setting on, high contrast at 1.6x with caps lock, and the bar focus marker with one-shot shift
-(`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. `test/golden/system_test.dart` covers the system screens (`settings_sys_*`, `ssh_admin_password`, `wifi_password`, `display_*`), the progress page (`progress_*`), the security notice (`security_notice_*`, also high contrast at 1.6x, locked and unlocked), the Home reminder, the Store (`store_*`), the terms page (`terms_*`, also high contrast at 1.6x, from the top and scrolled to the end), `games_steam_missing` and `installer_app_selection`. Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
+(`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. `test/golden/runtime_test.dart` covers the runtime settings on the real repositories over the mock daemon (`bt_pair_*` for the passkey modal, `wifi_wrong_password`, `settings_bt_unavailable`, `settings_display_cannot_set`, `display_keep_daemon`, `power_inhibited`, `settings_power_restricted`, `settings_net_no_internet`). `test/golden/system_test.dart` covers the system screens (`settings_sys_*`, `ssh_admin_password`, `wifi_password`, `display_*`), the progress page (`progress_*`), the security notice (`security_notice_*`, also high contrast at 1.6x, locked and unlocked), the Home reminder, the Store (`store_*`), the terms page (`terms_*`, also high contrast at 1.6x, from the top and scrolled to the end), `games_steam_missing` and `installer_app_selection`. Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
 running game, the attention banner, the close confirm and the app tiles at text 1.3x/1.6x (also high
 contrast). Tests load the bundled font explicitly (`flutter_test_config.dart`, no
 Ahem), use a fixed clock, the in-process mock, the committed placeholder art

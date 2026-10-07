@@ -45,10 +45,10 @@ Future<void> main(List<String> args) async {
   Widget app = LauncherApp(
     data: data,
     settings: settings,
-    // Real: system info, SSH, updates and jobs over the session API 0.6 relay;
-    // Wi-Fi, Bluetooth, display, audio, power and the Store are unavailable
-    // until the daemon has them (TODO(0.7), TODO(M8)). The mock behaves like
-    // the real daemon about the admin password.
+    // Real: system info, SSH, updates and jobs over the session API 0.6 relay,
+    // and Wi-Fi, Bluetooth, display, audio and power over the 0.7 runtime
+    // settings; the Store is unavailable until the daemon has it (TODO(M8)).
+    // The mock behaves like the real daemon about the admin password.
     services: mock
         ? MockSystemServices(
             autoRunJobs: true,
