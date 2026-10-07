@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../nav/nav_controller.dart';
 import '../system/models.dart';
 import '../theme/hinter_theme.dart';
+import 'app_icon_view.dart';
 import 'pages.dart';
 import 'widgets.dart';
 
@@ -10,17 +11,15 @@ import 'widgets.dart';
 /// anything else that picks apps from the catalog: the selection, which
 /// vendor terms were accepted, and what that adds up to.
 ///
-/// Only YouTube and Firefox are selected at first (catalog.md "Installer app
-/// selection"); the others are opt-in.
+/// The apps the catalog marks `installerDefault` are selected at first; the
+/// others are opt-in.
 class AppSelectionController extends ChangeNotifier {
   AppSelectionController(this.apps, {Set<String>? initial})
     : _selected = {
-        for (final id in initial ?? defaultSelection)
-          if (apps.any((a) => a.id == id)) id,
+        for (final a in apps)
+          if (initial == null ? a.installerDefault : initial.contains(a.id))
+            a.id,
       };
-
-  /// What is ticked at first.
-  static const defaultSelection = {'youtube', 'firefox'};
 
   final List<StoreApp> apps;
   final Set<String> _selected;
@@ -146,7 +145,16 @@ class AppSelectionView extends StatelessWidget {
               title: a.name,
               focused: f,
               dim: blocked,
-              leading: CheckMark(checked: c.isSelected(a.id)),
+              leading: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CheckMark(checked: c.isSelected(a.id)),
+                  const SizedBox(width: HinterTokens.s2),
+                  // No daemon on the ISO, so no resolved icon and no fetching:
+                  // the letter tile. The Store gets the daemon's icons.
+                  AppIconBadge(name: a.name, iconPath: null, size: 44),
+                ],
+              ),
               subtitle: [
                 a.summary,
                 if (a.hasTerms) 'Vendor terms apply.',
@@ -182,7 +190,7 @@ class AppSelectionView extends StatelessWidget {
               builder: (f) => SettingRow(
                 title: a.name,
                 focused: f,
-                subtitle: "${a.terms!.vendor}'s terms",
+                subtitle: a.terms!.title,
                 trailing: Text(
                   done ? 'Accepted' : 'Read and accept',
                   style: t.bodyDim.copyWith(

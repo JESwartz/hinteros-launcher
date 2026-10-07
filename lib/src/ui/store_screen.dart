@@ -42,7 +42,7 @@ class StoreScreen extends StatefulWidget {
   final VoidCallback? onPopulated;
 
   /// Id of the pseudo categories.
-  static const featured = 'featured';
+  static const all = 'all';
   static const installedCat = 'installed';
 
   @override
@@ -99,17 +99,14 @@ class _StoreScreenState extends State<StoreScreen> {
   }
 
   List<(String id, String label)> _categories(List<StoreApp> apps) => [
-    (StoreScreen.featured, 'Featured'),
+    (StoreScreen.all, 'All'),
     for (final c in StoreCategory.values)
       if (apps.any((a) => a.category == c)) (c.name, c.label),
     (StoreScreen.installedCat, 'Installed'),
   ];
 
   List<StoreApp> _appsIn(String cat, List<StoreApp> apps) => switch (cat) {
-    StoreScreen.featured => [
-      for (final a in apps)
-        if (a.featured) a,
-    ],
+    StoreScreen.all => apps,
     StoreScreen.installedCat => [
       for (final a in apps)
         if (_store.installed.contains(a.id)) a,
@@ -451,7 +448,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     if (app.hasTerms) {
       p.add(
         Text(
-          "${app.terms!.vendor}'s terms apply (version ${app.terms!.version}).",
+          '${app.terms!.title} applies (version ${app.terms!.version}).',
           style: t.bodyDim,
         ),
       );

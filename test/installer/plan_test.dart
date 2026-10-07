@@ -24,7 +24,24 @@ void main() {
         'base': 'unstable',
         'network': 'auto',
         'apps': ['youtube', 'firefox'],
+        'acceptedTerms': <String, String>{},
       });
+    });
+
+    test('accepted terms are id -> version', () {
+      const plan = InstallPlan(
+        disk: '/dev/sda',
+        hostname: 'box',
+        adminUser: 'a',
+        adminPassword: 'password1',
+        apps: ['steam', 'youtube'],
+        acceptedTerms: {'steam': '2026-09-10'},
+      );
+      expect(plan.toJson()['acceptedTerms'], {'steam': '2026-09-10'});
+      expect(
+        jsonDecode(utf8.decode(plan.encode())),
+        containsPair('acceptedTerms', {'steam': '2026-09-10'}),
+      );
     });
 
     test('only fields the backend knows', () {
@@ -37,6 +54,7 @@ void main() {
         'base',
         'network',
         'apps',
+        'acceptedTerms',
         'wifi',
       };
       const plan = InstallPlan(

@@ -194,7 +194,7 @@ params/result schemas that are a `$ref` (the relayed `system.*` results; `displa
   confirm step, the attention banner.
 - `test/system/daemon_runtime_test.dart` runs the real network, Bluetooth, display/audio and power repositories over the mock's runtime (mapping, events, the 4xxx errors). `test/system/runtime_ui_test.dart` is the same through the Settings screens: Wi-Fi with a wrong password then the right one, Bluetooth pairing with a passkey (Accept, Reject, the code shown for a device that shows none), the display keep or revert dialog with its 15 seconds (`display.keep` / `display.revert`), `can_set` false, power refused while an update is being applied, and one section unavailable while the others work.
 - `test/system/daemon_system_test.dart` runs the real repositories (`DaemonSystem`, `DaemonUpdates`, `DaemonJobs`) over `MockDaemon`'s relay: error mapping, jobs from events, cancel, downgrade acknowledgement, the update check and its cache, `settings.set` with a revision. `test/system/daemon_ui_test.dart` is the same through the Settings screens (SSH without a polkit agent, settings unavailable, About with the DEV badge, a security update through to "Restart session"). `test/osk/osk_auto_show_test.dart`: the keyboard opens and closes with the launcher's text fields.
-- `test/installer/` covers the installer: `flow_test.dart` walks the screens with a fake backend (disk filtering and the two confirmations, password mismatch, SSH off by default, offline disabling the online-only apps, the plan JSON for several choices, progress, exit status 2 and 1 with their codes, typing with the pad on the in-app keyboard), `plan_test.dart`, `progress_test.dart`, `parsers_test.dart` (lsblk, nmcli, catalog index fixtures), `process_backend_test.dart` (the real backend class against a stand-in script: the plan arrives on stdin, never in the arguments), `gamepad_test.dart`, `first_boot_test.dart`.
+- `test/installer/` covers the installer: `flow_test.dart` walks the screens with a fake backend (disk filtering and the two confirmations, password mismatch, SSH off by default, offline disabling the online-only apps, the plan JSON for several choices, progress, exit status 2 and 1 with their codes, typing with the pad on the in-app keyboard), `plan_test.dart`, `progress_test.dart`, `parsers_test.dart` (lsblk, nmcli; the catalog index is in `test/system/catalog_test.dart`, against `test/fixtures/catalog`, the real index with placeholder terms text), `process_backend_test.dart` (the real backend class against a stand-in script: the plan arrives on stdin, never in the arguments), `gamepad_test.dart`, `first_boot_test.dart`.
 - `test/osk/` drives the on-screen keyboard with the mock backend: layout, D-pad navigation, shift,
   pages, and the exact backend calls for typing `P@ss-w0rd!` with D-pad presses only.
 - `test/integration/` runs the real `hinteros-session` binary: `nix build .#checks.x86_64-linux.integration`.
@@ -273,7 +273,8 @@ about, the install erases the disk.
 | `lib/src/installer/fake_backend.dart` | The fake: scripted progress, refusals (exit 2), failures (exit 1), the plans it was given, a mock machine (disks, Wi-Fi, catalog with placeholder vendor terms) |
 | `lib/src/installer/plan.dart` | `InstallPlan`: the JSON the backend wants (`disk`, `hostname`, `admin {user, password}`, `ssh {enable}`, `channel`, `base`, `network`, `apps`, `wifi {ssid, psk}`), and the UI checks that mirror the backend's |
 | `lib/src/installer/progress.dart` | The stdout lines `{stage, percent, level, message, code?}`, the verdict (exit 0 and a `done` line is success; 2 is "refused, nothing was touched"; 1 or anything else is "failed part-way"; exit 0 with an error line is a failure too), and the plain-words text for every error code |
-| `lib/src/installer/parsers.dart` | `lsblk --json -b` and `nmcli -t` output (`\:` escapes), the catalog index |
+| `lib/src/installer/parsers.dart` | `lsblk --json -b` and `nmcli -t` output (`\:` escapes) |
+| `lib/src/system/catalog.dart` | The catalog index (format 2), shared with the Store: `parseCatalogIndex`, `loadCatalogIndex`, the terms reader |
 | `lib/src/installer/gamepad.dart` | Controller input without the daemon: reads the evdev gamepads under `/dev/input` (A accepts, B back, X/Y, bumpers, View/Menu, D-pad with repeat) |
 | `lib/src/installer/flow.dart` | `InstallerFlow`: the answers, the steps, the install run |
 | `lib/src/installer/ui/` | The screens, the shared input host (`host.dart`), the in-app keyboard (`text_entry.dart`), the first-boot wizard |
@@ -282,14 +283,28 @@ about, the install erases the disk.
 on-screen keyboard (`OskScreen`, same layouts) with an `InProcessKeyboard` as its `OskBackend`: the
 keys go into the field instead of into uinput. Done or Enter saves, View cancels.
 
-**Catalog.** The app list comes from `/run/current-system/sw/share/hinteros/catalog.json` on the
-ISO (`indexVersion` 1, design/catalog.md): the ids the plan accepts (`jellyfin`, `youtube`,
-`crunchyroll`, `firefox` on the ISO, `steam`, `plex-htpc`, `moonlight` downloaded), with the vendor
-`terms {vendor, version, sourceUrl, text}` an unfree entry carries. An unfree entry without terms is
-not offered. Without an index the four ISO apps are offered and nothing else.
-TODO(M8): the index with terms is the catalog repo's job; until it exists on the ISO, Steam and
-Plex are not selectable in the real installer. Also TODO: the plan has no field for the accepted
-terms (version, date), so the acceptance is not recorded on the box yet.
+**Catalog.** One model (`StoreApp`) and one parser (`lib/src/system/catalog.dart`) read the real
+index of the catalog repo (`indexVersion` 2, `schema/index.schema.json` there), for the installer
+and the Store alike. The installer reads `/run/current-system/sw/share/hinteros/catalog.json` on
+the ISO (`catalogIndexPath`; `ProcessInstallerBackend(catalogPath:)` overrides it for tests); the
+vendor terms are text files next to it (`terms/<id>-<version>.txt`), which the index entry names as
+`terms {title, version, url, retrieved, file}` and the parser reads into `VendorTerms.text`
+(only paths of the form `terms/<name>.txt`). Only `status: available` entries are read. The
+installer lists entries with `installer: true`, pre-selects `installerDefault`, and says "On the
+installer" for `onIso` (everything else is a download and is disabled while offline). The safety
+rule: an unfree entry (`free` is not true) whose terms are missing or unreadable is not offered, in
+the installer or the Store. Without an index (or one of another version) the four free ISO apps are
+offered as a fallback.
+
+**Accepted terms.** The plan carries `acceptedTerms: {"<id>": "<terms version>"}` for the selected
+apps that have terms (always present, `{}` when none); the system repo's `hinteros-install`
+validates it against the index and records it on the box.
+
+**Icons.** There is no daemon on the ISO and the installer UI never fetches anything, so the
+installer's list shows the letter tile (`AppIconBadge` without an icon path). The Store gets icons
+from the daemon (`StoreRepository.resolveIcon`: installed desktop icon, `iconUrl`, discovery on
+`siteUrl`, the kiosk profile's favicon, then a letter tile); the index only carries the inputs
+(`icon.desktopId`, `iconUrl`, `siteUrl`, `firefoxProfile`).
 
 ### What the system repo must set
 
@@ -307,7 +322,7 @@ terms (version, date), so the acceptance is not recorded on the box yet.
 - Fonts: the launcher bundles Atkinson Hyperlegible, so no font package is needed. Flutter
   under cage needs working GL (the GPU driver, or Mesa's software renderer for a machine without
   one); this has not been tried on the ISO yet.
-- The catalog index at the path above, once the catalog repo ships it.
+- The catalog index and its `terms/` directory at the path above: the catalog repo's `index` package (`share/hinteros/catalog.json`, `share/hinteros/terms/*.txt`) in the ISO's system packages.
 - Network: NetworkManager with `connectivity` checking on (`general CONNECTIVITY` is how the UI
   knows it is online). Without checking, a connected cable or Wi-Fi counts as online and the
   backend's own probe of cache.nixos.org has the last word.
@@ -548,9 +563,9 @@ through their stages by themselves.
   accepted version is passed to `apps.install`), then the progress page. Remove: confirm with "Also
   delete this app's data in all profiles"; ticking it asks again (Steam: installed games go too).
   "More apps are available after the next update" shows when the catalog changed upstream. Icons are
-  resolved at runtime (`StoreRepository.resolveIcon`); mocks use the generic placeholder icons.
+  resolved at runtime by the daemon (`StoreRepository.resolveIcon`); mocks use the generic placeholder icons. The mock Store reads `test/fixtures/catalog/catalog.json` (or `$HINTEROS_MOCK_CATALOG`) in the real index format, plus three mock-only apps for dependencies. The real Store repository stays TODO(M8) until the daemon's store API lands.
 - **Installer app selection** (`lib/src/ui/app_selection.dart`): `AppSelectionController` and
-  `AppSelectionView` for the M9 installer and first-boot wizard: a checklist with YouTube and Firefox
+  `AppSelectionView` for the M9 installer and first-boot wizard: a checklist with the `installerDefault` apps
   ticked, "On the installer" vs "Download, size" per app, terms acceptance for ticked apps with terms,
   Continue off until accepted. It needs a `ModalHost` above it (see `test/support/modal_host_harness.dart`).
 

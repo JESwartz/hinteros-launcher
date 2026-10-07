@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../system/catalog.dart';
 import '../system/models.dart';
 import 'backend.dart';
 import 'parsers.dart';
@@ -134,10 +135,12 @@ class ProcessInstallerBackend implements InstallerBackend {
 
   @override
   Future<List<StoreApp>> catalog() async {
-    final f = File(catalogPath);
-    if (!f.existsSync()) return fallbackCatalog();
+    if (!File(catalogPath).existsSync()) return fallbackCatalog();
     try {
-      final apps = parseCatalogIndex(await f.readAsString());
+      final apps = [
+        for (final a in loadCatalogIndex(catalogPath))
+          if (a.installer) a,
+      ];
       if (apps.isNotEmpty) return apps;
     } on FormatException {
       // An index this installer does not understand: offer the fallback.

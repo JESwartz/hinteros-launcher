@@ -1,0 +1,241 @@
+{
+  "apps": [
+    {
+      "buildsOnDevice": false,
+      "category": "video",
+      "conflicts": [],
+      "dataPaths": [
+        ".local/share/hinteros/firefox/crunchyroll"
+      ],
+      "depends": [],
+      "description": "Crunchyroll's website in its own full-screen Firefox profile, driven by the controller like a keyboard. Needs a Crunchyroll account; Firefox downloads the video DRM module itself on first play.",
+      "free": true,
+      "homepage": "https://www.crunchyroll.com",
+      "icon": {
+        "firefoxProfile": true,
+        "siteUrl": "https://www.crunchyroll.com"
+      },
+      "id": "crunchyroll",
+      "installer": true,
+      "installerDefault": false,
+      "kind": "web",
+      "name": "Crunchyroll",
+      "onIso": true,
+      "redistributable": true,
+      "requires": [],
+      "sizeMiB": 1,
+      "status": "available",
+      "statusReason": null,
+      "summary": "Anime streaming, in a full-screen browser profile.",
+      "terms": null
+    },
+    {
+      "buildsOnDevice": false,
+      "category": "utilities",
+      "conflicts": [],
+      "dataPaths": [
+        ".local/share/hinteros/firefox/firefox"
+      ],
+      "depends": [],
+      "description": "Firefox in full screen, with its own profile. Use a keyboard and mouse, or the controller as a pointer, to browse the web.",
+      "free": true,
+      "homepage": "https://www.mozilla.org/firefox/",
+      "icon": {
+        "iconUrl": "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/browser/branding/official/content/about-logo@2x.png",
+        "siteUrl": "https://www.mozilla.org"
+      },
+      "id": "firefox",
+      "installer": true,
+      "installerDefault": true,
+      "kind": "web",
+      "name": "Firefox",
+      "onIso": true,
+      "redistributable": true,
+      "requires": [],
+      "sizeMiB": 1,
+      "status": "available",
+      "statusReason": null,
+      "summary": "Browse the web on the TV, with a controller or keyboard.",
+      "terms": null
+    },
+    {
+      "buildsOnDevice": false,
+      "category": "video",
+      "conflicts": [],
+      "dataPaths": [
+        ".local/share/jellyfin-desktop",
+        ".config/jellyfin-desktop",
+        ".cache/jellyfin-desktop",
+        ".local/share/Jellyfin Media Player",
+        ".config/Jellyfin Media Player",
+        ".cache/Jellyfin Media Player"
+      ],
+      "depends": [],
+      "description": "The Jellyfin desktop client in its TV mode. Connect to a Jellyfin server on your network (or this box's own, from the Server section).",
+      "free": true,
+      "homepage": "https://jellyfin.org",
+      "icon": {
+        "desktopId": "org.jellyfin.JellyfinDesktop",
+        "iconUrl": "https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/SVG/icon-transparent.svg",
+        "siteUrl": "https://jellyfin.org"
+      },
+      "id": "jellyfin",
+      "installer": true,
+      "installerDefault": false,
+      "kind": "native",
+      "name": "Jellyfin",
+      "onIso": true,
+      "redistributable": true,
+      "requires": [],
+      "sizeMiB": 250,
+      "status": "available",
+      "statusReason": null,
+      "summary": "Watch your Jellyfin server's movies and shows.",
+      "terms": null
+    },
+    {
+      "buildsOnDevice": false,
+      "category": "games",
+      "conflicts": [],
+      "dataPaths": [
+        ".config/Moonlight Game Streaming Project",
+        ".cache/Moonlight Game Streaming Project",
+        ".local/share/Moonlight Game Streaming Project"
+      ],
+      "depends": [],
+      "description": "Moonlight plays games streamed from a PC running Sunshine or NVIDIA GameStream on your network, with your controller.",
+      "free": true,
+      "homepage": "https://moonlight-stream.org",
+      "icon": {
+        "desktopId": "com.moonlight_stream.Moonlight",
+        "iconUrl": "https://moonlight-stream.org/images/manifest/icons-512.png",
+        "siteUrl": "https://moonlight-stream.org"
+      },
+      "id": "moonlight",
+      "installer": true,
+      "installerDefault": false,
+      "kind": "native",
+      "name": "Moonlight",
+      "onIso": false,
+      "redistributable": true,
+      "requires": [],
+      "sizeMiB": 150,
+      "status": "available",
+      "statusReason": null,
+      "summary": "Stream games from your gaming PC to the TV.",
+      "terms": null
+    },
+    {
+      "buildsOnDevice": true,
+      "category": "video",
+      "conflicts": [],
+      "dataPaths": [
+        ".local/share/plex-htpc",
+        ".local/share/Plex HTPC",
+        ".config/plex-htpc",
+        ".config/Plex HTPC",
+        ".cache/plex",
+        ".cache/plex-htpc",
+        ".cache/Plex HTPC"
+      ],
+      "depends": [],
+      "description": "Plex HTPC, Plex's 10-foot client for the big screen. Sign in with your Plex account to watch your own or shared Plex servers. The app is downloaded from Plex and prepared on this box during install, which takes a few minutes.",
+      "free": false,
+      "homepage": "https://www.plex.tv",
+      "icon": {
+        "desktopId": "plex-htpc",
+        "iconUrl": "https://watch.plex.tv/icons/icon-512x512.png",
+        "siteUrl": "https://www.plex.tv"
+      },
+      "id": "plex-htpc",
+      "installer": true,
+      "installerDefault": false,
+      "kind": "native",
+      "name": "Plex",
+      "onIso": false,
+      "redistributable": false,
+      "requires": [],
+      "sizeMiB": 300,
+      "status": "available",
+      "statusReason": null,
+      "summary": "Watch your Plex libraries with Plex's TV interface.",
+      "terms": {
+        "file": "terms/plex-htpc-2025-10-30.txt",
+        "retrieved": "2026-10-06",
+        "title": "Plex Terms of Service",
+        "url": "https://www.plex.tv/about/privacy-legal/plex-terms-of-service/",
+        "version": "2025-10-30"
+      }
+    },
+    {
+      "buildsOnDevice": false,
+      "category": "games",
+      "conflicts": [],
+      "dataPaths": [
+        ".local/share/Steam",
+        ".steam"
+      ],
+      "depends": [],
+      "description": "Valve's game store and launcher. Your installed games appear in Games, and Steam's own Big Picture mode handles the store, downloads and settings. Each profile has its own Steam login and library.",
+      "free": false,
+      "homepage": "https://store.steampowered.com",
+      "icon": {
+        "desktopId": "steam",
+        "iconUrl": "https://store.steampowered.com/public/shared/images/responsive/share_steam_logo.png",
+        "siteUrl": "https://store.steampowered.com"
+      },
+      "id": "steam",
+      "installer": true,
+      "installerDefault": false,
+      "kind": "native",
+      "name": "Steam",
+      "onIso": false,
+      "redistributable": true,
+      "requires": [
+        "graphics32"
+      ],
+      "sizeMiB": 1000,
+      "status": "available",
+      "statusReason": null,
+      "summary": "Play your Steam library on the TV.",
+      "terms": {
+        "file": "terms/steam-2026-09-10.txt",
+        "retrieved": "2026-10-06",
+        "title": "Steam Subscriber Agreement",
+        "url": "https://store.steampowered.com/subscriber_agreement/",
+        "version": "2026-09-10"
+      }
+    },
+    {
+      "buildsOnDevice": false,
+      "category": "video",
+      "conflicts": [],
+      "dataPaths": [
+        ".local/share/hinteros/firefox/youtube"
+      ],
+      "depends": [],
+      "description": "YouTube's TV interface in its own full-screen Firefox profile, driven by the controller like a keyboard. Sign in with your Google account from the TV screen.",
+      "free": true,
+      "homepage": "https://www.youtube.com",
+      "icon": {
+        "firefoxProfile": true,
+        "iconUrl": "https://www.gstatic.com/youtube/img/branding/favicon/favicon_192x192_v2.png",
+        "siteUrl": "https://www.youtube.com"
+      },
+      "id": "youtube",
+      "installer": true,
+      "installerDefault": true,
+      "kind": "web",
+      "name": "YouTube",
+      "onIso": true,
+      "redistributable": true,
+      "requires": [],
+      "sizeMiB": 1,
+      "status": "available",
+      "statusReason": null,
+      "summary": "YouTube's TV interface, in a full-screen browser profile.",
+      "terms": null
+    }
+  ],
+  "indexVersion": 2
+}

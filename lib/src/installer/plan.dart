@@ -98,6 +98,7 @@ class InstallPlan {
     this.channel = InstallChannel.stable,
     this.network = PlanNetwork.auto,
     this.apps = const [],
+    this.acceptedTerms = const {},
     this.wifiSsid,
     this.wifiPsk,
   });
@@ -111,6 +112,11 @@ class InstallPlan {
   final InstallChannel channel;
   final PlanNetwork network;
   final List<String> apps;
+
+  /// `id -> terms version` the person accepted, for selected apps that have
+  /// vendor terms (the backend checks it against the catalog index and
+  /// records it on the box). Empty: no app with terms is selected.
+  final Map<String, String> acceptedTerms;
 
   /// A Wi-Fi network this UI connected to; the installer keeps the
   /// connection on the installed box. Null: nothing to keep.
@@ -126,6 +132,7 @@ class InstallPlan {
     'base': 'unstable',
     'network': network.name,
     'apps': apps,
+    'acceptedTerms': acceptedTerms,
     if (wifiSsid != null)
       'wifi': {'ssid': wifiSsid, if (wifiPsk != null) 'psk': wifiPsk},
   };
@@ -136,5 +143,5 @@ class InstallPlan {
   @override
   String toString() =>
       'InstallPlan(disk: $disk, host: $hostname, admin: $adminUser, '
-      'ssh: $ssh, channel: ${channel.name}, apps: $apps, password: <hidden>)';
+      'ssh: $ssh, channel: ${channel.name}, apps: $apps, acceptedTerms: $acceptedTerms, password: <hidden>)';
 }

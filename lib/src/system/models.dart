@@ -621,48 +621,68 @@ class AudioState {
 enum StoreCategory {
   games('Games'),
   video('Video'),
-  web('Web'),
-  tools('Tools'),
+  music('Music'),
+  photos('Photos'),
+  utilities('Utilities'),
   other('Other');
 
   const StoreCategory(this.label);
   final String label;
 
-  /// An unknown category means Other (catalog.md).
+  /// An unknown category means Other (the catalog schema).
   static StoreCategory parse(String? s) =>
       values.firstWhere((c) => c.name == s, orElse: () => other);
 }
 
-/// Vendor terms shown in full on the box before install (catalog.md,
-/// "Full vendor terms on the box").
+/// An app's vendor terms as the index lists them (`title`, `version`, `url`,
+/// `retrieved`, `file`), plus the [text] read from that file next to the
+/// index. Shown in full before install; the box records [version].
 @immutable
 class VendorTerms {
   const VendorTerms({
-    required this.vendor,
+    required this.title,
     required this.version,
-    required this.sourceUrl,
+    required this.url,
+    required this.retrieved,
+    required this.file,
     required this.text,
   });
 
-  final String vendor;
+  /// Document title ("Steam Subscriber Agreement").
+  final String title;
 
-  /// Recorded with the acceptance.
+  /// The vendor's version or revision date; recorded with the acceptance.
   final String version;
-  final String sourceUrl;
+  final String url;
+
+  /// `YYYY-MM-DD`: when the text was copied from [url].
+  final String retrieved;
+
+  /// Relative to the index (`terms/<id>-<version>.txt`).
+  final String file;
   final String text;
 }
 
-/// Where an app's icon comes from, resolved at runtime (catalog.md "Icons").
+/// Where an app's icon comes from. The session daemon resolves it at runtime
+/// (installed app's `desktopId`, then `iconUrl`, then discovery on `siteUrl`,
+/// then the kiosk profile's favicon, then a letter tile); the launcher never
+/// fetches icons itself.
 @immutable
 class StoreIcon {
-  const StoreIcon({this.desktopId, this.siteUrl, this.firefoxProfile = false});
+  const StoreIcon({
+    this.desktopId,
+    this.iconUrl,
+    this.siteUrl,
+    this.firefoxProfile = false,
+  });
 
   final String? desktopId;
+  final String? iconUrl;
   final String? siteUrl;
   final bool firefoxProfile;
 }
 
-/// One catalog index entry.
+/// One catalog index entry (format 2); see `catalog.dart` for the parser.
 @immutable
 class StoreApp {
   const StoreApp({
@@ -674,9 +694,14 @@ class StoreApp {
     this.description = '',
     this.depends = const [],
     this.terms,
+    this.free = true,
+    this.installer = true,
+    this.installerDefault = false,
     this.onIso = false,
-    this.featured = false,
+    this.isWeb = false,
+    this.buildsOnDevice = false,
     this.icon = const StoreIcon(),
+    this.dataPaths = const [],
     this.removeDataWarning,
     this.homepage = '',
   });
@@ -692,11 +717,27 @@ class StoreApp {
   /// repository, so these are the extra ones).
   final List<String> depends;
   final VendorTerms? terms;
+  final bool free;
+
+  /// Listed in the installer's app selection (always true for [onIso]).
+  final bool installer;
+
+  /// Pre-selected in the installer's app selection.
+  final bool installerDefault;
 
   /// Part of the installer ISO (no network download needed).
   final bool onIso;
-  final bool featured;
+
+  /// A web (kiosk) app rather than a native one.
+  final bool isWeb;
+
+  /// Unfree and not in the binary cache: fetched from the vendor and built
+  /// on the box.
+  final bool buildsOnDevice;
   final StoreIcon icon;
+
+  /// Paths in a profile's home that "remove and delete data" deletes.
+  final List<String> dataPaths;
 
   /// Shown when removing with data deletion (Steam: installed games go too).
   final String? removeDataWarning;

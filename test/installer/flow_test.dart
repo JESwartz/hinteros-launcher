@@ -365,7 +365,8 @@ void main() {
       expect(h.flow.apps!.isSelected('steam'), isFalse);
       expect(find.text('Read and accept'), findsNothing);
       // The ISO's apps still work.
-      await h.choose(t, 'a0'); // Jellyfin
+      final jf = h.flow.apps!.apps.indexWhere((a) => a.id == 'jellyfin');
+      await h.choose(t, 'a$jf');
       expect(h.flow.apps!.isSelected('jellyfin'), isTrue);
     });
 
@@ -440,7 +441,8 @@ void main() {
         'channel': 'stable',
         'base': 'unstable',
         'network': 'offline',
-        'apps': ['youtube', 'firefox'],
+        'apps': ['firefox', 'youtube'],
+        'acceptedTerms': <String, String>{},
       });
     });
 
@@ -475,7 +477,8 @@ void main() {
         'channel': 'beta',
         'base': 'unstable',
         'network': 'online',
-        'apps': ['youtube', 'firefox', 'steam'],
+        'apps': ['firefox', 'steam', 'youtube'],
+        'acceptedTerms': {'steam': '2026-09-10'},
         'wifi': {'ssid': 'Living Room', 'psk': 'correct horse'},
       });
     });

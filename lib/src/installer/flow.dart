@@ -270,6 +270,7 @@ class InstallerFlow extends ChangeNotifier {
           ? PlanNetwork.offline
           : (needsDownload ? PlanNetwork.online : PlanNetwork.auto),
       apps: [for (final x in a.selectedApps) x.id],
+      acceptedTerms: a.acceptances,
       wifiSsid: online ? joinedSsid : null,
       wifiPsk: online && joinedSsid != null ? _joinedPsk : null,
     );

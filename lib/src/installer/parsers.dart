@@ -1,5 +1,6 @@
-/// Parsers for the output of `lsblk --json` and `nmcli -t`, and of the
-/// catalog index. Tolerant (these tools differ between versions) and pure.
+/// Parsers for the output of `lsblk --json` and `nmcli -t`. Tolerant (these
+/// tools differ between versions) and pure. The catalog index is parsed in
+/// `system/catalog.dart`.
 library;
 
 import 'dart:convert';
@@ -167,74 +168,9 @@ NetworkState parseNetwork(String deviceStatus, String connectivity) {
   );
 }
 
-/// The ids the installer's plan accepts (the system repo's
-/// `nixos/lib/app-ids.nix`) and which of them are on the ISO.
-const installerOnIsoIds = ['jellyfin', 'youtube', 'crunchyroll', 'firefox'];
-const installerOnlineIds = ['steam', 'plex-htpc', 'moonlight'];
-
-/// Where the ISO keeps the catalog index.
-const catalogIndexPath = '/run/current-system/sw/share/hinteros/catalog.json';
-
-/// The apps of a catalog index (`indexVersion` 1, design/catalog.md) that the
-/// installer can offer: known ids, status available. Entries that need vendor
-/// terms carry them as `terms {vendor, version, sourceUrl, text}`; an unfree
-/// entry (`free: false`) without terms is left out, because it cannot be
-/// accepted. Throws [FormatException] for a different index version.
-List<StoreApp> parseCatalogIndex(String source) {
-  final j = jsonDecode(source);
-  if (j is! Map || j['indexVersion'] != 1 || j['apps'] is! List) {
-    throw const FormatException('unknown catalog index');
-  }
-  final known = {...installerOnIsoIds, ...installerOnlineIds};
-  final apps = <StoreApp>[];
-  for (final a in j['apps'] as List) {
-    if (a is! Map<String, Object?>) continue;
-    final id = a['id'];
-    if (id is! String || !known.contains(id)) continue;
-    final status = a['status'];
-    if (status != null && status != 'available') continue;
-    VendorTerms? terms;
-    final t = a['terms'];
-    if (t is Map &&
-        t['vendor'] is String &&
-        t['version'] is String &&
-        t['text'] is String) {
-      terms = VendorTerms(
-        vendor: t['vendor'] as String,
-        version: t['version'] as String,
-        sourceUrl: t['sourceUrl'] is String ? t['sourceUrl'] as String : '',
-        text: t['text'] as String,
-      );
-    }
-    if (a['free'] == false && terms == null) continue;
-    final onIso = installerOnIsoIds.contains(id);
-    final name = a['name'];
-    final summary = a['summary'];
-    final description = a['description'];
-    final size = a['sizeMiB'];
-    final depends = a['depends'];
-    apps.add(
-      StoreApp(
-        id: id,
-        name: name is String ? name : id,
-        summary: summary is String ? summary : '',
-        description: description is String ? description : '',
-        category: StoreCategory.parse(a['category'] as String?),
-        sizeMiB: size is num ? size.toInt() : 0,
-        depends: depends is List ? depends.whereType<String>().toList() : [],
-        terms: terms,
-        onIso: onIso,
-        featured: a['featured'] == true,
-      ),
-    );
-  }
-  return apps;
-}
-
 /// What the installer offers when the ISO has no catalog index.
-// TODO(M8): the catalog flake input puts catalog.json on the ISO (with the
-// vendor terms of Steam and Plex); until then only the apps that are on the
-// ISO and need no terms can be offered.
+// The index is the source of truth; this is only the safety net for an ISO
+// built without it: the free apps that are on the ISO, no terms needed.
 List<StoreApp> fallbackCatalog() => const [
   StoreApp(
     id: 'jellyfin',
@@ -251,6 +187,7 @@ List<StoreApp> fallbackCatalog() => const [
     category: StoreCategory.video,
     sizeMiB: 1,
     onIso: true,
+    installerDefault: true,
   ),
   StoreApp(
     id: 'crunchyroll',
@@ -264,8 +201,9 @@ List<StoreApp> fallbackCatalog() => const [
     id: 'firefox',
     name: 'Firefox',
     summary: 'A full web browser, for sites that have no app.',
-    category: StoreCategory.web,
+    category: StoreCategory.utilities,
     sizeMiB: 90,
     onIso: true,
+    installerDefault: true,
   ),
 ];

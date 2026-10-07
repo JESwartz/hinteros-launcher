@@ -7,6 +7,7 @@ import 'package:hinteros_launcher/src/installer/process_backend.dart';
 import 'package:hinteros_launcher/src/installer/progress.dart';
 
 import '../support/harness.dart' show tempDir;
+import '../support/installer_fixtures.dart' show catalogFixtureDir;
 
 /// The real backend class against a stand-in for `hinteros-install`: a shell
 /// script in a temp directory that records how it was called. The real
@@ -108,22 +109,31 @@ exit 2
     );
   });
 
-  test('a catalog index on the ISO is read', () async {
+  test('a catalog index on the ISO is read, with its terms', () async {
+    final terms = Directory('${dir.path}/terms')..createSync();
+    for (final f in Directory('$catalogFixtureDir/terms').listSync()) {
+      File('${terms.path}/${f.uri.pathSegments.last}')
+          .writeAsStringSync(File(f.path).readAsStringSync());
+    }
     File('${dir.path}/catalog.json').writeAsStringSync(
-      '{"indexVersion":1,"apps":[{"id":"firefox","name":"Firefox",'
-      '"status":"available","sizeMiB":90}]}',
+      File('$catalogFixtureDir/catalog.json').readAsStringSync(),
     );
-    final apps = await ProcessInstallerBackend(
-      catalogPath: '${dir.path}/catalog.json',
-    ).catalog();
-    expect(apps.single.id, 'firefox');
+    ProcessInstallerBackend backend() =>
+        ProcessInstallerBackend(catalogPath: '${dir.path}/catalog.json');
+    final apps = await backend().catalog();
+    expect(apps.every((a) => a.installer), isTrue);
+    expect(
+      apps.firstWhere((a) => a.id == 'steam').terms!.text,
+      startsWith('PLACEHOLDER TERMS FOR STEAM'),
+    );
+    // Without the terms files the unfree apps are not offered.
+    terms.deleteSync(recursive: true);
+    final ids = [for (final a in await backend().catalog()) a.id];
+    expect(ids, isNot(contains('steam')));
+    expect(ids, isNot(contains('plex-htpc')));
+    expect(ids, contains('firefox'));
     // An index of another version falls back instead of failing.
     File('${dir.path}/catalog.json').writeAsStringSync('{"indexVersion":9}');
-    expect(
-      (await ProcessInstallerBackend(
-        catalogPath: '${dir.path}/catalog.json',
-      ).catalog()).length,
-      4,
-    );
+    expect((await backend().catalog()).length, 4);
   });
 }

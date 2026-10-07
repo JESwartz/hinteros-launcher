@@ -14,13 +14,19 @@ Harness harness() => Harness(
 bool buttonEnabled(WidgetTester t, String label) =>
     t.widget<HButton>(find.widgetWithText(HButton, label)).enabled;
 
-/// Store, category [cat] (0 Featured, 1 Games, 2 Video, ...), first app.
-Future<void> openApp(WidgetTester t, int cat, [int more = 0]) async {
+/// Store, category [cat] (0 All, 1 Games, 2 Video, ...), first app.
+Future<void> openApp(
+  WidgetTester t,
+  int cat, [
+  int more = 0,
+  int rows = 0,
+]) async {
   await openStore(t);
   await press(t, [
     ...List.filled(cat, kDown),
     kRight,
     ...List.filled(more, kRight),
+    ...List.filled(rows, kDown),
   ]);
   await press(t, [kEnter]);
 }
@@ -34,7 +40,7 @@ void main() {
     await h.pump(t);
     await openStore(t);
     expect(focusLabel(), 'store-cats/c0:0');
-    expect(find.text('Featured'), findsOneWidget);
+    expect(find.text('All'), findsOneWidget);
     expect(find.text('Steam'), findsOneWidget);
     expect(find.text('Installed'), findsWidgets);
     expect(find.byKey(const ValueKey('more-apps')), findsOneWidget);
@@ -86,12 +92,12 @@ void main() {
 
   group('vendor terms', () {
     Future<void> toTerms(WidgetTester t, Harness h) async {
-      h.services.mockStore.setInstalled({'plex', 'jellyfin'});
+      h.services.mockStore.setInstalled({'plex-htpc', 'jellyfin'});
       await h.pump(t);
-      await openApp(t, 1); // Steam
+      await openApp(t, 1, 1); // Steam (Moonlight comes first)
       await press(t, [kEnter]); // Install
       expect(find.text('Install Steam?'), findsOneWidget);
-      expect(find.textContaining('You read them in full next'), findsOneWidget);
+      expect(find.textContaining('You read it in full next'), findsOneWidget);
       await press(t, [kRight, kEnter]); // Continue
       expect(find.text('Terms for Steam'), findsOneWidget);
     }
@@ -115,8 +121,8 @@ void main() {
       expect(buttonEnabled(t, 'Accept and install'), isTrue);
       expect(find.textContaining('END OF PLACEHOLDER TERMS'), findsOneWidget);
       await press(t, [kDown, kRight, kEnter]);
-      expect(h.services.mockStore.log, ['install:steam:2026-03']);
-      expect(h.services.mockStore.acceptances, ['steam=2026-03']);
+      expect(h.services.mockStore.log, ['install:steam:2026-09-10']);
+      expect(h.services.mockStore.acceptances, ['steam=2026-09-10']);
       expect(h.services.mockJobs.started.single.kind, JobKind.install);
     });
 
@@ -140,7 +146,7 @@ void main() {
     ) async {
       final h = harness();
       expect(
-        () => h.services.mockStore.install('plex'),
+        () => h.services.mockStore.install('plex-htpc'),
         throwsA(isA<SystemException>()),
       );
     });
@@ -168,7 +174,11 @@ void main() {
       setView(t);
       final h = harness();
       await h.pump(t);
-      await openApp(t, 1); // Steam (installed): detail
+      await openApp(
+        t,
+        1,
+        1,
+      ); // Steam (Moonlight comes first) (installed): detail
       expect(find.text('Installed.'), findsOneWidget);
       await press(t, [kRight, kEnter]); // Remove
       expect(find.text('Remove Steam?'), findsOneWidget);
@@ -198,12 +208,12 @@ void main() {
       setView(t);
       final h = harness();
       await h.pump(t);
-      await openApp(t, 2); // Video: Plex
+      await openApp(t, 2, 0, 1); // Video, second row, first column: Plex
       await press(t, [kRight, kEnter]);
-      expect(find.text('Remove Plex HTPC?'), findsOneWidget);
+      expect(find.text('Remove Plex?'), findsOneWidget);
       await press(t, [kDown, kRight, kEnter]);
       expect(find.textContaining('Delete all data'), findsNothing);
-      expect(h.services.mockStore.log, ['remove:plex:false']);
+      expect(h.services.mockStore.log, ['remove:plex-htpc:false']);
     });
   });
 

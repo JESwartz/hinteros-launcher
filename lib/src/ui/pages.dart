@@ -550,8 +550,8 @@ class _TermsScreenState extends State<TermsScreen> {
     return FullPage(
       title: 'Terms for ${widget.app.name}',
       subtitle:
-          '${_terms.vendor}, version ${_terms.version}. Source: '
-          '${_terms.sourceUrl}',
+          '${_terms.title}, version ${_terms.version}. Source: '
+          '${_terms.url}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

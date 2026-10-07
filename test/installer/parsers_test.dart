@@ -129,46 +129,4 @@ void main() {
       expect(parseNetwork('', '').online, isFalse);
     });
   });
-
-  group('catalog index', () {
-    test('keeps installer apps, with terms, in the order of the index', () {
-      final apps = parseCatalogIndex(catalogIndexFixture);
-      expect(
-        [for (final a in apps) a.id],
-        ['jellyfin', 'youtube', 'firefox', 'steam', 'plex-htpc', 'moonlight'],
-        reason: 'unknown ids, removed apps and unfree apps without terms go',
-      );
-      final by = {for (final a in apps) a.id: a};
-      expect(by['youtube']!.onIso, isTrue);
-      expect(by['steam']!.onIso, isFalse);
-      expect(by['steam']!.terms!.vendor, 'Example Games Co.');
-      expect(by['steam']!.terms!.version, '2026-03');
-      expect(by['plex-htpc']!.sizeMiB, 300);
-      expect(by['moonlight']!.hasTerms, isFalse);
-    });
-
-    test('another index version is refused', () {
-      expect(
-        () => parseCatalogIndex('{"indexVersion":2,"apps":[]}'),
-        throwsFormatException,
-      );
-      expect(() => parseCatalogIndex('[]'), throwsFormatException);
-    });
-
-    test('the fallback offers only what is on the ISO', () {
-      final ids = [for (final a in fallbackCatalog()) a.id];
-      expect(ids, installerOnIsoIds);
-      expect(fallbackCatalog().every((a) => a.onIso && !a.hasTerms), isTrue);
-    });
-
-    test('the id lists are the system repo\'s app-ids.nix', () {
-      expect(installerOnIsoIds, [
-        'jellyfin',
-        'youtube',
-        'crunchyroll',
-        'firefox',
-      ]);
-      expect(installerOnlineIds, ['steam', 'plex-htpc', 'moonlight']);
-    });
-  });
 }

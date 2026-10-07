@@ -46,8 +46,8 @@ Future<bool> installFlow(
         ),
       if (app.hasTerms)
         StatusLine(
-          "${app.terms!.vendor}'s terms apply. You read them in full next, "
-          'and accept them to install.',
+          '${app.terms!.title} applies. You read it in full next, '
+          'and accept it to install.',
         ),
     ],
     confirmLabel: app.hasTerms ? 'Continue' : 'Install',

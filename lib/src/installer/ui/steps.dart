@@ -629,7 +629,8 @@ class AppsStep extends StatelessWidget {
         final apps = f.apps;
         return StepPage(
           step: InstallerStep.apps,
-          subtitle: 'YouTube and Firefox are ticked to begin with',
+          subtitle:
+              'Tick what you want; more can be added later from the Store',
           child: apps == null
               ? const Align(
                   alignment: Alignment.topLeft,

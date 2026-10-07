@@ -38,22 +38,6 @@ const wifiFixture = r'''
  :Old WEP:5:WEP
 ''';
 
-/// A catalog index (design/catalog.md, `indexVersion` 1) as the ISO would
-/// carry it: Steam and Plex with their vendor terms. Unknown ids, a removed
-/// app and an unfree app without terms are in it to be dropped.
-// TODO(M8): replace with the real index once the catalog repo ships `terms`.
-const catalogIndexFixture = r'''
-{ "indexVersion": 1, "apps": [
-  { "id": "jellyfin", "name": "Jellyfin", "summary": "Media player", "category": "video", "sizeMiB": 280, "featured": true, "preinstalled": true, "status": "available", "free": true },
-  { "id": "youtube", "name": "YouTube", "summary": "The site", "category": "video", "sizeMiB": 1, "status": "available", "free": true },
-  { "id": "retroarch", "name": "RetroArch", "summary": "Not an installer app", "category": "games", "sizeMiB": 220, "status": "available", "free": true },
-  { "id": "crunchyroll", "name": "Crunchyroll", "status": "removed", "statusReason": "gone" },
-  { "id": "firefox", "name": "Firefox", "summary": "Browser", "category": "web", "sizeMiB": 90, "status": "available", "free": true },
-  { "id": "steam", "name": "Steam", "summary": "Games", "category": "games", "sizeMiB": 1000, "status": "available", "free": false,
-    "terms": {"vendor": "Example Games Co.", "version": "2026-03", "sourceUrl": "https://store.example/steam/terms", "text": "STEAM TERMS TEXT"} },
-  { "id": "plex-htpc", "name": "Plex", "summary": "Plex on the TV", "category": "video", "sizeMiB": 300, "status": "available", "free": false,
-    "terms": {"vendor": "Example Media Inc.", "version": "2026-01", "sourceUrl": "https://media.example/terms", "text": "PLEX TERMS TEXT"} },
-  { "id": "moonlight", "name": "Moonlight", "summary": "Stream games", "category": "games", "sizeMiB": 150, "status": "available", "free": true },
-  { "id": "unlisted-unfree", "name": "X", "status": "available", "free": false }
-] }
-''';
+/// The catalog index as the catalog repo's `index` package generates it
+/// (format 2) with placeholder terms text: `catalog.json` and `terms/`.
+const catalogFixtureDir = 'test/fixtures/catalog';

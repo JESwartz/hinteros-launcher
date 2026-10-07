@@ -46,13 +46,20 @@ void main() {
       await t.pumpAndSettle();
     }
 
-    testWidgets('YouTube and Firefox are selected at first, nothing else', (
-      t,
-    ) async {
-      await start(t);
-      expect(c.selected, {'youtube', 'firefox'});
-      expect(AppSelectionController.defaultSelection, {'youtube', 'firefox'});
-    });
+    testWidgets(
+      'the apps marked installerDefault are selected at first, nothing else',
+      (t) async {
+        await start(t);
+        expect(c.selected, {'youtube', 'firefox'});
+        expect(
+          [
+            for (final a in c.apps)
+              if (a.installerDefault) a.id,
+          ],
+          ['firefox', 'youtube'],
+        );
+      },
+    );
 
     testWidgets('each app says whether it is on the ISO or needs a download', (
       t,
@@ -69,7 +76,10 @@ void main() {
       t,
     ) async {
       await start(t);
-      await host.act(t, accept); // Steam (first row)
+      for (var i = 0; i < c.apps.indexWhere((a) => a.id == 'steam'); i++) {
+        await host.act(t, down);
+      }
+      await host.act(t, accept); // Steam
       expect(c.isSelected('steam'), isTrue);
       expect(c.downloadMiB, 1000);
       expect(find.text('Read and accept'), findsOneWidget);
@@ -81,9 +91,13 @@ void main() {
       t,
     ) async {
       await start(t);
+      for (var i = 0; i < c.apps.indexWhere((a) => a.id == 'steam'); i++) {
+        await host.act(t, down);
+      }
       await host.act(t, accept); // tick Steam
-      // Rows: 11 apps... go to the terms row: after the apps list.
-      for (var i = 0; i < c.apps.length; i++) {
+      // The terms row comes after the app rows.
+      final steamAt = c.apps.indexWhere((a) => a.id == 'steam');
+      for (var i = steamAt; i < c.apps.length; i++) {
         await host.act(t, down);
       }
       await host.act(t, accept); // open the terms
@@ -99,7 +113,7 @@ void main() {
       expect(c.termsAccepted(c.apps.first), isTrue);
       expect(find.text('Accepted'), findsOneWidget);
       expect(enabled(t, 'Continue'), isTrue);
-      expect(c.acceptances, {'steam': '2026-03'});
+      expect(c.acceptances, {'steam': '2026-09-10'});
       // Unticking withdraws it; ticking again asks again.
       host.nav.focusRegion(region);
       c.toggle('steam');
@@ -114,10 +128,13 @@ void main() {
         find.text('Needs internet'),
         findsNWidgets(c.apps.where((a) => !a.onIso).length),
       );
+      for (var i = 0; i < c.apps.indexWhere((a) => a.id == 'steam'); i++) {
+        await host.act(t, down);
+      }
       await host.act(t, accept); // Steam: refused
       expect(c.isSelected('steam'), isFalse);
       expect(find.text('Read and accept'), findsNothing);
-      c.toggle('plex');
+      c.toggle('plex-htpc');
       c.dropDownloads();
       expect(c.selected, {'youtube', 'firefox'});
     });

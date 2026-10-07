@@ -305,8 +305,8 @@ void main() {
   });
 
   group('Store', () {
-    testWidgets('featured', (t) async {
-      await shot(t, 'store_featured_1080p', harness(), run: openStore);
+    testWidgets('all', (t) async {
+      await shot(t, 'store_all_1080p', harness(), run: openStore);
     });
     testWidgets('games, text 1.6x, high contrast', (t) async {
       await shot(
@@ -348,7 +348,15 @@ void main() {
         harness(installed: {'jellyfin'}),
         run: (t) async {
           await openStore(t);
-          await press(t, [kDown, kRight, kEnter, kEnter, kRight, kEnter]);
+          await press(t, [
+            kDown,
+            kRight,
+            kRight,
+            kEnter,
+            kEnter,
+            kRight,
+            kEnter,
+          ]);
         },
       );
     });
@@ -361,7 +369,15 @@ void main() {
         harness(settings: hc160, installed: {'jellyfin'}),
         run: (t) async {
           await openStore(t);
-          await press(t, [kDown, kRight, kEnter, kEnter, kRight, kEnter]);
+          await press(t, [
+            kDown,
+            kRight,
+            kRight,
+            kEnter,
+            kEnter,
+            kRight,
+            kEnter,
+          ]);
           for (var i = 0; i < 80; i++) {
             await t.sendKeyEvent(kPageDown);
             await t.pump();
@@ -377,7 +393,15 @@ void main() {
         harness(settings: hc160, installed: {'jellyfin'}),
         run: (t) async {
           await openStore(t);
-          await press(t, [kDown, kRight, kEnter, kEnter, kRight, kEnter]);
+          await press(t, [
+            kDown,
+            kRight,
+            kRight,
+            kEnter,
+            kEnter,
+            kRight,
+            kEnter,
+          ]);
         },
       );
     });
@@ -388,7 +412,15 @@ void main() {
         harness(),
         run: (t) async {
           await openStore(t);
-          await press(t, [kDown, kRight, kEnter, kRight, kEnter, kEnter]);
+          await press(t, [
+            kDown,
+            kRight,
+            kRight,
+            kEnter,
+            kRight,
+            kEnter,
+            kEnter,
+          ]);
         },
       );
     });
@@ -400,7 +432,7 @@ void main() {
         run: (t) async {
           await openStore(t);
           await press(t, [
-            kDown, kRight, kEnter, kRight, kEnter, // Steam, Remove
+            kDown, kRight, kRight, kEnter, kRight, kEnter, // Steam, Remove
             kEnter, kDown, kRight, kEnter, // tick, Remove
           ]);
         },

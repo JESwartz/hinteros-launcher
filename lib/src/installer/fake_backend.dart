@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import '../system/mock_system.dart' show mockTermsText;
+import '../system/mock_system.dart' show mockCatalog;
 import '../system/models.dart';
 import 'backend.dart';
 import 'plan.dart';
@@ -252,72 +252,10 @@ List<WifiAp> mockWifi() => const [
   WifiAp(ssid: 'Office (802.1X)', signal: 20, secured: true, supported: false),
 ];
 
-/// The apps the installer offers, with the placeholder vendor terms the
-/// goldens and tests use (the real ones come from the ISO's catalog index).
+/// The apps the installer offers: the real-format catalog fixture's
+/// `installer` entries, with placeholder vendor terms (the real ones come from
+/// the ISO's catalog index).
 List<StoreApp> mockInstallerCatalog() => [
-  StoreApp(
-    id: 'jellyfin',
-    name: 'Jellyfin',
-    summary: 'Free media player for your own server.',
-    category: StoreCategory.video,
-    sizeMiB: 280,
-    onIso: true,
-  ),
-  const StoreApp(
-    id: 'youtube',
-    name: 'YouTube',
-    summary: 'The website, made for the TV.',
-    category: StoreCategory.video,
-    sizeMiB: 1,
-    onIso: true,
-  ),
-  const StoreApp(
-    id: 'crunchyroll',
-    name: 'Crunchyroll',
-    summary: 'Anime streaming site.',
-    category: StoreCategory.video,
-    sizeMiB: 1,
-    onIso: true,
-  ),
-  const StoreApp(
-    id: 'firefox',
-    name: 'Firefox',
-    summary: 'A full web browser, for sites that have no app.',
-    category: StoreCategory.web,
-    sizeMiB: 90,
-    onIso: true,
-  ),
-  StoreApp(
-    id: 'steam',
-    name: 'Steam',
-    summary: 'Your game library, with Big Picture on the TV.',
-    category: StoreCategory.games,
-    sizeMiB: 1000,
-    terms: VendorTerms(
-      vendor: 'Example Games Co.',
-      version: '2026-03',
-      sourceUrl: 'https://store.example/steam/terms',
-      text: mockTermsText('EXAMPLE GAMES CO.'),
-    ),
-  ),
-  StoreApp(
-    id: 'plex-htpc',
-    name: 'Plex HTPC',
-    summary: 'Your Plex libraries on the TV.',
-    category: StoreCategory.video,
-    sizeMiB: 300,
-    terms: VendorTerms(
-      vendor: 'Example Media Inc.',
-      version: '2026-01',
-      sourceUrl: 'https://media.example/plex/terms',
-      text: mockTermsText('EXAMPLE MEDIA INC.'),
-    ),
-  ),
-  const StoreApp(
-    id: 'moonlight',
-    name: 'Moonlight',
-    summary: 'Stream games from a PC in your house.',
-    category: StoreCategory.games,
-    sizeMiB: 150,
-  ),
+  for (final a in mockCatalog())
+    if (a.installer) a,
 ];
