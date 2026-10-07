@@ -41,7 +41,7 @@ the home screen says so and the client keeps retrying with backoff.
 | `tool/gen_api.dart` | Generator: schema to `lib/src/api/generated.dart` (models, typed method stubs, sealed event class, error codes) |
 | `lib/src/api/generated.dart` | Generated, committed. Do not edit |
 | `lib/src/api/client.dart` | `DaemonClient`: handshake, request correlation, events, subscribe, reconnect |
-| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.8 methods and events: the relayed `system.*` API, the runtime settings, the admin password prompt, `session.restart` and the Store) |
+| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.9 methods and events: the relayed `system.*` API, the runtime settings, the admin password prompt, `session.restart` and the Store) |
 | `lib/src/osk/` | The on-screen keyboard: `OskBackend` (+ mock), layouts, state, UI |
 | `tool/gen_mock_art.dart` | Draws the placeholder cover art in `test/fixtures/art/` (committed; no network, no third-party pictures) |
 | `tool/gen_mock_icons.dart` | Draws the generic placeholder app icons in `test/fixtures/icons/` (plain shapes, PNG and one SVG; no logos, no network) |
@@ -50,7 +50,7 @@ the home screen says so and the client keeps retrying with backoff.
 ### Mock daemon
 
 `--mock` (or `HINTEROS_MOCK=1`) swaps the socket for the in-process mock, which behaves like the
-0.8 daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
+0.9 daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
 Plex), a fake Steam library of 14 games in every install state (`games.list`, sorted by name),
 `apps.launch` (by id, command or `steam://rungameid/<appid>`), `apps.running`, `apps.focus`,
 `apps.close` (then `app_exited` with reason `closed`), `steam.attention` / `steam.focus`, and the
@@ -75,6 +75,13 @@ Escape and Backspace work in every mode and are the same actions as `input_nav` 
 flutter run -d linux --dart-entrypoint-args=--mock
 ./result/bin/hinteros-launcher --mock --windowed
 ```
+
+### Session API 0.9: Store icons, reloaded app list, readable failures
+
+- **Store icons.** `store.list`'s `icon.path` (the daemon resolves catalog icons itself, installed or not, and sends `store_changed` when one arrives) is what Store cards and the detail page draw, with the same tile as app icons and the letter as fallback; `apps.list` icons stay the fallback for installed apps. The mock: `MockDaemon.system.setStoreIcon(id, path)`.
+- **App list reload.** The daemon sends `apps_changed` when it reloads its app list after an install or remove, so Home, Apps and Games just follow `apps.list`; nothing refreshes by hand after a job. The mock adds and removes the app on job success and sends `apps_changed`.
+- **No Steam.** The daemon leaves `steam` out of `apps.list` while Steam is not installed. Then Games shows "Steam is not installed" with the install button, and Home and Apps have no Steam tile (they only draw what `apps.list` returns).
+- **Failures you can read.** A failed launch, switch or close is a dialog (not a toast) with the app's name in the title, a sentence for the error (2001 not in the app list, 2002 the program would not run, not connected) and "Error <code>: <message>" in small type. Every failure is also written to stderr, so the session journal has it for reading over SSH: `hinteros-launcher: start Steam failed: error 2002: ...`, `hinteros-launcher: a system call failed: error 3013: ...` (Store, settings, runtime calls) and `hinteros-launcher: job update (<id>) failed: <code> <message>`. `lib/src/log.dart` (`logFailure`, `logSink`).
 
 ### App icons
 
@@ -225,7 +232,7 @@ params/result schemas that are a `$ref` (the relayed `system.*` results; `displa
   the daemon repo (`crates/hinteros-system/tests/common`), which cannot be used from Dart; those
   paths (`ssh.set` to `authentication_required`, jobs and their events) are covered against the
   mock daemon's relay, whose answers the contract test checks against the schema.
-  `runtime_integration_test.dart`: the launcher and the on-screen keyboard say hello at 0.8; with `--no-runtime` every Wi-Fi, Bluetooth, audio, display and power method answers `unavailable` naming its service (`networkmanager`, `bluez`, `audio`, `display`, `logind`) while ping and `apps.list` work, and the real repositories say "<service> isn't available on this box". **Not covered:** `--runtime-bus` with fake NetworkManager, BlueZ, logind, PipeWire and gamescope. The daemon's fakes are Rust test helpers inside its own integration tests (`crates/hinteros-session/tests/runtime_*`), not programs, so nothing from Dart can start them; those paths (wrong password, pairing with a passkey, keep and revert, `power_inhibited`) run against the mock daemon, whose answers the contract test checks against every schema example. The other integration tests start the daemon with `--no-runtime`, so they never reach the host's system bus.
+  `runtime_integration_test.dart`: the launcher and the on-screen keyboard say hello at 0.9; with `--no-runtime` every Wi-Fi, Bluetooth, audio, display and power method answers `unavailable` naming its service (`networkmanager`, `bluez`, `audio`, `display`, `logind`) while ping and `apps.list` work, and the real repositories say "<service> isn't available on this box". **Not covered:** `--runtime-bus` with fake NetworkManager, BlueZ, logind, PipeWire and gamescope. The daemon's fakes are Rust test helpers inside its own integration tests (`crates/hinteros-session/tests/runtime_*`), not programs, so nothing from Dart can start them; those paths (wrong password, pairing with a passkey, keep and revert, `power_inhibited`) run against the mock daemon, whose answers the contract test checks against every schema example. The other integration tests start the daemon with `--no-runtime`, so they never reach the host's system bus.
   0.8 (`system_relay_integration_test.dart`): with a real `hinteros-system` and the real session daemon both reading the fixture catalog (`--catalog-index test/fixtures/catalog/catalog.json`, the real index format) `store.list` returns the index merged with state.json's installed apps (by name, Steam `installed`, the rest `available`, terms with the absolute path of a text that exists), and the real `DaemonStore` reads it with the terms text; without the index it is `unavailable {service: catalog}`, without the system service `system_unavailable`. `auth.respond` and `auth.cancel` with no pending request are `not_found` (the repository: cancel is quiet, respond is `notFound`), a client that is not the launcher gets `not_authorized`, and `session.restart` with logind pointed at a bus that does not exist is `unavailable {service: logind}` (**never run it against a real bus**: a greetd session would end). **Not covered:** everything that needs real polkit and PAM (the prompt end to end with a password, `system.apps.install` / `remove` on a real service, `session.restart` ending a greetd session): the daemon repo's VM tests `polkit-agent`, `store-install` and `session-restart`. The daemons are started with `--no-auth-agent`, so they never register with this machine's polkit.
   It is a separate check and is skipped by plain `flutter test` unless `HINTEROS_SESSION_BIN`
   points at the binary (and `HINTEROS_SYSTEM_BIN` at `hinteros-system`) (and `HINTEROS_STEAM_FIXTURE` at `crates/hinteros-session/tests/fixtures/steam-home`
@@ -605,7 +612,7 @@ through their stages by themselves.
 The UI reads through `AppsRepository` (apps, running, launch, close, Steam attention and focus) and
 `GamesRepository` (`games.list`, launch by Steam URL) in `lib/src/data/`, combined in
 `LauncherData`, which owns all daemon traffic and re-queries on connect and on events (the daemon
-does not replay them). The client speaks session API 0.8 (during 0.x the minor must match); the on-screen keyboard's connection too.
+does not replay them). The client speaks session API 0.9 (during 0.x the minor must match); the on-screen keyboard's connection too.
 
 ### Fonts
 
