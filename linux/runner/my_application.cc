@@ -12,6 +12,9 @@ struct _MyApplication {
   char** dart_entrypoint_arguments;
   gboolean osk;
   gboolean hide_pointer;
+  // Tells the Dart side whether the window has keyboard focus (channel
+  // "hinteros/window"), see lib/src/installer/keyboard_fallback.dart.
+  FlMethodChannel* window_channel;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -37,6 +40,116 @@ static void hide_cursors(MyApplication* self, GtkWidget* view) {
   hide_cursor(gtk_widget_get_toplevel(view));
 }
 
+// Diagnostics for the keyboard-focus problem seen on real hardware under
+// cage: everything goes to stderr, prefixed so it can be grepped.
+static void focus_log(const char* format, ...) G_GNUC_PRINTF(1, 2);
+static void focus_log(const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  g_autofree gchar* message = g_strdup_vprintf(format, args);
+  va_end(args);
+  g_printerr("hinteros-focus: %s\n", message);
+}
+
+// Lists every toplevel GTK knows: an extra (hidden or helper) window that the
+// compositor could give the focus to instead of ours would show up here.
+static void log_toplevels(const char* when) {
+  GList* all = gtk_window_list_toplevels();
+  focus_log("%s: %u GTK toplevel(s)", when, g_list_length(all));
+  for (GList* l = all; l != nullptr; l = l->next) {
+    GtkWindow* w = GTK_WINDOW(l->data);
+    focus_log("  toplevel %p \"%s\" visible=%d active=%d mapped=%d", (void*)w,
+              gtk_window_get_title(w) ? gtk_window_get_title(w) : "",
+              gtk_widget_get_visible(GTK_WIDGET(w)), gtk_window_is_active(w),
+              gtk_widget_get_mapped(GTK_WIDGET(w)));
+  }
+  g_list_free(all);
+}
+
+// Sends the window's keyboard focus state to Dart.
+static void send_focus(MyApplication* self, GtkWindow* window,
+                       const char* why) {
+  gboolean active = gtk_window_is_active(window);
+  focus_log("%s: is-active=%d has-toplevel-focus=%d", why, active,
+            gtk_window_has_toplevel_focus(window));
+  if (self->window_channel == nullptr) return;
+  g_autoptr(FlValue) value = fl_value_new_bool(active);
+  fl_method_channel_invoke_method(self->window_channel, "focus", value, nullptr,
+                                  nullptr, nullptr);
+}
+
+static void active_cb(GObject* window, GParamSpec*, gpointer user_data) {
+  send_focus(MY_APPLICATION(user_data), GTK_WINDOW(window), "notify::is-active");
+}
+
+static void toplevel_focus_cb(GObject* window, GParamSpec*,
+                              gpointer user_data) {
+  send_focus(MY_APPLICATION(user_data), GTK_WINDOW(window),
+             "notify::has-toplevel-focus");
+}
+
+static gboolean focus_event_cb(GtkWidget* window, GdkEventFocus* event,
+                               gpointer user_data) {
+  focus_log("focus-%s-event", event->in ? "in" : "out");
+  send_focus(MY_APPLICATION(user_data), GTK_WINDOW(window),
+             event->in ? "focus-in-event" : "focus-out-event");
+  return FALSE;
+}
+
+// The channel Dart asks "isActive" on at startup (messages sent before its
+// handler exists are lost).
+static void window_method_cb(FlMethodChannel* channel, FlMethodCall* call,
+                             gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  g_autoptr(FlMethodResponse) response = nullptr;
+  if (g_strcmp0(fl_method_call_get_name(call), "isActive") == 0) {
+    GtkWindow* window = GTK_WINDOW(
+        gtk_widget_get_toplevel(GTK_WIDGET(g_object_get_data(
+            G_OBJECT(self), "hinteros-view"))));
+    g_autoptr(FlValue) result =
+        fl_value_new_bool(window != nullptr && gtk_window_is_active(window));
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+  } else {
+    response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+  }
+  fl_method_call_respond(call, response, nullptr);
+}
+
+static guint32 present_time() {
+  guint32 t = gtk_get_current_event_time();
+  // No event yet (before the first input): the monotonic clock in ms, which
+  // is what the compositor's own timestamps count.
+  return t != GDK_CURRENT_TIME ? t : (guint32)(g_get_monotonic_time() / 1000);
+}
+
+static void present_window(GtkWindow* window, const char* why) {
+  guint32 t = present_time();
+  focus_log("present (%s) at time %u, active=%d", why, t,
+            gtk_window_is_active(window));
+  gtk_window_present_with_time(window, t);
+  GdkWindow* gdk = gtk_widget_get_window(GTK_WIDGET(window));
+  if (gdk != nullptr) gdk_window_focus(gdk, t);
+}
+
+// Asks again while the window still has no keyboard focus (the compositor
+// may only hand it out once the keyboard device exists), a few times.
+static gboolean refocus_cb(gpointer data) {
+  GtkWindow* window = GTK_WINDOW(data);
+  guint tries = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(window), "hinteros-tries"));
+  if (gtk_window_is_active(window) || tries >= 20) {
+    focus_log("refocus: stop after %u tries, active=%d", tries,
+              gtk_window_is_active(window));
+    g_object_unref(window);
+    return G_SOURCE_REMOVE;
+  }
+  g_object_set_data(G_OBJECT(window), "hinteros-tries",
+                    GUINT_TO_POINTER(tries + 1));
+  present_window(window, "retry");
+  GtkWidget* view = GTK_WIDGET(g_object_get_data(G_OBJECT(window), "hinteros-view"));
+  if (view != nullptr) gtk_widget_grab_focus(view);
+  return G_SOURCE_CONTINUE;
+}
+
 // Takes keyboard focus (the compositor gives it to the toplevel that asks,
 // and without a pointer click nothing else would), and gives it to the
 // Flutter view so key events reach Flutter before any other input.
@@ -44,13 +157,25 @@ static void focus_view(MyApplication* self, FlView* view) {
   if (self->osk) return;  // the keyboard never takes focus
   GtkWidget* toplevel = gtk_widget_get_toplevel(GTK_WIDGET(view));
   if (GTK_IS_WINDOW(toplevel)) {
-    gtk_window_present(GTK_WINDOW(toplevel));
+    GtkWindow* window = GTK_WINDOW(toplevel);
+    gtk_window_set_accept_focus(window, TRUE);
+    gtk_window_set_focus_on_map(window, TRUE);
+    present_window(window, "map/first frame");
+    if (g_object_get_data(G_OBJECT(window), "hinteros-refocus") == nullptr) {
+      g_object_set_data(G_OBJECT(window), "hinteros-refocus", GINT_TO_POINTER(1));
+      g_timeout_add(500, refocus_cb, g_object_ref(window));
+    }
+    log_toplevels("after present");
+    send_focus(self, window, "after present");
   }
+  gtk_widget_set_can_focus(GTK_WIDGET(view), TRUE);
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
 static void window_map_cb(GtkWidget* window, gpointer user_data) {
   MyApplication* self = MY_APPLICATION(user_data);
+  focus_log("window mapped (display %s)",
+            G_OBJECT_TYPE_NAME(gtk_widget_get_display(window)));
   gpointer view = g_object_get_data(G_OBJECT(window), "hinteros-view");
   if (view == nullptr) return;
   hide_cursors(self, GTK_WIDGET(view));
@@ -59,6 +184,7 @@ static void window_map_cb(GtkWidget* window, gpointer user_data) {
 
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
+  focus_log("first Flutter frame");
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
   hide_cursors(self, GTK_WIDGET(view));
   focus_view(self, view);
@@ -173,6 +299,26 @@ static void my_application_activate(GApplication* application) {
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
+  if (!self->osk) {
+    // Keyboard focus tracking: log it, and tell Dart (the installer falls
+    // back to reading the keyboard itself while the window has no focus).
+    g_object_set_data(G_OBJECT(self), "hinteros-view", view);
+    g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+    self->window_channel = fl_method_channel_new(
+        fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+        "hinteros/window", FL_METHOD_CODEC(codec));
+    fl_method_channel_set_method_call_handler(self->window_channel,
+                                             window_method_cb, self, nullptr);
+    g_signal_connect(window, "notify::is-active", G_CALLBACK(active_cb), self);
+    g_signal_connect(window, "notify::has-toplevel-focus",
+                     G_CALLBACK(toplevel_focus_cb), self);
+    g_signal_connect(window, "focus-in-event", G_CALLBACK(focus_event_cb),
+                     self);
+    g_signal_connect(window, "focus-out-event", G_CALLBACK(focus_event_cb),
+                     self);
+    log_toplevels("startup");
+  }
+
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
@@ -219,6 +365,7 @@ static void my_application_shutdown(GApplication* application) {
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  g_clear_object(&self->window_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
