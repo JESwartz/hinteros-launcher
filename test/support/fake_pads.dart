@@ -30,6 +30,17 @@ class FakePads implements PadBackend {
 
   void plugOther(String name) => _pads[name] = null;
 
+  /// Something with EV_KEY and EV_ABS that is not a pad (a keyboard that the
+  /// probe could not rule out by capability bits alone).
+  void plugLookalike(String name) =>
+      _pads[name] = const PadDeviceInfo(gamepad: false);
+
+  /// Nodes whose probe throws, whose open throws, or whose stream fails at
+  /// once, whatever they are.
+  final probeThrows = <String>{};
+  final openThrows = <String>{};
+  final streamFails = <String>{};
+
   void unplug(String name, {bool withError = false}) {
     _pads.remove(name);
     final c = _streams.remove(name);
@@ -37,6 +48,9 @@ class FakePads implements PadBackend {
     if (withError) c.addError(FileSystemException('No such device'));
     c.close();
   }
+
+  /// The node leaves the listing but its stream neither ends nor fails.
+  void vanish(String name) => _pads.remove(name);
 
   void send(String name, List<Uint8List> frames) {
     final c = _streams[name]!;
@@ -54,12 +68,20 @@ class FakePads implements PadBackend {
   }
 
   @override
-  PadDeviceInfo? probe(String name) => _pads[name];
+  PadDeviceInfo? probe(String name) {
+    if (probeThrows.contains(name)) throw StateError('sysfs read failed');
+    return _pads[name];
+  }
 
   @override
   Stream<List<int>> open(String name) {
     openAttempts++;
-    if (denyOpen) throw FileSystemException('Permission denied');
+    if (denyOpen || openThrows.contains(name)) {
+      throw FileSystemException('Permission denied');
+    }
+    if (streamFails.contains(name)) {
+      return Stream.error(FileSystemException('I/O error'));
+    }
     opened.add(name);
     return (_streams[name] = StreamController<List<int>>(
       onCancel: () {},
@@ -73,7 +95,7 @@ class FakePads implements PadBackend {
 class PadRig {
   PadRig() {
     fs.plug('event0', stick: AxisRange.xbox);
-    pad = EvdevPad(backend: fs)..start();
+    pad = EvdevPad(backend: fs, log: (_) {})..start();
   }
 
   final fs = FakePads();

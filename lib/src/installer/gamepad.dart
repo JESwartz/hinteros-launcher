@@ -285,9 +285,21 @@ class PadRepeater {
 
 /// What [EvdevPad] needs to know about one input device.
 class PadDeviceInfo {
-  const PadDeviceInfo({this.stickX, this.stickY});
+  const PadDeviceInfo({
+    this.stickX,
+    this.stickY,
+    this.gamepad = true,
+    this.label = '',
+  });
   final AxisRange? stickX;
   final AxisRange? stickY;
+
+  /// False for something that only looks like a pad (a keyboard or mouse
+  /// with EV_KEY and EV_ABS): never read.
+  final bool gamepad;
+
+  /// The device's name, for the log.
+  final String label;
 }
 
 /// The machine side of [EvdevPad], so tests can fake devices.
@@ -327,9 +339,12 @@ class LinuxPadBackend implements PadBackend {
 
   String? _caps(String name, String file) {
     try {
-      return File('$sysClassInput/$name/device/capabilities/$file')
-          .readAsStringSync();
-    } on FileSystemException {
+      return File(
+        file == _nameFile
+            ? '$sysClassInput/$name/device/name'
+            : '$sysClassInput/$name/device/capabilities/$file',
+      ).readAsStringSync();
+    } on Object {
       return null;
     }
   }
@@ -341,6 +356,11 @@ class LinuxPadBackend implements PadBackend {
     if (!sysfsBitSet(ev, _evKey) || !sysfsBitSet(ev, _evAbs)) return null;
     // BTN_GAMEPAD is BTN_SOUTH.
     if (!sysfsBitSet(key, _btnSouth)) return null;
+    // A keyboard that reports stray BTN_* codes: it has letters, Enter and
+    // Space, which no pad has.
+    if (sysfsBitSet(key, 30) && sysfsBitSet(key, 28) && sysfsBitSet(key, 57)) {
+      return null;
+    }
     final abs = _caps(name, 'abs') ?? '';
     AxisRange? range(int code) {
       if (!sysfsBitSet(abs, code)) return null;
@@ -348,8 +368,14 @@ class LinuxPadBackend implements PadBackend {
       return r == null ? null : AxisRange(r.$1, r.$2);
     }
 
-    return PadDeviceInfo(stickX: range(_absX), stickY: range(_absY));
+    return PadDeviceInfo(
+      stickX: range(_absX),
+      stickY: range(_absY),
+      label: (_caps(name, _nameFile) ?? '').trim(),
+    );
   }
+
+  static const _nameFile = '<name>';
 
   @override
   Stream<List<int>> open(String name) => File('$devInput/$name').openRead();
@@ -360,21 +386,41 @@ class LinuxPadBackend implements PadBackend {
 /// that goes away, or that cannot be opened (no permission), never crashes
 /// anything: its held directions are released and it is tried again at the
 /// next scan.
+///
+/// Every device is handled on its own: a device that cannot be probed or
+/// opened (a keyboard plugged in later, with whatever capabilities and
+/// errors), or one whose event number changes, never touches a pad that is
+/// already open. A pad is only closed when its own stream ends or fails, or
+/// when its node is gone from the listing.
 class EvdevPad {
   EvdevPad({
     PadBackend? backend,
     this.rescan = const Duration(seconds: 2),
     Duration repeatDelay = padRepeatDelay,
     Duration repeatEvery = padRepeatEvery,
-  }) : backend = backend ?? LinuxPadBackend() {
+    void Function(String)? log,
+  }) : backend = backend ?? LinuxPadBackend(),
+       _log = log ?? _stderrLog {
     _repeater = PadRepeater(_add, delay: repeatDelay, every: repeatEvery);
   }
 
   final PadBackend backend;
   final Duration rescan;
+  final void Function(String) _log;
+
+  static void _stderrLog(String m) {
+    try {
+      stderr.writeln('hinteros-evdev: $m');
+    } on Object {
+      // no stderr: nothing to tell
+    }
+  }
 
   final _out = StreamController<PadEvent>.broadcast();
   final _open = <String, _OpenPad>{};
+
+  /// Nodes already looked at and not a pad, with why (to log them once).
+  final _ignored = <String, String>{};
   late final PadRepeater _repeater;
   Timer? _scanTimer;
 
@@ -389,40 +435,93 @@ class EvdevPad {
   }
 
   void _scan() {
+    if (_out.isClosed) return;
+    try {
+      _scanDevices();
+    } on Object catch (e) {
+      _log('scan failed: $e'); // never stops the timer
+    }
+  }
+
+  void _scanDevices() {
     final List<String> names;
     try {
       names = backend.list();
     } on Object {
-      return; // no /dev/input (yet), or not allowed
+      return; // no /dev/input (yet), or not allowed: keep what is open
     }
+    final present = names.toSet();
+    // A node that left the listing is gone, even if its stream did not say
+    // so: let go of it (releases its directions), so a later device that gets
+    // the same event number is not mistaken for it.
+    for (final name in _open.keys.toList()) {
+      if (!present.contains(name)) {
+        _log('$name disappeared');
+        _lost(name, _open[name]!);
+      }
+    }
+    _ignored.removeWhere((name, _) => !present.contains(name));
     for (final name in names) {
       if (_open.containsKey(name)) continue;
       try {
-        final info = backend.probe(name);
-        if (info == null) continue;
-        final pad = _OpenPad(
-          PadMapper(stickX: info.stickX, stickY: info.stickY),
-        );
-        _open[name] = pad;
-        pad.sub = backend
-            .open(name)
-            .listen(
-              (chunk) => pad.decoder.add(chunk).forEach(_emit),
-              onError: (Object _) => _lost(name, pad),
-              onDone: () => _lost(name, pad),
-              cancelOnError: true,
-            );
-      } on Object {
-        _open.remove(name); // permission denied and the like: next scan
+        _tryOpen(name);
+      } on Object catch (e) {
+        // Permission denied and the like: this device only, next scan.
+        _open.remove(name);
+        _note(name, 'error: $e');
       }
     }
+  }
+
+  void _note(String name, String why) {
+    if (_ignored[name] == why) return;
+    _ignored[name] = why;
+    _log('ignoring $name ($why)');
+  }
+
+  void _tryOpen(String name) {
+    final PadDeviceInfo? info;
+    try {
+      info = backend.probe(name);
+    } on Object catch (e) {
+      _note(name, 'cannot be probed: $e');
+      return;
+    }
+    if (info == null || !info.gamepad) {
+      _note(name, 'not a gamepad');
+      return;
+    }
+    final pad = _OpenPad(PadMapper(stickX: info.stickX, stickY: info.stickY));
+    _open[name] = pad;
+    pad.sub = backend
+        .open(name)
+        .listen(
+          (chunk) {
+            try {
+              pad.decoder.add(chunk).forEach(_emit);
+            } on Object catch (e) {
+              _log('$name: bad data: $e');
+            }
+          },
+          onError: (Object _) => _lost(name, pad),
+          onDone: () => _lost(name, pad),
+          cancelOnError: true,
+        );
+    _ignored.remove(name);
+    final label = info.label.isEmpty ? '' : ' "${info.label}"';
+    _log('opened $name$label');
   }
 
   void _lost(String name, _OpenPad pad) {
     if (_open[name] != pad) return;
     _open.remove(name);
-    pad.sub?.cancel();
+    try {
+      pad.sub?.cancel();
+    } on Object {
+      // already gone
+    }
     pad.mapper.releaseAll().forEach(_emit);
+    _log('closed $name');
   }
 
   void _emit(PadEvent e) {
