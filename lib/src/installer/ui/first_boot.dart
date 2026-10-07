@@ -37,8 +37,10 @@ class FirstBootApp extends StatelessWidget {
     this.pad,
     this.settings = const LauncherSettings(),
     this.onFinished,
+    this.hideCursor = true,
   });
 
+  final bool hideCursor;
   final SystemServices services;
   final Stream<PadEvent>? pad;
   final LauncherSettings settings;
@@ -50,6 +52,7 @@ class FirstBootApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ConsoleApp(
     settings: settings,
+    hideCursor: hideCursor,
     title: 'HinterOS setup',
     home: ConsoleHost(
       pad: pad,

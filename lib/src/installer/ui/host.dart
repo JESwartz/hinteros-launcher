@@ -118,17 +118,27 @@ class _ConsoleHostState extends State<ConsoleHost> {
   late final _nav = NavController();
   late final ConsoleController _console = ConsoleController(_nav);
   StreamSubscription<PadEvent>? _sub;
+  final _hostFocus = FocusNode(debugLabel: 'console host');
 
   @override
   void initState() {
     super.initState();
     _nav.onBack = () => _console.onBack?.call() ?? false;
     _sub = widget.pad?.listen((e) => _console.action(e.$1, e.$2));
+    // Keys must work before any other input: once the first frame is up,
+    // make sure something has primary focus (the first row, which the
+    // screen focuses itself, else this host).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && FocusManager.instance.primaryFocus == null) {
+        _hostFocus.requestFocus();
+      }
+    });
   }
 
   @override
   void dispose() {
     _sub?.cancel();
+    _hostFocus.dispose();
     _console.content.dispose();
     super.dispose();
   }
@@ -165,6 +175,7 @@ class _ConsoleHostState extends State<ConsoleHost> {
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
     return Focus(
+      focusNode: _hostFocus,
       autofocus: true,
       onKeyEvent: _onKey,
       child: Scaffold(
@@ -186,11 +197,16 @@ class ConsoleApp extends StatelessWidget {
     required this.settings,
     required this.title,
     required this.home,
+    this.hideCursor = true,
   });
 
   final LauncherSettings settings;
   final String title;
   final Widget home;
+
+  /// Console mode: no mouse pointer (Flutter sets the cursor to `none`, which
+  /// the GTK runner also blanks natively).
+  final bool hideCursor;
 
   @override
   Widget build(BuildContext context) {
@@ -209,7 +225,9 @@ class ConsoleApp extends StatelessWidget {
           child: DesignScale(child: child!),
         ),
       ),
-      home: home,
+      home: hideCursor
+          ? MouseRegion(cursor: SystemMouseCursors.none, child: home)
+          : home,
     );
   }
 }

@@ -64,6 +64,7 @@ FakeInstallerBackend mockBackend(String scenario) {
 Future<void> runInstallerMode(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   final mock = _flag(args, '--mock', 'HINTEROS_MOCK');
+  final windowed = _flag(args, '--windowed', 'HINTEROS_WINDOWED');
   final EvdevPad? pad = mock ? null : (EvdevPad()..start());
   if (wantsFirstBoot(args) && !wantsInstaller(args)) {
     final SystemServices services;
@@ -74,7 +75,9 @@ Future<void> runInstallerMode(List<String> args) async {
         DaemonClient(socketPath: defaultSocketPath()),
       );
     }
-    runApp(FirstBootApp(services: services, pad: pad?.events));
+    runApp(
+      FirstBootApp(services: services, pad: pad?.events, hideCursor: !windowed),
+    );
     return;
   }
   final scenario = args
@@ -84,5 +87,11 @@ Future<void> runInstallerMode(List<String> args) async {
   final InstallerBackend backend = mock
       ? mockBackend(scenario ?? 'ok')
       : ProcessInstallerBackend();
-  runApp(InstallerApp(flow: InstallerFlow(backend), pad: pad?.events));
+  runApp(
+    InstallerApp(
+      flow: InstallerFlow(backend),
+      pad: pad?.events,
+      hideCursor: !windowed,
+    ),
+  );
 }

@@ -15,8 +15,10 @@ class InstallerApp extends StatelessWidget {
     required this.flow,
     this.pad,
     this.settings = const LauncherSettings(),
+    this.hideCursor = true,
   });
 
+  final bool hideCursor;
   final InstallerFlow flow;
 
   /// Controller presses; null: keyboard only (desktop, tests).
@@ -26,6 +28,7 @@ class InstallerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ConsoleApp(
     settings: settings,
+    hideCursor: hideCursor,
     title: 'HinterOS installer',
     home: ConsoleHost(
       pad: pad,

@@ -64,6 +64,11 @@ Future<void> main(List<String> args) async {
   if (connection is MockDaemon) {
     app = _DevKeys(mock: connection, iconDir: iconDir, child: app);
   }
+  // Console mode: no pointer (the GTK runner blanks its own cursor; this
+  // keeps Flutter from putting one back).
+  if (!_flag(args, '--windowed', 'HINTEROS_WINDOWED')) {
+    app = MouseRegion(cursor: SystemMouseCursors.none, child: app);
+  }
   runApp(app);
 }
 

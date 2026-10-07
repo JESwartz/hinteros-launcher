@@ -11,13 +11,57 @@ struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
   gboolean osk;
+  gboolean hide_pointer;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+// Blanks the pointer on [widget]'s GdkWindow. Works on X11 and on Wayland
+// (the compositor shows no pointer image for a blank cursor). Safe to call
+// repeatedly; does nothing before the widget is realized.
+static void hide_cursor(GtkWidget* widget) {
+  GdkWindow* gdk_window = gtk_widget_get_window(widget);
+  if (gdk_window == nullptr) return;
+  g_autoptr(GdkCursor) blank = gdk_cursor_new_for_display(
+      gdk_window_get_display(gdk_window), GDK_BLANK_CURSOR);
+  gdk_window_set_cursor(gdk_window, blank);
+}
+
+// Console mode: hide the pointer on the Flutter view and its window. Done at
+// realize, map and first frame because GTK and Wayland compositors reset the
+// cursor on enter events; the Dart side also sets Flutter's own cursor to
+// none.
+static void hide_cursors(MyApplication* self, GtkWidget* view) {
+  if (!self->hide_pointer) return;
+  hide_cursor(view);
+  hide_cursor(gtk_widget_get_toplevel(view));
+}
+
+// Takes keyboard focus (the compositor gives it to the toplevel that asks,
+// and without a pointer click nothing else would), and gives it to the
+// Flutter view so key events reach Flutter before any other input.
+static void focus_view(MyApplication* self, FlView* view) {
+  if (self->osk) return;  // the keyboard never takes focus
+  GtkWidget* toplevel = gtk_widget_get_toplevel(GTK_WIDGET(view));
+  if (GTK_IS_WINDOW(toplevel)) {
+    gtk_window_present(GTK_WINDOW(toplevel));
+  }
+  gtk_widget_grab_focus(GTK_WIDGET(view));
+}
+
+static void window_map_cb(GtkWidget* window, gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  gpointer view = g_object_get_data(G_OBJECT(window), "hinteros-view");
+  if (view == nullptr) return;
+  hide_cursors(self, GTK_WIDGET(view));
+  focus_view(self, FL_VIEW(view));
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
+  hide_cursors(self, GTK_WIDGET(view));
+  focus_view(self, view);
 }
 
 // Implements GApplication::activate.
@@ -37,6 +81,8 @@ static void my_application_activate(GApplication* application) {
       }
     }
   }
+
+  self->hide_pointer = !windowed;
 
   if (self->osk) {
     // GTK capitalises the program class ("Hinteros-osk"); set WM_CLASS
@@ -119,15 +165,11 @@ static void my_application_activate(GApplication* application) {
                            self);
   gtk_widget_realize(GTK_WIDGET(view));
 
-  // Hide the mouse cursor in console mode (best effort).
-  if (!windowed) {
-    GdkWindow* gdk_window = gtk_widget_get_window(GTK_WIDGET(view));
-    if (gdk_window != nullptr) {
-      g_autoptr(GdkCursor) blank = gdk_cursor_new_for_display(
-          gdk_window_get_display(gdk_window), GDK_BLANK_CURSOR);
-      gdk_window_set_cursor(gdk_window, blank);
-    }
-  }
+  // Hide the mouse cursor in console mode, installer included (best effort;
+  // repeated on map and first frame).
+  hide_cursors(self, GTK_WIDGET(view));
+  g_object_set_data(G_OBJECT(window), "hinteros-view", view);
+  g_signal_connect(window, "map", G_CALLBACK(window_map_cb), self);
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
