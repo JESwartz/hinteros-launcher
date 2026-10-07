@@ -41,7 +41,7 @@ the home screen says so and the client keeps retrying with backoff.
 | `tool/gen_api.dart` | Generator: schema to `lib/src/api/generated.dart` (models, typed method stubs, sealed event class, error codes) |
 | `lib/src/api/generated.dart` | Generated, committed. Do not edit |
 | `lib/src/api/client.dart` | `DaemonClient`: handshake, request correlation, events, subscribe, reconnect |
-| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.7 methods and events: the relayed `system.*` API and the runtime settings) |
+| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.8 methods and events: the relayed `system.*` API, the runtime settings, the admin password prompt, `session.restart` and the Store) |
 | `lib/src/osk/` | The on-screen keyboard: `OskBackend` (+ mock), layouts, state, UI |
 | `tool/gen_mock_art.dart` | Draws the placeholder cover art in `test/fixtures/art/` (committed; no network, no third-party pictures) |
 | `tool/gen_mock_icons.dart` | Draws the generic placeholder app icons in `test/fixtures/icons/` (plain shapes, PNG and one SVG; no logos, no network) |
@@ -50,12 +50,12 @@ the home screen says so and the client keeps retrying with backoff.
 ### Mock daemon
 
 `--mock` (or `HINTEROS_MOCK=1`) swaps the socket for the in-process mock, which behaves like the
-0.7 daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
+0.8 daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
 Plex), a fake Steam library of 14 games in every install state (`games.list`, sorted by name),
 `apps.launch` (by id, command or `steam://rungameid/<appid>`), `apps.running`, `apps.focus`,
 `apps.close` (then `app_exited` with reason `closed`), `steam.attention` / `steam.focus`, and the
 `app_started`, `app_exited`, `focus_changed`, `games_changed`, `steam_attention` and `osk_visibility` events; a
-`command` launch of `does-not-exist` fails with 2002. 0.5: the apps have generic local icons (`test/fixtures/icons`, found from the repo root or `HINTEROS_MOCK_ICONS=<dir>`), except YouTube and Plex, whose icons arrive later (F6, `apps_changed`); `MockDaemon.setAppIcon` does the same in tests. 0.4: `osk.show` / `osk.hide` (event only on a change; Home and a focus change hide it; `oskEnabled = false` gives 2005), `keys.type` (printable ASCII types, anything else comes back as `untypeable`), `keys.key`, `keys.action` (all logged in `MockDaemon.keyLog`; `keyboardAvailable = false` gives 2004), and, while the keyboard is visible, `input_nav` only to a mock constructed with `clientName: 'hinteros-osk'`. 0.6: the relayed system service (`MockDaemon.system`, `lib/src/api/mock_system_relay.dart`): `system.info`, `settings.get` / `set`, `ssh.set` (`authentication_required` until `system.adminAuthorized = true`), `generations.list`, `rebuild`, `hardware.redetect`, `rollback`, `update.check` (a job, 60 s cache), `update.apply` (only the last checked rev), `channel.set` / `base.set` (`needs_acknowledgement` for downgrades), `jobs.get` / `list` / `cancel`, and the `job_started` / `job_progress` / `job_finished` events. One mutating job at a time (`job_busy`); jobs step through their stages by themselves with `systemStepDelay`, or a test drives them (`progressJob`, `finishJob`); `unavailable = SystemUnavailableDataReason.down` gives `system_unavailable`; `failNext` injects any error (rate limit, low memory...). 0.7: the runtime settings (`MockDaemon.runtime`, `lib/src/api/mock_runtime.dart`): `network.status`, `wifi.scan` / `list` / `connect` / `disconnect` / `forget` / `enable` (a stored network joins without a password, a wrong password is `wrong_password` and stores nothing, WEP and 802.1X are refused, `keyChanged` makes a stored password stale), `bluetooth.*` (devices appear on the first scan; a controller pairs without a prompt, a `confirm` device sends `bluetooth_confirm` and waits for `bluetooth.confirm`, a `display` device waits for `finishDisplayPairing()`), `audio.*` (every call returns the state and sends `audio_changed`), `display.modes` / `set_mode` / `keep` / `revert` (the replaced mode is remembered until kept or reverted; `displayCanSet`, `displayIgnoresMode`), `power.*` (`inhibited = true` gives `power_inhibited`, `powerCapabilities`, `notAuthorized`), and `network_changed`, `wifi_list_changed`, `bluetooth_changed`, `bluetooth_confirm`, `audio_changed` after every change. `runtime.setUnavailable('bluez')` (also `networkmanager`, `audio`, `display`, `logind`) makes one service answer `unavailable` and leaves the rest working. No daemon needed for desktop work. Dev keys,
+`command` launch of `does-not-exist` fails with 2002. 0.5: the apps have generic local icons (`test/fixtures/icons`, found from the repo root or `HINTEROS_MOCK_ICONS=<dir>`), except YouTube and Plex, whose icons arrive later (F6, `apps_changed`); `MockDaemon.setAppIcon` does the same in tests. 0.4: `osk.show` / `osk.hide` (event only on a change; Home and a focus change hide it; `oskEnabled = false` gives 2005), `keys.type` (printable ASCII types, anything else comes back as `untypeable`), `keys.key`, `keys.action` (all logged in `MockDaemon.keyLog`; `keyboardAvailable = false` gives 2004), and, while the keyboard is visible, `input_nav` only to a mock constructed with `clientName: 'hinteros-osk'`. 0.6: the relayed system service (`MockDaemon.system`, `lib/src/api/mock_system_relay.dart`): `system.info`, `settings.get` / `set`, `ssh.set` (to on it waits for the admin password, see 0.8 below; `system.adminAuthorized = true` skips that), `generations.list`, `rebuild`, `hardware.redetect`, `rollback`, `update.check` (a job, 60 s cache), `update.apply` (only the last checked rev), `channel.set` / `base.set` (`needs_acknowledgement` for downgrades), `jobs.get` / `list` / `cancel`, and the `job_started` / `job_progress` / `job_finished` events. One mutating job at a time (`job_busy`); jobs step through their stages by themselves with `systemStepDelay`, or a test drives them (`progressJob`, `finishJob`); `unavailable = SystemUnavailableDataReason.down` gives `system_unavailable`; `failNext` injects any error (rate limit, low memory...). 0.7: the runtime settings (`MockDaemon.runtime`, `lib/src/api/mock_runtime.dart`): `network.status`, `wifi.scan` / `list` / `connect` / `disconnect` / `forget` / `enable` (a stored network joins without a password, a wrong password is `wrong_password` and stores nothing, WEP and 802.1X are refused, `keyChanged` makes a stored password stale), `bluetooth.*` (devices appear on the first scan; a controller pairs without a prompt, a `confirm` device sends `bluetooth_confirm` and waits for `bluetooth.confirm`, a `display` device waits for `finishDisplayPairing()`), `audio.*` (every call returns the state and sends `audio_changed`), `display.modes` / `set_mode` / `keep` / `revert` (the replaced mode is remembered until kept or reverted; `displayCanSet`, `displayIgnoresMode`), `power.*` (`inhibited = true` gives `power_inhibited`, `powerCapabilities`, `notAuthorized`), and `network_changed`, `wifi_list_changed`, `bluetooth_changed`, `bluetooth_confirm`, `audio_changed` after every change. `runtime.setUnavailable('bluez')` (also `networkmanager`, `audio`, `display`, `logind`) makes one service answer `unavailable` and leaves the rest working. 0.8: the admin password agent (`MockDaemon.auth`, `lib/src/api/mock_auth.dart`): `system.ssh.set` to on waits like the real call, sends `authentication_requested` (to a mock named `hinteros-launcher` only) and ends with the job on `auth.respond` (3 tries, then `permission_denied`), with `authentication_required` on `auth.cancel` or when `auth.agentRegistered = false`; `auth.*` from another client is `not_authorized`; the answer to `auth.respond` comes before the waiting call's. `session.restart` (`sessionRestarts`, `sessionRestartAvailable = false` gives `unavailable {logind, not_greetd}`). `store.list` and `system.apps.install` / `remove` over a wire catalog (`lib/src/api/mock_store.dart`: the fixture in `test/fixtures/catalog` with absolute `terms.file` paths, plus RetroArch with its cores, a video player, Kodi (conflicts with Jellyfin) and a retired app): states `installing` / `removing` while the job runs, `store_changed` when an apps job starts and ends, `more_after_update` from the update check's `new_apps`, the service's checks (`state_conflict` for a stale revision, `not_available`, transitive depends, `app_conflict` both ways, `terms_required` per app, `insufficient_resources` from `freeDiskMib`, `app_conflict` when removing an app another needs). No daemon needed for desktop work. Dev keys,
 all going through the mock's event stream:
 
 | Key | Does |
@@ -193,13 +193,15 @@ params/result schemas that are a `$ref` (the relayed `system.*` results; `displa
   they fit narrow covers at text 1.0 to 1.6x), launching and explaining games, Close with its
   confirm step, the attention banner.
 - `test/system/daemon_runtime_test.dart` runs the real network, Bluetooth, display/audio and power repositories over the mock's runtime (mapping, events, the 4xxx errors). `test/system/runtime_ui_test.dart` is the same through the Settings screens: Wi-Fi with a wrong password then the right one, Bluetooth pairing with a passkey (Accept, Reject, the code shown for a device that shows none), the display keep or revert dialog with its 15 seconds (`display.keep` / `display.revert`), `can_set` false, power refused while an update is being applied, and one section unavailable while the others work.
+- `test/api/mock08_test.dart`: what the contract test's examples do not show about the 0.8 mock: the order of events and answers around the admin password prompt (`auth.respond` answers before the waiting `ssh.set`), three wrong passwords, cancel, who gets the events and may answer, the Store's states while an apps job runs, `store_changed`, dependencies and conflicts, `more_after_update`, `session.restart`.
+- `test/system/daemon_store_test.dart`: `DaemonStore` over `MockDaemon`: the listing (sorted, states, terms text from the daemon's file path, unfree without readable terms left out, `unavailable {catalog}`, `system_unavailable`, icons from `apps.list`, a slow older answer not overwriting a newer one), following jobs and `store_changed`, `accepted_terms`, `app_conflict`, `insufficient_resources`, `not_found`, `not_available`, `job_busy`, a stale revision retried once (and only once). `test/system/daemon_store_ui_test.dart`: the same through the screens: install with terms and progress, a stale revision, `terms_required` with a newer version, conflicts, no space, remove with delete data (two confirmations), a running app closed first, retired and going-away apps, the update's new and removed apps, the Games tab's "Install Steam", and the session restart offer (also on a desktop session).
 - `test/system/daemon_system_test.dart` runs the real repositories (`DaemonSystem`, `DaemonUpdates`, `DaemonJobs`) over `MockDaemon`'s relay: error mapping, jobs from events, cancel, downgrade acknowledgement, the update check and its cache, `settings.set` with a revision. `test/system/daemon_ui_test.dart` is the same through the Settings screens (SSH without a polkit agent, settings unavailable, About with the DEV badge, a security update through to "Restart session"). `test/osk/osk_auto_show_test.dart`: the keyboard opens and closes with the launcher's text fields.
 - `test/installer/` covers the installer: `flow_test.dart` walks the screens with a fake backend (disk filtering and the two confirmations, password mismatch, SSH off by default, offline disabling the online-only apps, the plan JSON for several choices, progress, exit status 2 and 1 with their codes, typing with the pad on the in-app keyboard), `plan_test.dart`, `progress_test.dart`, `parsers_test.dart` (lsblk, nmcli; the catalog index is in `test/system/catalog_test.dart`, against `test/fixtures/catalog`, the real index with placeholder terms text), `process_backend_test.dart` (the real backend class against a stand-in script: the plan arrives on stdin, never in the arguments), `gamepad_test.dart`, `first_boot_test.dart`.
 - `test/osk/` drives the on-screen keyboard with the mock backend: layout, D-pad navigation, shift,
   pages, and the exact backend calls for typing `P@ss-w0rd!` with D-pad presses only.
 - `test/integration/` runs the real `hinteros-session` binary: `nix build .#checks.x86_64-linux.integration`.
   It starts the daemon with `--no-gamescope --no-inputplumber`, a temp config of two command apps
-  and `--steam-dir` pointing at the daemon repo's fake Steam home, and covers the 0.7 handshake (an app with an explicit `icon` path gets it back in `apps.list`),
+  and `--steam-dir` pointing at the daemon repo's fake Steam home, and covers the 0.8 handshake (an app with an explicit `icon` path gets it back in `apps.list`),
   `apps.list` (built-in `steam` first), `apps.launch` (configured app, unknown app, spawn failure),
   `apps.running`, `app_started` / `app_exited`, `apps.close` (reason `closed`, 2001 when not
   running), `games.list` against the fixture (names, install state, artwork files that exist),
@@ -223,7 +225,8 @@ params/result schemas that are a `$ref` (the relayed `system.*` results; `displa
   the daemon repo (`crates/hinteros-system/tests/common`), which cannot be used from Dart; those
   paths (`ssh.set` to `authentication_required`, jobs and their events) are covered against the
   mock daemon's relay, whose answers the contract test checks against the schema.
-  `runtime_integration_test.dart`: the launcher and the on-screen keyboard say hello at 0.7; with `--no-runtime` every Wi-Fi, Bluetooth, audio, display and power method answers `unavailable` naming its service (`networkmanager`, `bluez`, `audio`, `display`, `logind`) while ping and `apps.list` work, and the real repositories say "<service> isn't available on this box". **Not covered:** `--runtime-bus` with fake NetworkManager, BlueZ, logind, PipeWire and gamescope. The daemon's fakes are Rust test helpers inside its own integration tests (`crates/hinteros-session/tests/runtime_*`), not programs, so nothing from Dart can start them; those paths (wrong password, pairing with a passkey, keep and revert, `power_inhibited`) run against the mock daemon, whose answers the contract test checks against every schema example. The other integration tests start the daemon with `--no-runtime`, so they never reach the host's system bus.
+  `runtime_integration_test.dart`: the launcher and the on-screen keyboard say hello at 0.8; with `--no-runtime` every Wi-Fi, Bluetooth, audio, display and power method answers `unavailable` naming its service (`networkmanager`, `bluez`, `audio`, `display`, `logind`) while ping and `apps.list` work, and the real repositories say "<service> isn't available on this box". **Not covered:** `--runtime-bus` with fake NetworkManager, BlueZ, logind, PipeWire and gamescope. The daemon's fakes are Rust test helpers inside its own integration tests (`crates/hinteros-session/tests/runtime_*`), not programs, so nothing from Dart can start them; those paths (wrong password, pairing with a passkey, keep and revert, `power_inhibited`) run against the mock daemon, whose answers the contract test checks against every schema example. The other integration tests start the daemon with `--no-runtime`, so they never reach the host's system bus.
+  0.8 (`system_relay_integration_test.dart`): with a real `hinteros-system` and the real session daemon both reading the fixture catalog (`--catalog-index test/fixtures/catalog/catalog.json`, the real index format) `store.list` returns the index merged with state.json's installed apps (by name, Steam `installed`, the rest `available`, terms with the absolute path of a text that exists), and the real `DaemonStore` reads it with the terms text; without the index it is `unavailable {service: catalog}`, without the system service `system_unavailable`. `auth.respond` and `auth.cancel` with no pending request are `not_found` (the repository: cancel is quiet, respond is `notFound`), a client that is not the launcher gets `not_authorized`, and `session.restart` with logind pointed at a bus that does not exist is `unavailable {service: logind}` (**never run it against a real bus**: a greetd session would end). **Not covered:** everything that needs real polkit and PAM (the prompt end to end with a password, `system.apps.install` / `remove` on a real service, `session.restart` ending a greetd session): the daemon repo's VM tests `polkit-agent`, `store-install` and `session-restart`. The daemons are started with `--no-auth-agent`, so they never register with this machine's polkit.
   It is a separate check and is skipped by plain `flutter test` unless `HINTEROS_SESSION_BIN`
   points at the binary (and `HINTEROS_SYSTEM_BIN` at `hinteros-system`) (and `HINTEROS_STEAM_FIXTURE` at `crates/hinteros-session/tests/fixtures/steam-home`
   for the games test), e.g.
@@ -487,11 +490,16 @@ Since session API 0.6 the daemon relays the privileged system service (`system.*
 the runtime settings (Wi-Fi, Bluetooth, audio, display, power) are served by the session daemon
 itself, and `lib/src/system/daemon_runtime.dart` implements `NetworkRepository`,
 `BluetoothRepository` and `DisplayAudioRepository` over them (`daemonSystemServices(connection)`,
-what `main` uses; the error mapping is in `daemon_errors.dart`). `--mock` uses the in-process fakes of
-`lib/src/system/mock_system.dart` (all repositories). Only the Store is still unavailable in the real
-build (the screens say "needs a newer HinterOS service" instead of showing invented data):
-`apps.install` / `apps.remove` (`TODO(M8)`), and restarting the session (`TODO(session-restart)`, no
-session API method yet).
+what `main` uses; the error mapping is in `daemon_errors.dart`). Since 0.8 the same function also wires
+`AuthRepository` (`daemon_auth.dart`: the admin password prompt), `restartSession` (`session.restart`)
+and `StoreRepository` (`daemon_store.dart`: `store.list`, `store_changed`, `system.apps.install` /
+`remove`). `--mock` uses the in-process fakes of `lib/src/system/mock_system.dart` (all
+repositories; their `MockAuth` and `MockStore` follow the real ones' rules). Nothing is left
+unavailable except what the daemon itself reports as such.
+
+Responses may arrive out of order (a relayed call can wait minutes for the admin password), which
+the client handles by matching on the request id; `system.ssh.set` has a 340 s timeout instead of
+10 s.
 
 **What the screens do with the daemon's answers**
 
@@ -509,13 +517,14 @@ session API method yet).
 
 | Interface | Wraps (later) | Used by |
 |---|---|---|
-| `SystemRepository` | `system.info`, `ssh.set`, `settings.get` / `set` (with `revision`), `power.capabilities` / `suspend` / `reboot` / `poweroff`; session restart: TODO(session-restart) | About, Power, Remote access, session restart |
+| `SystemRepository` | `system.info`, `ssh.set`, `settings.get` / `set` (with `revision`), `power.capabilities` / `suspend` / `reboot` / `poweroff`, `session.restart` | About, Power, Remote access, session restart |
+| `AuthRepository` | `authentication_requested` / `authentication_finished`, `auth.respond`, `auth.cancel` | the admin password prompt (shell-wide) |
 | `UpdatesRepository` | `update.check`, `update.apply`, `generations.list`, `rollback`, `channel.set`, `base.set` | Updates, reminders |
 | `JobsRepository` | `jobs.get` / `jobs.cancel`, `job_started` / `job_progress` / `job_finished` | the progress page |
 | `NetworkRepository` | `network.status`, `wifi.*`, `network_changed`, `wifi_list_changed` | Network |
 | `BluetoothRepository` | `bluetooth.*`, `bluetooth_changed`, `bluetooth_confirm` | Bluetooth |
 | `DisplayAudioRepository` | `display.modes` / `set_mode` / `keep` / `revert`, `audio.*`, `audio_changed` | Display, Audio |
-| `StoreRepository` | the catalog index, `apps.install` / `apps.remove` (M8) | Store, Games, installer |
+| `StoreRepository` | `store.list`, `store_changed`, `system.apps.install` / `remove` (+ the job events) | Store, Games |
 
 `MockJobs` behaves like the service: one mutating job at a time (`job_busy`), stages, progress,
 cancel until activation. Tests drive it by hand (`progress`, `finish`); `--mock` lets jobs run
@@ -539,12 +548,13 @@ through their stages by themselves.
   is on the hardware checklist.) "Hold Guide, press Y" is no longer printed in the dialogs; it is
   kept in Settings, under "Typed text on keyboard", as the way to open the keyboard anywhere else.
 - **Remote access:** one SSH toggle. SSH is plain username and password for now (you log in as the
-  admin account). Key import and key-only login are in the backlog. See "Admin password and
-  polkit" for how turning it on works.
+  admin account). Key import and key-only login are in the backlog. The toggle just calls
+  `ssh.set`; turning it on makes the daemon ask for the admin password, which shows as the prompt
+  described in "Admin password and polkit".
 - **Progress page** (`pages.dart`): the stages of the job kind, a percentage where the job reports one,
   Cancel until activation ("Can't cancel now" after), "your session will restart" while running,
   "Restart session" when `session_restart_required`, and on failure or cancel what went wrong plus
-  "Nothing was changed". Back does not leave a running job's page.
+  "Nothing was changed". Back does not leave a running job's page. "Restart session" calls `session.restart`; the daemon answers and then ends the session (the launcher goes with it, greetd starts a new one). On a desktop session (not greetd) the daemon refuses and the page says "This is not a TV session, so it cannot be restarted from here".
 - **Updates:** at startup the box checks once (`UpdateReminders`; the real check waits for the
   connection, and is tried again after 5, 15, 45 and 120 s while the system service is not up
   yet, since it can start after the session; the update check is a job whose result arrives with
@@ -556,14 +566,36 @@ through their stages by themselves.
   first) and "Update now". The notice appears at startup and on every return to Home until the update is
   installed. Nothing is ever installed without choosing it.
 - **Store (a top-level tab, after Apps):** categories on the left, apps on the right, an app page
-  (modal) with Install or Remove. Why a tab and not a place under Apps: it is reachable with L1/R1 and
-  from Games ("Install Steam from the Store"), has its own two-pane navigation, and keeps the Apps grid
-  as "what you have". Install: confirm (size, dependencies), then vendor terms in full when the app
-  has them (up/down scroll, L1/R1 page, "Accept and install" stays off until the end is reached; the
-  accepted version is passed to `apps.install`), then the progress page. Remove: confirm with "Also
-  delete this app's data in all profiles"; ticking it asks again (Steam: installed games go too).
-  "More apps are available after the next update" shows when the catalog changed upstream. Icons are
-  resolved at runtime by the daemon (`StoreRepository.resolveIcon`); mocks use the generic placeholder icons. The mock Store reads `test/fixtures/catalog/catalog.json` (or `$HINTEROS_MOCK_CATALOG`) in the real index format, plus three mock-only apps for dependencies. The real Store repository stays TODO(M8) until the daemon's store API lands.
+  (modal) with Install or Remove. Why a tab and not a place under Apps: it is reachable with L1/R1,
+  has its own two-pane navigation, and keeps the Apps grid as "what you have". The real repository
+  is `DaemonStore` (`lib/src/system/daemon_store.dart`): `store.list` is the listing (every app with
+  its `state`: available, installed, installing, removing, retired, unavailable), refreshed on
+  `store_changed` and after every (re)connect; an answer that arrives after a newer request's is
+  dropped. The terms text is read from the absolute path in `terms.file` (offline), and an unfree
+  app whose text cannot be read is not offered. Icons: the daemon resolves them for installed apps
+  (`apps.list`'s `icon`); an app that is not installed gets the letter tile (the launcher fetches
+  nothing). **Install:** confirm (size, the apps that come along, transitively), then the vendor
+  terms of the app **and of every app that comes with it**, each in full (up/down scroll, L1/R1
+  page, "Accept and install" stays off until the end is reached), then
+  `system.apps.install {ids, revision (from settings.get), accepted_terms: {id: version read}}`, then
+  the progress page (job kind `apps_install`). A stale revision (`state_conflict`) is fetched again
+  and the call tried once more. **What the service says:** `terms_required` shows the terms of the
+  app it names again (re-reading the listing: the version may be newer) and retries with the new
+  version; `app_conflict` says which app is in the way ("Kodi cannot be installed together with
+  Jellyfin. Remove Jellyfin first if you want Kodi."; for removing: "RetroArch needs Emulator
+  cores"); `insufficient_resources` says how much space is needed and free; "already installed"
+  says so. **Remove:** confirm with "Also delete this app's data in all profiles"; ticking it asks
+  again (Steam: installed games go too); a running app is closed first (`apps.close`); then
+  `system.apps.remove {ids, revision, delete_data}` (job kind `apps_remove`). **States:** cards say
+  Installing... / Removing...; a retired app ("This app is retired. <reason> It keeps working")
+  and one the next update takes away can be removed. **"More apps are available after the next
+  update"** shows from `store.list`'s `more_after_update` or an update check's `new_apps` (the
+  names are listed); Settings > Updates names `removed_apps` with the catalog's reason, also in
+  the "Update now" confirm. **Games tab:** with Steam not installed, "Install Steam" runs the same
+  install flow right there (`installSteam`), not shown until the first listing arrived. The mock
+  Store (`MockStore`) reads `test/fixtures/catalog/catalog.json` (or `$HINTEROS_MOCK_CATALOG`) in
+  the real index format, plus three mock-only apps for dependencies.
+
 - **Installer app selection** (`lib/src/ui/app_selection.dart`): `AppSelectionController` and
   `AppSelectionView` for the M9 installer and first-boot wizard: a checklist with the `installerDefault` apps
   ticked, "On the installer" vs "Download, size" per app, terms acceptance for ticked apps with terms,
@@ -574,7 +606,7 @@ through their stages by themselves.
 The UI reads through `AppsRepository` (apps, running, launch, close, Steam attention and focus) and
 `GamesRepository` (`games.list`, launch by Steam URL) in `lib/src/data/`, combined in
 `LauncherData`, which owns all daemon traffic and re-queries on connect and on events (the daemon
-does not replay them). The client speaks session API 0.7 (during 0.x the minor must match); the on-screen keyboard's connection too.
+does not replay them). The client speaks session API 0.8 (during 0.x the minor must match); the on-screen keyboard's connection too.
 
 ### Fonts
 
@@ -589,7 +621,7 @@ Atkinson Hyperlegible Regular and Bold (`assets/fonts/`), SIL Open Font License 
 `test/golden/goldens/`. `test/golden/osk_test.dart` renders the on-screen keyboard at 1920x1080 over
 a checkerboard (so the transparent area and the panel's rounded corners show): letters, symbols with dots in the preview,
 the masked preview with its newest character readable, the preview with the setting on, high contrast at 1.6x with caps lock, and the bar focus marker with one-shot shift
-(`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. `test/golden/runtime_test.dart` covers the runtime settings on the real repositories over the mock daemon (`bt_pair_*` for the passkey modal, `wifi_wrong_password`, `settings_bt_unavailable`, `settings_display_cannot_set`, `display_keep_daemon`, `power_inhibited`, `settings_power_restricted`, `settings_net_no_internet`). `test/golden/system_test.dart` covers the system screens (`settings_sys_*`, `ssh_admin_password`, `wifi_password`, `display_*`), the progress page (`progress_*`), the security notice (`security_notice_*`, also high contrast at 1.6x, locked and unlocked), the Home reminder, the Store (`store_*`), the terms page (`terms_*`, also high contrast at 1.6x, from the top and scrolled to the end), `games_steam_missing` and `installer_app_selection`. `test/golden/installer_test.dart` has `installer_*_1080p.png` for every installer screen (welcome, network, disk, the disk warning and the second confirmation, the warning in high contrast at 1.4x text, account, keyboard, options, apps offline and online, summary, progress, both failures, done). Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
+(`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. `test/golden/runtime_test.dart` covers the runtime settings on the real repositories over the mock daemon (`bt_pair_*` for the passkey modal, `wifi_wrong_password`, `settings_bt_unavailable`, `settings_display_cannot_set`, `display_keep_daemon`, `power_inhibited`, `settings_power_restricted`, `settings_net_no_internet`). `test/golden/system_test.dart` covers the system screens (`settings_sys_*`, `auth_prompt_*` (the admin password prompt: masked, and after a wrong password in high contrast at 1.6x; also over the real repositories), `ssh_cancelled`, `wifi_password`, `display_*`), the progress page (`progress_*`), the security notice (`security_notice_*`, also high contrast at 1.6x, locked and unlocked), the Home reminder, the Store (`store_*`; over the real repository: `store_retired_detail`, `store_install_conflict`, `store_installing_progress`, `store_no_space`, `store_more_apps_highcontrast_text160`), the terms page (`terms_*`, also high contrast at 1.6x, from the top and scrolled to the end), `games_steam_missing` and `installer_app_selection`. `test/golden/installer_test.dart` has `installer_*_1080p.png` for every installer screen (welcome, network, disk, the disk warning and the second confirmation, the warning in high contrast at 1.4x text, account, keyboard, options, apps offline and online, summary, progress, both failures, done). Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
 running game, the attention banner, the close confirm and the app tiles at text 1.3x/1.6x (also high
 contrast). Tests load the bundled font explicitly (`flutter_test_config.dart`, no
 Ahem), use a fixed clock, the in-process mock, the committed placeholder art
@@ -609,41 +641,44 @@ in `nix develop` also compares them, and may differ slightly from the sandbox; u
 
 ### Admin password and polkit
 
-`ssh.set` is guarded by the polkit action `org.hinteros.system.ssh` with `auth_admin` (the admin
-password). polkit only asks for a password through an **authentication agent**, and none exists on
-the box; the launcher cannot hand the daemon a password either (no session API method carries
-one). So turning SSH on is answered with `authentication_required` (3012, `data: {action}`), and
-that is what the launcher shows, honestly: **"An admin has to turn on SSH"** (Settings > Remote
-access), saying SSH must be enabled by an admin, from the installer's "Enable SSH" option or over
-the admin account on the box. Turning it off needs no password and works. The same code path,
-`SystemErrorKind.authenticationRequired`, shows "This needs the admin password" for any other
-action that ever gets `auth_admin`.
+`ssh.set` (turning SSH on) is guarded by the polkit action `org.hinteros.system.ssh` with
+`auth_admin`: the admin password. Since session API 0.8 the **session daemon is polkit's
+authentication agent** for the calls it relays, and the launcher shows the password prompt:
 
-The admin-password dialog (masked field, retry on a wrong password, `SystemErrorKind.wrongPassword`)
-is kept, tested with the mock (`MockSystem(acceptsAdminPassword: true)`), and **switched off by
-one flag**: `adminPasswordUi` in `lib/src/system/daemon_system.dart` (`false`;
-`SystemRepository.acceptsAdminPassword` reads it). `main --mock` uses the same flag, so the dev
-window behaves like the real daemon.
+1. The launcher calls `ssh.set {enabled: true}`. The call **waits** (up to 330 s at the daemon, so
+   the client gives it 340 s), and its response may come after the answers to later calls.
+2. The daemon sends `authentication_requested {cookie, action, message, identities}` to the
+   launcher only. `AuthPrompter` (`lib/src/ui/auth_prompt.dart`, owned by the shell, so it shows
+   over whatever screen is up) opens the **Admin password** dialog: "Enter the password for
+   <account> to turn on SSH." (the account is the first identity; for an action the launcher
+   does not know, polkit's own message is shown instead), a masked field (the on-screen keyboard
+   opens with it; "Show what I type" is off), Cancel and Submit.
+3. Submit sends `auth.respond {cookie, password}`. `{ok: false, attempts_left}` keeps the dialog
+   open with "That is not the password. 2 tries left." (the field is empty again and the keyboard
+   comes back); after the third wrong one the request fails and the dialog closes. `{ok: true}`
+   closes it and the progress page of the SSH job follows.
+4. Cancel or Back sends `auth.cancel {cookie}`. `authentication_finished {cookie, outcome}`
+   (authorized, failed, cancelled, also when polkit gives up after 2 minutes) closes the dialog
+   without sending anything.
+5. The waiting `ssh.set` ends with the job, or with `authentication_required` ("The admin password
+   was not given, so nothing was changed.": cancelled, timed out, or no agent registered) or
+   `permission_denied {reason: polkit}` ("The admin password was wrong too many times. Nothing was
+   changed."). Turning SSH off needs no password.
 
-TODO(polkit-agent), design sketch for when the daemon gains an agent:
+**The password:** it is read from the field and the field is emptied in the same moment; it is the
+argument of `auth.respond` and nothing else (not stored in a state object, not in an error, not
+logged: `AuthAnswer` carries only `ok` and the tries left). Dart strings cannot be wiped from
+memory, so this is as far as the launcher can go; the daemon wipes its copy, and only the launcher
+connection (hello name `hinteros-launcher`) may answer. `auth.respond` for a request that is
+over is `not_found` (the dialog just closes). The flag `adminPasswordUi` that kept this off until
+the daemon had an agent is gone.
 
-1. The session daemon (`hinteros-session`, the session user's process) registers a polkit
-   authentication agent for its session with `org.freedesktop.PolicyKit1.Authority`
-   (`RegisterAuthenticationAgent`, subject `unix-session`, object path of its own, locale), and
-   implements `org.freedesktop.PolicyKit1.AuthenticationAgent.BeginAuthentication(action_id,
-   message, icon_name, details, cookie, identities)`.
-2. The system service stops using `AllowUserInteraction = false` for `auth_admin` actions: it
-   calls `CheckAuthorization` with `AllowUserInteraction`, and polkit calls the agent. The session
-   daemon then sends the launcher a new event, for example `authentication_requested {id, action,
-   message, identity}` (the identity is the admin account polkit offers).
-3. The launcher shows the existing password dialog (`acceptsAdminPassword` flips to true) and
-   answers with a new method, `auth.respond {id, password}` (or `auth.cancel {id}`). The session
-   daemon runs `polkit-agent-helper-1` for the identity (as polkit's own agents do: it speaks the
-   PAM conversation over a pipe), feeds it the password, and completes `BeginAuthentication` or
-   fails it. The password lives only in that exchange: never logged, never stored, zeroed after,
-   and the event/method carry it only over the 0600 session socket.
-4. A wrong password is `BeginAuthentication` failing, which polkit reports to the system service as
-   not authorized; the retry stays inside the same `ssh.set` call (the launcher keeps the dialog
-   open on `auth.respond` returning `{ok: false}`), so the job only starts once polkit says yes.
-5. `ssh.set` stays one method call: the launcher awaits it while the dialog is up. Until the
-   agent exists nothing in the launcher changes except flipping the flag.
+What the tests cover: `test/system/system_ui_test.dart` (the prompt on `MockAuth`: masked, empty
+refused, wrong then right, three wrong, Back, Cancel, closed by the daemon, off needs none),
+`test/system/daemon_ui_test.dart` and `test/system/daemon_system_test.dart` (the same over the real
+repositories and `MockDaemon`'s agent, including the out-of-order answers and `not_authorized` for
+other clients), `test/api/mock08_test.dart` (the mock's order of events and answers). **Not covered
+anywhere here:** polkit and PAM themselves. That a real polkit matches the system service's
+subject to the agent the user service registered, that the helper runs under the unit's
+`NoNewPrivileges`, and that three wrong passwords really fail are the daemon repo's VM test
+(`polkit-agent`).
