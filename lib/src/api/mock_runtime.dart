@@ -51,6 +51,10 @@ class MockAccessPoint {
   String password;
   bool known;
   bool connected = false;
+
+  /// The network's password was changed since it was stored: joining with the
+  /// stored one fails with `wrong_password`.
+  bool keyChanged = false;
 }
 
 class MockBtDevice {
@@ -249,6 +253,12 @@ class MockRuntime {
           const {'field': 'password', 'reason': 'required'},
         );
       }
+      if (password == null && ap.keyChanged) {
+        throw ApiException(
+          ApiErrorCode.wrongPassword,
+          'the stored password for $ssid was not accepted',
+        );
+      }
       if (password != null && password != ap.password) {
         // A connection made for it is removed again: nothing is stored.
         throw ApiException(
@@ -256,7 +266,9 @@ class MockRuntime {
           'the password for $ssid was not accepted',
         );
       }
-      ap.known = true;
+      ap
+        ..known = true
+        ..keyChanged = password == null && ap.keyChanged;
     }
     for (final a in accessPoints) {
       a.connected = a == ap;
