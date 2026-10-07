@@ -70,6 +70,7 @@ icon = "$iconFixture"
       config.path,
       '--no-gamescope',
       '--no-inputplumber',
+      '--no-runtime',
       '--fake-keyboard',
       keyLog.path,
       if (_steamHome != null) ...[
@@ -123,12 +124,13 @@ icon = "$iconFixture"
   );
 
   test(
-    'handshake at 0.6, ping, apps.list and home_pressed (SIGUSR1)',
+    'handshake at 0.7, ping, apps.list and home_pressed (SIGUSR1)',
     () async {
       final c = client = DaemonClient(socketPath: sock);
       await c.subscribeTo([EventName.homePressed]);
       final connected = await c.waitConnected();
-      expect(connected.apiVersion, apiVersion);
+      expect(connected.apiVersion, '0.7');
+      expect(apiVersion, '0.7');
       expect(connected.server.name, 'hinteros-session');
 
       expect((await c.ping(const PingParams(nonce: 'hi'))).nonce, 'hi');
@@ -351,7 +353,8 @@ icon = "$iconFixture"
         final launcher = client = DaemonClient(socketPath: sock);
         await launcher.subscribeTo([EventName.oskVisibility]);
         await launcher.waitConnected();
-        await osk.connection.waitConnected();
+        final oskHello = await osk.connection.waitConnected();
+        expect(oskHello.apiVersion, '0.7');
         expect(
           (osk.connection as DaemonClient).clientInfo.name,
           'hinteros-osk',

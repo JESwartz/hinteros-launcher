@@ -1,4 +1,4 @@
-// The system.* relay against the real hinteros-session (session API 0.6).
+// The system.* relay against the real hinteros-session (session API 0.7).
 //
 // 1. No system service running: every system.* method is `system_unavailable`
 //    {reason: down}, the session API keeps working, and the real repositories
@@ -115,6 +115,7 @@ void main() {
       '--no-gamescope',
       '--no-inputplumber',
       '--no-uinput',
+      '--no-runtime',
       '--system-socket',
       systemSocket,
     ]);
@@ -151,7 +152,7 @@ void main() {
         final c = await session('${dir.path}/no-such-system.sock');
         await c.waitConnected();
         expect(c.status, isA<Connected>());
-        expect((c.status as Connected).apiVersion, '0.6');
+        expect((c.status as Connected).apiVersion, '0.7');
 
         final e = await c.systemInfo().then<ApiException?>(
           (_) => null,
