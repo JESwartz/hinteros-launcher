@@ -5,7 +5,7 @@ import 'package:hinteros_launcher/src/nav/nav_controller.dart';
 import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
 import 'package:hinteros_launcher/src/system/daemon_system.dart';
 import 'package:hinteros_launcher/src/system/mock_system.dart';
-import 'package:hinteros_launcher/src/system/models.dart';
+import 'package:hinteros_launcher/src/system/models.dart' hide AvailableUpdate;
 import 'package:hinteros_launcher/src/ui/app_selection.dart';
 
 import '../support/harness.dart';
@@ -94,10 +94,10 @@ void main() {
         },
       );
     });
-    testWidgets('admin password for SSH (masked)', (t) async {
+    testWidgets('admin password prompt for SSH (masked)', (t) async {
       await shot(
         t,
-        'ssh_admin_password_1080p',
+        'auth_prompt_1080p',
         harness(),
         run: (t) async {
           await enterSettingsEntry(t, 'ssh');
@@ -107,9 +107,21 @@ void main() {
         },
       );
     });
-    testWidgets('SSH needs an admin (the real daemon, no polkit agent)', (
-      t,
-    ) async {
+    testWidgets('admin password prompt after a wrong password, high contrast, '
+        'text 1.6x', (t) async {
+      await shot(
+        t,
+        'auth_prompt_highcontrast_text160_1080p',
+        harness(settings: hc160),
+        run: (t) async {
+          await enterSettingsEntry(t, 'ssh');
+          await press(t, [kEnter]);
+          await t.enterText(find.byType(TextField), 'wrong');
+          await press(t, [kEnter]);
+        },
+      );
+    });
+    testWidgets('admin password prompt over the real repositories', (t) async {
       final mock = MockDaemon(
         apps: appsWithIcons(),
         games: gamesWithArt(),
@@ -117,11 +129,27 @@ void main() {
       );
       await shot(
         t,
-        'ssh_needs_admin_1080p',
+        'auth_prompt_daemon_1080p',
         Harness(mock: mock, realServices: daemonSystemServices(mock)),
         run: (t) async {
           await enterSettingsEntry(t, 'ssh');
           await press(t, [kEnter]);
+        },
+      );
+    });
+    testWidgets('SSH not turned on: the prompt was cancelled', (t) async {
+      final mock = MockDaemon(
+        apps: appsWithIcons(),
+        games: gamesWithArt(),
+        now: fixedNow,
+      );
+      await shot(
+        t,
+        'ssh_cancelled_1080p',
+        Harness(mock: mock, realServices: daemonSystemServices(mock)),
+        run: (t) async {
+          await enterSettingsEntry(t, 'ssh');
+          await press(t, [kEnter, kEscape]);
         },
       );
     });
@@ -437,6 +465,126 @@ void main() {
           ]);
         },
       );
+    });
+    group('over the real Store repository', () {
+      Harness daemonHarness({
+        Set<String> installed = const {'steam'},
+        LauncherSettings settings = const LauncherSettings(),
+      }) {
+        final mock = MockDaemon(
+          apps: appsWithIcons(),
+          games: gamesWithArt(),
+          now: fixedNow,
+        );
+        mock.system.installedApps
+          ..clear()
+          ..addAll(installed);
+        return Harness(
+          mock: mock,
+          settings: settings,
+          realServices: daemonSystemServices(mock),
+        );
+      }
+
+      /// The startup update check holds the job slot: end it.
+      Future<void> endStartupCheck(WidgetTester t, Harness h) async {
+        await t.pump();
+        final id = h.mock.system.runningJobId;
+        if (id != null) h.mock.system.finishJob(id);
+        await t.pumpAndSettle();
+      }
+
+      testWidgets('a retired app: reason, Remove', (t) async {
+        final h = daemonHarness(installed: {'old-player'});
+        await shot(
+          t,
+          'store_retired_detail_1080p',
+          h,
+          run: (t) async {
+            await endStartupCheck(t, h);
+            await openStore(t);
+            await press(t, [kDown, kDown, kDown, kDown, kRight, kEnter]);
+          },
+        );
+      });
+      testWidgets('an app that conflicts with an installed one', (t) async {
+        final h = daemonHarness(installed: {'jellyfin'});
+        await shot(
+          t,
+          'store_install_conflict_1080p',
+          h,
+          run: (t) async {
+            await endStartupCheck(t, h);
+            await openStore(t);
+            // Video: Crunchyroll, Jellyfin / Kodi, Plex; install Kodi.
+            await press(t, [
+              kDown, kDown, kRight, kDown, kEnter, // Kodi
+              kEnter, kRight, kEnter, // Install, confirm
+            ]);
+          },
+        );
+      });
+      testWidgets('the install job on the progress page', (t) async {
+        final h = daemonHarness(installed: {});
+        await shot(
+          t,
+          'store_installing_progress_1080p',
+          h,
+          run: (t) async {
+            await endStartupCheck(t, h);
+            await openStore(t);
+            await press(t, [kDown, kRight, kEnter, kEnter, kRight, kEnter]);
+            h.mock.system.progressJob(
+              h.mock.system.runningJobId!,
+              Stage.downloading,
+              percent: 40,
+              bytesTotal: 150 << 20,
+            );
+            await t.pumpAndSettle();
+          },
+        );
+      });
+      testWidgets('not enough space', (t) async {
+        final h = daemonHarness(installed: {});
+        h.mock.system.freeDiskMib = 100;
+        await shot(
+          t,
+          'store_no_space_1080p',
+          h,
+          run: (t) async {
+            await endStartupCheck(t, h);
+            await openStore(t);
+            await press(t, [
+              kDown, kRight, kRight, kEnter, // RetroArch
+              kEnter, kRight, kEnter, // Install, confirm
+            ]);
+          },
+        );
+      });
+      testWidgets('the Store with the apps an update brings, high contrast', (
+        t,
+      ) async {
+        final h = daemonHarness(settings: hc160);
+        h.mock.system.nextUpdate = const AvailableUpdate(
+          rev: '9a8b7c6d5e4f30211a2b3c4d5e6f708192a3b4c5',
+          date: 1791300000,
+          summary: 'New apps.',
+          signer: 'release@hinteros',
+          security: null,
+          commits: 2,
+          newApps: [CatalogApp(id: 'new-app', name: 'New player')],
+          removedApps: null,
+        );
+        await shot(
+          t,
+          'store_more_apps_highcontrast_text160_1080p',
+          h,
+          run: (t) async {
+            await endStartupCheck(t, h);
+            await press(t, [kUp, kUp, kRight, kRight, kRight]);
+          },
+        );
+      });
     });
     testWidgets('Games tab asks to install Steam', (t) async {
       await shot(
