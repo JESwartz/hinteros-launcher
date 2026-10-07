@@ -112,6 +112,8 @@ class OskScreen extends StatefulWidget {
     required this.backend,
     this.showTyped = false,
     this.initialText = '',
+    this.hardwareKeys = false,
+    this.onEscape,
   });
 
   final OskBackend backend;
@@ -123,6 +125,13 @@ class OskScreen extends StatefulWidget {
   /// The "Show typed text on the on-screen keyboard" setting; off masks the
   /// preview strip.
   final bool showTyped;
+
+  /// A physical keyboard types into the field (the installer, where the
+  /// keyboard is in this process): printable keys are text, Backspace
+  /// deletes, Enter submits, and Escape calls [onEscape] (cancel). Off: the
+  /// keys only move the focus, like the D-pad.
+  final bool hardwareKeys;
+  final VoidCallback? onEscape;
 
   @override
   State<OskScreen> createState() => _OskScreenState();
@@ -211,7 +220,41 @@ class _OskScreenState extends State<OskScreen> {
     return null;
   }
 
+  KeyEventResult _hardwareKey(KeyEvent e) {
+    final k = e.logicalKey;
+    final down = e is KeyDownEvent || e is KeyRepeatEvent;
+    if (k == LogicalKeyboardKey.backspace) {
+      if (down) _state.backspace();
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) {
+      if (e is KeyDownEvent) _state.press(const OskKey(KeyKind.done, 'Done'));
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.escape) {
+      if (e is KeyDownEvent) widget.onEscape?.call();
+      return KeyEventResult.handled;
+    }
+    final hw = HardwareKeyboard.instance;
+    final c = e.character;
+    if (c != null &&
+        c.isNotEmpty &&
+        c.runes.first >= 0x20 &&
+        c.runes.first != 0x7f &&
+        !hw.isControlPressed &&
+        !hw.isMetaPressed &&
+        !hw.isAltPressed) {
+      if (down) _state.typeText(c);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    if (widget.hardwareKeys) {
+      final r = _hardwareKey(e);
+      if (r != KeyEventResult.ignored) return r;
+    }
     final action = _actionForKey(e.logicalKey);
     if (action == null) return KeyEventResult.ignored;
     _onAction(action, switch (e) {

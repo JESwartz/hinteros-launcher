@@ -2,6 +2,7 @@
 // daemon's system relay: what the user sees for each answer of the system
 // service.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart' as api;
 import 'package:hinteros_launcher/src/system/daemon_system.dart';
@@ -33,6 +34,28 @@ Future<void> endStartupCheck(WidgetTester t, Harness h) async {
 
 void main() {
   group('Remote access and the admin password (over the daemon)', () {
+    testWidgets('Backspace deletes in the password field; it is not Back', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await endStartupCheck(t, h);
+      await enterSettingsEntry(t, 'ssh');
+      await press(t, [kEnter]);
+      expect(find.text('Admin password'), findsOneWidget);
+      await t.enterText(find.byType(TextField), 'abc');
+      await press(t, [LogicalKeyboardKey.backspace]);
+      expect(find.text('Admin password'), findsOneWidget);
+      expect(
+        t.widget<TextField>(find.byType(TextField)).controller!.text,
+        'ab',
+      );
+      // Escape is Back: the prompt is cancelled.
+      await press(t, [kEscape]);
+      expect(find.text('Admin password'), findsNothing);
+    });
+
     testWidgets('the prompt appears, a wrong password then the right one', (
       t,
     ) async {

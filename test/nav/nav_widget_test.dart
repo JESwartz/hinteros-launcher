@@ -105,6 +105,20 @@ void main() {
     expect(focusLabel(), 'home/apps:0');
   });
 
+  testWidgets('Backspace is Back, like Escape, outside text fields', (t) async {
+    await start(t);
+    await keys(t, [up, right, right]);
+    expect(focusLabel(), 'tabs/tabs:2');
+    await keys(t, [LogicalKeyboardKey.backspace]);
+    expect(focusLabel(), 'home/apps:0');
+    await keys(t, [up, right, right, right, right, down, right]);
+    expect(focusLabel(), 'settings-detail/o0:0');
+    await keys(t, [LogicalKeyboardKey.backspace]); // detail -> list
+    expect(focusLabel(), 'settings-list/text:0');
+    await keys(t, [LogicalKeyboardKey.backspace]); // section -> Home
+    expect(focusLabel(), startsWith('home/'));
+  });
+
   testWidgets('Back from the tab bar goes Home', (t) async {
     await start(t);
     await keys(t, [up, right, right]);

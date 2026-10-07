@@ -178,6 +178,9 @@ class OskState extends ChangeNotifier {
 
   void space() => _text(' ');
 
+  /// Text from a physical keyboard: typed like a key press.
+  void typeText(String s) => _text(s);
+
   /// Starts the preview with text that is already in the field (the in-app
   /// keyboard of the installer edits existing values), so Backspace and the
   /// preview agree with the field.

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../api/api.dart';
 import '../data/launcher_data.dart';
 import '../fps_overlay.dart';
+import '../nav/key_map.dart';
 import '../nav/nav_controller.dart';
 import '../nav/nav_model.dart';
 import '../osk/osk_control.dart';
@@ -459,38 +460,15 @@ class _LauncherShellState extends State<LauncherShell> {
   void _onAction(NavAction action, NavPhase phase) =>
       _nav.dispatch(action, phase);
 
-  static NavAction? _actionForKey(LogicalKeyboardKey k) {
-    if (k == LogicalKeyboardKey.arrowLeft) return NavAction.left;
-    if (k == LogicalKeyboardKey.arrowRight) return NavAction.right;
-    if (k == LogicalKeyboardKey.arrowUp) return NavAction.up;
-    if (k == LogicalKeyboardKey.arrowDown) return NavAction.down;
-    if (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) {
-      return NavAction.accept;
-    }
-    if (k == LogicalKeyboardKey.escape) return NavAction.back;
-    if (k == LogicalKeyboardKey.pageUp) return NavAction.pageLeft;
-    if (k == LogicalKeyboardKey.pageDown) return NavAction.pageRight;
-    // Gamepad Y / X stand-ins.
-    if (k == LogicalKeyboardKey.keyY || k == LogicalKeyboardKey.contextMenu) {
-      return NavAction.context;
-    }
-    if (k == LogicalKeyboardKey.keyX) return NavAction.secondary;
-    return null;
-  }
-
   bool _typingInField() =>
       FocusManager.instance.primaryFocus?.context
           ?.findAncestorWidgetOfExactType<EditableText>() !=
       null;
 
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
-    final action = _actionForKey(e.logicalKey);
+    // In a text field letters are letters (not Y/X) and Backspace deletes.
+    final action = navActionForKey(e.logicalKey, inTextField: _typingInField());
     if (action == null) return KeyEventResult.ignored;
-    // Typing into a text field: letters are letters, not Y/X buttons.
-    if (_typingInField() &&
-        (action == NavAction.context || action == NavAction.secondary)) {
-      return KeyEventResult.ignored;
-    }
     _onAction(action, switch (e) {
       KeyDownEvent() => NavPhase.press,
       KeyRepeatEvent() => NavPhase.repeat,

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../api/api.dart' show NavAction, NavPhase;
 import '../../app.dart' show DesignScale;
 import '../../settings/launcher_settings.dart';
+import '../../nav/key_map.dart';
 import '../../nav/nav_controller.dart';
 import '../../theme/hinter_theme.dart';
 import '../../ui/modal_host.dart';
@@ -84,9 +85,10 @@ class ConsoleController {
   void action(NavAction a, NavPhase phase) {
     final kb = _keyboard;
     if (kb != null) {
-      if (phase == NavPhase.press &&
-          (a == NavAction.view || a == NavAction.menu)) {
+      if (phase == NavPhase.press && a == NavAction.view) {
         kb.onCancel?.call();
+      } else if (phase == NavPhase.press && a == NavAction.menu) {
+        kb.onDone?.call(kb.text.value);
       } else {
         kb.emitNav(a, phase);
       }
@@ -131,26 +133,25 @@ class _ConsoleHostState extends State<ConsoleHost> {
     super.dispose();
   }
 
-  static NavAction? _actionForKey(LogicalKeyboardKey k) {
-    if (k == LogicalKeyboardKey.arrowLeft) return NavAction.left;
-    if (k == LogicalKeyboardKey.arrowRight) return NavAction.right;
-    if (k == LogicalKeyboardKey.arrowUp) return NavAction.up;
-    if (k == LogicalKeyboardKey.arrowDown) return NavAction.down;
-    if (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) {
-      return NavAction.accept;
-    }
-    if (k == LogicalKeyboardKey.escape) return NavAction.back;
-    if (k == LogicalKeyboardKey.pageUp) return NavAction.pageLeft;
-    if (k == LogicalKeyboardKey.pageDown) return NavAction.pageRight;
-    if (k == LogicalKeyboardKey.keyY) return NavAction.context;
-    if (k == LogicalKeyboardKey.keyX) return NavAction.secondary;
-    // Stands in for the View button: cancels the keyboard.
-    if (k == LogicalKeyboardKey.f1) return NavAction.view;
-    return null;
-  }
-
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
-    final a = _actionForKey(e.logicalKey);
+    if (e.logicalKey == LogicalKeyboardKey.tab) {
+      if (e is KeyUpEvent) return KeyEventResult.handled;
+      final back = HardwareKeyboard.instance.isShiftPressed;
+      if (_console.typing) {
+        // The on-screen keyboard has no focus order of its own: step along it.
+        _console.action(
+          back ? NavAction.left : NavAction.right,
+          NavPhase.press,
+        );
+      } else if (back) {
+        FocusManager.instance.primaryFocus?.previousFocus();
+      } else {
+        FocusManager.instance.primaryFocus?.nextFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    // F1 stands in for the View button (cancels the on-screen keyboard).
+    final a = navActionForKey(e.logicalKey, view: true);
     if (a == null) return KeyEventResult.ignored;
     _console.action(a, switch (e) {
       KeyDownEvent() => NavPhase.press,
