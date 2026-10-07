@@ -6,6 +6,20 @@ import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
 
 import '../support/harness.dart';
 
+/// A daemon whose launches fail (2002).
+class _FailingLaunch extends MockDaemon {
+  @override
+  Future<Map<String, dynamic>> rpc(String method, Map<String, dynamic> params) {
+    if (method == 'apps.launch') {
+      throw const ApiException(
+        ApiErrorCode.appLaunchFailed,
+        'spawn failed: No such file or directory (os error 2)',
+      );
+    }
+    return super.rpc(method, params);
+  }
+}
+
 /// Golden screenshots (TESTING.md): every screen at 1920x1080, Home and Games
 /// also at 3840x2160 (1920x1080 logical at DPR 2), plus Home in the
 /// high-contrast, 1.6x text variant. Regenerate with `nix run .#update-goldens`.
@@ -49,6 +63,25 @@ void main() {
   const toAppsRunning = [up, up, right, right, down];
   const toSettings = [up, right, right, right, right, down];
 
+  testWidgets('launch failure dialog 1080p', (t) async {
+    await shot(
+      t,
+      'launch_failure_1080p',
+      h: Harness(mock: _FailingLaunch()),
+      keys: [LogicalKeyboardKey.enter],
+    );
+  });
+  testWidgets('launch failure dialog high contrast, text 1.6x', (t) async {
+    await shot(
+      t,
+      'launch_failure_highcontrast_text160_1080p',
+      h: Harness(
+        mock: _FailingLaunch(),
+        settings: const LauncherSettings(textScale: 1.6, highContrast: true),
+      ),
+      keys: [LogicalKeyboardKey.enter],
+    );
+  });
   testWidgets('home 1080p', (t) async {
     await shot(t, 'home_1080p', setup: running, keys: [right]);
   });
