@@ -149,7 +149,8 @@ NetworkState parseNetwork(String deviceStatus, String connectivity) {
   for (final line in const LineSplitter().convert(deviceStatus)) {
     final f = splitTerse(line);
     if (f.length < 3) continue;
-    final connected = f[1] == 'connected';
+    // "connected" or "connected (externally)"; "connecting (...)" is not yet.
+    final connected = f[1].startsWith('connected');
     if (f[0] == 'ethernet' && connected) wired = true;
     if (f[0] == 'wifi') {
       wifi = true;

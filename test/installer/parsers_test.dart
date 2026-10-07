@@ -119,6 +119,13 @@ void main() {
       expect(w.wifiSsid, 'Home: 5G');
       expect(w.online, isFalse, reason: 'a captive portal is not online');
 
+      final ext = parseNetwork(
+        'ethernet:connected (externally):Wired\nwifi:connecting (getting IP configuration):Home\n',
+        'full',
+      );
+      expect(ext.wiredConnected, isTrue);
+      expect(ext.wifiSsid, isNull, reason: 'still connecting');
+
       final none = parseNetwork('wifi:unavailable:\n', 'none');
       expect(none.online, isFalse);
       expect(none.wifiAvailable, isTrue);
