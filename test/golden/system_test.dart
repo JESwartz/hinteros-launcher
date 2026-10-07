@@ -430,7 +430,6 @@ void main() {
           controller: c,
           region: region,
           onContinue: () {},
-          online: false,
         ),
       ),
     );
