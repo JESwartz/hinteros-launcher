@@ -1,0 +1,693 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hinteros_launcher/src/api/api.dart';
+import 'package:hinteros_launcher/src/installer/backend.dart';
+import 'package:hinteros_launcher/src/installer/fake_backend.dart';
+import 'package:hinteros_launcher/src/installer/flow.dart';
+
+import '../support/installer_harness.dart';
+
+const online = NetworkState(
+  wiredConnected: true,
+  wifiAvailable: true,
+  online: true,
+);
+
+void main() {
+  group('welcome and network', () {
+    testWidgets('Welcome starts the install steps; Back goes back', (t) async {
+      final h = InstallerHarness();
+      await h.pump(t);
+      expect(find.text('Welcome to HinterOS'), findsOneWidget);
+      expect(h.focus, 'content/start:0');
+      await h.back(t); // nowhere to go
+      expect(h.flow.step, InstallerStep.welcome);
+      await h.accept(t);
+      expect(h.flow.step, InstallerStep.network);
+      expect(find.text('Step 1 of 6'), findsOneWidget);
+      await h.back(t);
+      expect(h.flow.step, InstallerStep.welcome);
+    });
+
+    testWidgets('offline: says so, and carries on without internet', (t) async {
+      final h = InstallerHarness();
+      await h.start(t);
+      expect(find.text('This computer is not online.'), findsOneWidget);
+      expect(find.text('Continue without internet'), findsOneWidget);
+      expect(find.text('No Wi-Fi adapter found.'), findsOneWidget);
+      await h.choose(t, 'actions', 1);
+      expect(h.flow.step, InstallerStep.disk);
+      expect(h.flow.online, isFalse);
+    });
+
+    testWidgets('wired: online, Continue', (t) async {
+      final h = InstallerHarness(backend: FakeInstallerBackend(state: online));
+      await h.start(t);
+      expect(find.text('Network cable: connected.'), findsOneWidget);
+      expect(find.text('This computer is online.'), findsOneWidget);
+      expect(find.text('Continue'), findsOneWidget);
+      expect(h.flow.online, isTrue);
+    });
+
+    testWidgets('Wi-Fi: the password comes from the on-screen keyboard', (
+      t,
+    ) async {
+      final backend = FakeInstallerBackend(
+        state: const NetworkState(wifiAvailable: true),
+        wifiPasswords: {'Living Room': 'correct horse'},
+      );
+      final h = InstallerHarness(backend: backend);
+      await h.start(t);
+      expect(find.text('Living Room'), findsOneWidget);
+      expect(find.text('Office (802.1X)'), findsOneWidget);
+      expect(
+        find.text('This kind of network cannot be used here.'),
+        findsOneWidget,
+      );
+
+      // A wrong password: the error is shown, still offline.
+      await h.choose(t, 'w0');
+      expect(find.text('Password for Living Room'), findsOneWidget);
+      await h.type(t, 'wrong');
+      expect(find.textContaining('Check the password'), findsOneWidget);
+      expect(h.flow.online, isFalse);
+
+      // The right one.
+      await h.choose(t, 'w0');
+      await h.type(t, 'correct horse');
+      expect(find.text('This computer is online.'), findsOneWidget);
+      expect(find.text('Connected'), findsOneWidget);
+      expect(
+        backend.calls.where((c) => c == 'connectWifi:Living Room').length,
+        2,
+      );
+
+      // An unsupported network cannot be chosen.
+      await h.moveTo(t, 'w3');
+      await h.accept(t);
+      expect(backend.calls.contains('connectWifi:Office (802.1X)'), isFalse);
+      expect(h.console(t).typing, isFalse);
+    });
+
+    testWidgets('an open Wi-Fi network joins without a password', (t) async {
+      final backend = FakeInstallerBackend(
+        state: const NetworkState(wifiAvailable: true),
+      );
+      final h = InstallerHarness(backend: backend);
+      await h.start(t);
+      await h.choose(t, 'w2'); // Cafe Guest
+      expect(h.console(t).typing, isFalse);
+      expect(h.flow.online, isTrue);
+      expect(h.flow.joinedSsid, 'Cafe Guest');
+    });
+  });
+
+  group('disk', () {
+    Future<InstallerHarness> toDisk(WidgetTester t) async {
+      final h = InstallerHarness();
+      await h.start(t);
+      await h.choose(t, 'actions', 1);
+      return h;
+    }
+
+    testWidgets(
+      'unusable disks are shown with the reason and cannot be chosen',
+      (t) async {
+        final h = await toDisk(t);
+        expect(find.textContaining('Example NVMe 512GB'), findsOneWidget);
+        expect(find.textContaining('Example SATA SSD 1TB'), findsOneWidget);
+        expect(find.textContaining('In use (mounted at /iso)'), findsOneWidget);
+        expect(find.textContaining('Removable drive'), findsOneWidget);
+        expect(
+          find.textContaining('Too small: at least 16 GB'),
+          findsOneWidget,
+        );
+        expect(find.text('Cannot be used'), findsNWidgets(3));
+        expect(buttonEnabled(t, 'Continue'), isFalse);
+
+        // Pressing accept on the stick (row d3) does nothing.
+        await h.moveTo(t, 'd3');
+        await h.accept(t);
+        expect(h.flow.disk, isNull);
+        expect(find.text('Warning'), findsNothing);
+
+        // The NVMe disk can.
+        await h.choose(t, 'd0');
+        expect(h.flow.disk!.path, '/dev/nvme0n1');
+        expect(buttonEnabled(t, 'Continue'), isTrue);
+      },
+    );
+
+    testWidgets('two confirmations, each can be answered "go back"', (t) async {
+      final h = await toDisk(t);
+      await h.choose(t, 'd0');
+
+      // First warning: the safe answer has the focus.
+      await h.choose(t, 'actions', 1);
+      expect(
+        find.text('Everything on this disk will be erased'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('cannot be undone'), findsOneWidget);
+      expect(h.focus, matches(RegExp(r'^modal-\d+/buttons:0$')));
+      await h.accept(t); // Go back
+      expect(find.text('Warning'), findsNothing);
+      expect(h.flow.step, InstallerStep.disk);
+
+      // Back (B) closes it, too.
+      await h.accept(t);
+      expect(find.text('Warning'), findsOneWidget);
+      await h.back(t);
+      expect(find.text('Warning'), findsNothing);
+      expect(h.flow.step, InstallerStep.disk);
+
+      // Yes to the first, no to the second.
+      await h.moveTo(t, 'actions', 1);
+      await h.accept(t);
+      await h.press(t, NavAction.right);
+      await h.accept(t); // I understand, continue
+      expect(
+        find.textContaining('Last check: erase Example NVMe'),
+        findsOneWidget,
+      );
+      expect(h.flow.step, InstallerStep.disk);
+      expect(h.focus, matches(RegExp(r'^modal-\d+/buttons:0$')));
+      await h.accept(t); // No, go back
+      expect(h.flow.step, InstallerStep.disk);
+      expect(find.text('Warning'), findsNothing);
+
+      // Yes to both.
+      await h.moveTo(t, 'actions', 1);
+      await h.accept(t);
+      await h.press(t, NavAction.right);
+      await h.accept(t);
+      await h.press(t, NavAction.right);
+      await h.accept(t); // Yes, erase this disk
+      expect(h.flow.step, InstallerStep.account);
+      expect(h.flow.disk!.name, 'nvme0n1');
+    });
+
+    testWidgets('no usable disk: an error and no way on', (t) async {
+      final h = InstallerHarness(
+        backend: FakeInstallerBackend(disks: [mockDisks()[3], mockDisks()[2]]),
+      );
+      await h.start(t);
+      await h.choose(t, 'actions', 1);
+      expect(
+        find.textContaining('None of the disks can be used'),
+        findsOneWidget,
+      );
+      expect(buttonEnabled(t, 'Continue'), isFalse);
+    });
+  });
+
+  group('admin account', () {
+    Future<InstallerHarness> toAccount(WidgetTester t) async {
+      final h = InstallerHarness();
+      await h.start(t);
+      h.flow.chooseDisk(mockDisks().first);
+      h.flow.go(InstallerStep.account);
+      await t.pumpAndSettle();
+      return h;
+    }
+
+    testWidgets('user name and password come from the on-screen keyboard', (
+      t,
+    ) async {
+      final h = await toAccount(t);
+      expect(buttonEnabled(t, 'Continue'), isFalse);
+      await h.choose(t, 'user');
+      expect(h.console(t).typing, isTrue);
+      await h.type(t, 'james');
+      expect(h.flow.username, 'james');
+      expect(find.text('james'), findsOneWidget);
+      // Never shown in the clear.
+      await h.choose(t, 'pw');
+      await h.type(t, 'sekrit-pass');
+      expect(find.text('sekrit-pass'), findsNothing);
+      expect(find.text('•' * 11), findsOneWidget);
+    });
+
+    testWidgets('a password that does not match is refused', (t) async {
+      final h = await toAccount(t);
+      await h.choose(t, 'user');
+      await h.type(t, 'james');
+      await h.choose(t, 'pw');
+      await h.type(t, 'longpassword1');
+      await h.choose(t, 'pw2');
+      await h.type(t, 'longpassword2');
+      expect(find.text('The two passwords are not the same.'), findsOneWidget);
+      expect(buttonEnabled(t, 'Continue'), isFalse);
+      // Accepting a disabled Continue does nothing.
+      await h.moveTo(t, 'actions');
+      await h.accept(t);
+      expect(h.flow.step, InstallerStep.account);
+
+      await h.choose(t, 'pw2');
+      await h.type(t, 'longpassword1');
+      expect(find.text('The two passwords are not the same.'), findsNothing);
+      expect(find.text('The account looks good.'), findsOneWidget);
+      expect(buttonEnabled(t, 'Continue'), isTrue);
+      await h.choose(t, 'actions');
+      expect(h.flow.step, InstallerStep.options);
+    });
+
+    testWidgets('bad names and short passwords are explained', (t) async {
+      final h = await toAccount(t);
+      await h.choose(t, 'user');
+      await h.type(t, 'root');
+      expect(find.textContaining('reserved for the system'), findsOneWidget);
+      await h.choose(t, 'user');
+      await h.type(t, 'Mixed Case');
+      expect(find.textContaining('lowercase letters'), findsOneWidget);
+      await h.choose(t, 'user');
+      await h.type(t, 'james');
+      await h.choose(t, 'pw');
+      await h.type(t, 'short');
+      expect(find.textContaining('at least 8 characters'), findsOneWidget);
+      expect(buttonEnabled(t, 'Continue'), isFalse);
+    });
+
+    testWidgets('View cancels an edit, the keyboard edits the existing text', (
+      t,
+    ) async {
+      final h = await toAccount(t);
+      await h.choose(t, 'user');
+      await h.console(t).keyboard!.type('abc');
+      await h.press(t, NavAction.view);
+      expect(h.console(t).typing, isFalse);
+      expect(h.flow.username, '');
+      // Editing starts from what is there; Backspace takes characters off.
+      h.flow.setUsername('james');
+      await t.pumpAndSettle();
+      await h.choose(t, 'user');
+      expect(find.byKey(const ValueKey('text-field')), findsOneWidget);
+      expect(
+        t
+            .widget<Text>(
+              find.descendant(
+                of: find.byKey(const ValueKey('text-field')),
+                matching: find.byType(Text),
+              ),
+            )
+            .data,
+        'james',
+      );
+    });
+  });
+
+  group('options', () {
+    Future<InstallerHarness> toOptions(WidgetTester t) async {
+      final h = InstallerHarness();
+      await h.start(t);
+      h.flow.go(InstallerStep.options);
+      await t.pumpAndSettle();
+      return h;
+    }
+
+    testWidgets(
+      'SSH is off by default, with its explanation; the toggle works',
+      (t) async {
+        final h = await toOptions(t);
+        expect(h.flow.ssh, isFalse);
+        expect(find.text('Enable SSH'), findsOneWidget);
+        expect(find.text('Off'), findsOneWidget);
+        expect(
+          find.textContaining('log in as the admin, with the password'),
+          findsOneWidget,
+        );
+        await h.choose(t, 'ssh');
+        expect(h.flow.ssh, isTrue);
+        expect(find.text('On'), findsOneWidget);
+        await h.choose(t, 'ssh');
+        expect(h.flow.ssh, isFalse);
+      },
+    );
+
+    testWidgets('host name defaults to hinteros; the channel toggles', (
+      t,
+    ) async {
+      final h = await toOptions(t);
+      expect(h.flow.hostname, 'hinteros');
+      expect(find.text('hinteros'), findsOneWidget);
+      expect(find.text('Stable'), findsOneWidget);
+      await h.choose(t, 'channel');
+      expect(find.text('Beta'), findsOneWidget);
+      await h.choose(t, 'host');
+      await h.type(t, 'Bad Name');
+      expect(
+        find.textContaining('lowercase letters, digits and hyphens'),
+        findsWidgets,
+      );
+      expect(buttonEnabled(t, 'Continue'), isFalse);
+      await h.choose(t, 'host');
+      await h.type(t, 'tv-box');
+      expect(buttonEnabled(t, 'Continue'), isTrue);
+    });
+  });
+
+  group('apps', () {
+    testWidgets('offline: online-only apps are disabled and say why', (
+      t,
+    ) async {
+      final h = InstallerHarness();
+      await h.start(t);
+      h.flow.go(InstallerStep.apps);
+      await t.pumpAndSettle();
+      expect(h.flow.apps!.selected, {'youtube', 'firefox'});
+      expect(
+        find.text('Needs internet'),
+        findsNWidgets(3),
+        reason: 'Steam, Plex, Moonlight',
+      );
+      final steam = h.flow.apps!.apps.indexWhere((a) => a.id == 'steam');
+      await h.choose(t, 'a$steam');
+      expect(h.flow.apps!.isSelected('steam'), isFalse);
+      expect(find.text('Read and accept'), findsNothing);
+      // The ISO's apps still work.
+      await h.choose(t, 'a0'); // Jellyfin
+      expect(h.flow.apps!.isSelected('jellyfin'), isTrue);
+    });
+
+    testWidgets('online: Steam needs its terms accepted before Continue', (
+      t,
+    ) async {
+      final h = InstallerHarness(backend: FakeInstallerBackend(state: online));
+      await h.start(t);
+      h.flow.go(InstallerStep.apps);
+      await t.pumpAndSettle();
+      expect(find.text('Needs internet'), findsNothing);
+      final steam = h.flow.apps!.apps.indexWhere((a) => a.id == 'steam');
+      await h.choose(t, 'a$steam');
+      expect(h.flow.apps!.isSelected('steam'), isTrue);
+      expect(buttonEnabled(t, 'Continue'), isFalse);
+      await h.choose(t, 'terms0');
+      expect(find.text('Terms for Steam'), findsOneWidget);
+      for (var i = 0; i < 60 && !buttonEnabled(t, 'Accept and install'); i++) {
+        await h.press(t, NavAction.pageRight);
+      }
+      await h.press(t, NavAction.down);
+      await h.press(t, NavAction.right);
+      await h.accept(t);
+      expect(h.flow.apps!.termsComplete, isTrue);
+      expect(buttonEnabled(t, 'Continue'), isTrue);
+    });
+
+    testWidgets('going offline drops apps that were ticked while online', (
+      t,
+    ) async {
+      final h = InstallerHarness(backend: FakeInstallerBackend(state: online));
+      await h.start(t);
+      await h.flow.loadCatalog();
+      h.flow.apps!.toggle('plex-htpc');
+      expect(h.flow.apps!.isSelected('plex-htpc'), isTrue);
+      h.backend.state = const NetworkState();
+      await h.flow.refreshNetwork();
+      expect(h.flow.apps!.selected, {'youtube', 'firefox'});
+    });
+  });
+
+  group('the plan', () {
+    /// Fills in everything, as a person would.
+    Future<InstallerHarness> toSummary(
+      WidgetTester t, {
+      FakeInstallerBackend? backend,
+      void Function(InstallerFlow f)? tweak,
+    }) async {
+      final h = InstallerHarness(backend: backend);
+      await h.pump(t);
+      await h.flow.refreshNetwork();
+      await h.flow.loadCatalog();
+      await h.flow.loadDisks();
+      h.flow.chooseDisk(h.flow.disks!.first);
+      h.flow.setUsername('james');
+      h.flow.setPassword('change-me-now');
+      h.flow.setRepeat('change-me-now');
+      tweak?.call(h.flow);
+      h.flow.go(InstallerStep.summary);
+      await t.pumpAndSettle();
+      return h;
+    }
+
+    testWidgets('offline default: exactly the backend format', (t) async {
+      final h = await toSummary(t);
+      expect(find.text('erased completely'), findsOneWidget);
+      expect(h.flow.buildPlan().toJson(), {
+        'disk': '/dev/nvme0n1',
+        'hostname': 'hinteros',
+        'admin': {'user': 'james', 'password': 'change-me-now'},
+        'ssh': {'enable': false},
+        'channel': 'stable',
+        'base': 'unstable',
+        'network': 'offline',
+        'apps': ['youtube', 'firefox'],
+      });
+    });
+
+    testWidgets('online with Steam, SSH, beta and a joined Wi-Fi network', (
+      t,
+    ) async {
+      final backend = FakeInstallerBackend(
+        state: const NetworkState(wifiAvailable: true),
+        wifiPasswords: {'Living Room': 'correct horse'},
+      );
+      final h = await toSummary(
+        t,
+        backend: backend,
+        tweak: (f) {
+          f.toggleSsh();
+          f.toggleChannel();
+          f.setHostname('tv-box');
+        },
+      );
+      await h.flow.joinWifi(
+        (await backend.scanWifi()).first,
+        psk: 'correct horse',
+      );
+      final steam = h.flow.apps!.apps.firstWhere((a) => a.id == 'steam');
+      h.flow.apps!.toggle('steam');
+      h.flow.apps!.accept(steam);
+      expect(h.flow.buildPlan().toJson(), {
+        'disk': '/dev/nvme0n1',
+        'hostname': 'tv-box',
+        'admin': {'user': 'james', 'password': 'change-me-now'},
+        'ssh': {'enable': true},
+        'channel': 'beta',
+        'base': 'unstable',
+        'network': 'online',
+        'apps': ['youtube', 'firefox', 'steam'],
+        'wifi': {'ssid': 'Living Room', 'psk': 'correct horse'},
+      });
+    });
+
+    testWidgets('wired and only apps from the ISO: network auto', (t) async {
+      final h = await toSummary(
+        t,
+        backend: FakeInstallerBackend(state: online),
+      );
+      final j = h.flow.buildPlan().toJson();
+      expect(j['network'], 'auto');
+      expect(j.containsKey('wifi'), isFalse);
+    });
+  });
+
+  group('install', () {
+    Future<InstallerHarness> toSummary(
+      WidgetTester t, {
+      FakeInstallerBackend? backend,
+    }) async {
+      final h = InstallerHarness(backend: backend);
+      await h.pump(t);
+      await h.flow.refreshNetwork();
+      await h.flow.loadCatalog();
+      await h.flow.loadDisks();
+      h.flow.chooseDisk(h.flow.disks!.first);
+      h.flow.setUsername('james');
+      h.flow.setPassword('change-me-now');
+      h.flow.setRepeat('change-me-now');
+      h.flow.go(InstallerStep.summary);
+      await t.pumpAndSettle();
+      return h;
+    }
+
+    testWidgets('a whole install: validate, install, Done, restart', (t) async {
+      final backend = FakeInstallerBackend();
+      final h = await toSummary(t, backend: backend);
+      expect(find.text('Install HinterOS'), findsOneWidget);
+      expect(
+        h.focus,
+        'content/actions:0',
+        reason: 'Back has the focus, not Install',
+      );
+      await h.choose(t, 'actions', 1);
+
+      expect(backend.calls.where((c) => c == 'validate' || c == 'install'), [
+        'validate',
+        'install',
+      ]);
+      // Both calls got the same plan, on stdin.
+      expect(backend.plans.length, 2);
+      expect(backend.plans[0], backend.plans[1]);
+      expect(backend.plans[1]['admin'], {
+        'user': 'james',
+        'password': 'change-me-now',
+      });
+      expect(h.flow.step, InstallerStep.done);
+      expect(find.text('HinterOS is installed'), findsOneWidget);
+      expect(find.textContaining('Remove the USB stick'), findsOneWidget);
+      expect(
+        find.textContaining('general drivers'),
+        findsOneWidget,
+        reason: 'the warning',
+      );
+      expect(h.flow.password, isEmpty, reason: 'wiped after the install');
+
+      expect(backend.rebooted, isFalse);
+      await h.accept(t); // Restart now
+      expect(backend.rebooted, isTrue);
+      expect(find.text('Restarting...'), findsOneWidget);
+    });
+
+    testWidgets('progress: stage, percent, warnings, no Back while it runs', (
+      t,
+    ) async {
+      final backend = FakeInstallerBackend(
+        delay: const Duration(milliseconds: 100),
+      );
+      final h = await toSummary(t, backend: backend);
+      await h.choose(t, 'actions', 1);
+      expect(h.flow.phase, InstallPhase.validating);
+      expect(find.text('Checking your choices'), findsOneWidget);
+
+      // Part-way through the install: the warning and a percentage.
+      for (var i = 0; i < 80 && h.flow.percent < 57; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      expect(h.flow.phase, InstallPhase.installing);
+      expect(find.text('Installing HinterOS'), findsWidgets);
+      expect(
+        t.widget<Text>(find.byKey(const ValueKey('percent'))).data,
+        '${h.flow.percent}%',
+      );
+      expect(h.flow.progressStage, 'install');
+      expect(find.textContaining('general drivers'), findsOneWidget);
+      await h.back(t);
+      expect(
+        h.flow.step,
+        InstallerStep.install,
+        reason: 'Back is off while installing',
+      );
+      for (var i = 0; i < 80 && h.flow.running; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      await t.pumpAndSettle();
+      expect(h.flow.phase, InstallPhase.succeeded);
+    });
+
+    testWidgets('exit 2: refused, nothing touched; try again', (t) async {
+      final backend = FakeInstallerBackend()
+        ..validateScript = FakeScript.refused(
+          'disk-in-use',
+          '/dev/nvme0n1 is in use (mounted at: /iso)',
+        );
+      final h = await toSummary(t, backend: backend);
+      await h.choose(t, 'actions', 1);
+      expect(h.flow.phase, InstallPhase.refused);
+      expect(h.flow.outcome!.exitCode, 2);
+      expect(find.text('The install did not start'), findsOneWidget);
+      expect(find.text('Nothing was changed on your disk.'), findsOneWidget);
+      expect(find.textContaining('Choose a different disk'), findsOneWidget);
+      expect(find.textContaining('(disk-in-use)'), findsOneWidget);
+      expect(
+        find.textContaining('/var/log/hinteros-install.log'),
+        findsOneWidget,
+      );
+      expect(
+        backend.calls.contains('install'),
+        isFalse,
+        reason: 'never got to install',
+      );
+      expect(h.focus, 'content/actions:0');
+
+      // Try again, now it passes.
+      backend.validateScript = null;
+      await h.accept(t);
+      expect(h.flow.step, InstallerStep.done);
+      expect(backend.calls.where((c) => c == 'validate').length, 2);
+    });
+
+    testWidgets('exit 1: failed part-way; Change my choices', (t) async {
+      final backend = FakeInstallerBackend()
+        ..installScript = FakeScript.failed();
+      final h = await toSummary(t, backend: backend);
+      await h.choose(t, 'actions', 1);
+      expect(h.flow.phase, InstallPhase.failed);
+      expect(h.flow.outcome!.exitCode, 1);
+      expect(find.text('The install did not finish'), findsOneWidget);
+      expect(find.textContaining('stopped part of the way'), findsOneWidget);
+      expect(
+        find.textContaining('Installing the system failed'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('(install-failed)'), findsOneWidget);
+      expect(
+        find.textContaining('/var/log/hinteros-install.log'),
+        findsWidgets,
+      );
+      expect(backend.calls, containsAllInOrder(['validate', 'install']));
+
+      await h.choose(t, 'actions', 1); // Change my choices
+      expect(h.flow.step, InstallerStep.summary);
+      expect(h.flow.phase, InstallPhase.idle);
+      expect(h.flow.password, 'change-me-now', reason: 'kept for another try');
+    });
+
+    testWidgets('the password is never printed or shown', (t) async {
+      final lines = <String>[];
+      final old = debugPrint;
+      debugPrint = (m, {wrapWidth}) => lines.add(m ?? '');
+      final InstallerHarness h;
+      try {
+        h = await toSummary(t);
+        await h.choose(t, 'actions', 1);
+      } finally {
+        debugPrint = old;
+      }
+      expect(lines.join(), isNot(contains('change-me-now')));
+      expect(find.textContaining('change-me-now'), findsNothing);
+    });
+
+    testWidgets('typing with the controller on the in-app keyboard', (t) async {
+      final h = InstallerHarness();
+      await h.start(t);
+      h.flow.go(InstallerStep.account);
+      await t.pumpAndSettle();
+      await h.choose(t, 'user');
+      expect(find.text('Typed text appears here'), findsOneWidget);
+      // The keyboard starts on Q; the controller moves around it.
+      expect(h.focus, 'osk/r1:0');
+      await h.press(t, NavAction.down); // A
+      expect(h.focus, 'osk/r2:0');
+      await h.accept(t);
+      await h.press(t, NavAction.right); // S
+      await h.accept(t);
+      await h.press(t, NavAction.right); // D
+      await h.accept(t);
+      expect(h.console(t).keyboard!.text.value, 'asd');
+      await h.press(t, NavAction.back); // B is Backspace
+      expect(h.console(t).keyboard!.text.value, 'as');
+      await h.press(t, NavAction.secondary); // X is Space
+      expect(h.console(t).keyboard!.text.value, 'as ');
+      // Down to the bottom row, along to Done.
+      await h.press(t, NavAction.down);
+      await h.press(t, NavAction.down);
+      expect(h.focus, startsWith('osk/bottom:'));
+      for (var i = 0; i < 12 && h.focus != 'osk/bottom:5'; i++) {
+        await h.press(t, NavAction.right);
+      }
+      await h.accept(t);
+      expect(h.console(t).typing, isFalse);
+      expect(h.flow.username, 'as ');
+    });
+  });
+}

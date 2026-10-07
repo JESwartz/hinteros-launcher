@@ -1,0 +1,199 @@
+import 'package:flutter/material.dart';
+
+import '../../theme/hinter_theme.dart';
+import '../../ui/widgets.dart';
+import '../flow.dart';
+import '../progress.dart';
+import 'steps.dart';
+
+/// The install itself: the stages in plain words, a percentage, warnings,
+/// and on error what it means, where the log is, and Try again / Back.
+class InstallStepView extends StatelessWidget {
+  const InstallStepView({super.key, required this.env});
+
+  final StepEnv env;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: env.flow,
+      builder: (context, _) {
+        final f = env.flow;
+        final t = HinterTheme.of(context);
+        final p = Pane(env.region);
+        switch (f.phase) {
+          case InstallPhase.idle:
+          case InstallPhase.validating:
+          case InstallPhase.installing:
+          case InstallPhase.succeeded:
+            _running(context, f, p);
+          case InstallPhase.refused:
+          case InstallPhase.failed:
+            _failure(context, f, p);
+        }
+        final title = switch (f.phase) {
+          InstallPhase.refused => 'The install did not start',
+          InstallPhase.failed => 'The install did not finish',
+          _ => 'Installing HinterOS',
+        };
+        return StepPage(
+          step: InstallerStep.install,
+          title: title,
+          subtitle: f.running
+              ? 'This takes a few minutes. Do not turn the computer off.'
+              : null,
+          child: scrolling(DefaultTextStyle(style: t.body, child: p.build())),
+        );
+      },
+    );
+  }
+
+  void _running(BuildContext context, InstallerFlow f, Pane p) {
+    final t = HinterTheme.of(context);
+    // Nothing to press while it runs: Back is off, too.
+    env.region.setRows(const []);
+    final current = installStages.indexOf(f.progressStage);
+    p.add(
+      Row(
+        children: [
+          Expanded(child: HBar(fraction: f.percent / 100, height: 28)),
+          const SizedBox(width: HinterTokens.s3),
+          SizedBox(
+            width: 120,
+            child: Text(
+              '${f.percent}%',
+              key: const ValueKey('percent'),
+              textAlign: TextAlign.right,
+              style: t.title,
+            ),
+          ),
+        ],
+      ),
+    );
+    p.add(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < installStages.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: HinterTokens.s1),
+              child: Row(
+                children: [
+                  CheckMark(checked: i < current, size: 32),
+                  const SizedBox(width: HinterTokens.s2),
+                  Text(
+                    stageLabel(installStages[i]),
+                    style: i == current
+                        ? t.label.copyWith(color: t.accent)
+                        : (i < current ? t.body : t.bodyDim),
+                  ),
+                  if (i == current) ...[
+                    const SizedBox(width: HinterTokens.s2),
+                    Text('now', style: t.caption),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ),
+      gap: HinterTokens.s3,
+    );
+    if (f.progressMessage.isNotEmpty) {
+      p.add(Text(f.progressMessage, style: t.caption), gap: HinterTokens.s1);
+    }
+    for (final w in f.warnings) {
+      p.add(
+        StatusLine('${explainCode(w.code)} (${w.message})'),
+        gap: HinterTokens.s2,
+      );
+    }
+  }
+
+  void _failure(BuildContext context, InstallerFlow f, Pane p) {
+    final t = HinterTheme.of(context);
+    final o = f.outcome;
+    final e = o?.error;
+    final refused = f.phase == InstallPhase.refused;
+    p.add(
+      StatusLine(
+        refused
+            ? 'Nothing was changed on your disk.'
+            : 'The install stopped part of the way. The disk may have been '
+                  'changed and the computer may not start HinterOS yet. '
+                  'Trying again starts over.',
+        error: !refused,
+      ),
+    );
+    p.add(Text(explainCode(e?.code), style: t.title), gap: HinterTokens.s3);
+    if (e != null) {
+      p.add(
+        Text(
+          'Details: ${e.message}${e.code != null ? ' (${e.code})' : ''}',
+          style: t.bodyDim,
+        ),
+        gap: HinterTokens.s2,
+      );
+    }
+    p.add(
+      Text('The full log is in $installLogPath', style: t.caption),
+      gap: HinterTokens.s2,
+    );
+    p.buttons('actions', [
+      btn('Try again', f.startInstall, primary: true),
+      btn('Change my choices', f.leaveFailure),
+    ], gap: HinterTokens.s4);
+  }
+}
+
+/// The last screen: remove the stick, restart.
+class DoneStepView extends StatefulWidget {
+  const DoneStepView({super.key, required this.env});
+
+  final StepEnv env;
+
+  @override
+  State<DoneStepView> createState() => _DoneStepViewState();
+}
+
+class _DoneStepViewState extends State<DoneStepView> {
+  bool _restarting = false;
+
+  Future<void> _reboot() async {
+    setState(() => _restarting = true);
+    await widget.env.flow.reboot();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final env = widget.env;
+    final t = HinterTheme.of(context);
+    final f = env.flow;
+    final p = Pane(env.region);
+    p.add(
+      Text(
+        'Remove the USB stick, then restart. The computer starts HinterOS '
+        'from its disk.',
+        style: t.title,
+      ),
+    );
+    for (final w in f.warnings) {
+      p.add(
+        StatusLine('${explainCode(w.code)} (${w.message})'),
+        gap: HinterTokens.s2,
+      );
+    }
+    if (_restarting) {
+      p.add(const StatusLine('Restarting...'), gap: HinterTokens.s3);
+      env.region.setRows(const []);
+    } else {
+      p.buttons('actions', [
+        btn('Restart now', _reboot, primary: true),
+      ], gap: HinterTokens.s4);
+    }
+    return StepPage(
+      step: InstallerStep.done,
+      title: 'HinterOS is installed',
+      child: scrolling(p.build()),
+    );
+  }
+}

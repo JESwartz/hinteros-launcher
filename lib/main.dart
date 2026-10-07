@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'osk_main.dart';
+import 'src/installer/installer_main.dart';
 import 'src/api/api.dart';
 import 'src/app.dart';
 import 'src/settings/launcher_settings.dart';
@@ -29,6 +30,11 @@ bool _flag(List<String> args, String flag, String env) =>
 Future<void> main(List<String> args) async {
   // One binary, two apps: `--osk` (the hinteros-osk wrapper) is the keyboard.
   if (args.contains('--osk')) return runOsk(args);
+  // The installer (ISO) and the first-boot wizard are modes of the same
+  // binary too: controller-only, no session daemon needed for the installer.
+  if (wantsInstaller(args) || wantsFirstBoot(args)) {
+    return runInstallerMode(args);
+  }
   WidgetsFlutterBinding.ensureInitialized();
   final showFps = _flag(args, '--fps', 'HINTEROS_FPS');
   final mock = _flag(args, '--mock', 'HINTEROS_MOCK');
