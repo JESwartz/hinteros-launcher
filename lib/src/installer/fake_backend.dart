@@ -62,6 +62,58 @@ class FakeScript {
     _e('done', 100, 'HinterOS is installed. Remove the installer medium.'),
   ], 0);
 
+  /// A whole two-stage install: the system, then each of [apps]; the ones
+  /// in [failing] end with an `app-failed` warning (the exit status stays 0).
+  static FakeScript twoStage(
+    List<String> apps, {
+    List<String> failing = const [],
+  }) {
+    InstallEvent sys(String stage, int pct, String m) => InstallEvent(
+      stage: stage,
+      percent: pct,
+      level: InstallLevel.info,
+      message: m,
+    );
+    InstallEvent app(int pct, String m, String id, [String? code]) =>
+        InstallEvent(
+          stage: 'install',
+          percent: pct,
+          level: code == null ? InstallLevel.info : InstallLevel.warn,
+          message: m,
+          code: code,
+          phase: InstallSection.apps,
+          app: id,
+        );
+    final n = apps.length;
+    return FakeScript([
+      sys('validate', 0, 'Checking the plan'),
+      sys('validate', 8, 'Plan accepted'),
+      sys('partition', 20, 'Disk is partitioned and mounted'),
+      sys('config', 30, 'Device configuration written'),
+      sys('install', 57, 'Installing the system'),
+      sys('snapshot', 90, 'Checking the config snapshot'),
+      sys('finalize', 97, 'System installed'),
+      for (var i = 0; i < n; i++) ...[
+        app(97 + 3 * i ~/ n, 'Installing ${apps[i]}', apps[i]),
+        if (failing.contains(apps[i]))
+          app(
+            97 + 3 * (i + 1) ~/ n,
+            '${apps[i]} could not be installed',
+            apps[i],
+            'app-failed',
+          ),
+      ],
+      InstallEvent(
+        stage: 'done',
+        percent: 100,
+        level: InstallLevel.info,
+        message: 'HinterOS is installed. Remove the installer medium.',
+        phase: InstallSection.apps,
+        failedApps: failing,
+      ),
+    ], 0);
+  }
+
   /// The plan or machine is refused: exit 2, nothing touched.
   static FakeScript refused(String code, String message) => FakeScript([
     _e('validate', 0, 'Checking the plan'),
@@ -108,6 +160,10 @@ class FakeInstallerBackend implements InstallerBackend {
   /// between calls to script a retry.
   FakeScript? validateScript;
   FakeScript? installScript;
+
+  /// Builds the install script from the plan (the apps it names), when
+  /// [installScript] is not set.
+  FakeScript Function(InstallPlan plan)? installScriptFor;
 
   /// Pause between progress lines (the desktop mock is slow on purpose).
   Duration delay;
@@ -193,8 +249,11 @@ class FakeInstallerBackend implements InstallerBackend {
       _run('validate', plan, validateScript ?? FakeScript.validateOk);
 
   @override
-  InstallRun install(InstallPlan plan) =>
-      _run('install', plan, installScript ?? FakeScript.installOk);
+  InstallRun install(InstallPlan plan) => _run(
+    'install',
+    plan,
+    installScript ?? installScriptFor?.call(plan) ?? FakeScript.installOk,
+  );
 
   @override
   Future<void> reboot() async => calls.add('reboot');

@@ -31,6 +31,7 @@ bool wantsFirstBoot(List<String> args) =>
 ///  - `offline`: no network at all
 ///  - `online`: a cable is connected
 ///  - `refused`: the backend refuses the plan (exit 2, `disk-in-use`)
+///  - `apps-failed`: the system installs, then the first picked app fails
 ///  - `failed`: the install fails part-way (exit 1, `install-failed`)
 FakeInstallerBackend mockBackend(String scenario) {
   final b = FakeInstallerBackend(
@@ -46,6 +47,12 @@ FakeInstallerBackend mockBackend(String scenario) {
             online: true,
           )
         : const NetworkState(wifiAvailable: true),
+  );
+  b.installScriptFor = (plan) => FakeScript.twoStage(
+    plan.apps,
+    failing: scenario == 'apps-failed' && plan.apps.isNotEmpty
+        ? [plan.apps.first]
+        : const [],
   );
   switch (scenario) {
     case 'refused':

@@ -52,62 +52,132 @@ class InstallStepView extends StatelessWidget {
     final t = HinterTheme.of(context);
     // Nothing to press while it runs: Back is off, too.
     env.region.setRows(const []);
+    final inApps = f.section == InstallSection.apps;
     final current = installStages.indexOf(f.progressStage);
-    p.add(
-      Row(
-        children: [
-          Expanded(child: HBar(fraction: f.percent / 100, height: 28)),
-          const SizedBox(width: HinterTokens.s3),
-          SizedBox(
-            width: 120,
-            child: Text(
-              '${f.percent}%',
-              key: const ValueKey('percent'),
-              textAlign: TextAlign.right,
-              style: t.title,
-            ),
-          ),
-        ],
-      ),
-    );
-    p.add(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < installStages.length; i++)
-            Padding(
-              padding: const EdgeInsets.only(bottom: HinterTokens.s1),
-              child: Row(
-                children: [
-                  CheckMark(checked: i < current, size: 32),
-                  const SizedBox(width: HinterTokens.s2),
-                  Text(
-                    stageLabel(installStages[i]),
-                    style: i == current
-                        ? t.label.copyWith(color: t.accent)
-                        : (i < current ? t.body : t.bodyDim),
-                  ),
-                  if (i == current) ...[
+    p.add(_sectionHeader(t, 'Installing HinterOS', f.systemPercent, 'percent'));
+    if (!inApps) {
+      p.add(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < installStages.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: HinterTokens.s1),
+                child: Row(
+                  children: [
+                    CheckMark(checked: i < current, size: 32),
                     const SizedBox(width: HinterTokens.s2),
-                    Text('now', style: t.caption),
+                    Text(
+                      stageLabel(installStages[i]),
+                      style: i == current
+                          ? t.label.copyWith(color: t.accent)
+                          : (i < current ? t.body : t.bodyDim),
+                    ),
+                    if (i == current) ...[
+                      const SizedBox(width: HinterTokens.s2),
+                      Text('now', style: t.caption),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-        ],
-      ),
-      gap: HinterTokens.s3,
-    );
-    if (f.progressMessage.isNotEmpty) {
-      p.add(Text(f.progressMessage, style: t.caption), gap: HinterTokens.s1);
+          ],
+        ),
+        gap: HinterTokens.s2,
+      );
+      if (f.progressMessage.isNotEmpty) {
+        p.add(Text(f.progressMessage, style: t.caption), gap: HinterTokens.s1);
+      }
+    }
+    final appRows = f.appProgress;
+    if (appRows.isNotEmpty) {
+      p.add(
+        _sectionHeader(t, 'Installing apps', f.appsPercent, 'apps-percent'),
+        gap: HinterTokens.s4,
+      );
+      p.add(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final a in appRows)
+              Padding(
+                key: ValueKey('app-${a.id}'),
+                padding: const EdgeInsets.only(bottom: HinterTokens.s1),
+                child: Row(
+                  children: [
+                    CheckMark(
+                      checked: a.state == AppInstallState.done,
+                      size: 32,
+                    ),
+                    const SizedBox(width: HinterTokens.s2),
+                    Text(
+                      a.name,
+                      style: switch (a.state) {
+                        AppInstallState.installing => t.label.copyWith(
+                          color: t.accent,
+                        ),
+                        AppInstallState.waiting => t.bodyDim,
+                        _ => t.body,
+                      },
+                    ),
+                    const SizedBox(width: HinterTokens.s2),
+                    Text(
+                      switch (a.state) {
+                        AppInstallState.waiting => 'waiting',
+                        AppInstallState.installing => 'installing',
+                        AppInstallState.done => 'done',
+                        AppInstallState.failed => 'failed',
+                      },
+                      style: a.state == AppInstallState.failed
+                          ? t.caption.copyWith(color: t.danger)
+                          : t.caption,
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        gap: HinterTokens.s2,
+      );
+      if (inApps && f.progressMessage.isNotEmpty) {
+        p.add(Text(f.progressMessage, style: t.caption), gap: HinterTokens.s1);
+      }
     }
     for (final w in f.warnings) {
+      if (w.code == 'app-failed') continue; // shown on the app's own row
       p.add(
         StatusLine('${explainCode(w.code)} (${w.message})'),
         gap: HinterTokens.s2,
       );
     }
   }
+
+  Widget _sectionHeader(
+    HinterTokens t,
+    String title,
+    int percent,
+    String key,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(title, style: t.title),
+      const SizedBox(height: HinterTokens.s1),
+      Row(
+        children: [
+          Expanded(child: HBar(fraction: percent / 100, height: 28)),
+          const SizedBox(width: HinterTokens.s3),
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$percent%',
+              key: ValueKey(key),
+              textAlign: TextAlign.right,
+              style: t.title,
+            ),
+          ),
+        ],
+      ),
+    ],
+  );
 
   void _failure(BuildContext context, InstallerFlow f, Pane p) {
     final t = HinterTheme.of(context);
@@ -176,7 +246,18 @@ class _DoneStepViewState extends State<DoneStepView> {
         style: t.title,
       ),
     );
+    final failedApps = f.failedAppNames;
+    if (failedApps.isNotEmpty) {
+      p.add(
+        StatusLine(
+          "HinterOS is installed. These apps couldn't be installed and can be "
+          "added later from the Store: ${failedApps.join(', ')}",
+        ),
+        gap: HinterTokens.s3,
+      );
+    }
     for (final w in f.warnings) {
+      if (w.code == 'app-failed') continue;
       p.add(
         StatusLine('${explainCode(w.code)} (${w.message})'),
         gap: HinterTokens.s2,

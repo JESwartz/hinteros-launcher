@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart';
@@ -22,6 +24,7 @@ void main() {
     String name, {
     FakeInstallerBackend? backend,
     LauncherSettings settings = const LauncherSettings(),
+    bool settle = true,
     required Future<void> Function(InstallerHarness h) setup,
   }) async {
     final h = InstallerHarness(backend: backend, settings: settings);
@@ -30,7 +33,8 @@ void main() {
     await h.flow.loadCatalog();
     await h.flow.loadDisks();
     await setup(h);
-    await t.pumpAndSettle();
+    // A running install must not move on while the screen settles.
+    if (settle) await t.pumpAndSettle();
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/installer_${name}_1080p.png'),
@@ -263,6 +267,66 @@ void main() {
     await shot(
       t,
       'done',
+      setup: (h) async {
+        await filled(h, t);
+        await h.choose(t, 'actions', 1);
+      },
+    );
+  });
+
+  /// A two-stage install.
+  FakeInstallerBackend twoStage({
+    List<String> failing = const [],
+    Duration delay = const Duration(milliseconds: 50),
+  }) =>
+      FakeInstallerBackend(delay: delay)
+        ..installScriptFor = (plan) =>
+            FakeScript.twoStage(plan.apps, failing: failing);
+
+  Future<void> install(
+    InstallerHarness h,
+    WidgetTester t,
+    bool Function() until,
+  ) async {
+    await filled(h, t);
+    h.flow.go(InstallerStep.install);
+    unawaited(h.flow.startInstall());
+    for (var i = 0; i < 600 && !until(); i++) {
+      await t.pump(const Duration(milliseconds: 10));
+    }
+  }
+
+  testWidgets('progress, system stage (apps waiting)', (t) async {
+    await shot(
+      t,
+      'progress_system',
+      backend: twoStage(),
+      settle: false,
+      setup: (h) => install(h, t, () => h.flow.percent >= 57),
+    );
+    await t.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('progress, apps stage with a failed app', (t) async {
+    await shot(
+      t,
+      'progress_apps',
+      backend: twoStage(failing: ['firefox']),
+      settle: false,
+      setup: (h) => install(
+        h,
+        t,
+        () => h.flow.appProgress.last.state == AppInstallState.installing,
+      ),
+    );
+    await t.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('done, some apps could not be installed', (t) async {
+    await shot(
+      t,
+      'done_failed_apps',
+      backend: twoStage(failing: ['youtube'], delay: Duration.zero),
       setup: (h) async {
         await filled(h, t);
         await h.choose(t, 'actions', 1);

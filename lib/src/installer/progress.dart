@@ -11,6 +11,10 @@ const installLogPath = '/var/log/hinteros-install.log';
 
 enum InstallLevel { info, warn, error }
 
+/// The install runs in two stages: the HinterOS base system, then the apps
+/// the person picked.
+enum InstallSection { system, apps }
+
 class InstallEvent {
   const InstallEvent({
     required this.stage,
@@ -18,6 +22,9 @@ class InstallEvent {
     required this.level,
     required this.message,
     this.code,
+    this.phase = InstallSection.system,
+    this.app,
+    this.failedApps = const [],
   });
 
   final String stage;
@@ -27,6 +34,16 @@ class InstallEvent {
 
   /// Set on error lines (and on some warnings): see [explainCode].
   final String? code;
+
+  /// Which of the two installs this line belongs to. Lines without a `phase`
+  /// (older backends) count as the system.
+  final InstallSection phase;
+
+  /// The app an apps-phase line is about, when it names one.
+  final String? app;
+
+  /// On the final `done` line: the apps that could not be installed.
+  final List<String> failedApps;
 
   bool get isError => level == InstallLevel.error;
   bool get isWarning => level == InstallLevel.warn;
@@ -59,7 +76,12 @@ InstallEvent? parseProgressLine(String line) {
     _ => InstallLevel.info,
   };
   final code = j['code'];
+  final app = j['app'];
+  final failed = j['failed_apps'];
   return InstallEvent(
+    phase: j['phase'] == 'apps' ? InstallSection.apps : InstallSection.system,
+    app: app is String && app.isNotEmpty ? app : null,
+    failedApps: failed is List ? failed.whereType<String>().toList() : const [],
     stage: stage,
     percent: percent,
     level: level,
@@ -165,6 +187,9 @@ String explainCode(String? code) => switch (code) {
   'no-network' =>
     'The installer needs the internet for the apps you '
         'picked, but could not reach it. Check the cable or the Wi-Fi.',
+  'app-failed' =>
+    'An app could not be installed. HinterOS itself is fine, and the app '
+        'can be added later from the Store.',
   'wifi-invalid' => 'The Wi-Fi details cannot be used.',
   'wifi-failed' =>
     'The Wi-Fi connection did not work. The install goes on '
