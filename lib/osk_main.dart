@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 
 import 'src/api/api.dart';
+import 'src/installer/evdev_keyboard.dart';
 import 'src/osk/osk_backend.dart';
 import 'src/osk/osk_screen.dart';
 import 'src/settings/launcher_settings.dart';
@@ -43,5 +44,13 @@ Future<void> runOsk(List<String> args) async {
   backend.visibility.listen((visible) async {
     if (visible) settings.value = await storage.load();
   });
-  runApp(OskApp(backend: backend, settings: settings));
+  // The keystrokes of a real keyboard go to the focused app, not to us: read
+  // them (read-only, never grabbed) while the keyboard is up, only to show
+  // which key was pressed.
+  EvdevKeyboard? echo;
+  if (!mock) {
+    echo = EvdevKeyboard();
+    backend.visibility.listen((v) => v ? echo!.start() : echo!.stop());
+  }
+  runApp(OskApp(backend: backend, settings: settings, echoKeys: echo?.keys));
 }

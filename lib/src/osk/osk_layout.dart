@@ -121,3 +121,37 @@ List<OskRow> oskLayout(OskPage page, ShiftState shift) {
       ];
   }
 }
+
+/// Where a key sits: the page it is on and its row (index into
+/// [oskLayout]) and column.
+typedef OskKeyPos = ({OskPage page, int row, int col});
+
+/// The key a physical key press corresponds to, for visual feedback only:
+/// a printable [char] (case ignored for letters, so a capital finds the same
+/// key), or else a [kind] (Space, Backspace, Enter, Tab). The current [page]
+/// is preferred, so a key that is on this page stays where it is; otherwise
+/// the first page that has it. Null when the keyboard has no such key.
+OskKeyPos? oskLocate({
+  String? char,
+  KeyKind? kind,
+  required OskPage page,
+  required ShiftState shift,
+}) {
+  final pages = [page, ...OskPage.values.where((p) => p != page)];
+  for (final p in pages) {
+    final rows = oskLayout(p, shift);
+    for (var r = 0; r < rows.length; r++) {
+      final keys = rows[r].keys;
+      for (var c = 0; c < keys.length; c++) {
+        final k = keys[c];
+        final hit = kind != null
+            ? k.kind == kind
+            : k.kind == KeyKind.char &&
+                  char != null &&
+                  k.value!.toLowerCase() == char.toLowerCase();
+        if (hit) return (page: p, row: r, col: c);
+      }
+    }
+  }
+  return null;
+}

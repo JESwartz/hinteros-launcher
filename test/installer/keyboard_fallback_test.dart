@@ -151,6 +151,16 @@ void main() {
       expect(fs.opened, isNot(contains('event3')), reason: 'the pad');
     });
 
+    hot('stop lets go of the devices, start reads them again', (t) async {
+      await setUp(t);
+      kb.stop();
+      expect(kb.devices, isEmpty);
+      kb.start();
+      expect(kb.devices, {'event4'});
+      kb.start(); // twice is harmless
+      expect(kb.devices, {'event4'});
+    });
+
     hot('keys come through, typed with shift', (t) async {
       await setUp(t);
       fs.send('event4', [

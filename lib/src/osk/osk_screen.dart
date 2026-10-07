@@ -26,9 +26,17 @@ const oskPanelShare = 0.4;
 /// docked at the bottom. Fully transparent outside the panel (the native
 /// window has an ARGB visual, see linux/runner).
 class OskApp extends StatelessWidget {
-  const OskApp({super.key, required this.backend, required this.settings});
+  const OskApp({
+    super.key,
+    required this.backend,
+    required this.settings,
+    this.echoKeys,
+  });
 
   final OskBackend backend;
+
+  /// Physical key presses to echo on the keys (see [OskScreen.echoKeys]).
+  final Stream<SoftKey>? echoKeys;
 
   /// Local launcher settings (text size, high contrast, focus marker).
   final ValueListenable<LauncherSettings> settings;
@@ -56,7 +64,11 @@ class OskApp extends StatelessWidget {
           ),
           home: Material(
             type: MaterialType.transparency,
-            child: OskScreen(backend: backend, showTyped: s.showTypedOnOsk),
+            child: OskScreen(
+              backend: backend,
+              showTyped: s.showTypedOnOsk,
+              echoKeys: echoKeys,
+            ),
           ),
         );
       },
@@ -116,6 +128,7 @@ class OskScreen extends StatefulWidget {
     this.hardwareKeys = false,
     this.onEscape,
     this.softKeys,
+    this.echoKeys,
   });
 
   final OskBackend backend;
@@ -138,6 +151,12 @@ class OskScreen extends StatefulWidget {
   /// Where keys from the evdev fallback arrive (see [SoftKeySink]).
   final SoftKeySink? softKeys;
 
+  /// Keys pressed on a physical keyboard, for feedback only: the matching
+  /// key lights up briefly and the focus follows it. Nothing is typed from
+  /// here. (The daemon-backed keyboard reads them from evdev; the in-app
+  /// one sees its keys already.)
+  final Stream<SoftKey>? echoKeys;
+
   @override
   State<OskScreen> createState() => _OskScreenState();
 }
@@ -150,6 +169,14 @@ class _OskScreenState extends State<OskScreen> {
   final _region = NavRegion('osk', rememberPerRow: false, wrapHorizontal: true);
   StreamSubscription<InputNavEvent>? _sub;
   StreamSubscription<bool>? _visSub;
+  StreamSubscription<SoftKey>? _echoSub;
+
+  /// Keys drawn as pressed (`row:col` of the current page), for a moment.
+  Set<String> _pressed = const {};
+  Timer? _pressTimer;
+
+  /// How long a physical key press shows on the keyboard.
+  static const pressFor = Duration(milliseconds: 150);
 
   @override
   void didUpdateWidget(OskScreen old) {
@@ -167,6 +194,7 @@ class _OskScreenState extends State<OskScreen> {
       if (visible) _focusStart();
     });
     widget.softKeys?.handler = _softKey;
+    _echoSub = widget.echoKeys?.listen(_echoSoft);
     _state.addListener(_onState);
     _syncRows();
     _focusStart();
@@ -228,6 +256,9 @@ class _OskScreenState extends State<OskScreen> {
 
   KeyEventResult _hardwareKey(KeyEvent e) {
     final hw = HardwareKeyboard.instance;
+    if (e is! KeyUpEvent) {
+      _echo(e.logicalKey, e.character, hw.isShiftPressed);
+    }
     return _typedKey(
       e.logicalKey,
       e.character,
@@ -241,6 +272,7 @@ class _OskScreenState extends State<OskScreen> {
   /// the same handling as a hardware key. True if it was used.
   bool _softKey(SoftKey k) {
     if (!widget.hardwareKeys) return false;
+    if (k.phase != NavPhase.release) _echo(k.key, k.character, k.shift);
     final r = _typedKey(
       k.key,
       k.character,
@@ -301,9 +333,62 @@ class _OskScreenState extends State<OskScreen> {
     return KeyEventResult.handled;
   }
 
+  void _echoSoft(SoftKey k) {
+    if (k.phase == NavPhase.release) return;
+    _echo(k.key, k.character, k.shift);
+  }
+
+  /// Shows a physical key on the keyboard: switches to the page that has it,
+  /// moves the focus to it and presses it for [pressFor]. Visual only: it
+  /// never types (the key itself reaches the field some other way).
+  void _echo(LogicalKeyboardKey key, String? char, bool shift) {
+    final KeyKind? kind = key == LogicalKeyboardKey.space
+        ? KeyKind.space
+        : key == LogicalKeyboardKey.backspace
+        ? KeyKind.backspace
+        : (key == LogicalKeyboardKey.enter ||
+              key == LogicalKeyboardKey.numpadEnter)
+        ? KeyKind.enter
+        : key == LogicalKeyboardKey.tab
+        ? KeyKind.tab
+        : null;
+    final printable =
+        kind == null &&
+        char != null &&
+        char.isNotEmpty &&
+        char.runes.first > 0x20 &&
+        char.runes.first != 0x7f;
+    if (kind == null && !printable) return;
+    final pos = oskLocate(
+      char: kind == null ? char : null,
+      kind: kind,
+      page: _state.page,
+      shift: _state.shift,
+    );
+    if (pos == null) return;
+    _state.setPage(pos.page); // (rows are in sync right after this)
+    final rows = _state.rows;
+    final pressed = {'${rows[pos.row].id}:${pos.col}'};
+    // A capital: Shift is part of the press.
+    final upper =
+        kind == null &&
+        char != char!.toLowerCase() &&
+        _state.shift == ShiftState.off;
+    if (upper && pos.page == OskPage.letters) pressed.add('r3:0');
+    _region.model.goTo(pos.row, pos.col);
+    _nav.focusRegion(_region);
+    _pressTimer?.cancel();
+    setState(() => _pressed = pressed);
+    _pressTimer = Timer(pressFor, () {
+      if (mounted) setState(() => _pressed = const {});
+    });
+  }
+
   @override
   void dispose() {
     if (widget.softKeys?.handler == _softKey) widget.softKeys?.handler = null;
+    _echoSub?.cancel();
+    _pressTimer?.cancel();
     _sub?.cancel();
     _visSub?.cancel();
     _state.removeListener(_onState);
@@ -347,7 +432,7 @@ class _OskScreenState extends State<OskScreen> {
               _PreviewStrip(state: _state),
               const SizedBox(height: HinterTokens.s1),
               Expanded(
-                child: _Keys(state: _state, region: _region),
+                child: _Keys(state: _state, region: _region, pressed: _pressed),
               ),
             ],
           ),
@@ -425,8 +510,13 @@ class _PreviewStrip extends StatelessWidget {
 }
 
 class _Keys extends StatelessWidget {
-  const _Keys({required this.state, required this.region});
+  const _Keys({
+    required this.state,
+    required this.region,
+    this.pressed = const {},
+  });
 
+  final Set<String> pressed;
   final OskState state;
   final NavRegion region;
 
@@ -459,6 +549,7 @@ class _Keys extends StatelessWidget {
                         keyDef: r.keys[i],
                         focused: focused,
                         shift: state.shift,
+                        pressed: pressed.contains('${r.id}:$i'),
                       ),
                     ),
                   ),
@@ -490,10 +581,14 @@ class _KeyCap extends StatelessWidget {
     required this.keyDef,
     required this.focused,
     required this.shift,
+    this.pressed = false,
   });
 
   final OskKey keyDef;
   final bool focused;
+
+  /// A physical key is down on this one: pressed in, accent colours.
+  final bool pressed;
   final ShiftState shift;
 
   @override
@@ -503,49 +598,54 @@ class _KeyCap extends StatelessWidget {
     final caps = isShift && shift == ShiftState.caps;
     final once = isShift && shift == ShiftState.once;
     final char = keyDef.kind == KeyKind.char;
-    final fill = caps
+    final fill = (caps || pressed)
         ? t.accent
         : focused
         ? t.surfaceHigh
         : t.surface;
-    final fg = caps ? t.onAccent : (once ? t.accent : t.text);
+    final fg = (caps || pressed) ? t.onAccent : (once ? t.accent : t.text);
     final style = (char ? t.title : t.label).copyWith(
       color: fg,
       fontWeight: char && !once ? FontWeight.w400 : FontWeight.w700,
     );
     final radius = BorderRadius.circular(HinterTokens.radiusSmall);
-    return Semantics(
-      label: keyDef.label,
-      button: true,
-      focused: focused,
-      child: ExcludeSemantics(
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: fill,
-                borderRadius: radius,
-                // One-shot shift: an outline, caps lock: filled (and "Caps").
-                border: once
-                    ? Border.all(color: t.accent, width: 3)
-                    : (t.highContrast && !focused
-                          ? Border.all(color: t.textDim, width: 2)
-                          : null),
-              ),
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(keyDef.label, maxLines: 1, style: style),
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    return AnimatedScale(
+      scale: pressed ? 0.94 : 1,
+      duration: still ? Duration.zero : const Duration(milliseconds: 60),
+      child: Semantics(
+        label: keyDef.label,
+        button: true,
+        focused: focused,
+        child: ExcludeSemantics(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: fill,
+                  borderRadius: radius,
+                  // One-shot shift: an outline, caps lock: filled (and "Caps").
+                  border: once
+                      ? Border.all(color: t.accent, width: 3)
+                      : (t.highContrast && !focused
+                            ? Border.all(color: t.textDim, width: 2)
+                            : null),
+                ),
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(keyDef.label, maxLines: 1, style: style),
+                    ),
                   ),
                 ),
               ),
-            ),
-            if (focused)
-              IgnorePointer(child: _marker(t, radius, t.focusStyle, caps)),
-          ],
+              if (focused)
+                IgnorePointer(child: _marker(t, radius, t.focusStyle, caps)),
+            ],
+          ),
         ),
       ),
     );

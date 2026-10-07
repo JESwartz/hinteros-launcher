@@ -281,8 +281,23 @@ class EvdevKeyboard {
   Set<String> get devices => _open.keys.toSet();
 
   void start() {
+    if (_timer != null) return;
     _scan();
     _timer = Timer.periodic(rescan, (_) => _scan());
+  }
+
+  /// Lets go of every device (nothing is read while nobody listens); [start]
+  /// begins again.
+  void stop() {
+    _timer?.cancel();
+    _timer = null;
+    for (final name in _open.keys.toList()) {
+      final kb = _open.remove(name)!;
+      unawaited(kb.sub?.cancel());
+      kb.decoder.mapper.reset();
+    }
+    _owner.clear();
+    _ignored.clear();
   }
 
   void _scan() {

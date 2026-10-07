@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:hinteros_launcher/src/nav/soft_key.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart';
 import 'package:hinteros_launcher/src/osk/osk_backend.dart';
@@ -13,9 +16,13 @@ class OskHarness {
     : settings = ValueNotifier(settings);
 
   final backend = MockOskBackend();
+
+  /// Physical key presses as the evdev reader would report them.
+  final echo = StreamController<SoftKey>.broadcast();
   final ValueNotifier<LauncherSettings> settings;
 
-  Widget get app => OskApp(backend: backend, settings: settings);
+  Widget get app =>
+      OskApp(backend: backend, settings: settings, echoKeys: echo.stream);
 
   Future<void> pump(
     WidgetTester tester, {

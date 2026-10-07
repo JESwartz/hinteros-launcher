@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart';
+import 'package:hinteros_launcher/src/nav/soft_key.dart';
 import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
 
 import '../osk/osk_harness.dart';
@@ -114,6 +116,29 @@ void main() {
         await h.moveTo(t, 'Space');
       },
     );
+  });
+
+  testWidgets('osk key pressed on a real keyboard (capital R)', (t) async {
+    await shot(
+      t,
+      'osk_physical_key_1080p',
+      setup: (t, h) async {
+        h.echo.add(
+          const SoftKey(
+            LogicalKeyboardKey.keyR,
+            NavPhase.press,
+            character: 'R',
+            shift: true,
+          ),
+        );
+        await t.pump();
+        await t.pump();
+        await t.pump(
+          const Duration(milliseconds: 80),
+        ); // pressed in, still down
+      },
+    );
+    await t.pump(const Duration(milliseconds: 200));
   });
 }
 
