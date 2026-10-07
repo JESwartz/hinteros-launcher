@@ -1,5 +1,5 @@
-// The runtime settings (session API 0.7) against the real hinteros-session
-// started with `--no-runtime`: the hello is at 0.7 for the launcher and the
+// The runtime settings (session API 0.8) against the real hinteros-session
+// started with `--no-runtime`: the hello is at 0.8 for the launcher and the
 // on-screen keyboard, every runtime method answers `unavailable` with the
 // service it needs (the rest of the API is unaffected), and the real
 // repositories turn that into "<service> isn't available on this box". Needs
@@ -41,6 +41,7 @@ void main() {
       '--no-inputplumber',
       '--no-uinput',
       '--no-runtime',
+      '--no-auth-agent',
       '--system-socket',
       '${dir.path}/no-such-system.sock',
     ]);
@@ -76,16 +77,16 @@ void main() {
     onError: (Object e) => e as ApiException,
   );
 
-  test('the launcher and the on-screen keyboard say hello at 0.7', () async {
+  test('the launcher and the on-screen keyboard say hello at 0.8', () async {
     final c = client = DaemonClient(socketPath: sock);
     final hello = await c.waitConnected();
-    expect(hello.apiVersion, '0.7');
-    expect(apiVersion, '0.7');
+    expect(hello.apiVersion, '0.8');
+    expect(apiVersion, '0.8');
     final osk = DaemonOskBackend(
       DaemonClient(socketPath: sock, clientInfo: DaemonOskBackend.oskPeer),
     );
     addTearDown(osk.dispose);
-    expect((await osk.connection.waitConnected()).apiVersion, '0.7');
+    expect((await osk.connection.waitConnected()).apiVersion, '0.8');
   }, skip: _skip());
 
   test('--no-runtime: every runtime method is unavailable, naming its service; '

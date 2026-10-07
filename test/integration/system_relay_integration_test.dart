@@ -1,4 +1,5 @@
-// The system.* relay against the real hinteros-session (session API 0.7).
+// The system.* relay, the Store and the admin password calls against the real
+// hinteros-session (session API 0.8).
 //
 // 1. No system service running: every system.* method is `system_unavailable`
 //    {reason: down}, the session API keeps working, and the real repositories
@@ -12,11 +13,25 @@
 //    (`crates/hinteros-system/tests/common`), so they cannot be reused from
 //    here. That part (ssh.set -> authentication_required, jobs) is covered
 //    against the mock daemon's relay instead.
+// 3. The 0.8 Store: `store.list` over a real `hinteros-system` and the real
+//    session daemon, both reading the fixture catalog
+//    (`test/fixtures/catalog`, the real index format) : the daemon's merge of
+//    the index with the installed apps, the terms paths, and the launcher's
+//    `DaemonStore` reading them. `auth.respond` and `auth.cancel` with no
+//    pending request are `not_found`. `session.restart` runs with logind
+//    pointed at a bus that does not exist: it must never reach this machine's
+//    real logind (a greetd session would be ended). NOT covered: the polkit
+//    agent with a real polkit and PAM (`auth.respond` with a password, the
+//    prompt end to end), `session.restart` ending a real greetd session, and
+//    `system.apps.install` / `remove` on a real service (they need logind and
+//    polkit like the other mutating methods); the daemon repo's VM tests
+//    (`polkit-agent`, `session-restart`, `store-install`) are the ones for that.
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hinteros_launcher/src/api/api.dart';
+import 'package:hinteros_launcher/src/api/api.dart' hide StoreState;
+import 'package:hinteros_launcher/src/api/api.dart' as wire show StoreState;
 import 'package:hinteros_launcher/src/system/daemon_system.dart';
 import 'package:hinteros_launcher/src/system/models.dart';
 
@@ -42,6 +57,18 @@ String? _skipNoSystem() => _sessionBin == null
     : !_hasSshKeygen()
     ? 'ssh-keygen not found'
     : null;
+
+/// The catalog fixture in the real index format (placeholder terms text).
+final _catalogIndex = File('test/fixtures/catalog/catalog.json').absolute.path;
+
+/// Flags that keep the daemon off this machine's buses: logind, the user's
+/// systemd and polkit. `session.restart` must never reach a real greetd session.
+List<String> _isolated(String root) => [
+  '--runtime-bus',
+  'unix:path=$root/no-bus',
+  '--session-user-bus',
+  'unix:path=$root/no-bus',
+];
 
 const _rev = '0f3c5a9e2b7d4c1a8e6f9b0d2c4e6a8b1d3f5a7c';
 
@@ -107,7 +134,10 @@ void main() {
     return p;
   }
 
-  Future<DaemonClient> session(String systemSocket) async {
+  Future<DaemonClient> session(
+    String systemSocket, {
+    List<String> extra = const [],
+  }) async {
     final sock = '${dir.path}/run-session/session.sock';
     await start(_sessionBin!, [
       '--socket',
@@ -116,8 +146,10 @@ void main() {
       '--no-inputplumber',
       '--no-uinput',
       '--no-runtime',
+      '--no-auth-agent',
       '--system-socket',
       systemSocket,
+      ...extra,
     ]);
     await waitSocket(sock);
     return client = DaemonClient(socketPath: sock);
@@ -152,7 +184,7 @@ void main() {
         final c = await session('${dir.path}/no-such-system.sock');
         await c.waitConnected();
         expect(c.status, isA<Connected>());
-        expect((c.status as Connected).apiVersion, '0.7');
+        expect((c.status as Connected).apiVersion, '0.8');
 
         final e = await c.systemInfo().then<ApiException?>(
           (_) => null,
@@ -213,10 +245,103 @@ void main() {
       // Unrelated: the job subscription (relayed) did not break the session.
       expect((await c.appsList()).apps, isNotNull);
     }, skip: _skipNoSession());
+
+    test('store.list without the system service: system_unavailable', () async {
+      final c = await session(
+        '${dir.path}/no-such-system.sock',
+        extra: ['--catalog-index', _catalogIndex],
+      );
+      await c.waitConnected();
+      final e = await c.storeList().then<ApiException?>(
+        (_) => null,
+        onError: (Object e) => e as ApiException,
+      );
+      expect(e?.code, ApiErrorCode.systemUnavailable);
+      final s = daemonSystemServices(c);
+      expect(s.store.loaded, isFalse);
+    }, skip: _skipNoSession());
+
+    test('auth.respond and auth.cancel with no pending request are not_found', () async {
+      final c = await session('${dir.path}/no-such-system.sock');
+      await c.waitConnected();
+      Future<ApiException?> err(Future<Object?> f) => f.then<ApiException?>(
+        (_) => null,
+        onError: (Object e) => e as ApiException,
+      );
+      final respond = await err(
+        c.authRespond(const AuthRespondParams(cookie: 'nope-1', password: 'x')),
+      );
+      expect(respond?.code, ApiErrorCode.notFound);
+      expect(respond?.message, contains('no authentication request'));
+      final cancel = await err(
+        c.authCancel(const AuthCancelParams(cookie: 'nope-1')),
+      );
+      expect(cancel?.code, ApiErrorCode.notFound);
+      // The repository: cancelling what is over is not an error; answering is.
+      final s = daemonSystemServices(c);
+      await s.auth.cancel('nope-1');
+      await expectLater(
+        s.auth.respond('nope-1', 'x'),
+        throwsA(
+          isA<SystemException>().having(
+            (e) => e.kind,
+            'kind',
+            SystemErrorKind.notFound,
+          ),
+        ),
+      );
+    }, skip: _skipNoSession());
+
+    test(
+      'a client that is not the launcher may not answer (not_authorized)',
+      () async {
+        await session('${dir.path}/no-such-system.sock');
+        final other = DaemonClient(
+          socketPath: '${dir.path}/run-session/session.sock',
+          clientInfo: const Peer(name: 'someone-else', version: '0'),
+        );
+        addTearDown(other.close);
+        await other.waitConnected();
+        final e = await other
+            .authCancel(const AuthCancelParams(cookie: 'x-1'))
+            .then<ApiException?>(
+              (_) => null,
+              onError: (Object e) => e as ApiException,
+            );
+        expect(e?.code, ApiErrorCode.notAuthorized);
+      },
+      skip: _skipNoSession(),
+    );
+
+    test(
+      'session.restart with logind out of reach is unavailable {logind}',
+      () async {
+        final c = await session(
+          '${dir.path}/no-such-system.sock',
+          extra: _isolated(dir.path),
+        );
+        await c.waitConnected();
+        final e = await c.sessionRestart().then<ApiException?>(
+          (_) => null,
+          onError: (Object e) => e as ApiException,
+        );
+        expect(e?.code, ApiErrorCode.unavailable);
+        expect((e!.data! as Map)['service'], 'logind');
+        // The real repository: a plain refusal, the session still there.
+        final s = daemonSystemServices(c);
+        final r = await s.system.restartSession().then<SystemException?>(
+          (_) => null,
+          onError: (Object e) => e as SystemException,
+        );
+        expect(r?.kind, SystemErrorKind.unavailable);
+        expect((await c.ping(const PingParams(nonce: 'alive'))).nonce, 'alive');
+      },
+      skip: _skipNoSession(),
+    );
   });
 
   group('a real hinteros-system (read-only methods)', () {
-    Future<DaemonClient> withSystem() async {
+    Future<DaemonClient> withSystem({bool catalog = false}) async {
       final root = Directory('${dir.path}/root')..createSync();
       _writeRoot(root);
       final r = root.path;
@@ -234,9 +359,16 @@ void main() {
         // Mutating methods would need logind and polkit on this bus.
         '--bus', 'unix:path=$r/no-bus',
         '--journal-socket', '$r/journal.sock',
+        if (catalog) ...['--catalog-index', _catalogIndex],
       ]);
       await waitSocket(sock);
-      return session(sock);
+      return session(
+        sock,
+        extra: [
+          if (catalog) ...['--catalog-index', _catalogIndex],
+          ..._isolated(r),
+        ],
+      );
     }
 
     test(
@@ -302,5 +434,77 @@ void main() {
         ),
       );
     }, skip: _skipNoSystem());
+
+    test('store.list: the index merged with the installed apps', () async {
+      final c = await withSystem(catalog: true);
+      await c.waitConnected();
+      expect((c.status as Connected).apiVersion, '0.8');
+      // state.json of the fake root lists steam as installed.
+      expect((await c.systemSettingsGet()).settings.apps, ['steam']);
+      final l = await c.storeList();
+      expect(l.indexVersion, 2);
+      expect(l.moreAfterUpdate, isFalse);
+      final names = l.apps.map((a) => a.name).toList();
+      expect(
+        names,
+        [...names]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase())),
+        reason: 'by name',
+      );
+      expect(l.apps.map((a) => a.id), contains('moonlight'));
+      final steam = l.apps.firstWhere((a) => a.id == 'steam');
+      expect(steam.state, wire.StoreState.installed);
+      expect(l.apps.where((a) => a.id != 'steam').map((a) => a.state).toSet(), {
+        wire.StoreState.available,
+      });
+      // The terms: the version, and the absolute path of the text.
+      expect(steam.terms!.version, '2026-09-10');
+      expect(steam.terms!.file, startsWith('/'));
+      expect(steam.terms!.file, endsWith('terms/steam-2026-09-10.txt'));
+      expect(
+        File(steam.terms!.file).readAsStringSync(),
+        contains('PLACEHOLDER TERMS'),
+      );
+      expect(l.apps.firstWhere((a) => a.id == 'youtube').kind, AppKind.web);
+    }, skip: _skipNoSystem());
+
+    test('the real DaemonStore reads it, terms text included', () async {
+      final c = await withSystem(catalog: true);
+      await c.waitConnected();
+      final store = daemonSystemServices(c).store;
+      final apps = await store.catalog();
+      expect(store.loaded, isTrue);
+      expect(store.installed, {'steam'});
+      expect(store.moreAfterUpdate, isFalse);
+      final steam = apps.firstWhere((a) => a.id == 'steam');
+      expect(steam.terms!.text, contains('PLACEHOLDER TERMS'));
+      expect(steam.removeDataWarning, contains('Games you installed'));
+      final plex = apps.firstWhere((a) => a.id == 'plex-htpc');
+      expect(plex.terms!.version, '2025-10-30');
+      expect(plex.free, isFalse);
+      expect(store.stateOf('plex-htpc'), StoreState.available);
+    }, skip: _skipNoSystem());
+
+    test(
+      'without the catalog index store.list is unavailable {catalog}',
+      () async {
+        final c = await withSystem();
+        await c.waitConnected();
+        final e = await c.storeList().then<ApiException?>(
+          (_) => null,
+          onError: (Object e) => e as ApiException,
+        );
+        expect(e?.code, ApiErrorCode.unavailable);
+        expect((e!.data! as Map)['service'], 'catalog');
+        final s = daemonSystemServices(c);
+        expect(
+          (await s.store.catalog().then<SystemException?>(
+            (_) => null,
+            onError: (Object e) => e as SystemException,
+          ))?.kind,
+          SystemErrorKind.unavailable,
+        );
+      },
+      skip: _skipNoSystem(),
+    );
   });
 }
