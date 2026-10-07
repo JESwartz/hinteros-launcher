@@ -52,15 +52,11 @@ Future<void> main(List<String> args) async {
     data: data,
     settings: settings,
     // Real: system info, SSH, updates and jobs over the session API 0.6 relay,
-    // and Wi-Fi, Bluetooth, display, audio and power over the 0.7 runtime
-    // settings; the Store is unavailable until the daemon has it (TODO(M8)).
-    // The mock behaves like the real daemon about the admin password.
+    // Wi-Fi, Bluetooth, display, audio and power over the 0.7 runtime
+    // settings, and the admin password prompt, session restart and the Store
+    // of 0.8. The mock asks for the admin password like the real daemon.
     services: mock
-        ? MockSystemServices(
-            autoRunJobs: true,
-            iconDir: iconDir,
-            acceptsAdminPassword: adminPasswordUi,
-          )
+        ? MockSystemServices(autoRunJobs: true, iconDir: iconDir)
         : daemonSystemServices(connection),
     showFps: showFps,
     showServer: _flag(args, '--server', 'HINTEROS_SERVER'),

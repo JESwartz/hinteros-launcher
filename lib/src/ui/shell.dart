@@ -15,12 +15,14 @@ import '../system/repositories.dart';
 import '../updates/reminder.dart';
 import '../theme/hinter_theme.dart';
 import 'apps_screen.dart';
+import 'auth_prompt.dart';
 import 'common.dart';
 import 'games_screen.dart';
 import 'home_screen.dart';
 import 'modal_host.dart';
 import 'overlays.dart';
 import 'settings_screen.dart';
+import 'store_flows.dart';
 import 'store_screen.dart';
 import 'update_banner.dart';
 import 'pages.dart';
@@ -98,6 +100,9 @@ class _LauncherShellState extends State<LauncherShell> {
   final _banner = NavRegion('banner', rememberPerRow: false);
   final _dialog = NavRegion('dialog', rememberPerRow: false);
   late final _modals = ModalController(_nav);
+  // The admin password prompt: shown over whatever is on screen whenever
+  // polkit asks (a relayed call such as ssh.set is waiting for it).
+  late final AuthPrompter _authPrompts;
   bool _bannerVisible = false;
   bool _updateBannerVisible = false;
   late final UpdateReminders _reminders = UpdateReminders(
@@ -191,6 +196,7 @@ class _LauncherShellState extends State<LauncherShell> {
         if (mounted) setState(() {});
       }),
     );
+    _authPrompts = AuthPrompter(widget.services.auth, _modals);
     _reminders.addListener(_onReminders);
     _reminders.onLateResult = _homeEntered;
     unawaited(_reminders.start().then((_) => _homeEntered()));
@@ -280,6 +286,7 @@ class _LauncherShellState extends State<LauncherShell> {
   @override
   void dispose() {
     _reminders.removeListener(_onReminders);
+    _authPrompts.dispose();
     _reminders.dispose();
     widget.data.removeListener(_onData);
     _clock?.cancel();
@@ -407,9 +414,6 @@ class _LauncherShellState extends State<LauncherShell> {
     },
   );
 
-  /// The Store tab (the Games tab's "install Steam" prompt leads here).
-  void _openStore() => _openSection(Section.store, _store);
-
   /// Switches the visible section (tab focus, L1/R1, Back, Home).
   void _setSection(Section s) {
     if (s == _section) return;
@@ -507,11 +511,14 @@ class _LauncherShellState extends State<LauncherShell> {
     Section.games => GamesScreen(
       data: widget.data,
       region: _games,
-      steamMissing: !widget.services.store.installed.contains('steam'),
-      onOpenStore: _openStore,
+      steamMissing:
+          widget.services.store.loaded &&
+          !widget.services.store.installed.contains('steam'),
+      onInstallSteam: (context) => installSteam(context, widget.services),
     ),
     Section.store => StoreScreen(
       services: widget.services,
+      data: widget.data,
       cats: _store,
       grid: _storeGrid,
       onPopulated: _contentReady,

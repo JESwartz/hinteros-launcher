@@ -306,6 +306,18 @@ class LauncherData extends ChangeNotifier {
     }
   }
 
+  /// Closes app [id] without asking (the caller already did): a Store app
+  /// is closed before it is removed. Not running is fine.
+  Future<void> closeApp(String id) async {
+    if (!isRunning(id)) return;
+    try {
+      await apps.close(id);
+    } on ApiException catch (e) {
+      if (e.code != ApiErrorCode.appNotFound) rethrow;
+    }
+    unawaited(refreshRunning());
+  }
+
   /// "Open Steam" on the attention banner.
   Future<void> focusSteam() async {
     try {

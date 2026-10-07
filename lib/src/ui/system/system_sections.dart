@@ -12,12 +12,12 @@ import 'common.dart';
 /// SSH on or off. SSH is plain username and password for now: you log in as
 /// the admin account with its password, over the local network.
 ///
-/// Turning it on needs the admin password (polkit `auth_admin`). The launcher
-/// cannot pass a password to polkit yet, so ([SystemRepository.acceptsAdminPassword]
-/// false) it asks the daemon anyway and, on `authentication_required`, explains
-/// that an admin has to enable SSH. With a polkit agent in the session daemon
-/// the flag turns on and the password dialog below (kept, tested with the
-/// mock) asks first.
+/// Turning it on needs the admin password (polkit `auth_admin`). This just
+/// calls `ssh.set`: the session daemon is polkit's authentication agent, and
+/// while the call waits it sends `authentication_requested`, which the shell
+/// shows as the password prompt over this screen (`AuthPromptHost`). The call
+/// then ends with a job, or with "nothing was changed" when the prompt was
+/// cancelled or the password was wrong too often.
 class RemoteAccessSection extends StatelessWidget {
   const RemoteAccessSection(this.env, {super.key});
 
@@ -44,22 +44,14 @@ class RemoteAccessSection extends StatelessWidget {
         p.item(
           'ssh',
           onSelect: () async {
-            if (ssh.enabled) {
-              await runJob(context, env.services, () => sys.setSsh(false));
-            } else if (sys.acceptsAdminPassword) {
-              await _turnOn(context);
-            } else {
-              await _turnOnNeedsAdmin(context);
-            }
+            await runJob(context, env.services, () => sys.setSsh(!ssh.enabled));
             await reload();
           },
           builder: (f) => SettingRow(
             title: 'SSH',
             subtitle: ssh.enabled
                 ? null
-                : sys.acceptsAdminPassword
-                ? 'Turning it on asks for the admin password.'
-                : 'Turning it on needs an admin.',
+                : 'Turning it on asks for the admin password.',
             focused: f,
             trailing: ToggleMark(on: ssh.enabled),
           ),
@@ -79,65 +71,6 @@ class RemoteAccessSection extends StatelessWidget {
       },
     );
   }
-
-  /// No way to give polkit the admin password: try, and explain the refusal.
-  Future<void> _turnOnNeedsAdmin(BuildContext context) async {
-    final JobHandle h;
-    try {
-      h = await env.services.system.setSsh(true);
-    } on SystemException catch (e) {
-      if (!context.mounted) return;
-      if (e.kind == SystemErrorKind.authenticationRequired) {
-        await showMessage(
-          context,
-          title: 'An admin has to turn on SSH',
-          body:
-              'Turning on SSH needs the admin password, and this screen cannot '
-              'ask for it yet. An admin can turn it on from the installer\'s '
-              '"Enable SSH" option, or by logging in to the admin account on '
-              'this box.',
-        );
-      } else {
-        await showMessage(
-          context,
-          title: "That didn't work",
-          body: describeError(e),
-        );
-      }
-      return;
-    }
-    if (!context.mounted) return;
-    await showJobProgress(context, env.services, h);
-  }
-
-  /// With a polkit agent: asks for the admin password first.
-  Future<void> _turnOn(BuildContext context) async {
-    final sys = env.services.system;
-    JobHandle? job;
-    final pw = await showTextEntry(
-      context,
-      title: 'Admin password',
-      body:
-          'Turning on SSH needs the admin password. Type it with the '
-          'on-screen keyboard; it is not shown.',
-      secret: true,
-      submitLabel: 'Turn on SSH',
-      submit: (pw) async {
-        if (pw.isEmpty) return 'Type the password first.';
-        try {
-          job = await sys.setSsh(true, adminPassword: pw);
-          return null;
-        } on SystemException catch (e) {
-          return e.kind == SystemErrorKind.wrongPassword
-              ? 'That is not the admin password. Try again.'
-              : e.message;
-        }
-      },
-    );
-    final h = job;
-    if (pw == null || h == null || !context.mounted) return;
-    await showJobProgress(context, env.services, h);
-  }
 }
 
 // ------------------------------------------------------------------ updates
@@ -152,6 +85,11 @@ class UpdatesSection extends StatefulWidget {
 }
 
 class _UpdatesSectionState extends State<UpdatesSection> {
+  /// "This update takes away Plex (reason), ...": installed apps the update
+  /// removes from the catalog.
+  static String _takesAway(List<CatalogChange> apps) =>
+      'This update takes away ${[for (final n in apps) n.reason == null || n.reason!.isEmpty ? n.name : '${n.name} (${n.reason})'].join(', ')}.';
+
   bool _checking = false;
   String? _checkError;
   final _key = GlobalKey();
@@ -270,6 +208,21 @@ class _UpdatesSectionState extends State<UpdatesSection> {
         } else {
           p.add(const StatusLine('Not checked yet.'));
         }
+        if (a != null) {
+          final removed = a.removedApps;
+          if (removed != null && removed.isNotEmpty) {
+            p.add(StatusLine(_takesAway(removed), error: true));
+          }
+          final added = a.newApps;
+          if (added != null && added.isNotEmpty) {
+            p.add(
+              Text(
+                'It also adds to the Store: ${[for (final n in added) n.name].join(', ')}.',
+                style: t.bodyDim,
+              ),
+            );
+          }
+        }
         p.item(
           'check',
           onSelect: _checking ? null : () => _check(reload),
@@ -290,6 +243,10 @@ class _UpdatesSectionState extends State<UpdatesSection> {
                 body:
                     'It downloads, installs and then restarts your session. '
                     'If it fails, nothing is changed.',
+                extra: [
+                  if (a.removedApps?.isNotEmpty ?? false)
+                    StatusLine(_takesAway(a.removedApps!), error: true),
+                ],
                 confirmLabel: 'Update now',
               );
               if (r == null || !context.mounted) return;

@@ -147,8 +147,11 @@ void main() {
     });
   });
 
-  group('Remote access', () {
-    testWidgets('turning SSH on needs the admin password (masked, retried)', (
+  group('Remote access and the admin password prompt', () {
+    TextEditingController field(WidgetTester t) =>
+        t.widget<TextField>(find.byType(TextField)).controller!;
+
+    testWidgets('turning SSH on asks for the admin password (masked, retried)', (
       t,
     ) async {
       setView(t);
@@ -156,20 +159,33 @@ void main() {
       await h.pump(t);
       await enterSettingsEntry(t, 'ssh');
       expect(find.textContaining('log in as the admin account'), findsWidgets);
-      await press(t, [kEnter]);
+      expect(find.text('Admin password'), findsNothing);
+      await press(t, [kEnter]); // SSH: ssh.set waits for the prompt
       expect(find.text('Admin password'), findsOneWidget);
+      expect(
+        find.text('Enter the password for admin to turn on SSH.'),
+        findsOneWidget,
+      );
       expect(t.widget<TextField>(find.byType(TextField)).obscureText, isTrue);
-      // Nothing typed: refused before it reaches the service.
+      // Nothing typed: refused before it is sent.
       await press(t, [kEnter]);
-      expect(h.services.mockSystem.adminAttempts, isEmpty);
+      expect(find.text('Type the password first.'), findsOneWidget);
+      expect(h.services.mockAuth.attempts, 0);
+      // A wrong password: the tries left, the dialog stays, the field is empty.
       await t.enterText(find.byType(TextField), 'wrong');
       await press(t, [kEnter]);
-      expect(find.textContaining('not the admin password'), findsOneWidget);
+      expect(find.text('Admin password'), findsOneWidget);
+      expect(
+        find.text('That is not the password. 2 tries left.'),
+        findsOneWidget,
+      );
+      expect(field(t).text, isEmpty, reason: 'the password is not kept');
       expect(h.services.mockSystem.log, isNot(contains('ssh:on')));
       expect(h.services.mockJobs.started, isEmpty);
       await t.enterText(find.byType(TextField), 'correct horse');
       await press(t, [kEnter]);
-      expect(h.services.mockSystem.adminAttempts, ['wrong', 'correct horse']);
+      expect(h.services.mockAuth.attempts, 2);
+      expect(find.text('Admin password'), findsNothing);
       expect(h.services.mockJobs.started, hasLength(1));
       // The apply job's progress page; finish it.
       expect(find.text('Changing remote access'), findsOneWidget);
@@ -182,18 +198,7 @@ void main() {
       );
     });
 
-    testWidgets('cancelling the password dialog changes nothing', (t) async {
-      setView(t);
-      final h = harness();
-      await h.pump(t);
-      await enterSettingsEntry(t, 'ssh');
-      await press(t, [kEnter, kEscape]);
-      expect(find.text('Admin password'), findsNothing);
-      expect(h.services.mockSystem.adminAttempts, isEmpty);
-      expect(h.services.mockSystem.log, isEmpty);
-    });
-
-    testWidgets('the typed password is not lost to the Y and X buttons', (
+    testWidgets('three wrong passwords: the prompt closes, nothing changes', (
       t,
     ) async {
       setView(t);
@@ -201,11 +206,80 @@ void main() {
       await h.pump(t);
       await enterSettingsEntry(t, 'ssh');
       await press(t, [kEnter]);
-      await t.enterText(find.byType(TextField), 'xyz');
-      expect(
-        t.widget<TextField>(find.byType(TextField)).controller!.text,
-        'xyz',
-      );
+      for (final left in ['2 tries', '1 try']) {
+        await t.enterText(find.byType(TextField), 'wrong');
+        await press(t, [kEnter]);
+        expect(
+          find.text('That is not the password. $left left.'),
+          findsOneWidget,
+        );
+      }
+      await t.enterText(find.byType(TextField), 'wrong');
+      await press(t, [kEnter]);
+      expect(find.text('Admin password'), findsNothing);
+      expect(find.textContaining('wrong too many times'), findsOneWidget);
+      expect(h.services.mockAuth.attempts, 3);
+      expect(h.services.mockJobs.started, isEmpty);
+      await press(t, [kEnter]);
+      expect(find.textContaining('wrong too many times'), findsNothing);
+    });
+
+    testWidgets('Back cancels the request: auth.cancel, nothing changes', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await enterSettingsEntry(t, 'ssh');
+      await press(t, [kEnter, kEscape]);
+      expect(find.text('Admin password'), findsNothing);
+      expect(h.services.mockAuth.cancels, 1);
+      expect(h.services.mockAuth.pending, isEmpty);
+      expect(h.services.mockAuth.attempts, 0);
+      expect(find.textContaining('nothing was changed'), findsOneWidget);
+      expect(h.services.mockSystem.log, isEmpty);
+    });
+
+    testWidgets('the Cancel button does the same', (t) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await enterSettingsEntry(t, 'ssh');
+      await press(t, [kEnter]);
+      await press(t, [kDown, kDown, kEnter]); // the Cancel button
+      expect(find.text('Admin password'), findsNothing);
+      expect(h.services.mockAuth.cancels, 1);
+    });
+
+    testWidgets('the prompt goes away when polkit ends the request', (t) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await enterSettingsEntry(t, 'ssh');
+      await press(t, [kEnter]);
+      expect(find.text('Admin password'), findsOneWidget);
+      // Someone else cancels it (polkit's timeout): no auth.cancel from here.
+      await h.services.mockAuth.cancel(h.services.mockAuth.pending.single);
+      await t.pumpAndSettle();
+      expect(find.text('Admin password'), findsNothing);
+      expect(h.services.mockAuth.cancels, 1, reason: 'only the one above');
+    });
+
+    testWidgets('turning SSH off needs no password', (t) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await enterSettingsEntry(t, 'ssh');
+      await press(t, [kEnter]);
+      await t.enterText(find.byType(TextField), 'correct horse');
+      await press(t, [kEnter]);
+      h.services.mockJobs.finish(h.services.mockJobs.started.single.jobId);
+      await t.pumpAndSettle();
+      await press(t, [kEnter]); // Close
+      await press(t, [kEnter]); // SSH off again
+      expect(find.text('Admin password'), findsNothing);
+      expect(h.services.mockAuth.attempts, 1);
+      expect(h.services.mockSystem.log.last, 'ssh:off');
     });
   });
 

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../data/launcher_data.dart';
 import '../nav/nav_controller.dart';
 import '../nav/nav_model.dart';
 import '../system/models.dart';
@@ -30,10 +31,14 @@ class StoreScreen extends StatefulWidget {
     required this.services,
     required this.cats,
     required this.grid,
+    this.data,
     this.onPopulated,
   });
 
   final SystemServices services;
+
+  /// Which apps run (a running app is closed before it is removed).
+  final LauncherData? data;
   final NavRegion cats;
   final NavRegion grid;
 
@@ -54,17 +59,32 @@ class _StoreScreenState extends State<StoreScreen> {
   Object? _error;
   final _icons = <String, String?>{};
   int _cat = 0;
-  StreamSubscription<void>? _sub;
+  final _subs = <StreamSubscription<void>>[];
+  Timer? _retry;
 
   StoreRepository get _store => widget.services.store;
 
   @override
   void initState() {
     super.initState();
-    _sub = _store.changes.listen((_) {
-      if (mounted) setState(() {});
-    });
+    // store_changed (an apps job started or finished, an update check found
+    // new apps): the listing is already refreshed, show it.
+    _subs.add(
+      _store.changes.listen((_) {
+        if (!mounted || !_store.loaded) return;
+        setState(() {
+          _catalog = _store.apps;
+          _error = null;
+        });
+        _resolveIcons(_store.apps);
+      }),
+    );
+    _subs.add(widget.services.updates.changes.listen((_) => _rebuild()));
     unawaited(_load());
+  }
+
+  void _rebuild() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -74,7 +94,10 @@ class _StoreScreenState extends State<StoreScreen> {
 
   @override
   void dispose() {
-    _sub?.cancel();
+    _retry?.cancel();
+    for (final s in _subs) {
+      s.cancel();
+    }
     super.dispose();
   }
 
@@ -82,19 +105,32 @@ class _StoreScreenState extends State<StoreScreen> {
     try {
       final c = await _store.catalog();
       if (!mounted) return;
-      setState(() => _catalog = c);
+      setState(() {
+        _catalog = c;
+        _error = null;
+      });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) widget.onPopulated?.call();
       });
-      for (final a in c) {
-        unawaited(
-          _store.resolveIcon(a).then((p) {
-            if (mounted) setState(() => _icons[a.id] = p);
-          }),
-        );
-      }
+      _resolveIcons(c);
     } catch (e) {
-      if (mounted) setState(() => _error = e);
+      if (!mounted) return;
+      setState(() => _error = e);
+      // The system service or the catalog may only be late: look again.
+      _retry?.cancel();
+      _retry = Timer(const Duration(seconds: 5), () {
+        if (mounted && _catalog == null) unawaited(_load());
+      });
+    }
+  }
+
+  void _resolveIcons(List<StoreApp> apps) {
+    for (final a in apps) {
+      unawaited(
+        _store.resolveIcon(a).then((p) {
+          if (mounted && _icons[a.id] != p) setState(() => _icons[a.id] = p);
+        }),
+      );
     }
   }
 
@@ -141,7 +177,7 @@ class _StoreScreenState extends State<StoreScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const RowHeader('Store'),
-        if (_store.moreAfterUpdate)
+        if (_moreAfterUpdate)
           Padding(
             padding: const EdgeInsets.fromLTRB(
               HinterTokens.margin,
@@ -150,7 +186,7 @@ class _StoreScreenState extends State<StoreScreen> {
               HinterTokens.s1,
             ),
             child: Text(
-              'More apps are available after the next update.',
+              _moreAfterUpdateText,
               key: const ValueKey('more-apps'),
               style: t.caption,
             ),
@@ -205,7 +241,7 @@ class _StoreScreenState extends State<StoreScreen> {
                         itemBuilder: (_, i, f) => StoreCard(
                           app: shown[i],
                           iconPath: _icons[shown[i].id],
-                          installed: _store.installed.contains(shown[i].id),
+                          state: _store.stateOf(shown[i].id),
                           focused: f,
                         ),
                       ),
@@ -215,6 +251,23 @@ class _StoreScreenState extends State<StoreScreen> {
         ),
       ],
     );
+  }
+
+  /// More apps come with the next update: the Store listing says so, or
+  /// the update that was found does.
+  bool get _moreAfterUpdate =>
+      _store.moreAfterUpdate ||
+      (widget.services.updates.status.available?.catalogChanged ?? false);
+
+  String get _moreAfterUpdateText {
+    final names = [
+      for (final a
+          in widget.services.updates.status.available?.newApps ??
+              const <CatalogChange>[])
+        a.name,
+    ];
+    return 'More apps are available after the next update'
+        '${names.isEmpty ? '' : ': ${names.join(', ')}'}.';
   }
 
   /// Cards grow with the text size.
@@ -242,6 +295,7 @@ class _StoreScreenState extends State<StoreScreen> {
         app: app,
         catalog: catalog,
         iconPath: _icons[app.id],
+        data: widget.data,
       ),
     );
   }
@@ -305,13 +359,13 @@ class StoreCard extends StatelessWidget {
     super.key,
     required this.app,
     required this.iconPath,
-    required this.installed,
+    required this.state,
     required this.focused,
   });
 
   final StoreApp app;
   final String? iconPath;
-  final bool installed;
+  final StoreState state;
   final bool focused;
 
   @override
@@ -355,11 +409,22 @@ class StoreCard extends StatelessWidget {
                         style: t.caption,
                       ),
                       Text(
-                        installed ? 'Installed' : app.sizeLabel,
+                        switch (state) {
+                          StoreState.installed => 'Installed',
+                          StoreState.installing => 'Installing...',
+                          StoreState.removing => 'Removing...',
+                          StoreState.retired => 'Installed, no longer offered',
+                          StoreState.unavailable => 'Installed, going away',
+                          StoreState.available => app.sizeLabel,
+                        },
                         maxLines: 1,
                         style: t.caption.copyWith(
-                          color: installed ? t.positive : t.textDim,
-                          fontWeight: installed ? FontWeight.w700 : null,
+                          color: state == StoreState.installed
+                              ? t.positive
+                              : t.textDim,
+                          fontWeight: state == StoreState.installed
+                              ? FontWeight.w700
+                              : null,
                         ),
                       ),
                     ],
@@ -384,8 +449,10 @@ class AppDetailPage extends StatefulWidget {
     required this.app,
     required this.catalog,
     this.iconPath,
+    this.data,
   });
 
+  final LauncherData? data;
   final ModalHandle<void> modal;
   final SystemServices services;
   final StoreApp app;
@@ -417,27 +484,28 @@ class _AppDetailPageState extends State<AppDetailPage> {
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
     final app = widget.app;
-    final installed = widget.services.store.installed.contains(app.id);
-    final deps = missingDependencies(
-      app,
-      widget.catalog,
-      widget.services.store.installed,
-    );
+    final store = widget.services.store;
+    final state = store.stateOf(app.id);
+    final installed = state.isInstalled;
+    final deps = missingDependencies(app, widget.catalog, store.installed);
+    final inTheWay = [
+      for (final id in app.conflicts)
+        if (store.installed.contains(id))
+          widget.catalog.where((a) => a.id == id).firstOrNull?.name ?? id,
+    ];
     final p = Pane(widget.modal.region);
-    p.add(
-      Text(
-        app.description.isEmpty ? app.summary : app.description,
-        style: t.body,
-      ),
-    );
-    p.add(
-      Text(
-        'Size: ${app.sizeLabel}. '
-        '${app.onIso ? 'Included with the installer.' : 'Downloads when you install it.'}',
-        style: t.bodyDim,
-      ),
-    );
-    if (deps.isNotEmpty) {
+    final about = app.description.isEmpty ? app.summary : app.description;
+    if (about.isNotEmpty) p.add(Text(about, style: t.body));
+    if (!installed && app.sizeMiB > 0) {
+      p.add(
+        Text(
+          'Size: ${app.sizeLabel}. '
+          '${app.onIso ? 'Included with the installer.' : 'Downloads when you install it.'}',
+          style: t.bodyDim,
+        ),
+      );
+    }
+    if (!installed && deps.isNotEmpty) {
       p.add(
         Text(
           'Also installs: ${[for (final d in deps) d.name].join(', ')}.',
@@ -445,7 +513,15 @@ class _AppDetailPageState extends State<AppDetailPage> {
         ),
       );
     }
-    if (app.hasTerms) {
+    if (!installed && inTheWay.isNotEmpty) {
+      p.add(
+        StatusLine(
+          "Can't be installed together with ${inTheWay.join(', ')}, which "
+          '${inTheWay.length == 1 ? 'is' : 'are'} installed.',
+        ),
+      );
+    }
+    if (app.hasTerms && !installed) {
       p.add(
         Text(
           '${app.terms!.title} applies (version ${app.terms!.version}).',
@@ -454,16 +530,38 @@ class _AppDetailPageState extends State<AppDetailPage> {
       );
     }
     p.add(
-      Text(installed ? 'Installed.' : 'Not installed.', style: t.label),
+      Text(switch (state) {
+        StoreState.available => 'Not installed.',
+        StoreState.installing => 'Installing...',
+        StoreState.removing => 'Removing...',
+        _ => 'Installed.',
+      }, style: t.label),
       gap: HinterTokens.s3,
     );
+    if (state == StoreState.retired) {
+      p.add(
+        StatusLine(
+          'This app is retired.${_reason(app)} It keeps working, and you '
+          'can remove it.',
+        ),
+      );
+    } else if (state == StoreState.unavailable) {
+      p.add(
+        StatusLine(
+          'The next update takes this app away.${_reason(app)} You can '
+          'remove it now.',
+        ),
+      );
+    }
     final cat = widget.catalog;
     p.buttons('actions', [
-      if (installed) ...[
+      if (state.busy)
+        btn('Back', widget.modal.close, primary: true)
+      else if (installed) ...[
         btn('Back', widget.modal.close),
         btn(
           'Remove',
-          () => removeFlow(context, widget.services, app),
+          () => removeFlow(context, widget.services, app, data: widget.data),
           danger: true,
         ),
       ] else ...[
@@ -477,7 +575,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
     ], gap: HinterTokens.s3);
     return FullPage(
       title: app.name,
-      subtitle: '${app.category.label}: ${app.summary}',
+      subtitle: app.summary.isEmpty
+          ? app.category.label
+          : '${app.category.label}: ${app.summary}',
       leading: AppIconBadge(
         name: app.name,
         iconPath: widget.iconPath,
@@ -485,5 +585,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
       ),
       child: SingleChildScrollView(clipBehavior: Clip.none, child: p.build()),
     );
+  }
+
+  /// The catalog's reason as a sentence (with a leading space), or nothing.
+  static String _reason(StoreApp app) {
+    final r = app.statusReason;
+    if (r == null || r.isEmpty) return '';
+    return r.endsWith('.') ? ' $r' : ' $r.';
   }
 }

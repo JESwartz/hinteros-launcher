@@ -50,6 +50,14 @@ enum SystemErrorKind {
   /// polkit action.
   authenticationRequired,
 
+  /// 3013: an app to install conflicts with another one, or an app to
+  /// remove is needed by another. `data`: `id`, `conflicts_with`.
+  appConflict,
+
+  /// 3014: an app to install has vendor terms whose current version was not
+  /// accepted. `data`: `id`, `version`.
+  termsRequired,
+
   /// 4002: a connection, pairing or mode change failed. `data['reason']`
   /// is for code (`not_applied`, `nothing_to_revert`, ...).
   deviceFailed,
@@ -285,6 +293,18 @@ enum SecuritySeverity {
   };
 }
 
+/// An app an update adds to the catalog or takes away from this box.
+@immutable
+class CatalogChange {
+  const CatalogChange(this.id, this.name, {this.reason});
+
+  final String id;
+  final String name;
+
+  /// Why it goes away (`removed_apps`); null for a new app.
+  final String? reason;
+}
+
 @immutable
 class AvailableUpdate {
   const AvailableUpdate({
@@ -294,7 +314,8 @@ class AvailableUpdate {
     required this.summary,
     this.severity,
     this.signer = '',
-    this.catalogChanged = false,
+    this.newApps,
+    this.removedApps,
   });
 
   /// 40 hex characters; what `update.apply` takes.
@@ -309,8 +330,16 @@ class AvailableUpdate {
   final SecuritySeverity? severity;
   final String signer;
 
-  /// The update carries a new catalog revision (more Store apps).
-  final bool catalogChanged;
+  /// Apps the update makes installable (`update.check`'s `new_apps`); null
+  /// when the target's catalog could not be read.
+  final List<CatalogChange>? newApps;
+
+  /// Installed apps the update takes away, with the catalog's reason; null
+  /// when unknown.
+  final List<CatalogChange>? removedApps;
+
+  /// The update carries a catalog change (more Store apps).
+  bool get catalogChanged => newApps?.isNotEmpty ?? false;
 
   bool get isSecurity => severity != null;
 }
@@ -634,6 +663,29 @@ enum StoreCategory {
       values.firstWhere((c) => c.name == s, orElse: () => other);
 }
 
+/// Where an app stands on this box (`store.list`'s `state`).
+enum StoreState {
+  available,
+  installed,
+  installing,
+  removing,
+
+  /// Installed, but the catalog retired it: it still works and can be removed.
+  retired,
+
+  /// Installed, but the next update takes it away.
+  unavailable;
+
+  /// The app is on the box (it is still there while being removed).
+  bool get isInstalled => switch (this) {
+    available || installing => false,
+    _ => true,
+  };
+
+  /// A job is working on it.
+  bool get busy => this == installing || this == removing;
+}
+
 /// An app's vendor terms as the index lists them (`title`, `version`, `url`,
 /// `retrieved`, `file`), plus the [text] read from that file next to the
 /// index. Shown in full before install; the box records [version].
@@ -704,6 +756,9 @@ class StoreApp {
     this.dataPaths = const [],
     this.removeDataWarning,
     this.homepage = '',
+    this.state = StoreState.available,
+    this.statusReason,
+    this.conflicts = const [],
   });
 
   final String id;
@@ -743,6 +798,16 @@ class StoreApp {
   final String? removeDataWarning;
   final String homepage;
 
+  /// Where it stands on this box. The catalog file (installer) has no state:
+  /// [StoreState.available].
+  final StoreState state;
+
+  /// Why the catalog retired or removed it.
+  final String? statusReason;
+
+  /// Ids of apps that cannot be installed together with this one.
+  final List<String> conflicts;
+
   bool get hasTerms => terms != null;
 
   String get sizeLabel => sizeMiB >= 1000
@@ -753,3 +818,50 @@ class StoreApp {
 /// The first [n] characters of a revision, for display ("" for none).
 String shortRev(String? rev, [int n = 7]) =>
     rev == null ? '' : (rev.length > n ? rev.substring(0, n) : rev);
+
+// ---------------------------------------------------------------- admin password
+
+/// polkit wants the admin password for something the launcher asked for
+/// (`authentication_requested`).
+@immutable
+class AuthRequest {
+  const AuthRequest({
+    required this.cookie,
+    required this.action,
+    required this.message,
+    required this.account,
+  });
+
+  /// Names this request in `auth.respond` and `auth.cancel`.
+  final String cookie;
+
+  /// The polkit action (`org.hinteros.system.ssh`).
+  final String action;
+
+  /// polkit's own sentence, in English.
+  final String message;
+
+  /// Whose password is asked for (the first identity).
+  final String account;
+}
+
+/// How an authentication request ended (`authentication_finished`).
+enum AuthOutcome { authorized, failed, cancelled }
+
+@immutable
+class AuthFinished {
+  const AuthFinished(this.cookie, this.outcome);
+
+  final String cookie;
+  final AuthOutcome outcome;
+}
+
+/// `auth.respond`'s answer. A wrong password ([ok] false) leaves the request
+/// open while [attemptsLeft] is above zero.
+@immutable
+class AuthAnswer {
+  const AuthAnswer({required this.ok, required this.attemptsLeft});
+
+  final bool ok;
+  final int attemptsLeft;
+}

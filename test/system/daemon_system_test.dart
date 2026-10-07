@@ -29,6 +29,20 @@ Future<(api.MockDaemon, SystemServices)> _setup() async {
   return (mock, services);
 }
 
+/// A daemon whose connection ends when it answers session.restart.
+class _DropsOnRestart extends api.MockDaemon {
+  @override
+  Future<Map<String, dynamic>> rpc(
+    String method,
+    Map<String, dynamic> params,
+  ) async {
+    if (method == 'session.restart') {
+      throw const api.DaemonUnavailableException('connection closed');
+    }
+    return super.rpc(method, params);
+  }
+}
+
 /// A connection that is not there (the real client throws this).
 class _Offline extends api.MockDaemon {
   @override
@@ -100,18 +114,96 @@ void main() {
 
   group('ssh.set and the admin password', () {
     test(
-      'turning on is authentication_required, with the polkit action',
+      'no authentication agent: authentication_required, with the action',
       () async {
         final (mock, s) = await _setup();
-        expect(s.system.acceptsAdminPassword, isFalse);
-        final e = await _fails(s.system.setSsh(true, adminPassword: 'secret'));
+        mock.auth.agentRegistered = false;
+        final e = await _fails(s.system.setSsh(true));
         expect(e.kind, SystemErrorKind.authenticationRequired);
         expect(e.data['action'], 'org.hinteros.system.ssh');
-        // The password goes nowhere: the call is exactly ssh.set {enabled}.
         expect(mock.system.log, ['ssh.set:on']);
         expect(mock.system.sshEnabled, isFalse);
       },
     );
+
+    test('the prompt: wrong password (tries left), then the right one starts the job', () async {
+      final (mock, s) = await _setup();
+      final asked = s.auth.requests.first;
+      final finished = s.auth.finished.first;
+      var done = false;
+      final call = s.system.setSsh(true)..then((_) => done = true);
+      final r = await asked;
+      expect(r.action, 'org.hinteros.system.ssh');
+      expect(r.account, 'admin');
+      expect(r.message, contains('remote login'));
+      // The call waits; the answers to auth.respond come meanwhile (out of
+      // order with the waiting call's response).
+      final wrong = await s.auth.respond(r.cookie, 'nope');
+      expect((wrong.ok, wrong.attemptsLeft), (false, 2));
+      expect(done, isFalse);
+      final right = await s.auth.respond(r.cookie, 'correct horse');
+      expect(right.ok, isTrue);
+      expect((await finished).outcome, AuthOutcome.authorized);
+      final h = await call;
+      expect(h.kind, JobKind.ssh);
+      mock.system.finishJob(h.jobId);
+      expect(mock.auth.pendingCookies, isEmpty);
+      // The password reached nobody but auth.respond: not the relayed call.
+      expect(mock.system.log, ['ssh.set:on']);
+      expect(mock.auth.attempts, 2);
+    });
+
+    test('three wrong passwords: permission_denied, outcome failed', () async {
+      final (mock, s) = await _setup();
+      final asked = s.auth.requests.first;
+      final outcome = s.auth.finished.first;
+      final call = _fails(s.system.setSsh(true));
+      final r = await asked;
+      expect((await s.auth.respond(r.cookie, 'a')).attemptsLeft, 2);
+      expect((await s.auth.respond(r.cookie, 'b')).attemptsLeft, 1);
+      final last = await s.auth.respond(r.cookie, 'c');
+      expect((last.ok, last.attemptsLeft), (false, 0));
+      expect((await outcome).outcome, AuthOutcome.failed);
+      final e = await call;
+      expect(e.kind, SystemErrorKind.permissionDenied);
+      expect(e.message, contains('wrong too many times'));
+      expect(mock.system.sshEnabled, isFalse);
+    });
+
+    test('cancelling: authentication_required, outcome cancelled', () async {
+      final (_, s) = await _setup();
+      final asked = s.auth.requests.first;
+      final outcome = s.auth.finished.first;
+      final call = _fails(s.system.setSsh(true));
+      final r = await asked;
+      await s.auth.cancel(r.cookie);
+      expect((await outcome).outcome, AuthOutcome.cancelled);
+      final e = await call;
+      expect(e.kind, SystemErrorKind.authenticationRequired);
+      expect(e.message, contains('nothing was changed'));
+      // A request that is over is not an error to cancel again, and not
+      // something to answer.
+      await s.auth.cancel(r.cookie);
+      expect(
+        (await _fails(s.auth.respond(r.cookie, 'x'))).kind,
+        SystemErrorKind.notFound,
+      );
+    });
+
+    test('only the launcher may answer', () async {
+      final mock = api.MockDaemon(clientName: 'someone-else');
+      await mock.waitConnected();
+      final s = daemonSystemServices(mock);
+      addTearDown(mock.close);
+      final call = _fails(s.system.setSsh(true));
+      await Future<void>.delayed(Duration.zero);
+      final e = await _fails(
+        s.auth.respond(mock.auth.pendingCookies.single, 'correct horse'),
+      );
+      expect(e.kind, SystemErrorKind.notAuthorized);
+      mock.auth.cancelFromPolkit(mock.auth.pendingCookies.single);
+      expect((await call).kind, SystemErrorKind.authenticationRequired);
+    });
 
     test('an authorised caller gets a job that ends with SSH on', () async {
       final (mock, s) = await _setup();
@@ -405,11 +497,41 @@ void main() {
     });
   });
 
-  test('restarting the session has no session API method', () async {
-    final (_, s) = await _setup();
-    expect(
-      (await _fails(s.system.restartSession())).kind,
-      SystemErrorKind.unavailable,
+  group('session.restart', () {
+    test('asks the daemon to restart the session', () async {
+      final (mock, s) = await _setup();
+      await s.system.restartSession();
+      expect(mock.sessionRestarts, 1);
+    });
+
+    test(
+      'the launcher going away with the session is the restart working',
+      () async {
+        final mock = _DropsOnRestart();
+        await mock.waitConnected();
+        final s = daemonSystemServices(mock);
+        addTearDown(mock.close);
+        await s.system.restartSession();
+      },
     );
+
+    test('a desktop session is refused with a plain message', () async {
+      final (mock, s) = await _setup();
+      mock.sessionRestartAvailable = false;
+      final e = await _fails(s.system.restartSession());
+      expect(e.kind, SystemErrorKind.unavailable);
+      expect(e.message, contains('not a TV session'));
+      expect(mock.sessionRestarts, 0);
+    });
+
+    test('without a connection it is unavailable', () async {
+      final mock = _Offline();
+      final s = daemonSystemServices(mock);
+      addTearDown(mock.close);
+      expect(
+        (await _fails(s.system.restartSession())).kind,
+        SystemErrorKind.unavailable,
+      );
+    });
   });
 }

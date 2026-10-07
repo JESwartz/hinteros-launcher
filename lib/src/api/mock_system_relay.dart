@@ -122,6 +122,9 @@ class MockSystemRelay {
 
   /// Free disk space, for `apps.install`.
   int freeDiskMib = 100000;
+
+  /// `<id>=<terms version>` for every acceptance an install recorded.
+  final List<String> acceptances = [];
   List<String> hostKeyFingerprints = [
     'SHA256:2CixtE95MNbZHanQGv6hP2D3qfguu9QZfjca2OaupKI',
   ];
@@ -627,6 +630,10 @@ class MockSystemRelay {
           availableBytes: freeDiskMib << 20,
         ).toJson(),
       );
+    }
+    for (final id in want) {
+      final v = _catalogApp(id).terms?.version;
+      if (v != null) acceptances.add('$id=$v');
     }
     return _started(
       JobKind.appsInstall,

@@ -1,10 +1,11 @@
 /// What the system UI needs from the world. Screens only ever see these
 /// interfaces. `daemon_system.dart` implements the system ones (info, SSH,
-/// updates, jobs) over the session API 0.6 `system.*` relay and the runtime
-/// settings (Wi-Fi, Bluetooth, audio, display, power) over the 0.7 methods;
+/// updates, jobs) over the session API 0.6 `system.*` relay, the runtime
+/// settings (Wi-Fi, Bluetooth, audio, display, power) over the 0.7 methods,
+/// and the 0.8 ones (admin password prompt, session restart, Store);
 /// `mock_system.dart` has in-process fakes for all of them (like
 /// `MockDaemon`), and `unavailable_system.dart` answers "unavailable" for
-/// what the daemon does not offer yet (the Store: TODO(M8)).
+/// tests and the first moments before a connection exists.
 library;
 
 import 'models.dart';
@@ -24,9 +25,10 @@ abstract class SystemRepository {
   /// `system.info`.
   Future<SystemInfo> info();
 
-  /// Restarts the launcher session (after a job reported
-  /// `session_restart_required`).
-  // TODO(session-restart): no session API method for it in 0.7
+  /// Restarts the TV session (`session.restart`, after a job reported
+  /// `session_restart_required`): the daemon answers and the launcher is ended
+  /// with the rest of the session; greetd starts a new one. Throws
+  /// [SystemErrorKind.unavailable] when this is not a TV session.
   Future<void> restartSession();
 
   /// `power.suspend` / `reboot` / `poweroff`, session daemon -> logind
@@ -40,24 +42,42 @@ abstract class SystemRepository {
 
   Future<SshState> ssh();
 
-  /// Whether the admin password can be passed on (see `adminPasswordUi`).
-  /// When false, turning SSH on is attempted as it is and the screen explains
-  /// [SystemErrorKind.authenticationRequired].
-  bool get acceptsAdminPassword;
-
   /// Turns SSH on or off (`ssh.set`). SSH is plain username and password:
   /// you log in as the admin account. Turning it on needs the admin password
-  /// (polkit `auth_admin`): without a polkit agent the service answers
-  /// [SystemErrorKind.authenticationRequired]; with one,
-  /// [SystemErrorKind.wrongPassword] means the password was not right.
-  /// Turning it off needs none. [SystemErrorKind.nothingToDo] when SSH
-  /// already is in that state.
-  Future<JobHandle> setSsh(bool enable, {String? adminPassword});
+  /// (polkit `auth_admin`): the call waits while [AuthRepository.requests]
+  /// carries the prompt, which the shell shows. The password never passes
+  /// through here. [SystemErrorKind.authenticationRequired]: the prompt was
+  /// cancelled (or no agent), nothing changed;
+  /// [SystemErrorKind.permissionDenied]: too many wrong passwords. Turning
+  /// it off needs none. [SystemErrorKind.nothingToDo] when SSH already is in
+  /// that state.
+  Future<JobHandle> setSsh(bool enable);
 
   /// `settings.get` then `settings.set` with the revision it returned
   /// (retried once when it went stale). Null when there was nothing to
   /// change.
   Future<JobHandle?> applySettings();
+}
+
+/// The admin password prompt: the session daemon is polkit's authentication
+/// agent for the calls it relays. The launcher shows the prompt (the shell
+/// listens to [requests]), answers with [respond] or [cancel] and closes it on
+/// [finished]. The password is only ever an argument of [respond]: it is not
+/// logged, kept or put into an error.
+abstract class AuthRepository {
+  /// `authentication_requested`.
+  Stream<AuthRequest> get requests;
+
+  /// `authentication_finished`: the request is over (authorized, failed, or
+  /// cancelled by anyone).
+  Stream<AuthFinished> get finished;
+
+  /// `auth.respond`. A wrong password is an answer with `ok` false, not an
+  /// error. [SystemErrorKind.notFound] when the request is over already.
+  Future<AuthAnswer> respond(String cookie, String password);
+
+  /// `auth.cancel`; a request that is over already is not an error.
+  Future<void> cancel(String cookie);
 }
 
 /// Updates, rollback, channel.
@@ -174,31 +194,58 @@ abstract class DisplayAudioRepository {
   Future<void> setMuted(bool muted);
 }
 
-/// The Store: catalog index, installed apps, install and remove.
+/// The Store: the catalog merged with what is installed, and install and
+/// remove. [DaemonStore] reads `store.list` and follows `store_changed`;
+/// there is no state of its own to keep in step.
 abstract class StoreRepository {
-  // TODO(M8): /run/current-system/sw/share/hinteros/catalog.json,
-  // apps.install / apps.remove (M8), terms acceptance record
+  /// The first listing arrived (until then [installed] is empty because it is
+  /// not known, not because nothing is installed).
+  bool get loaded;
 
+  /// `store.list`, fresh: every app with its state, by name. Throws
+  /// [SystemException]: `unavailable` without a catalog index or system
+  /// service.
   Future<List<StoreApp>> catalog();
 
-  /// Ids of installed apps; follows [changes].
+  /// The last listing ([catalog] and every `store_changed` refresh it), empty
+  /// before [loaded].
+  List<StoreApp> get apps;
+
+  /// Ids of the apps that are on this box (installed, being removed,
+  /// retired, unavailable); follows [changes].
   Set<String> get installed;
+
+  /// The state of app [id] in the last listing; available when unknown.
+  StoreState stateOf(String id);
+
+  /// The listing changed (`store_changed`, or a refresh that found a change).
   Stream<void> get changes;
 
-  /// `update.check` found a catalog change: more apps arrive with the next
-  /// update.
+  /// More apps arrive with the next update (`store.list`'s
+  /// `more_after_update`).
   bool get moreAfterUpdate;
 
   /// The app's own installed icon or, before install, the site icon (the
   /// daemon's runtime resolution). A file path, or null for placeholder art.
   Future<String?> resolveIcon(StoreApp app);
 
-  /// `apps.install`; [acceptedTerms] is the version of the vendor terms the
-  /// user accepted (recorded with date and profile).
-  Future<JobHandle> install(String id, {String? acceptedTerms});
+  /// `apps.install {ids: [id], revision, accepted_terms}`; [acceptedTerms] is
+  /// the version of the vendor terms the user read, per app id: the app's own
+  /// and those of the apps installed with it. A stale revision is fetched
+  /// again and the call tried once more.
+  ///
+  /// [SystemErrorKind.appConflict] (`data`: `id`, `conflicts_with`),
+  /// [SystemErrorKind.termsRequired] (`id`, `version`),
+  /// [SystemErrorKind.insufficientResources], [SystemErrorKind.nothingToDo]
+  /// (already installed).
+  Future<JobHandle> install(
+    String id, {
+    Map<String, String> acceptedTerms = const {},
+  });
 
-  /// `apps.remove`; [deleteData] also deletes the app's files in every
-  /// profile.
+  /// `apps.remove {ids: [id], revision, delete_data}`; [deleteData] also
+  /// deletes the app's files in every profile. [SystemErrorKind.appConflict]
+  /// when another installed app needs it.
   Future<JobHandle> remove(String id, {bool deleteData = false});
 }
 
@@ -212,6 +259,7 @@ class SystemServices {
     required this.bluetooth,
     required this.displayAudio,
     required this.store,
+    required this.auth,
   });
 
   final JobsRepository jobs;
@@ -221,4 +269,5 @@ class SystemServices {
   final BluetoothRepository bluetooth;
   final DisplayAudioRepository displayAudio;
   final StoreRepository store;
+  final AuthRepository auth;
 }

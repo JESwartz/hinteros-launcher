@@ -114,6 +114,7 @@ StoreApp? _parseApp(Map<String, Object?> a, TermsReader readTerms) {
     homepage: _str(a['homepage']) ?? '',
     isWeb: a['kind'] == 'web',
     depends: _strs(a['depends']),
+    conflicts: _strs(a['conflicts']),
     terms: terms,
     free: a['free'] == true,
     installer: a['installer'] == true,
@@ -129,9 +130,14 @@ StoreApp? _parseApp(Map<String, Object?> a, TermsReader readTerms) {
             firefoxProfile: icon['firefoxProfile'] == true,
           )
         : const StoreIcon(),
-    removeDataWarning: dataPaths.contains('.local/share/Steam')
-        ? 'Games you installed through Steam are deleted too, in every '
-              'profile. They have to be downloaded again.'
-        : null,
+    removeDataWarning: removeDataWarningFor(dataPaths),
   );
 }
+
+/// What removing an app together with its data costs beyond the app itself,
+/// for the apps whose data paths hold more than settings (Steam: the games).
+String? removeDataWarningFor(List<String> dataPaths) =>
+    dataPaths.contains('.local/share/Steam')
+    ? 'Games you installed through Steam are deleted too, in every '
+          'profile. They have to be downloaded again.'
+    : null;

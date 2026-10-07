@@ -111,18 +111,29 @@ class MockAuthAgent {
     {'action': action},
   );
 
-  void _finish(_Pending p, AuthOutcome outcome) {
+  /// The request is over. [later]: after the answer to the call that ended it
+  /// was delivered (the daemon replies to `auth.respond` first; the event and
+  /// the waiting call follow).
+  void _finish(_Pending p, AuthOutcome outcome, {bool later = false}) {
     if (_pending.remove(p.cookie) == null) return;
-    if (isLauncher()) {
-      emit(
-        'authentication_finished',
-        AuthenticationFinishedEvent(
-          cookie: p.cookie,
-          outcome: outcome,
-        ).toJson(),
-      );
+    void announce() {
+      if (isLauncher()) {
+        emit(
+          'authentication_finished',
+          AuthenticationFinishedEvent(
+            cookie: p.cookie,
+            outcome: outcome,
+          ).toJson(),
+        );
+      }
+      p.done.complete(outcome);
     }
-    p.done.complete(outcome);
+
+    if (later) {
+      Timer.run(announce);
+    } else {
+      announce();
+    }
   }
 
   _Pending _find(String cookie) =>
@@ -150,15 +161,14 @@ class MockAuthAgent {
         attempts++;
         p.attemptsLeft--;
         final ok = r.password == adminPassword;
-        // The reply goes out before the call that waited resumes.
         final reply = AuthRespondResult(
           ok: ok,
           attemptsLeft: p.attemptsLeft,
         ).toJson();
         if (ok) {
-          _finish(p, AuthOutcome.authorized);
+          _finish(p, AuthOutcome.authorized, later: true);
         } else if (p.attemptsLeft <= 0) {
-          _finish(p, AuthOutcome.failed);
+          _finish(p, AuthOutcome.failed, later: true);
         }
         return reply;
       case 'auth.cancel':

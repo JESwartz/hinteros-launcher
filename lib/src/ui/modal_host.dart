@@ -57,7 +57,13 @@ class ModalController extends ChangeNotifier {
 
   /// Shows [builder] over everything, resolving with what the modal passes to
   /// [ModalHandle.close] (null when closed with Back).
-  Future<T?> show<T>(ModalBuilder<T> builder) {
+  Future<T?> show<T>(ModalBuilder<T> builder) => open(builder).result;
+
+  /// Like [show], and also gives the handle, so the host can close the modal
+  /// itself (an event said it is over).
+  ({ModalHandle<T> handle, Future<T?> result}) open<T>(
+    ModalBuilder<T> builder,
+  ) {
     final id = _nextId++;
     final region = NavRegion('modal-$id', rememberPerRow: false);
     nav.adopt(region);
@@ -82,7 +88,7 @@ class ModalController extends ChangeNotifier {
         nav.focusRegion(region);
       }
     });
-    return completer.future.then((v) => v as T?);
+    return (handle: handle, result: completer.future.then((v) => v as T?));
   }
 
   void _close(_Entry e, Object? result) {

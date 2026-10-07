@@ -29,14 +29,11 @@ class _UnavailableSystem implements SystemRepository {
   @override
   Future<Set<PowerAction>> powerAllowed() => Future.error(_gone);
   @override
-  bool get acceptsAdminPassword => false;
-  @override
   Future<SshState> ssh() => Future.error(_gone);
   @override
   Future<JobHandle?> applySettings() => Future.error(_gone);
   @override
-  Future<JobHandle> setSsh(bool enable, {String? adminPassword}) =>
-      Future.error(_gone);
+  Future<JobHandle> setSsh(bool enable) => Future.error(_gone);
 }
 
 class _UnavailableUpdates implements UpdatesRepository {
@@ -137,9 +134,15 @@ class _UnavailableDisplayAudio implements DisplayAudioRepository {
 
 class _UnavailableStore implements StoreRepository {
   @override
+  bool get loaded => false;
+  @override
   Future<List<StoreApp>> catalog() => Future.error(_gone);
   @override
+  List<StoreApp> get apps => const [];
+  @override
   Set<String> get installed => const {};
+  @override
+  StoreState stateOf(String id) => StoreState.available;
   @override
   Stream<void> get changes => const Stream.empty();
   @override
@@ -147,11 +150,25 @@ class _UnavailableStore implements StoreRepository {
   @override
   Future<String?> resolveIcon(StoreApp app) async => null;
   @override
-  Future<JobHandle> install(String id, {String? acceptedTerms}) =>
-      Future.error(_gone);
+  Future<JobHandle> install(
+    String id, {
+    Map<String, String> acceptedTerms = const {},
+  }) => Future.error(_gone);
   @override
   Future<JobHandle> remove(String id, {bool deleteData = false}) =>
       Future.error(_gone);
+}
+
+class _UnavailableAuth implements AuthRepository {
+  @override
+  Stream<AuthRequest> get requests => const Stream.empty();
+  @override
+  Stream<AuthFinished> get finished => const Stream.empty();
+  @override
+  Future<AuthAnswer> respond(String cookie, String password) =>
+      Future.error(_gone);
+  @override
+  Future<void> cancel(String cookie) async {}
 }
 
 /// Every system call fails with `unavailable`.
@@ -163,4 +180,5 @@ SystemServices unavailableSystemServices() => SystemServices(
   bluetooth: _UnavailableBluetooth(),
   displayAudio: _UnavailableDisplayAudio(),
   store: _UnavailableStore(),
+  auth: _UnavailableAuth(),
 );

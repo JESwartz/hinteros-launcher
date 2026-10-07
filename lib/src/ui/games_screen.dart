@@ -20,7 +20,7 @@ class GamesScreen extends StatelessWidget {
     required this.data,
     required this.region,
     this.steamMissing = false,
-    this.onOpenStore,
+    this.onInstallSteam,
   });
 
   final LauncherData data;
@@ -28,12 +28,14 @@ class GamesScreen extends StatelessWidget {
 
   /// Steam is not installed (Store state): offer to install it.
   final bool steamMissing;
-  final VoidCallback? onOpenStore;
+
+  /// The install flow for Steam (confirm, terms, progress), through the Store.
+  final Future<void> Function(BuildContext context)? onInstallSteam;
 
   @override
   Widget build(BuildContext context) {
     if (steamMissing) {
-      return _SteamPrompt(region: region, onOpenStore: onOpenStore);
+      return _SteamPrompt(region: region, onInstall: onInstallSteam);
     }
     return ListenableBuilder(
       listenable: data,
@@ -78,12 +80,12 @@ class GamesScreen extends StatelessWidget {
   }
 }
 
-/// Steam is not installed: say so and lead to the Store.
+/// Steam is not installed: say so and install it from here.
 class _SteamPrompt extends StatelessWidget {
-  const _SteamPrompt({required this.region, required this.onOpenStore});
+  const _SteamPrompt({required this.region, required this.onInstall});
 
   final NavRegion region;
-  final VoidCallback? onOpenStore;
+  final Future<void> Function(BuildContext context)? onInstall;
 
   @override
   Widget build(BuildContext context) {
@@ -98,8 +100,8 @@ class _SteamPrompt extends StatelessWidget {
           Text('Steam is not installed', style: t.headline),
           const SizedBox(height: HinterTokens.s2),
           Text(
-            'Your games come from Steam. Install it from the Store and they '
-            'will show up here.',
+            'Your games come from Steam. Install it and they will show up '
+            'here.',
             style: t.bodyDim,
           ),
           const SizedBox(height: HinterTokens.s4),
@@ -107,12 +109,9 @@ class _SteamPrompt extends StatelessWidget {
             region: region,
             rowKey: 'install-steam',
             col: 0,
-            onSelect: onOpenStore,
-            builder: (_, f) => HButton(
-              label: 'Install Steam from the Store',
-              focused: f,
-              primary: true,
-            ),
+            onSelect: onInstall == null ? null : () => onInstall!(context),
+            builder: (_, f) =>
+                HButton(label: 'Install Steam', focused: f, primary: true),
           ),
         ],
       ),

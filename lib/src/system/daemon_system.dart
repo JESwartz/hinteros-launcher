@@ -9,24 +9,14 @@ library;
 import 'dart:async';
 
 import '../api/api.dart' as api;
+import 'daemon_auth.dart';
 import 'daemon_errors.dart';
 import 'daemon_runtime.dart';
+import 'daemon_store.dart';
 import 'models.dart';
 import 'repositories.dart';
-import 'unavailable_system.dart';
 
 export 'daemon_errors.dart';
-
-/// Whether the launcher can hand an admin password to polkit. It cannot yet:
-/// `ssh.set` is guarded by `auth_admin`, which needs an authentication agent,
-/// and the session API has no way to carry a password. While this is false
-/// the Remote access screen calls `ssh.set` as it is and explains the
-/// `authentication_required` answer; when true it asks for the password
-/// first (the code is kept, see `RemoteAccessSection`).
-// TODO(polkit-agent): flip when the session daemon registers a polkit
-// authentication agent that takes the password from the launcher (design
-// sketch in the README, "Admin password and polkit").
-const bool adminPasswordUi = false;
 
 // ---------------------------------------------------------------- wire mapping
 
@@ -461,6 +451,15 @@ class DaemonUpdates implements UpdatesRepository {
               summary: a.summary,
               severity: a.security == null ? null : _severity(a.security!),
               signer: a.signer,
+              newApps: a.newApps == null
+                  ? null
+                  : [for (final n in a.newApps!) CatalogChange(n.id, n.name)],
+              removedApps: a.removedApps == null
+                  ? null
+                  : [
+                      for (final n in a.removedApps!)
+                        CatalogChange(n.id, n.name, reason: n.reason),
+                    ],
             ),
       checkedAt: _unix(result.checkedAt),
     );
@@ -545,9 +544,6 @@ class DaemonSystem implements SystemRepository {
   final DaemonJobs _jobs;
 
   @override
-  bool get acceptsAdminPassword => adminPasswordUi;
-
-  @override
   Future<SystemInfo> info() => guardCall(() async {
     final i = await _conn.systemInfo();
     return SystemInfo(
@@ -567,14 +563,14 @@ class DaemonSystem implements SystemRepository {
     () async => SshState(enabled: (await _conn.systemInfo()).ssh.enabled),
   );
 
-  /// `ssh.set`. polkit guards it with `auth_admin`; there is no way yet to
-  /// give it the password ([adminPasswordUi]), so turning SSH on ends in
-  /// [SystemErrorKind.authenticationRequired] and [adminPassword] is not
-  /// sent anywhere.
-  // TODO(polkit-agent): hand the password to the session daemon's polkit
-  // agent once it exists.
+  /// `ssh.set`. polkit guards turning it on with `auth_admin`: the call waits
+  /// while the session daemon (polkit's authentication agent) sends
+  /// `authentication_requested`, which [DaemonAuth] hands to the prompt. This
+  /// only ever sees the answer: a job id, `authentication_required` (the
+  /// prompt was cancelled or timed out) or `permission_denied` (wrong
+  /// passwords).
   @override
-  Future<JobHandle> setSsh(bool enable, {String? adminPassword}) => _jobs.start(
+  Future<JobHandle> setSsh(bool enable) => _jobs.start(
     JobKind.ssh,
     () async =>
         (await _conn.systemSshSet(api.SystemSshSetParams(enabled: enable)))
@@ -631,26 +627,41 @@ class DaemonSystem implements SystemRepository {
     };
   });
 
-  // TODO(session-restart): the session API has no method to restart the
-  // session.
+  /// `session.restart`: the daemon answers and then ends the session, so the
+  /// connection may drop before (or just after) the answer is read; that is
+  /// the restart working.
   @override
-  Future<void> restartSession() => Future.error(_needsRestartMethod);
+  Future<void> restartSession() async {
+    final wasConnected = _conn.status is api.Connected;
+    try {
+      await _conn.sessionRestart();
+    } on api.DaemonUnavailableException {
+      if (!wasConnected) {
+        throw systemExceptionFrom(const api.DaemonUnavailableException());
+      }
+    } on api.ApiException catch (e) {
+      final data = e.data is Map ? (e.data! as Map) : const {};
+      if (e.code == api.ApiErrorCode.unavailable &&
+          data['service'] == 'logind' &&
+          data['reason'] == 'not_greetd') {
+        throw const SystemException(
+          SystemErrorKind.unavailable,
+          'This is not a TV session, so it cannot be restarted from here.',
+          data: {'reason': 'not_greetd'},
+        );
+      }
+      throw systemExceptionFrom(e);
+    }
+  }
 }
-
-const _needsRestartMethod = SystemException(
-  SystemErrorKind.unavailable,
-  'This needs a newer HinterOS service than the one that is running.',
-);
 
 // ---------------------------------------------------------------- wiring
 
-/// The services over a daemon connection. System info, SSH, updates, jobs,
-/// power, Wi-Fi, Bluetooth, display and audio are real (API 0.7); the Store
-/// stays unavailable until the daemon has it.
-// TODO(M8): StoreRepository (apps.install / apps.remove).
+/// The services over a daemon connection (session API 0.8): system info, SSH,
+/// updates, jobs, power, Wi-Fi, Bluetooth, display, audio, the admin password
+/// prompt, session restart and the Store.
 SystemServices daemonSystemServices(api.DaemonConnection connection) {
   final jobs = DaemonJobs(connection);
-  final rest = unavailableSystemServices();
   return SystemServices(
     jobs: jobs,
     system: DaemonSystem(connection, jobs),
@@ -658,6 +669,7 @@ SystemServices daemonSystemServices(api.DaemonConnection connection) {
     network: DaemonNetwork(connection),
     bluetooth: DaemonBluetooth(connection),
     displayAudio: DaemonDisplayAudio(connection),
-    store: rest.store,
+    store: DaemonStore(connection, jobs),
+    auth: DaemonAuth(connection),
   );
 }

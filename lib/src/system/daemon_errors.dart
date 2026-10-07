@@ -75,20 +75,37 @@ SystemException systemExceptionFrom(Object e) {
       case api.ApiErrorCode.permissionDenied:
         return SystemException(
           SystemErrorKind.permissionDenied,
-          'This is not allowed on this box right now.',
+          data['reason'] == 'polkit'
+              ? 'The admin password was wrong too many times. Nothing was '
+                    'changed.'
+              : 'This is not allowed on this box right now.',
           data: data,
         );
       case api.ApiErrorCode.authenticationRequired:
         return SystemException(
           SystemErrorKind.authenticationRequired,
-          'This needs the admin password.',
+          'The admin password was not given, so nothing was changed.',
+          data: data,
+        );
+      case api.ApiErrorCode.appConflict:
+        return SystemException(
+          SystemErrorKind.appConflict,
+          '${data['id']} and ${data['conflicts_with']} cannot be on this '
+          'box together.',
+          data: data,
+        );
+      case api.ApiErrorCode.termsRequired:
+        return SystemException(
+          SystemErrorKind.termsRequired,
+          'The terms of ${data['id']} have to be accepted first.',
           data: data,
         );
       case api.ApiErrorCode.insufficientResources:
         return SystemException(
           SystemErrorKind.insufficientResources,
           data['kind'] == 'disk'
-              ? 'There is not enough free disk space for this.'
+              ? 'There is not enough free disk space for this. Free some '
+                    'space (remove an app or delete files) and try again.'
               : 'There is not enough free memory for this.',
           data: data,
         );
@@ -135,9 +152,14 @@ SystemException systemExceptionFrom(Object e) {
       case api.ApiErrorCode.invalidParams:
         return SystemException(
           SystemErrorKind.invalidParams,
-          data['reason'] == 'unsupported_security'
-              ? "This kind of network (WEP or a business login) can't be joined from here."
-              : e.message,
+          switch (data['reason']) {
+            'unsupported_security' =>
+              "This kind of network (WEP or a business login) can't be "
+                  'joined from here.',
+            'not_available' =>
+              'That app is not available in this version of HinterOS.',
+            _ => e.message,
+          },
           data: data,
         );
       case api.ApiErrorCode.methodNotFound:
@@ -166,5 +188,7 @@ String runtimeServiceName(String service) => switch (service) {
   'audio' => 'Audio',
   'display' => 'Display control',
   'logind' => 'Power control',
+  'catalog' => 'The Store',
+  'polkit' => 'The admin password check',
   _ => 'This',
 };

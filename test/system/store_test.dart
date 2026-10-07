@@ -121,7 +121,7 @@ void main() {
       expect(buttonEnabled(t, 'Accept and install'), isTrue);
       expect(find.textContaining('END OF PLACEHOLDER TERMS'), findsOneWidget);
       await press(t, [kDown, kRight, kEnter]);
-      expect(h.services.mockStore.log, ['install:steam:2026-09-10']);
+      expect(h.services.mockStore.log, ['install:steam:steam=2026-09-10']);
       expect(h.services.mockStore.acceptances, ['steam=2026-09-10']);
       expect(h.services.mockJobs.started.single.kind, JobKind.install);
     });
@@ -145,9 +145,16 @@ void main() {
       t,
     ) async {
       final h = harness();
+      h.services.mockStore.setInstalled({});
       expect(
         () => h.services.mockStore.install('plex-htpc'),
-        throwsA(isA<SystemException>()),
+        throwsA(
+          isA<SystemException>().having(
+            (e) => e.kind,
+            'kind',
+            SystemErrorKind.termsRequired,
+          ),
+        ),
       );
     });
 
@@ -227,8 +234,17 @@ void main() {
       expect(find.text('Steam is not installed'), findsOneWidget);
       expect(focusLabel(), 'games/install-steam:0');
       await press(t, [kEnter]);
-      expect(focusLabel(), startsWith('store-cats/'));
-      expect(find.text('Store'), findsWidgets);
+      // The install flow starts right here, not in the Store tab.
+      expect(find.text('Install Steam?'), findsOneWidget);
+      expect(find.textContaining('You read it in full next'), findsOneWidget);
+      await press(t, [kRight, kEnter]); // Continue
+      expect(find.text('Terms for Steam'), findsOneWidget);
+      for (var i = 0; i < 60 && !buttonEnabled(t, 'Accept and install'); i++) {
+        await press(t, [kPageDown]);
+      }
+      await press(t, [kDown, kRight, kEnter]);
+      expect(h.services.mockStore.log, ['install:steam:steam=2026-09-10']);
+      expect(find.text('Installing'), findsOneWidget, reason: 'progress page');
     });
 
     testWidgets('shows the library when Steam is installed', (t) async {

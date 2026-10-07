@@ -9,6 +9,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import '../api/mock_store.dart' show mockCatalogDir;
 import 'catalog.dart';
 import 'models.dart';
 import 'repositories.dart';
@@ -23,6 +24,7 @@ class _Job {
   JobSnapshot snap;
   final changes = StreamController<JobSnapshot>.broadcast(sync: true);
   void Function()? onSuccess;
+  void Function()? onFinish;
   Timer? timer;
 }
 
@@ -63,7 +65,11 @@ class MockJobs implements JobsRepository {
 
   /// Starts a job. [onSuccess] is the side effect on the mock's state when it
   /// finishes well.
-  JobHandle start(JobKind kind, {void Function()? onSuccess}) {
+  JobHandle start(
+    JobKind kind, {
+    void Function()? onSuccess,
+    void Function()? onFinish,
+  }) {
     final r = running;
     if (r != null) {
       throw SystemException(
@@ -73,7 +79,9 @@ class MockJobs implements JobsRepository {
       );
     }
     final id = _hex(++_n * 7919 + 0xabc0de, 16);
-    final job = _Job(JobSnapshot(jobId: id, kind: kind))..onSuccess = onSuccess;
+    final job = _Job(JobSnapshot(jobId: id, kind: kind))
+      ..onSuccess = onSuccess
+      ..onFinish = onFinish;
     _jobs[id] = job;
     final h = JobHandle(id, kind);
     started.add(h);
@@ -160,6 +168,7 @@ class MockJobs implements JobsRepository {
               j.snap.sessionRestartRequired),
     );
     if (ok) j.onSuccess?.call();
+    j.onFinish?.call();
     j.changes.add(j.snap);
   }
 
@@ -403,7 +412,9 @@ AvailableUpdate mockOrdinaryUpdate({bool catalogChanged = true}) =>
       date: DateTime(2026, 10, 5),
       summary: 'New apps in the Store, Wi-Fi reconnect fix.',
       signer: 'release',
-      catalogChanged: catalogChanged,
+      newApps: catalogChanged
+          ? const [CatalogChange('mpv', 'Video player')]
+          : null,
     );
 
 AvailableUpdate mockSecurityUpdate({
@@ -415,7 +426,7 @@ AvailableUpdate mockSecurityUpdate({
   summary: 'Fixes a flaw in the web engine used by Firefox and the web apps.',
   severity: severity,
   signer: 'release',
-  catalogChanged: true,
+  newApps: const [CatalogChange('mpv', 'Video player')],
 );
 
 UpdateStatus mockBehind(AvailableUpdate a) => UpdateStatus(
@@ -428,25 +439,13 @@ UpdateStatus mockBehind(AvailableUpdate a) => UpdateStatus(
 // ---------------------------------------------------------------- system
 
 class MockSystem implements SystemRepository {
-  MockSystem(
-    this.jobs,
-    this.updates, {
-    this.adminPassword = 'correct horse',
-    this.acceptsAdminPassword = true,
-    this.dev = false,
-  });
+  MockSystem(this.jobs, this.updates, this.auth, {this.dev = false});
 
   final MockJobs jobs;
   final MockUpdates updates;
 
-  /// The admin account's password in this mock.
-  String adminPassword;
-
-  /// True: like a daemon with a polkit agent (the launcher asks for the
-  /// password first). False: like the real 0.6 daemon, `ssh.set` to on
-  /// answers `authenticationRequired` and no password is looked at.
-  @override
-  final bool acceptsAdminPassword;
+  /// The admin password prompt turning SSH on goes through.
+  final MockAuth auth;
 
   /// A developer build (`system.info.dev`): About shows the DEV badge.
   bool dev;
@@ -454,9 +453,6 @@ class MockSystem implements SystemRepository {
 
   /// Everything done to the box: `power:<action>`, `ssh:on`, ...
   final List<String> log = [];
-
-  /// Admin passwords that were offered, in order (for tests).
-  final List<String> adminAttempts = [];
 
   @override
   Future<SystemInfo> info() async => SystemInfo(
@@ -482,8 +478,15 @@ class MockSystem implements SystemRepository {
   @override
   Future<Set<PowerAction>> powerAllowed() async => allowedActions;
 
+  /// Makes the next `restartSession` fail with this.
+  SystemException? restartFails;
+
   @override
-  Future<void> restartSession() async => log.add('session:restart');
+  Future<void> restartSession() async {
+    final e = restartFails;
+    if (e != null) throw e;
+    log.add('session:restart');
+  }
 
   @override
   Future<SshState> ssh() async => SshState(enabled: _enabled);
@@ -492,25 +495,111 @@ class MockSystem implements SystemRepository {
   Future<JobHandle?> applySettings() async => null;
 
   @override
-  Future<JobHandle> setSsh(bool enable, {String? adminPassword}) async {
-    if (enable && !acceptsAdminPassword) {
-      throw const SystemException(
-        SystemErrorKind.authenticationRequired,
-        'This needs the admin password.',
-        data: {'action': 'org.hinteros.system.ssh'},
-      );
-    }
+  Future<JobHandle> setSsh(bool enable) async {
     if (enable) {
-      adminAttempts.add(adminPassword ?? '');
-      if (adminPassword != this.adminPassword) {
-        throw const SystemException(
-          SystemErrorKind.wrongPassword,
-          'That is not the admin password.',
-        );
+      // polkit auth_admin: the prompt is the shell's, this waits for it.
+      switch (await auth.ask(
+        action: 'org.hinteros.system.ssh',
+        message:
+            'Authentication is required to turn remote login (SSH) on or off',
+      )) {
+        case AuthOutcome.authorized:
+          break;
+        case AuthOutcome.failed:
+          throw const SystemException(
+            SystemErrorKind.permissionDenied,
+            'The admin password was wrong too many times. Nothing was changed.',
+          );
+        case AuthOutcome.cancelled:
+          throw const SystemException(
+            SystemErrorKind.authenticationRequired,
+            'The admin password was not given, so nothing was changed.',
+            data: {'action': 'org.hinteros.system.ssh'},
+          );
       }
     }
     log.add('ssh:${enable ? 'on' : 'off'}');
     return jobs.start(JobKind.ssh, onSuccess: () => _enabled = enable);
+  }
+}
+
+// ---------------------------------------------------------------- admin password
+
+/// The admin password prompt as the real one behaves: a call that needs the
+/// password [ask]s and waits; the UI [respond]s (3 tries) or [cancel]s.
+class MockAuth implements AuthRepository {
+  /// The admin account's password in this mock (placeholder).
+  String adminPassword = 'correct horse';
+  String account = 'admin';
+  int maxAttempts = 3;
+
+  /// How many passwords were checked (never which).
+  int attempts = 0;
+
+  /// How many prompts were cancelled by the UI.
+  int cancels = 0;
+
+  final _requests = StreamController<AuthRequest>.broadcast(sync: true);
+  final _finished = StreamController<AuthFinished>.broadcast(sync: true);
+  final _pending = <String, ({int left, Completer<AuthOutcome> done})>{};
+  int _n = 0;
+
+  /// Cookies that wait for an answer.
+  List<String> get pending => _pending.keys.toList();
+
+  @override
+  Stream<AuthRequest> get requests => _requests.stream;
+  @override
+  Stream<AuthFinished> get finished => _finished.stream;
+
+  Future<AuthOutcome> ask({required String action, required String message}) {
+    final cookie = 'mock-${++_n}';
+    final done = Completer<AuthOutcome>();
+    _pending[cookie] = (left: maxAttempts, done: done);
+    _requests.add(
+      AuthRequest(
+        cookie: cookie,
+        action: action,
+        message: message,
+        account: account,
+      ),
+    );
+    return done.future;
+  }
+
+  void _end(String cookie, AuthOutcome o) {
+    final p = _pending.remove(cookie);
+    if (p == null) return;
+    _finished.add(AuthFinished(cookie, o));
+    p.done.complete(o);
+  }
+
+  @override
+  Future<AuthAnswer> respond(String cookie, String password) async {
+    final p = _pending[cookie];
+    if (p == null) {
+      throw const SystemException(
+        SystemErrorKind.notFound,
+        'There is no such request any more.',
+      );
+    }
+    attempts++;
+    final left = p.left - 1;
+    final ok = password == adminPassword;
+    if (ok) {
+      _end(cookie, AuthOutcome.authorized);
+    } else if (left <= 0) {
+      _end(cookie, AuthOutcome.failed);
+    } else {
+      _pending[cookie] = (left: left, done: p.done);
+    }
+    return AuthAnswer(ok: ok, attemptsLeft: left);
+  }
+
+  @override
+  Future<void> cancel(String cookie) async {
+    if (_pending.containsKey(cookie)) cancels++;
+    _end(cookie, AuthOutcome.cancelled);
   }
 }
 
@@ -848,23 +937,6 @@ class MockDisplayAudio implements DisplayAudioRepository {
 
 // ---------------------------------------------------------------- store
 
-/// The directory of the real-format catalog fixture (`catalog.json` plus
-/// `terms/`, generated by the catalog repo's `index` package, with
-/// placeholder terms text): `$HINTEROS_MOCK_CATALOG`, else
-/// `test/fixtures/catalog` found from the working directory upwards.
-String? mockCatalogDir() {
-  final env = Platform.environment['HINTEROS_MOCK_CATALOG'];
-  if (env != null && env.isNotEmpty) return env;
-  var d = Directory.current;
-  for (var i = 0; i < 6; i++) {
-    final c = '${d.path}/test/fixtures/catalog';
-    if (File('$c/catalog.json').existsSync()) return c;
-    if (d.parent.path == d.path) break;
-    d = d.parent;
-  }
-  return null;
-}
-
 /// The mock Store's catalog: the fixture in the real index format, read by
 /// the same parser as the real one, plus three mock-only entries (RetroArch
 /// and its cores, a video player) that exercise dependencies and the Store
@@ -930,6 +1002,7 @@ class MockStore implements StoreRepository {
   final MockJobs jobs;
   final List<StoreApp> _catalog;
   final Set<String> _installed;
+  final _busy = <String, StoreState>{};
 
   /// Where the generic placeholder icons are (`<id>.png`); null: none.
   final String? iconDir;
@@ -938,16 +1011,54 @@ class MockStore implements StoreRepository {
   @override
   bool moreAfterUpdate;
 
-  /// `install:<id>:<terms>` / `remove:<id>:<deleteData>` in order.
+  /// `install:<id>:<id=terms version,...>` / `remove:<id>:<deleteData>` in
+  /// order.
   final List<String> log = [];
 
   /// `<id>=<terms version>` for every acceptance the box would record.
   final List<String> acceptances = [];
 
+  /// The next install or remove fails with this (a conflict, no space...).
+  SystemException? failNext;
+
+  @override
+  bool get loaded => true;
   @override
   Set<String> get installed => Set.unmodifiable(_installed);
   @override
   Stream<void> get changes => _changes.stream;
+
+  @override
+  StoreState stateOf(String id) =>
+      _busy[id] ??
+      (_installed.contains(id) ? StoreState.installed : StoreState.available);
+
+  @override
+  List<StoreApp> get apps => [
+    for (final a in _catalog)
+      StoreApp(
+        id: a.id,
+        name: a.name,
+        summary: a.summary,
+        description: a.description,
+        category: a.category,
+        sizeMiB: a.sizeMiB,
+        homepage: a.homepage,
+        isWeb: a.isWeb,
+        depends: a.depends,
+        conflicts: a.conflicts,
+        terms: a.terms,
+        free: a.free,
+        installer: a.installer,
+        installerDefault: a.installerDefault,
+        onIso: a.onIso,
+        buildsOnDevice: a.buildsOnDevice,
+        dataPaths: a.dataPaths,
+        icon: a.icon,
+        removeDataWarning: a.removeDataWarning,
+        state: stateOf(a.id),
+      ),
+  ];
 
   void setInstalled(Iterable<String> ids) {
     _installed
@@ -957,7 +1068,7 @@ class MockStore implements StoreRepository {
   }
 
   @override
-  Future<List<StoreApp>> catalog() async => _catalog;
+  Future<List<StoreApp>> catalog() async => apps;
 
   @override
   Future<String?> resolveIcon(StoreApp app) async {
@@ -978,24 +1089,54 @@ class MockStore implements StoreRepository {
     ),
   );
 
-  @override
-  Future<JobHandle> install(String id, {String? acceptedTerms}) async {
-    final a = _app(id);
-    if (a.terms != null && acceptedTerms != a.terms!.version) {
-      throw const SystemException(
-        SystemErrorKind.invalidParams,
-        'The vendor terms have to be accepted first.',
-        data: {'field': 'accepted_terms'},
-      );
+  void _maybeFail() {
+    final e = failNext;
+    if (e != null) {
+      failNext = null;
+      throw e;
     }
-    log.add('install:$id:${acceptedTerms ?? ''}');
-    if (acceptedTerms != null) acceptances.add('$id=$acceptedTerms');
+  }
+
+  @override
+  Future<JobHandle> install(
+    String id, {
+    Map<String, String> acceptedTerms = const {},
+  }) async {
+    final a = _app(id);
+    _maybeFail();
+    // What the service installs: the app and its depends, transitively.
+    final want = <StoreApp>[];
+    void add(StoreApp x) {
+      if (_installed.contains(x.id) || want.any((w) => w.id == x.id)) return;
+      want.add(x);
+      x.depends.map(_app).forEach(add);
+    }
+
+    add(a);
+    for (final w in want) {
+      final t = w.terms;
+      if (t != null && acceptedTerms[w.id] != t.version) {
+        throw SystemException(
+          SystemErrorKind.termsRequired,
+          'The terms of ${w.id} have to be accepted first.',
+          data: {'id': w.id, 'version': t.version},
+        );
+      }
+    }
+    final given = acceptedTerms.entries.map((e) => '${e.key}=${e.value}');
+    log.add('install:$id:${(given.toList()..sort()).join(',')}');
+    acceptances.addAll(given);
+    for (final w in want) {
+      _busy[w.id] = StoreState.installing;
+    }
+    _changes.add(null);
     return jobs.start(
       JobKind.install,
-      onSuccess: () {
-        _installed
-          ..add(id)
-          ..addAll(a.depends);
+      onSuccess: () => _installed.addAll(want.map((w) => w.id)),
+      onFinish: () {
+        for (final w in want) {
+          _busy.remove(w.id);
+        }
         _changes.add(null);
       },
     );
@@ -1004,11 +1145,15 @@ class MockStore implements StoreRepository {
   @override
   Future<JobHandle> remove(String id, {bool deleteData = false}) async {
     _app(id);
+    _maybeFail();
     log.add('remove:$id:$deleteData');
+    _busy[id] = StoreState.removing;
+    _changes.add(null);
     return jobs.start(
       JobKind.remove,
-      onSuccess: () {
-        _installed.remove(id);
+      onSuccess: () => _installed.remove(id),
+      onFinish: () {
+        _busy.remove(id);
         _changes.add(null);
       },
     );
@@ -1027,6 +1172,7 @@ class MockSystemServices extends SystemServices {
     required this.mockBluetooth,
     required this.mockDisplayAudio,
     required this.mockStore,
+    required this.mockAuth,
   }) : super(
          jobs: mockJobs,
          system: mockSystem,
@@ -1035,6 +1181,7 @@ class MockSystemServices extends SystemServices {
          bluetooth: mockBluetooth,
          displayAudio: mockDisplayAudio,
          store: mockStore,
+         auth: mockAuth,
        );
 
   /// [autoRunJobs]: jobs step through their stages by themselves (`--mock`);
@@ -1044,18 +1191,15 @@ class MockSystemServices extends SystemServices {
     String? iconDir,
     UpdateStatus? status,
     DateTime Function()? now,
-    bool acceptsAdminPassword = true,
   }) {
     final jobs = MockJobs(autoRun: autoRunJobs);
     final updates = MockUpdates(jobs, status: status, now: now);
+    final auth = MockAuth();
     return MockSystemServices._(
       mockJobs: jobs,
       mockUpdates: updates,
-      mockSystem: MockSystem(
-        jobs,
-        updates,
-        acceptsAdminPassword: acceptsAdminPassword,
-      ),
+      mockSystem: MockSystem(jobs, updates, auth),
+      mockAuth: auth,
       mockNetwork: MockNetwork(),
       mockBluetooth: MockBluetooth(),
       mockDisplayAudio: MockDisplayAudio(),
@@ -1070,6 +1214,7 @@ class MockSystemServices extends SystemServices {
   final MockBluetooth mockBluetooth;
   final MockDisplayAudio mockDisplayAudio;
   final MockStore mockStore;
+  final MockAuth mockAuth;
 
   void dispose() => mockJobs.dispose();
 }

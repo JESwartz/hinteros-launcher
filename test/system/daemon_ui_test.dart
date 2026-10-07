@@ -32,23 +32,73 @@ Future<void> endStartupCheck(WidgetTester t, Harness h) async {
 }
 
 void main() {
-  group('Remote access without a polkit agent', () {
-    testWidgets('SSH on explains that an admin has to do it', (t) async {
+  group('Remote access and the admin password (over the daemon)', () {
+    testWidgets('the prompt appears, a wrong password then the right one', (
+      t,
+    ) async {
       setView(t);
       final h = harness();
       await h.pump(t);
       await endStartupCheck(t, h);
       await enterSettingsEntry(t, 'ssh');
-      expect(find.textContaining('needs an admin'), findsOneWidget);
+      expect(find.textContaining('asks for the admin password'), findsWidgets);
       await press(t, [kEnter]);
-      expect(find.text('An admin has to turn on SSH'), findsOneWidget);
-      expect(find.textContaining('"Enable SSH"'), findsOneWidget);
-      expect(find.textContaining('admin account'), findsWidgets);
-      // No password field: the launcher cannot pass one on.
-      expect(find.byType(TextField), findsNothing);
+      // ssh.set waits at the daemon; authentication_requested shows the prompt.
+      expect(find.text('Admin password'), findsOneWidget);
+      expect(
+        find.text('Enter the password for admin to turn on SSH.'),
+        findsOneWidget,
+      );
       expect(h.mock.system.log.last, 'ssh.set:on');
+      expect(h.mock.system.runningJobId, isNull);
+      await t.enterText(find.byType(TextField), 'wrong');
       await press(t, [kEnter]);
-      expect(find.text('An admin has to turn on SSH'), findsNothing);
+      expect(
+        find.text('That is not the password. 2 tries left.'),
+        findsOneWidget,
+      );
+      await t.enterText(find.byType(TextField), 'correct horse');
+      await press(t, [kEnter]);
+      // authorized: the dialog is gone and the job's progress shows.
+      expect(find.text('Admin password'), findsNothing);
+      expect(find.text('Changing remote access'), findsOneWidget);
+      h.mock.system.finishJob(h.mock.system.runningJobId!);
+      await t.pumpAndSettle();
+      await press(t, [kEnter]); // Close
+      expect(
+        find.textContaining('On. Log in as the admin account'),
+        findsOneWidget,
+      );
+      expect(h.mock.auth.pendingCookies, isEmpty);
+    });
+
+    testWidgets('Back at the prompt: auth.cancel, SSH stays off', (t) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await endStartupCheck(t, h);
+      await enterSettingsEntry(t, 'ssh');
+      await press(t, [kEnter]);
+      expect(h.mock.auth.pendingCookies, hasLength(1));
+      await press(t, [kEscape]);
+      expect(find.text('Admin password'), findsNothing);
+      expect(h.mock.auth.pendingCookies, isEmpty);
+      expect(find.textContaining('nothing was changed'), findsOneWidget);
+      expect(h.mock.system.sshEnabled, isFalse);
+      expect(h.mock.system.runningJobId, isNull);
+    });
+
+    testWidgets('no authentication agent: said plainly, no prompt', (t) async {
+      setView(t);
+      final h = harness();
+      h.mock.auth.agentRegistered = false;
+      await h.pump(t);
+      await endStartupCheck(t, h);
+      await enterSettingsEntry(t, 'ssh');
+      await press(t, [kEnter]);
+      expect(find.text('Admin password'), findsNothing);
+      expect(find.textContaining('nothing was changed'), findsOneWidget);
+      await press(t, [kEnter]);
       expect(h.mock.system.sshEnabled, isFalse);
     });
 
@@ -62,6 +112,7 @@ void main() {
       await endStartupCheck(t, h);
       await enterSettingsEntry(t, 'ssh');
       await press(t, [kEnter]);
+      expect(find.text('Admin password'), findsNothing);
       expect(find.text('Changing remote access'), findsOneWidget);
       h.mock.system.finishJob(h.mock.system.runningJobId!);
       await t.pumpAndSettle();
