@@ -2,10 +2,13 @@
 
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
+#include <X11/Xatom.h>
+#include <X11/Xlib.h>
 #include <gdk/gdkx.h>
 #endif
 
 #include "flutter/generated_plugin_registrant.h"
+#include "gl_dummy.h"
 
 struct _MyApplication {
   GtkApplication parent_instance;
@@ -172,6 +175,83 @@ static void focus_view(MyApplication* self, FlView* view) {
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
+// Unmaps GTK's GLX "dummy" window (see gl_dummy.h): under gamescope it
+// becomes the focus window, is resized to the output and ends up painted
+// above the real toplevel (black screen). Only windows of our own X client
+// that GDK does not know are touched. Safe to call repeatedly.
+static void unmap_gl_dummies(GtkWidget* widget) {
+#ifdef GDK_WINDOWING_X11
+  GtkWidget* top = gtk_widget_get_toplevel(widget);
+  GdkWindow* gdk_top = top != nullptr ? gtk_widget_get_window(top) : nullptr;
+  if (gdk_top == nullptr || !GDK_IS_X11_WINDOW(gdk_top)) return;
+  GdkDisplay* gdk_display = gdk_window_get_display(gdk_top);
+  Display* xdisplay = GDK_DISPLAY_XDISPLAY(gdk_display);
+  Window toplevel = GDK_WINDOW_XID(gdk_top);
+
+  // The WM client leader (GTK's hidden group window), if set.
+  Window leader = 0;
+  {
+    Atom type;
+    int format;
+    unsigned long n, after;
+    unsigned char* data = nullptr;
+    if (XGetWindowProperty(xdisplay, toplevel,
+                           gdk_x11_get_xatom_by_name_for_display(
+                               gdk_display, "WM_CLIENT_LEADER"),
+                           0, 1, False, XA_WINDOW, &type, &format, &n, &after,
+                           &data) == Success &&
+        data != nullptr) {
+      if (type == XA_WINDOW && format == 32 && n == 1)
+        leader = *reinterpret_cast<Window*>(data);
+      XFree(data);
+    }
+  }
+
+  Window root, parent, *children = nullptr;
+  unsigned int count = 0;
+  Window xroot = GDK_WINDOW_XID(
+      gdk_screen_get_root_window(gdk_window_get_screen(gdk_top)));
+  if (!XQueryTree(xdisplay, xroot, &root, &parent, &children, &count)) return;
+  for (unsigned int i = 0; i < count; i++) {
+    XWindowAttributes attrs;
+    gdk_x11_display_error_trap_push(gdk_display);
+    Status ok = XGetWindowAttributes(xdisplay, children[i], &attrs);
+    if (gdk_x11_display_error_trap_pop(gdk_display) != 0 || !ok) continue;
+    X11WindowInfo info = {
+        static_cast<uint32_t>(children[i]), attrs.override_redirect != False,
+        attrs.map_state == IsViewable,
+        gdk_x11_window_lookup_for_display(gdk_display, children[i]) !=
+            nullptr};
+    if (!is_gdk_gl_dummy(info, static_cast<uint32_t>(toplevel),
+                         static_cast<uint32_t>(leader)))
+      continue;
+    gdk_x11_display_error_trap_push(gdk_display);
+    XUnmapWindow(xdisplay, children[i]);
+    XFlush(xdisplay);
+    gdk_x11_display_error_trap_pop_ignored(gdk_display);
+    g_printerr("hinteros-x11: unmapped GDK GL dummy window 0x%lx\n",
+               static_cast<unsigned long>(children[i]));
+  }
+  if (children != nullptr) XFree(children);
+#else
+  (void)widget;
+#endif
+}
+
+static gboolean unmap_gl_dummies_timeout_cb(gpointer data) {
+  unmap_gl_dummies(GTK_WIDGET(data));
+  return G_SOURCE_REMOVE;
+}
+
+// Now, and again shortly after (the dummy may appear late).
+static void unmap_gl_dummies_now_and_later(GtkWidget* view) {
+  unmap_gl_dummies(view);
+  static const guint delays[] = {100, 500, 1500};
+  for (guint delay : delays)
+    g_timeout_add_full(G_PRIORITY_DEFAULT, delay, unmap_gl_dummies_timeout_cb,
+                       g_object_ref(view), g_object_unref);
+}
+
 static void window_map_cb(GtkWidget* window, gpointer user_data) {
   MyApplication* self = MY_APPLICATION(user_data);
   focus_log("window mapped (display %s)",
@@ -179,6 +259,7 @@ static void window_map_cb(GtkWidget* window, gpointer user_data) {
   gpointer view = g_object_get_data(G_OBJECT(window), "hinteros-view");
   if (view == nullptr) return;
   hide_cursors(self, GTK_WIDGET(view));
+  unmap_gl_dummies(GTK_WIDGET(view));
   focus_view(self, FL_VIEW(view));
 }
 
@@ -187,6 +268,7 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   focus_log("first Flutter frame");
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
   hide_cursors(self, GTK_WIDGET(view));
+  unmap_gl_dummies(GTK_WIDGET(view));
   focus_view(self, view);
 }
 
@@ -290,6 +372,7 @@ static void my_application_activate(GApplication* application) {
   g_signal_connect_swapped(view, "first-frame", G_CALLBACK(first_frame_cb),
                            self);
   gtk_widget_realize(GTK_WIDGET(view));
+  unmap_gl_dummies_now_and_later(GTK_WIDGET(view));
 
   // Hide the mouse cursor in console mode, installer included (best effort;
   // repeated on map and first frame).

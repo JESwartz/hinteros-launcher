@@ -208,6 +208,75 @@
           '';
         });
 
+        # The pure logic that recognises GTK's GLX dummy window (never a
+        # foreign client's window, never GDK's own).
+        gl-dummy-logic = pkgs.runCommandCC "hinteros-launcher-gl-dummy-logic" { } ''
+          g++ -Wall -Werror -I${./linux/runner} ${./linux/runner/gl_dummy_test.cc} -o test
+          ./test
+          touch "$out"
+        '';
+
+        # The real launcher (console mode, then the keyboard) under a bare X
+        # server: after startup no override-redirect viewable window of its
+        # client may remain (GTK's GL dummy would black out gamescope), and its
+        # toplevel must be viewable.
+        x11-gl-dummy =
+          pkgs.runCommand "hinteros-launcher-x11-gl-dummy"
+            {
+              nativeBuildInputs = [
+                pkgs.xorg-server
+                pkgs.xwininfo
+              ];
+            }
+            ''
+              export HOME=$TMPDIR XDG_RUNTIME_DIR=$TMPDIR
+              export LIBGL_ALWAYS_SOFTWARE=1 GDK_BACKEND=x11 NO_AT_BRIDGE=1
+              export LIBGL_DRIVERS_PATH=${pkgs.mesa}/lib/dri
+              export LD_LIBRARY_PATH=${pkgs.libGL}/lib:${pkgs.mesa}/lib
+              export __EGL_VENDOR_LIBRARY_FILENAMES=${pkgs.mesa}/share/glvnd/egl_vendor.d/50_mesa.json
+              Xvfb :77 -screen 0 1920x1080x24 -nolisten tcp -nolisten unix \
+                -xkbdir ${pkgs.xkeyboard_config}/etc/X11/xkb &
+              xpid=$!
+              trap 'kill $xpid ''${app:-} 2>/dev/null || true' EXIT
+              export DISPLAY=:77
+              for _ in $(seq 50); do xwininfo -root >/dev/null 2>&1 && break; sleep 0.2; done
+
+              check() {
+                name=$1; shift
+                "$@" >app.log 2>&1 &
+                app=$!
+                sleep 10
+                cat app.log
+                xwininfo -root -children | tee tree.txt
+                # Windows of the app's client share the resource base of
+                # its named toplevel.
+                top=""
+                for id in $(sed -n 's/^ *\(0x[0-9a-f]*\) "[^"]*".*/\1/p' tree.txt); do
+                  if xwininfo -id "$id" -stats | grep -q 'Map State: IsViewable'; then top=$id; break; fi
+                done
+                if [ -z "$top" ]; then echo "$name: no viewable toplevel"; exit 1; fi
+                base=$(( top & ~0x1fffff ))
+                if ! xwininfo -id "$top" -stats | grep -q 'Map State: IsViewable'; then
+                  echo "$name: toplevel $top not viewable"; exit 1
+                fi
+                for id in $(sed -n 's/^ *\(0x[0-9a-f]*\) .*/\1/p' tree.txt); do
+                  [ $(( id & ~0x1fffff )) -eq $base ] || continue
+                  stats=$(xwininfo -id "$id" -stats)
+                  if echo "$stats" | grep -q 'Override Redirect State: yes' &&
+                     echo "$stats" | grep -q 'Map State: IsViewable'; then
+                    echo "$name: override-redirect viewable window $id remains"; exit 1
+                  fi
+                done
+                grep -q 'unmapped GDK GL dummy window' app.log ||
+                  echo "$name: note: no GL dummy was found"
+                kill $app; wait $app 2>/dev/null || true
+              }
+
+              check launcher ${pkgs.hinteros-launcher}/bin/hinteros-launcher
+              check osk ${pkgs.hinteros-launcher}/bin/hinteros-osk
+              touch "$out"
+            '';
+
         # The real hinteros-session on a temp socket, driven by the Dart client.
         integration = pkgs.hinteros-launcher.overrideAttrs (old: {
           pname = "hinteros-launcher-integration";
