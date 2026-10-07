@@ -1,18 +1,10 @@
 import 'dart:async';
-import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart';
 import 'package:hinteros_launcher/src/installer/gamepad.dart';
 
-Uint8List frame(int type, int code, int value) {
-  final d = ByteData(inputEventSize);
-  d.setUint16(16, type, Endian.little);
-  d.setUint16(18, code, Endian.little);
-  d.setInt32(20, value, Endian.little);
-  return d.buffer.asUint8List();
-}
+import '../support/fake_pads.dart';
 
 void main() {
   test('buttons map to the controller actions', () {
@@ -366,58 +358,6 @@ void main() {
       expect(fs.hasListeners, isFalse);
     });
   });
-}
-
-/// A fake machine: event nodes with synthetic evdev byte streams. Nothing
-/// here opens a real device.
-class FakePads implements PadBackend {
-  final _pads = <String, PadDeviceInfo?>{};
-  final _streams = <String, StreamController<List<int>>>{};
-  bool denyOpen = false;
-  bool listFails = false;
-  int openAttempts = 0;
-  final opened = <String>[];
-
-  void plug(String name, {AxisRange? stick}) =>
-      _pads[name] = PadDeviceInfo(stickX: stick, stickY: stick);
-
-  void plugOther(String name) => _pads[name] = null;
-
-  void unplug(String name, {bool withError = false}) {
-    _pads.remove(name);
-    final c = _streams.remove(name);
-    if (c == null) return;
-    if (withError) c.addError(FileSystemException('No such device'));
-    c.close();
-  }
-
-  void send(String name, List<Uint8List> frames) {
-    final c = _streams[name]!;
-    for (final f in frames) {
-      c.add(f);
-    }
-  }
-
-  bool get hasListeners => _streams.values.any((c) => c.hasListener);
-
-  @override
-  List<String> list() {
-    if (listFails) throw FileSystemException('No such directory');
-    return _pads.keys.toList();
-  }
-
-  @override
-  PadDeviceInfo? probe(String name) => _pads[name];
-
-  @override
-  Stream<List<int>> open(String name) {
-    openAttempts++;
-    if (denyOpen) throw FileSystemException('Permission denied');
-    opened.add(name);
-    return (_streams[name] = StreamController<List<int>>(
-      onCancel: () {},
-    )).stream;
-  }
 }
 
 final _cleanups = <FutureOr<void> Function()>[];

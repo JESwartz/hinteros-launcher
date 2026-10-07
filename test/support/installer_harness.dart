@@ -18,6 +18,8 @@ class InstallerHarness {
   InstallerHarness({
     FakeInstallerBackend? backend,
     this.settings = const LauncherSettings(),
+    this.padStream,
+    this.driver,
   }) : backend = backend ?? FakeInstallerBackend() {
     flow = InstallerFlow(this.backend);
   }
@@ -27,11 +29,22 @@ class InstallerHarness {
   late final InstallerFlow flow;
   final _pad = StreamController<PadEvent>.broadcast();
 
+  /// Another source of controller events (an [EvdevPad] over fake devices).
+  final Stream<PadEvent>? padStream;
+
+  /// How [press] reaches the app, instead of the pad stream: a keyboard or a
+  /// stick. Gets the action to perform.
+  final Future<void> Function(WidgetTester t, NavAction a)? driver;
+
   Future<void> pump(WidgetTester t) async {
     setView(t);
     addTearDown(_pad.close);
     await t.pumpWidget(
-      InstallerApp(flow: flow, pad: _pad.stream, settings: settings),
+      InstallerApp(
+        flow: flow,
+        pad: padStream ?? _pad.stream,
+        settings: settings,
+      ),
     );
     await t.pumpAndSettle();
   }
@@ -41,6 +54,11 @@ class InstallerHarness {
 
   /// One controller press.
   Future<void> press(WidgetTester t, NavAction a) async {
+    if (driver != null) {
+      await driver!(t, a);
+      await t.pumpAndSettle();
+      return;
+    }
     _pad.add((a, NavPhase.press));
     await t.pumpAndSettle();
   }
