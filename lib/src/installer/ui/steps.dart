@@ -141,7 +141,19 @@ class NetworkStep extends StatelessWidget {
             style: t.bodyDim,
           ),
         );
-        if (net == null) {
+        if (f.checking) {
+          p.add(const StatusLine('Network cable: Checking…', busy: true));
+          p.add(
+            const StatusLine('This computer: Checking…', busy: true),
+            gap: HinterTokens.s1,
+          );
+          if (net == null || net.wifiAvailable) {
+            p.add(
+              const StatusLine('Wi-Fi: Checking…', busy: true),
+              gap: HinterTokens.s1,
+            );
+          }
+        } else if (net == null) {
           p.add(const StatusLine('Looking at the network...'));
         } else {
           p.add(
@@ -161,12 +173,26 @@ class NetworkStep extends StatelessWidget {
             ),
             gap: HinterTokens.s1,
           );
+          if (net.wifiAvailable) {
+            final ssid = net.wifiSsid;
+            p.add(
+              StatusLine(
+                ssid != null
+                    ? 'Wi-Fi: connected to $ssid.'
+                    : 'Wi-Fi: not connected.',
+                ok: ssid != null,
+              ),
+              gap: HinterTokens.s1,
+            );
+          }
         }
         if (f.networkMessage != null) {
           p.add(StatusLine(f.networkMessage!, error: true));
         }
         if (f.connecting) p.add(const StatusLine('Connecting...'));
-        if (net != null && !net.wifiAvailable) {
+        if (f.checking && net == null) {
+          // Nothing known yet: the Wi-Fi list waits for the first answer.
+        } else if (net != null && !net.wifiAvailable) {
           p.add(
             Text('No Wi-Fi adapter found.', style: t.bodyDim),
             gap: HinterTokens.s3,
@@ -175,12 +201,12 @@ class NetworkStep extends StatelessWidget {
           p.add(Text('Wi-Fi networks', style: t.label), gap: HinterTokens.s3);
           if (f.wifi.isEmpty) {
             p.add(
-              Text(
-                f.scanning
-                    ? 'Searching...'
-                    : 'No networks found. Choose "Search again".',
-                style: t.bodyDim,
-              ),
+              f.scanning
+                  ? const StatusLine('Searching…', busy: true)
+                  : Text(
+                      'No networks found. Choose "Search again".',
+                      style: t.bodyDim,
+                    ),
               gap: HinterTokens.s1,
             );
           }
@@ -219,9 +245,9 @@ class NetworkStep extends StatelessWidget {
               await f.refreshNetwork();
               await f.scanWifi();
               env.console.refocus();
-            }, enabled: !f.scanning && !f.connecting)
+            }, enabled: !f.scanning && !f.connecting && !f.checking)
           else
-            btn('Check again', f.refreshNetwork),
+            btn('Check again', f.refreshNetwork, enabled: !f.checking),
           btn(
             f.online ? 'Continue' : 'Continue without internet',
             f.next,

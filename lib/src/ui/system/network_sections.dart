@@ -54,11 +54,21 @@ class _NetworkSectionState extends State<NetworkSection> {
     if (_scanning || !mounted) return;
     setState(() => _scanning = true);
     try {
-      final list = await _net.scan();
+      final list = await _net.scan().timeout(const Duration(seconds: 10));
       if (!_scanned.isClosed) _scanned.add(list);
     } on SystemException catch (e) {
       if (mounted && e.kind == SystemErrorKind.notAuthorized) {
         await showMessage(context, title: refusalTitle(e), body: e.message);
+      }
+    } on TimeoutException {
+      if (mounted) {
+        await showMessage(
+          context,
+          title: 'Search took too long',
+          body:
+              'Looking for Wi-Fi networks took longer than 10 seconds. '
+              'Choose "Scan again" to try once more.',
+        );
       }
     } finally {
       if (mounted) setState(() => _scanning = false);
@@ -124,9 +134,10 @@ class _NetworkSectionState extends State<NetworkSection> {
             'scan',
             onSelect: _scanning ? null : _rescan,
             builder: (f) => SettingRow(
-              title: _scanning ? 'Scanning...' : 'Scan again',
+              title: _scanning ? 'Scanning…' : 'Scan again',
               focused: f,
               dim: true,
+              trailing: _scanning ? const Spinner() : null,
             ),
           );
           p.add(Text('Networks nearby', style: t.label), gap: HinterTokens.s2);

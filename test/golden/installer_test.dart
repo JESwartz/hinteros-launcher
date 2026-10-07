@@ -88,6 +88,25 @@ void main() {
     );
   });
 
+  testWidgets('network checking', (t) async {
+    final gate = Completer<void>();
+    await shot(
+      t,
+      'network_checking',
+      backend: FakeInstallerBackend(state: wired),
+      settle: false,
+      setup: (h) async {
+        h.flow.go(InstallerStep.network);
+        await t.pumpAndSettle();
+        h.backend.networkHold = gate.future;
+        unawaited(h.flow.refreshNetwork());
+        await t.pump(const Duration(milliseconds: 700));
+      },
+    );
+    gate.complete();
+    await t.pumpAndSettle();
+  });
+
   testWidgets('disk: usable and unusable disks', (t) async {
     await shot(
       t,

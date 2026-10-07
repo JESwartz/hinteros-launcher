@@ -516,17 +516,109 @@ class PaneHeading extends StatelessWidget {
       Text(text, style: HinterTheme.of(context).title);
 }
 
+/// A small spinning ring: something is being worked on.
+class Spinner extends StatefulWidget {
+  const Spinner({super.key, this.size = 22});
+
+  final double size;
+
+  @override
+  State<Spinner> createState() => _SpinnerState();
+}
+
+class _SpinnerState extends State<Spinner> with SingleTickerProviderStateMixin {
+  late final AnimationController _turn = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reduce motion: a still ring, the words say what is going on.
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
+      _turn.stop();
+    } else if (!_turn.isAnimating) {
+      _turn.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _turn.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = HinterTheme.of(context).accent;
+    return SizedBox(
+      key: const ValueKey('spinner'),
+      width: widget.size,
+      height: widget.size,
+      child: RotationTransition(
+        turns: _turn,
+        child: CustomPaint(painter: _RingPainter(color)),
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  const _RingPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = Offset.zero & size;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+      r.deflate(2),
+      0,
+      6.2832,
+      false,
+      paint..color = color.withValues(alpha: 0.25),
+    );
+    canvas.drawArc(r.deflate(2), -1.5708, 4.2, false, paint..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) => old.color != color;
+}
+
 /// A status message in a pane: a mark that is not just colour, and text.
 class StatusLine extends StatelessWidget {
-  const StatusLine(this.text, {super.key, this.error = false, this.ok = false});
+  const StatusLine(
+    this.text, {
+    super.key,
+    this.error = false,
+    this.ok = false,
+    this.busy = false,
+  });
 
   final String text;
+
+  /// Still working: a spinner instead of the mark.
+  final bool busy;
   final bool error;
   final bool ok;
 
   @override
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
+    if (busy) {
+      return Row(
+        children: [
+          const SizedBox(width: 40, child: Center(child: Spinner())),
+          const SizedBox(width: HinterTokens.s2),
+          Expanded(child: Text(text, style: t.bodyDim)),
+        ],
+      );
+    }
     final mark = error ? '!' : (ok ? 'OK' : 'i');
     final color = error
         ? t.danger

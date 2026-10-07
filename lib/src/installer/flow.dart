@@ -47,7 +47,13 @@ enum InstallPhase {
 /// The installer's answers and its progress: everything the screens show
 /// and change. Talks to the machine only through [backend].
 class InstallerFlow extends ChangeNotifier {
-  InstallerFlow(this.backend);
+  InstallerFlow(
+    this.backend, {
+    this.checkTimeout = const Duration(seconds: 10),
+  });
+
+  /// How long a network check or Wi-Fi scan may take before it is given up.
+  final Duration checkTimeout;
 
   final InstallerBackend backend;
 
@@ -83,6 +89,9 @@ class InstallerFlow extends ChangeNotifier {
   NetworkState? net;
   List<WifiAp> wifi = const [];
   bool scanning = false;
+
+  /// A network check (cable, internet) is running.
+  bool checking = false;
   bool connecting = false;
   String? networkMessage;
 
@@ -93,13 +102,22 @@ class InstallerFlow extends ChangeNotifier {
   bool get online => net?.online ?? false;
 
   Future<void> refreshNetwork() async {
+    if (checking) return;
+    checking = true;
+    notifyListeners();
     try {
-      net = await backend.network();
+      net = await backend.network().timeout(checkTimeout);
       networkMessage = null;
     } on InstallerException catch (e) {
       net = const NetworkState();
       networkMessage = e.message;
+    } on TimeoutException {
+      net = const NetworkState();
+      networkMessage =
+          'Checking took longer than ${checkTimeout.inSeconds} seconds. '
+          'Choose "Check again" to try once more.';
     }
+    checking = false;
     // Apps that need a download cannot stay ticked offline.
     if (!online) apps?.dropDownloads();
     notifyListeners();
@@ -110,11 +128,16 @@ class InstallerFlow extends ChangeNotifier {
     scanning = true;
     notifyListeners();
     try {
-      wifi = await backend.scanWifi();
+      wifi = await backend.scanWifi().timeout(checkTimeout);
       networkMessage = null;
     } on InstallerException catch (e) {
       wifi = const [];
       networkMessage = e.message;
+    } on TimeoutException {
+      wifi = const [];
+      networkMessage =
+          'Searching for Wi-Fi took longer than ${checkTimeout.inSeconds} '
+          'seconds. Choose "Search again" to try once more.';
     }
     scanning = false;
     notifyListeners();

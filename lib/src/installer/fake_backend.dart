@@ -139,6 +139,8 @@ class FakeScript {
 class FakeInstallerBackend implements InstallerBackend {
   FakeInstallerBackend({
     this.state = const NetworkState(),
+    this.networkHold,
+    this.scanHold,
     List<WifiAp>? wifi,
     List<DiskInfo>? disks,
     List<StoreApp>? catalog,
@@ -152,6 +154,11 @@ class FakeInstallerBackend implements InstallerBackend {
 
   /// What `network()` reports; joining Wi-Fi changes it.
   NetworkState state;
+
+  /// When set, `network()` / `scanWifi()` wait for these before answering
+  /// (a slow check, for tests).
+  Future<void>? networkHold;
+  Future<void>? scanHold;
   final List<WifiAp> _wifi;
   final List<DiskInfo> _disks;
   final List<StoreApp> _catalog;
@@ -189,12 +196,14 @@ class FakeInstallerBackend implements InstallerBackend {
   @override
   Future<NetworkState> network() async {
     calls.add('network');
+    await networkHold;
     return state;
   }
 
   @override
   Future<List<WifiAp>> scanWifi() async {
     calls.add('scanWifi');
+    await scanHold;
     return List.of(_wifi);
   }
 
