@@ -7,6 +7,7 @@ import '../../api/api.dart' as api show Key;
 import '../../osk/osk_backend.dart';
 import '../../osk/osk_screen.dart';
 import '../../osk/osk_state.dart' show oskMaskChar;
+import '../../nav/soft_key.dart';
 import '../../theme/hinter_theme.dart';
 import '../../ui/pages.dart';
 
@@ -85,7 +86,11 @@ class TextEntryScreen extends StatelessWidget {
     required this.title,
     required this.secret,
     this.hint,
+    this.softKeys,
   });
+
+  /// Where the evdev fallback keys go while this page is up.
+  final SoftKeySink? softKeys;
 
   final InProcessKeyboard keyboard;
   final String title;
@@ -146,6 +151,7 @@ class TextEntryScreen extends StatelessWidget {
           initialText: keyboard.text.value,
           hardwareKeys: true,
           onEscape: keyboard.onCancel,
+          softKeys: softKeys,
         ),
       ],
     );

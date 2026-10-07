@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../settings/launcher_settings.dart';
 import '../flow.dart';
 import '../gamepad.dart';
+import '../keyboard_fallback.dart';
 import 'host.dart';
 import 'progress_steps.dart';
 import 'steps.dart';
@@ -14,6 +15,7 @@ class InstallerApp extends StatelessWidget {
     super.key,
     required this.flow,
     this.pad,
+    this.keyboard,
     this.settings = const LauncherSettings(),
     this.hideCursor = true,
   });
@@ -23,6 +25,9 @@ class InstallerApp extends StatelessWidget {
 
   /// Controller presses; null: keyboard only (desktop, tests).
   final Stream<PadEvent>? pad;
+
+  /// The evdev keyboard fallback; null: Flutter key events only.
+  final KeyboardFallback? keyboard;
   final LauncherSettings settings;
 
   @override
@@ -32,6 +37,7 @@ class InstallerApp extends StatelessWidget {
     title: 'HinterOS installer',
     home: ConsoleHost(
       pad: pad,
+      keyboard: keyboard,
       builder: (context, console) =>
           InstallerScreen(flow: flow, console: console),
     ),

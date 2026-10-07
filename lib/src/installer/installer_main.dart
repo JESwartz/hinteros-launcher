@@ -10,6 +10,7 @@ import 'backend.dart';
 import 'fake_backend.dart';
 import 'flow.dart';
 import 'gamepad.dart';
+import 'keyboard_fallback.dart';
 import 'process_backend.dart';
 import 'ui/first_boot.dart';
 import 'ui/installer_app.dart';
@@ -73,6 +74,9 @@ Future<void> runInstallerMode(List<String> args) async {
   final mock = _flag(args, '--mock', 'HINTEROS_MOCK');
   final windowed = _flag(args, '--windowed', 'HINTEROS_WINDOWED');
   final EvdevPad? pad = mock ? null : (EvdevPad()..start());
+  // Keys read from evdev too, but used only while the window has no keyboard
+  // focus (see keyboard_fallback.dart).
+  final InstallerKeyboard? kb = mock ? null : InstallerKeyboard.start();
   if (wantsFirstBoot(args) && !wantsInstaller(args)) {
     final SystemServices services;
     if (mock) {
@@ -83,7 +87,12 @@ Future<void> runInstallerMode(List<String> args) async {
       );
     }
     runApp(
-      FirstBootApp(services: services, pad: pad?.events, hideCursor: !windowed),
+      FirstBootApp(
+        services: services,
+        pad: pad?.events,
+        keyboard: kb?.fallback,
+        hideCursor: !windowed,
+      ),
     );
     return;
   }
@@ -98,6 +107,7 @@ Future<void> runInstallerMode(List<String> args) async {
     InstallerApp(
       flow: InstallerFlow(backend),
       pad: pad?.events,
+      keyboard: kb?.fallback,
       hideCursor: !windowed,
     ),
   );

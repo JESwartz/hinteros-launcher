@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../api/api.dart';
 import '../nav/nav_controller.dart';
 import '../nav/nav_model.dart';
+import '../nav/soft_key.dart';
 import '../settings/launcher_settings.dart';
 import '../theme/hinter_theme.dart';
 import '../ui/nav_focusable.dart';
@@ -114,6 +115,7 @@ class OskScreen extends StatefulWidget {
     this.initialText = '',
     this.hardwareKeys = false,
     this.onEscape,
+    this.softKeys,
   });
 
   final OskBackend backend;
@@ -132,6 +134,9 @@ class OskScreen extends StatefulWidget {
   /// keys only move the focus, like the D-pad.
   final bool hardwareKeys;
   final VoidCallback? onEscape;
+
+  /// Where keys from the evdev fallback arrive (see [SoftKeySink]).
+  final SoftKeySink? softKeys;
 
   @override
   State<OskScreen> createState() => _OskScreenState();
@@ -161,6 +166,7 @@ class _OskScreenState extends State<OskScreen> {
     _visSub = widget.backend.visibility.listen((visible) {
       if (visible) _focusStart();
     });
+    widget.softKeys?.handler = _softKey;
     _state.addListener(_onState);
     _syncRows();
     _focusStart();
@@ -221,29 +227,59 @@ class _OskScreenState extends State<OskScreen> {
   }
 
   KeyEventResult _hardwareKey(KeyEvent e) {
-    final k = e.logicalKey;
-    final down = e is KeyDownEvent || e is KeyRepeatEvent;
+    final hw = HardwareKeyboard.instance;
+    return _typedKey(
+      e.logicalKey,
+      e.character,
+      isDown: e is KeyDownEvent,
+      isRepeat: e is KeyRepeatEvent,
+      modifier: hw.isControlPressed || hw.isMetaPressed || hw.isAltPressed,
+    );
+  }
+
+  /// A key from the evdev fallback (the window has no keyboard focus):
+  /// the same handling as a hardware key. True if it was used.
+  bool _softKey(SoftKey k) {
+    if (!widget.hardwareKeys) return false;
+    final r = _typedKey(
+      k.key,
+      k.character,
+      isDown: k.phase == NavPhase.press,
+      isRepeat: k.phase == NavPhase.repeat,
+      modifier: false,
+    );
+    if (r != KeyEventResult.ignored) return true;
+    final action = _actionForKey(k.key);
+    if (action == null) return false;
+    _onAction(action, k.phase);
+    return true;
+  }
+
+  KeyEventResult _typedKey(
+    LogicalKeyboardKey k,
+    String? c, {
+    required bool isDown,
+    required bool isRepeat,
+    required bool modifier,
+  }) {
+    final down = isDown || isRepeat;
     if (k == LogicalKeyboardKey.backspace) {
       if (down) _state.backspace();
       return KeyEventResult.handled;
     }
     if (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) {
-      if (e is KeyDownEvent) _state.press(const OskKey(KeyKind.done, 'Done'));
+      if (isDown) _state.press(const OskKey(KeyKind.done, 'Done'));
       return KeyEventResult.handled;
     }
     if (k == LogicalKeyboardKey.escape) {
-      if (e is KeyDownEvent) widget.onEscape?.call();
+      if (isDown) widget.onEscape?.call();
       return KeyEventResult.handled;
     }
-    final hw = HardwareKeyboard.instance;
-    final c = e.character;
     if (c != null &&
         c.isNotEmpty &&
         c.runes.first >= 0x20 &&
         c.runes.first != 0x7f &&
-        !hw.isControlPressed &&
-        !hw.isMetaPressed &&
-        !hw.isAltPressed) {
+        !modifier) {
       if (down) _state.typeText(c);
       return KeyEventResult.handled;
     }
@@ -267,6 +303,7 @@ class _OskScreenState extends State<OskScreen> {
 
   @override
   void dispose() {
+    if (widget.softKeys?.handler == _softKey) widget.softKeys?.handler = null;
     _sub?.cancel();
     _visSub?.cancel();
     _state.removeListener(_onState);

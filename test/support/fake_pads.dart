@@ -43,6 +43,7 @@ class FakePads implements PadBackend {
 
   void unplug(String name, {bool withError = false}) {
     _pads.remove(name);
+    keyboards.remove(name);
     final c = _streams.remove(name);
     if (c == null) return;
     if (withError) c.addError(FileSystemException('No such device'));
@@ -71,6 +72,20 @@ class FakePads implements PadBackend {
   PadDeviceInfo? probe(String name) {
     if (probeThrows.contains(name)) throw StateError('sysfs read failed');
     return _pads[name];
+  }
+
+  /// Keyboards on the fake machine, by node.
+  final keyboards = <String, String>{};
+
+  void plugKeyboard(String name, [String label = 'USB Keyboard']) {
+    keyboards[name] = label;
+    _pads[name] = null; // listed, not a pad
+  }
+
+  @override
+  String? probeKeyboard(String name) {
+    if (probeThrows.contains(name)) throw StateError('sysfs read failed');
+    return keyboards[name];
   }
 
   @override

@@ -310,6 +310,10 @@ abstract class PadBackend {
   /// What the device is: null if it is not a gamepad (or cannot be told).
   PadDeviceInfo? probe(String name);
 
+  /// The device's name when it is a keyboard (EV_KEY with letters, Enter and
+  /// Space), null when it is not or cannot be told.
+  String? probeKeyboard(String name);
+
   /// The device's raw `input_event` bytes. Errors (permission denied, the
   /// device unplugged) arrive as stream errors or as the stream's end.
   Stream<List<int>> open(String name);
@@ -373,6 +377,21 @@ class LinuxPadBackend implements PadBackend {
       stickY: range(_absY),
       label: (_caps(name, _nameFile) ?? '').trim(),
     );
+  }
+
+  /// A device with KEY_A, KEY_ENTER and KEY_SPACE that is not a pad (a pad
+  /// has BTN_SOUTH and none of those).
+  @override
+  String? probeKeyboard(String name) {
+    final ev = _caps(name, 'ev'), key = _caps(name, 'key');
+    if (ev == null || key == null) return null;
+    if (!sysfsBitSet(ev, _evKey)) return null;
+    if (!sysfsBitSet(key, 30) ||
+        !sysfsBitSet(key, 28) ||
+        !sysfsBitSet(key, 57)) {
+      return null;
+    }
+    return (_caps(name, _nameFile) ?? '').trim();
   }
 
   static const _nameFile = '<name>';

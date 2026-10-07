@@ -8,6 +8,7 @@ import '../../system/repositories.dart';
 import '../../theme/hinter_theme.dart';
 import '../../ui/widgets.dart';
 import '../gamepad.dart';
+import '../keyboard_fallback.dart';
 import 'host.dart';
 import '../../ui/pages.dart' show FullPage;
 import 'steps.dart' show scrolling;
@@ -35,6 +36,7 @@ class FirstBootApp extends StatelessWidget {
     super.key,
     required this.services,
     this.pad,
+    this.keyboard,
     this.settings = const LauncherSettings(),
     this.onFinished,
     this.hideCursor = true,
@@ -43,6 +45,9 @@ class FirstBootApp extends StatelessWidget {
   final bool hideCursor;
   final SystemServices services;
   final Stream<PadEvent>? pad;
+
+  /// The evdev keyboard fallback; null: Flutter key events only.
+  final KeyboardFallback? keyboard;
   final LauncherSettings settings;
 
   /// The wizard is done (the real thing exits so the session starts the
@@ -56,6 +61,7 @@ class FirstBootApp extends StatelessWidget {
     title: 'HinterOS setup',
     home: ConsoleHost(
       pad: pad,
+      keyboard: keyboard,
       builder: (context, console) => FirstBootScreen(
         services: services,
         console: console,

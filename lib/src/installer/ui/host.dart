@@ -8,9 +8,11 @@ import '../../app.dart' show DesignScale;
 import '../../settings/launcher_settings.dart';
 import '../../nav/key_map.dart';
 import '../../nav/nav_controller.dart';
+import '../../nav/soft_key.dart';
 import '../../theme/hinter_theme.dart';
 import '../../ui/modal_host.dart';
 import '../gamepad.dart';
+import '../keyboard_fallback.dart';
 import 'text_entry.dart';
 
 /// What a screen gets from the [ConsoleHost]: the navigation layer, modal
@@ -30,6 +32,9 @@ class ConsoleController {
 
   /// Back, when nothing else (a modal) took it. Return false to ignore.
   bool Function()? onBack;
+
+  /// The on-screen keyboard takes the evdev fallback keys through this.
+  final softKeys = SoftKeySink();
 
   InProcessKeyboard? _keyboard;
 
@@ -73,6 +78,7 @@ class ConsoleController {
           title: title,
           hint: hint,
           secret: secret,
+          softKeys: softKeys,
         );
       });
     } finally {
@@ -102,13 +108,22 @@ class ConsoleController {
 /// wizard: keyboard keys and the evdev gamepad become [NavAction]s, in one
 /// place, and a keyboard of our own stands in for the daemon's.
 class ConsoleHost extends StatefulWidget {
-  const ConsoleHost({super.key, required this.builder, this.pad});
+  const ConsoleHost({
+    super.key,
+    required this.builder,
+    this.pad,
+    this.keyboard,
+  });
 
   final Widget Function(BuildContext context, ConsoleController console)
   builder;
 
   /// Controller presses (the gamepad). Null: keyboard only.
   final Stream<PadEvent>? pad;
+
+  /// The evdev keyboard fallback for a window that has no keyboard focus.
+  /// Null: Flutter's own key events only.
+  final KeyboardFallback? keyboard;
 
   @override
   State<ConsoleHost> createState() => _ConsoleHostState();
@@ -118,6 +133,7 @@ class _ConsoleHostState extends State<ConsoleHost> {
   late final _nav = NavController();
   late final ConsoleController _console = ConsoleController(_nav);
   StreamSubscription<PadEvent>? _sub;
+  StreamSubscription<SoftKey>? _softSub;
   final _hostFocus = FocusNode(debugLabel: 'console host');
 
   @override
@@ -125,6 +141,8 @@ class _ConsoleHostState extends State<ConsoleHost> {
     super.initState();
     _nav.onBack = () => _console.onBack?.call() ?? false;
     _sub = widget.pad?.listen((e) => _console.action(e.$1, e.$2));
+    _softSub = widget.keyboard?.keys.listen(_onSoftKey);
+    widget.keyboard?.addListener(_onFocusChange);
     // Keys must work before any other input: once the first frame is up,
     // make sure something has primary focus (the first row, which the
     // screen focuses itself, else this host).
@@ -138,9 +156,47 @@ class _ConsoleHostState extends State<ConsoleHost> {
   @override
   void dispose() {
     _sub?.cancel();
+    _softSub?.cancel();
+    widget.keyboard?.removeListener(_onFocusChange);
     _hostFocus.dispose();
     _console.content.dispose();
     super.dispose();
+  }
+
+  bool _hadFocus = false;
+
+  /// The window got the compositor's keyboard focus (or a first key proved
+  /// it has): make sure something is focused, the first row on a fresh
+  /// screen, so that Start is highlighted and Enter reaches it.
+  void _onFocusChange() {
+    final has = widget.keyboard?.hasFocus ?? false;
+    if (has && !_hadFocus && mounted && !_console.typing) {
+      _console.refocus();
+      if (FocusManager.instance.primaryFocus == null) _hostFocus.requestFocus();
+    }
+    _hadFocus = has;
+  }
+
+  /// A key from the evdev fallback, handled like the same key from Flutter.
+  void _onSoftKey(SoftKey k) {
+    if (!mounted) return;
+    if (_console.typing && _console.softKeys.handler?.call(k) == true) return;
+    if (k.key == LogicalKeyboardKey.tab) {
+      if (k.phase == NavPhase.release) return;
+      if (_console.typing) {
+        _console.action(
+          k.shift ? NavAction.left : NavAction.right,
+          NavPhase.press,
+        );
+      } else if (k.shift) {
+        FocusManager.instance.primaryFocus?.previousFocus();
+      } else {
+        FocusManager.instance.primaryFocus?.nextFocus();
+      }
+      return;
+    }
+    final a = navActionForKey(k.key, view: true, inTextField: false);
+    if (a != null) _console.action(a, k.phase);
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {

@@ -6,6 +6,7 @@ import 'package:hinteros_launcher/src/ui/widgets.dart';
 import 'package:hinteros_launcher/src/installer/fake_backend.dart';
 import 'package:hinteros_launcher/src/installer/flow.dart';
 import 'package:hinteros_launcher/src/installer/gamepad.dart';
+import 'package:hinteros_launcher/src/installer/keyboard_fallback.dart';
 import 'package:hinteros_launcher/src/installer/ui/host.dart';
 import 'package:hinteros_launcher/src/installer/ui/installer_app.dart';
 import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
@@ -20,6 +21,7 @@ class InstallerHarness {
     this.settings = const LauncherSettings(),
     this.padStream,
     this.driver,
+    this.keyboard,
   }) : backend = backend ?? FakeInstallerBackend() {
     flow = InstallerFlow(this.backend);
   }
@@ -32,6 +34,9 @@ class InstallerHarness {
   /// Another source of controller events (an [EvdevPad] over fake devices).
   final Stream<PadEvent>? padStream;
 
+  /// The evdev keyboard fallback, when the test has one.
+  final KeyboardFallback? keyboard;
+
   /// How [press] reaches the app, instead of the pad stream: a keyboard or a
   /// stick. Gets the action to perform.
   final Future<void> Function(WidgetTester t, NavAction a)? driver;
@@ -43,6 +48,7 @@ class InstallerHarness {
       InstallerApp(
         flow: flow,
         pad: padStream ?? _pad.stream,
+        keyboard: keyboard,
         settings: settings,
       ),
     );
