@@ -1,0 +1,174 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hinteros_launcher/src/installer/backend.dart';
+import 'package:hinteros_launcher/src/installer/parsers.dart';
+
+import '../support/installer_fixtures.dart';
+
+void main() {
+  group('lsblk', () {
+    test('lists whole disks only, with the reasons for hiding some', () {
+      final disks = parseLsblk(lsblkFixture);
+      expect(
+        [for (final d in disks) d.name],
+        ['nvme0n1', 'sda', 'sdb', 'sdc', 'mmcblk0'],
+        reason: 'no loop, rom or zram devices, no partitions',
+      );
+      final byName = {for (final d in disks) d.name: d};
+
+      final nvme = byName['nvme0n1']!;
+      expect(nvme.path, '/dev/nvme0n1');
+      expect(nvme.sizeBytes, 512110190592);
+      expect(nvme.title, 'Example NVMe 512GB');
+      expect(nvme.sizeLabel, '512 GB');
+      expect(nvme.usable, isTrue);
+      expect(nvme.mountpoints, isEmpty, reason: '/mnt leftovers do not count');
+
+      // In use: a partition is mounted (the ISO stick), and it is removable.
+      final stick = byName['sdb']!;
+      expect(stick.mountpoints, ['/iso']);
+      expect(stick.unusableReason, contains('In use'));
+
+      expect(byName['sdc']!.removable, isTrue);
+      expect(byName['sdc']!.unusableReason, contains('Removable'));
+      expect(byName['mmcblk0']!.unusableReason, contains('Too small'));
+      expect(byName['sda']!.sizeLabel, '1.0 TB');
+      expect(byName['sda']!.usable, isTrue);
+    });
+
+    test('old lsblk: sizes and flags as strings', () {
+      final d = parseLsblk(
+        '{"blockdevices":[{"name":"sda","path":"/dev/sda","size":"34359738368",'
+        '"model":null,"tran":"sata","type":"disk","rm":"0","mountpoints":[null]}]}',
+      ).single;
+      expect(d.sizeBytes, 34359738368);
+      expect(d.removable, isFalse);
+      expect(d.title, 'sda');
+      expect(d.usable, isTrue);
+    });
+
+    test('exactly 16 GiB is enough, one byte less is not', () {
+      DiskInfo disk(int size) =>
+          DiskInfo(path: '/dev/x', name: 'x', sizeBytes: size);
+      expect(disk(16 * 1024 * 1024 * 1024).usable, isTrue);
+      expect(disk(16 * 1024 * 1024 * 1024 - 1).usable, isFalse);
+    });
+
+    test('not lsblk output is an error', () {
+      expect(() => parseLsblk('hello'), throwsFormatException);
+      expect(() => parseLsblk('{"x":1}'), throwsFormatException);
+    });
+
+    test('the arguments are the documented ones, no shell string', () {
+      expect(lsblkArgs, [
+        '--json',
+        '-b',
+        '-o',
+        'NAME,PATH,SIZE,MODEL,TRAN,TYPE,RM,MOUNTPOINTS',
+      ]);
+    });
+  });
+
+  group('nmcli terse output', () {
+    test('splits on colons, honouring backslash escapes', () {
+      expect(splitTerse('a:b:c'), ['a', 'b', 'c']);
+      expect(splitTerse(r'*:My\:Net:77:WPA2'), ['*', 'My:Net', '77', 'WPA2']);
+      expect(splitTerse(r'a\\b:c'), [r'a\b', 'c']);
+      expect(splitTerse(':'), ['', '']);
+      expect(splitTerse(''), ['']);
+      expect(splitTerse(r'trailing\'), [r'trailing\']);
+    });
+
+    test('Wi-Fi list: strongest first, one per name, odd ones marked', () {
+      final aps = parseWifiList(wifiFixture);
+      expect(
+        [for (final a in aps) a.ssid],
+        ['Living Room', 'My:Net', 'Cafe Guest', 'Office', '-oops', 'Old WEP'],
+      );
+      final by = {for (final a in aps) a.ssid: a};
+      expect(by['Living Room']!.signal, 82, reason: 'the stronger duplicate');
+      expect(by['Living Room']!.inUse, isTrue);
+      expect(by['Living Room']!.secured, isTrue);
+      expect(by['Cafe Guest']!.secured, isFalse);
+      expect(by['Office']!.supported, isFalse, reason: '802.1X');
+      expect(by['Old WEP']!.supported, isFalse);
+      expect(
+        by['-oops']!.supported,
+        isFalse,
+        reason: 'could pass for an option',
+      );
+      expect(by['My:Net']!.supported, isTrue);
+      expect(by['Living Room']!.bars, 4);
+      expect(by['Cafe Guest']!.bars, 2);
+    });
+
+    test('Wi-Fi list ignores hidden names, control characters and junk', () {
+      expect(parseWifiList(':::\nnot a record\n *:\u0007x:50:WPA2\n'), isEmpty);
+    });
+
+    test('network state', () {
+      final n = parseNetwork(
+        'ethernet:connected:Wired connection 1\nwifi:disconnected:\nloopback:unmanaged:\n',
+        'full\n',
+      );
+      expect(n.wiredConnected, isTrue);
+      expect(n.wifiAvailable, isTrue);
+      expect(n.wifiSsid, isNull);
+      expect(n.online, isTrue);
+
+      final w = parseNetwork(r'wifi:connected:Home\: 5G', 'portal');
+      expect(w.wifiSsid, 'Home: 5G');
+      expect(w.online, isFalse, reason: 'a captive portal is not online');
+
+      final none = parseNetwork('wifi:unavailable:\n', 'none');
+      expect(none.online, isFalse);
+      expect(none.wifiAvailable, isTrue);
+
+      // Connectivity checking off: a connection counts.
+      expect(parseNetwork('ethernet:connected:x', 'unknown').online, isTrue);
+      expect(parseNetwork('ethernet:unavailable:', 'unknown').online, isFalse);
+      expect(parseNetwork('', '').online, isFalse);
+    });
+  });
+
+  group('catalog index', () {
+    test('keeps installer apps, with terms, in the order of the index', () {
+      final apps = parseCatalogIndex(catalogIndexFixture);
+      expect(
+        [for (final a in apps) a.id],
+        ['jellyfin', 'youtube', 'firefox', 'steam', 'plex-htpc', 'moonlight'],
+        reason: 'unknown ids, removed apps and unfree apps without terms go',
+      );
+      final by = {for (final a in apps) a.id: a};
+      expect(by['youtube']!.onIso, isTrue);
+      expect(by['steam']!.onIso, isFalse);
+      expect(by['steam']!.terms!.vendor, 'Example Games Co.');
+      expect(by['steam']!.terms!.version, '2026-03');
+      expect(by['plex-htpc']!.sizeMiB, 300);
+      expect(by['moonlight']!.hasTerms, isFalse);
+    });
+
+    test('another index version is refused', () {
+      expect(
+        () => parseCatalogIndex('{"indexVersion":2,"apps":[]}'),
+        throwsFormatException,
+      );
+      expect(() => parseCatalogIndex('[]'), throwsFormatException);
+    });
+
+    test('the fallback offers only what is on the ISO', () {
+      final ids = [for (final a in fallbackCatalog()) a.id];
+      expect(ids, installerOnIsoIds);
+      expect(fallbackCatalog().every((a) => a.onIso && !a.hasTerms), isTrue);
+    });
+
+    test('the id lists are the system repo\'s app-ids.nix', () {
+      expect(installerOnIsoIds, [
+        'jellyfin',
+        'youtube',
+        'crunchyroll',
+        'firefox',
+      ]);
+      expect(installerOnlineIds, ['steam', 'plex-htpc', 'moonlight']);
+    });
+  });
+}

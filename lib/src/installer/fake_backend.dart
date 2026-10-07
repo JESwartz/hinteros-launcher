@@ -1,0 +1,323 @@
+import 'dart:async';
+import 'dart:convert';
+
+import '../system/mock_system.dart' show mockTermsText;
+import '../system/models.dart';
+import 'backend.dart';
+import 'plan.dart';
+import 'progress.dart';
+
+/// What a fake backend call prints and how it exits.
+class FakeScript {
+  const FakeScript(this.events, this.exitCode);
+
+  final List<InstallEvent> events;
+  final int exitCode;
+
+  static InstallEvent _e(
+    String stage,
+    int percent,
+    String message, [
+    InstallLevel level = InstallLevel.info,
+    String? code,
+  ]) => InstallEvent(
+    stage: stage,
+    percent: percent,
+    level: level,
+    message: message,
+    code: code,
+  );
+
+  /// `--validate-only` that accepts the plan.
+  static final validateOk = FakeScript([
+    _e('validate', 0, 'Checking the plan'),
+    _e('validate', 4, 'Offline install: only the apps on this installer'),
+    _e('validate', 8, 'Plan accepted'),
+    _e('done', 100, 'Plan and machine are fine (validate only)'),
+  ], 0);
+
+  /// A whole install with one warning on the way.
+  static final installOk = FakeScript([
+    _e('validate', 0, 'Checking the plan'),
+    _e('validate', 8, 'Plan accepted'),
+    _e('partition', 10, 'Erasing and partitioning the disk'),
+    _e('partition', 20, 'Disk is partitioned and mounted'),
+    _e('facter', 22, 'Detecting hardware'),
+    _e(
+      'facter',
+      26,
+      'Hardware detection failed; continuing with generic hardware support',
+      InstallLevel.warn,
+      'facter-failed',
+    ),
+    _e('config', 28, 'Writing the device configuration'),
+    _e('config', 30, 'Device configuration written to /etc/hinteros'),
+    _e('install', 32, 'Copying flake inputs to the new system'),
+    _e('install', 36, 'Building and installing the system'),
+    _e('install', 57, 'Installing: 57 of 100 steps'),
+    _e('install', 90, 'System installed, boot loader written'),
+    _e('snapshot', 92, 'Checking the config snapshot'),
+    _e('snapshot', 95, '/etc/hinteros matches the installed generation'),
+    _e('finalize', 97, 'Flushing to disk'),
+    _e('done', 100, 'HinterOS is installed. Remove the installer medium.'),
+  ], 0);
+
+  /// The plan or machine is refused: exit 2, nothing touched.
+  static FakeScript refused(String code, String message) => FakeScript([
+    _e('validate', 0, 'Checking the plan'),
+    _e('validate', 0, message, InstallLevel.error, code),
+  ], 2);
+
+  /// Fails part-way: exit 1.
+  static FakeScript failed({
+    String code = 'install-failed',
+    String message = 'nixos-install failed (exit 1); see $installLogPath',
+    int percent = 57,
+  }) => FakeScript([
+    _e('validate', 0, 'Checking the plan'),
+    _e('validate', 8, 'Plan accepted'),
+    _e('partition', 20, 'Disk is partitioned and mounted'),
+    _e('install', percent, 'Installing', InstallLevel.info),
+    _e('install', percent, message, InstallLevel.error, code),
+  ], 1);
+}
+
+/// A scripted backend: no processes, no devices. Used by the widget tests
+/// and by `--installer --mock` on the desktop. Records what it was asked.
+class FakeInstallerBackend implements InstallerBackend {
+  FakeInstallerBackend({
+    this.state = const NetworkState(),
+    List<WifiAp>? wifi,
+    List<DiskInfo>? disks,
+    List<StoreApp>? catalog,
+    this.validateScript,
+    this.installScript,
+    this.delay = Duration.zero,
+    this.wifiPasswords = const {},
+  }) : _wifi = wifi ?? mockWifi(),
+       _disks = disks ?? mockDisks(),
+       _catalog = catalog ?? mockInstallerCatalog();
+
+  /// What `network()` reports; joining Wi-Fi changes it.
+  NetworkState state;
+  final List<WifiAp> _wifi;
+  final List<DiskInfo> _disks;
+  final List<StoreApp> _catalog;
+
+  /// Null: [FakeScript.validateOk] / [FakeScript.installOk]. Set again
+  /// between calls to script a retry.
+  FakeScript? validateScript;
+  FakeScript? installScript;
+
+  /// Pause between progress lines (the desktop mock is slow on purpose).
+  Duration delay;
+
+  /// `ssid -> password` for secured networks; others fail to connect.
+  final Map<String, String> wifiPasswords;
+
+  /// Every call, in order: `network`, `scanWifi`, `connectWifi:<ssid>`,
+  /// `disks`, `catalog`, `validate`, `install`, `reboot`.
+  final calls = <String>[];
+
+  /// The plan of every `validate` / `install` call as the backend would get
+  /// it on stdin (UTF-8 JSON). Contains the password: this is a fake.
+  final stdinPlans = <String>[];
+
+  /// `stdinPlans` decoded.
+  List<Map<String, Object?>> get plans => [
+    for (final p in stdinPlans) jsonDecode(p) as Map<String, Object?>,
+  ];
+
+  bool get rebooted => calls.contains('reboot');
+
+  @override
+  Future<NetworkState> network() async {
+    calls.add('network');
+    return state;
+  }
+
+  @override
+  Future<List<WifiAp>> scanWifi() async {
+    calls.add('scanWifi');
+    return List.of(_wifi);
+  }
+
+  @override
+  Future<void> connectWifi(String ssid, {String? psk}) async {
+    calls.add('connectWifi:$ssid');
+    final ap = _wifi.where((a) => a.ssid == ssid).firstOrNull;
+    if (ap == null) throw const InstallerException('Network not found.');
+    if (ap.secured && wifiPasswords[ssid] != psk) {
+      throw InstallerException(
+        'Could not connect to "$ssid". Check the password and try again.',
+      );
+    }
+    state = NetworkState(
+      wiredConnected: state.wiredConnected,
+      wifiAvailable: true,
+      wifiSsid: ssid,
+      online: true,
+    );
+  }
+
+  @override
+  Future<List<DiskInfo>> disks() async {
+    calls.add('disks');
+    return List.of(_disks);
+  }
+
+  @override
+  Future<List<StoreApp>> catalog() async {
+    calls.add('catalog');
+    return List.of(_catalog);
+  }
+
+  InstallRun _run(String call, InstallPlan plan, FakeScript script) {
+    calls.add(call);
+    stdinPlans.add(utf8.decode(plan.encode()));
+    final c = StreamController<InstallEvent>();
+    final done = Completer<int>();
+    unawaited(() async {
+      for (final e in script.events) {
+        await Future<void>.delayed(delay);
+        c.add(e);
+      }
+      await c.close();
+      done.complete(script.exitCode);
+    }());
+    return InstallRun(c.stream, done.future);
+  }
+
+  @override
+  InstallRun validate(InstallPlan plan) =>
+      _run('validate', plan, validateScript ?? FakeScript.validateOk);
+
+  @override
+  InstallRun install(InstallPlan plan) =>
+      _run('install', plan, installScript ?? FakeScript.installOk);
+
+  @override
+  Future<void> reboot() async => calls.add('reboot');
+}
+
+const _gib = 1024 * 1024 * 1024;
+
+/// A machine with an internal NVMe disk, a second SATA disk, a small one,
+/// the installer stick and a USB drive.
+List<DiskInfo> mockDisks() => const [
+  DiskInfo(
+    path: '/dev/nvme0n1',
+    name: 'nvme0n1',
+    sizeBytes: 512110190592,
+    model: 'Example NVMe 512GB',
+    transport: 'nvme',
+  ),
+  DiskInfo(
+    path: '/dev/sda',
+    name: 'sda',
+    sizeBytes: 1000204886016,
+    model: 'Example SATA SSD 1TB',
+    transport: 'sata',
+  ),
+  DiskInfo(
+    path: '/dev/mmcblk0',
+    name: 'mmcblk0',
+    sizeBytes: 8 * _gib,
+    model: 'Example eMMC 8GB',
+    transport: null,
+  ),
+  DiskInfo(
+    path: '/dev/sdb',
+    name: 'sdb',
+    sizeBytes: 32 * _gib,
+    model: 'Example USB Stick',
+    transport: 'usb',
+    removable: true,
+    mountpoints: ['/iso'],
+  ),
+  DiskInfo(
+    path: '/dev/sdc',
+    name: 'sdc',
+    sizeBytes: 2000398934016,
+    model: 'Example USB Drive 2TB',
+    transport: 'usb',
+    removable: true,
+  ),
+];
+
+List<WifiAp> mockWifi() => const [
+  WifiAp(ssid: 'Living Room', signal: 82, secured: true),
+  WifiAp(ssid: 'Neighbour 5G', signal: 55, secured: true),
+  WifiAp(ssid: 'Cafe Guest', signal: 33, secured: false),
+  WifiAp(ssid: 'Office (802.1X)', signal: 20, secured: true, supported: false),
+];
+
+/// The apps the installer offers, with the placeholder vendor terms the
+/// goldens and tests use (the real ones come from the ISO's catalog index).
+List<StoreApp> mockInstallerCatalog() => [
+  StoreApp(
+    id: 'jellyfin',
+    name: 'Jellyfin',
+    summary: 'Free media player for your own server.',
+    category: StoreCategory.video,
+    sizeMiB: 280,
+    onIso: true,
+  ),
+  const StoreApp(
+    id: 'youtube',
+    name: 'YouTube',
+    summary: 'The website, made for the TV.',
+    category: StoreCategory.video,
+    sizeMiB: 1,
+    onIso: true,
+  ),
+  const StoreApp(
+    id: 'crunchyroll',
+    name: 'Crunchyroll',
+    summary: 'Anime streaming site.',
+    category: StoreCategory.video,
+    sizeMiB: 1,
+    onIso: true,
+  ),
+  const StoreApp(
+    id: 'firefox',
+    name: 'Firefox',
+    summary: 'A full web browser, for sites that have no app.',
+    category: StoreCategory.web,
+    sizeMiB: 90,
+    onIso: true,
+  ),
+  StoreApp(
+    id: 'steam',
+    name: 'Steam',
+    summary: 'Your game library, with Big Picture on the TV.',
+    category: StoreCategory.games,
+    sizeMiB: 1000,
+    terms: VendorTerms(
+      vendor: 'Example Games Co.',
+      version: '2026-03',
+      sourceUrl: 'https://store.example/steam/terms',
+      text: mockTermsText('EXAMPLE GAMES CO.'),
+    ),
+  ),
+  StoreApp(
+    id: 'plex-htpc',
+    name: 'Plex HTPC',
+    summary: 'Your Plex libraries on the TV.',
+    category: StoreCategory.video,
+    sizeMiB: 300,
+    terms: VendorTerms(
+      vendor: 'Example Media Inc.',
+      version: '2026-01',
+      sourceUrl: 'https://media.example/plex/terms',
+      text: mockTermsText('EXAMPLE MEDIA INC.'),
+    ),
+  ),
+  const StoreApp(
+    id: 'moonlight',
+    name: 'Moonlight',
+    summary: 'Stream games from a PC in your house.',
+    category: StoreCategory.games,
+    sizeMiB: 150,
+  ),
+];
