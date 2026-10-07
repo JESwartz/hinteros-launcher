@@ -5,6 +5,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart' as api;
 import 'package:hinteros_launcher/src/system/daemon_system.dart';
+import 'package:hinteros_launcher/src/ui/app_icon_view.dart';
 import 'package:hinteros_launcher/src/ui/settings_screen.dart';
 import 'package:hinteros_launcher/src/ui/widgets.dart';
 
@@ -23,6 +24,10 @@ Harness harness({
   mock.system.installedApps
     ..clear()
     ..addAll(installed);
+  // The daemon leaves Steam out of apps.list while it is not installed.
+  if (!installed.contains('steam')) {
+    mock.apps.removeWhere((a) => a.id == 'steam');
+  }
   mock.system.nextUpdate = update;
   return Harness(mock: mock, realServices: daemonSystemServices(mock));
 }
@@ -417,13 +422,24 @@ void main() {
       expect(find.text('Steam is not installed'), findsNothing);
     });
 
-    testWidgets('no prompt while the first listing has not arrived', (t) async {
+    testWidgets(
+      'the prompt follows apps.list, even while the Store is unreachable',
+      (t) async {
+        setView(t);
+        final h = harness(installed: {});
+        h.mock.system.unavailable = api.SystemUnavailableDataReason.down;
+        await h.pump(t);
+        await openTab(t, 1);
+        expect(find.text('Steam is not installed'), findsOneWidget);
+        await press(t, [kEnter]);
+        expect(find.text("The Store isn't available"), findsOneWidget);
+      },
+    );
+
+    testWidgets('no prompt before apps.list has arrived', (t) async {
       setView(t);
       final h = harness(installed: {});
-      h.mock.system.unavailable = api.SystemUnavailableDataReason.down;
-      await h.pump(t);
-      await openTab(t, 1);
-      // Nothing is known about what is installed: no "not installed" claim.
+      await t.pumpWidget(h.app);
       expect(find.text('Steam is not installed'), findsNothing);
     });
   });
@@ -474,6 +490,78 @@ void main() {
         findsOneWidget,
         reason: 'still offered',
       );
+    });
+  });
+
+  group('session API 0.9', () {
+    testWidgets('a catalog icon (icon.path) replaces the letter tile', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await endStartupCheck(t, h);
+      await openStore(t);
+      final before = find.byType(AppIconImage).evaluate().length;
+      final path = '${iconDir()}/jellyfin.png';
+      h.mock.system.setStoreIcon('moonlight', path); // store_changed
+      await t.pumpAndSettle();
+      await loadIcons(t, [path]);
+      await t.pumpAndSettle();
+      expect(find.byType(AppIconImage).evaluate().length, before + 1);
+      // Its detail page shows it too.
+      await press(t, [kRight, kDown, kEnter]);
+      expect(find.text('Moonlight'), findsWidgets);
+      expect(find.byType(AppIconImage).evaluate().length, greaterThan(before));
+    });
+
+    testWidgets('an app without icon.path keeps the letter', (t) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await endStartupCheck(t, h);
+      await openStore(t);
+      expect(find.text('M'), findsWidgets);
+    });
+
+    testWidgets(
+      'apps_changed after the install job puts the app on Home and Apps',
+      (t) async {
+        setView(t);
+        final h = harness(installed: {});
+        await h.pump(t);
+        await endStartupCheck(t, h);
+        expect(h.data.appList!.any((a) => a.id == 'steam'), isFalse);
+        await openTab(t, 1);
+        await press(t, [kEnter, kRight, kEnter]); // Install Steam, Continue
+        await readTerms(t);
+        await press(t, [kDown, kRight, kEnter]);
+        h.mock.system.finishJob(h.mock.system.runningJobId!);
+        await t.pumpAndSettle();
+        await press(t, [kEnter]); // Close
+        expect(h.data.appList!.any((a) => a.id == 'steam'), isTrue);
+        await press(t, [kUp, kLeft, kDown]); // Games to Home
+        expect(find.text('Steam'), findsWidgets);
+        expect(find.text('Steam is not installed'), findsNothing);
+      },
+    );
+
+    testWidgets('removing Steam takes it off Home and shows the prompt again', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await endStartupCheck(t, h);
+      await openSteam(t);
+      await press(t, [kRight, kEnter, kDown, kRight, kEnter]); // Remove
+      h.mock.system.finishJob(h.mock.system.runningJobId!);
+      await t.pumpAndSettle();
+      expect(h.data.appList!.any((a) => a.id == 'steam'), isFalse);
+      await press(t, [kEnter]);
+      await press(t, [kEscape, kEscape, kEscape]); // back out to Home
+      await openTab(t, 1);
+      expect(find.text('Steam is not installed'), findsOneWidget);
     });
   });
 }

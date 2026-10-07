@@ -4,6 +4,7 @@ library;
 
 import '../api/api.dart' as api;
 import 'models.dart';
+import '../log.dart';
 
 // ---------------------------------------------------------------- errors
 
@@ -177,6 +178,7 @@ Future<T> guardCall<T>(Future<T> Function() call) async {
   try {
     return await call();
   } catch (e) {
+    logFailure('a system call', e);
     throw systemExceptionFrom(e);
   }
 }

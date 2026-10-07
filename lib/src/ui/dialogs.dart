@@ -593,3 +593,33 @@ Future<void> showMessage(
 }) async {
   await showConfirm(context, title: title, body: body, showCancel: false);
 }
+
+/// A failure on screen: [body] says what went wrong, [detail] (an error code
+/// and message) goes below it in small type. [modals] is the shell's own
+/// controller, for failures that arrive outside any widget's context.
+Future<void> showFailureOn(
+  ModalController modals, {
+  required String title,
+  required String body,
+  String? detail,
+}) async {
+  await modals.show<ConfirmResult>(
+    (context, modal) => _ConfirmDialog(
+      modal: modal,
+      title: title,
+      body: body,
+      extra: [
+        if (detail != null)
+          Builder(
+            builder: (c) => Text(detail, style: HinterTheme.of(c).caption),
+          ),
+      ],
+      confirmLabel: 'OK',
+      cancelLabel: 'Cancel',
+      danger: false,
+      showCancel: false,
+      checkbox: null,
+      checkboxHint: null,
+    ),
+  );
+}

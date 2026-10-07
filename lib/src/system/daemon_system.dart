@@ -9,6 +9,7 @@ library;
 import 'dart:async';
 
 import '../api/api.dart' as api;
+import '../log.dart';
 import 'daemon_auth.dart';
 import 'daemon_errors.dart';
 import 'daemon_runtime.dart';
@@ -231,6 +232,13 @@ class DaemonJobs implements JobsRepository {
         final kind = _jobKind(ev.kind);
         if (!e.kindKnown) e.kindKnown = true;
         final cancelled = !ev.ok && _isCancel(ev.error);
+        if (!ev.ok && !cancelled) {
+          final err = ev.error;
+          logSink(
+            'hinteros-launcher: job ${kind.name} (${ev.jobId}) failed'
+            '${err == null ? '' : ": ${err.code} ${err.message}"}',
+          );
+        }
         _set(
           e,
           e.snap.copyWith(

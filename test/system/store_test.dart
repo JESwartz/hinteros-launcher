@@ -229,6 +229,7 @@ void main() {
       setView(t);
       final h = harness();
       h.services.mockStore.setInstalled({'jellyfin'});
+      h.mock.apps.removeWhere((a) => a.id == 'steam');
       await h.pump(t);
       await openTab(t, 1);
       expect(find.text('Steam is not installed'), findsOneWidget);

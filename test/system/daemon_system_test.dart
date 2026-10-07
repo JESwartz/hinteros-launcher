@@ -2,6 +2,7 @@
 // mock daemon's relay of the system API (session API 0.6).
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart' as api;
+import 'package:hinteros_launcher/src/log.dart';
 import 'package:hinteros_launcher/src/system/daemon_system.dart';
 import 'package:hinteros_launcher/src/system/models.dart';
 import 'package:hinteros_launcher/src/system/repositories.dart';
@@ -299,6 +300,30 @@ void main() {
       expect(last.failed, isTrue);
       expect(last.error!.stage, JobStage.building);
       expect(last.error!.logHint, 'error: builder failed');
+    });
+
+    test('a failed job is logged with its code and message', () async {
+      final log = <String>[];
+      final old = logSink;
+      logSink = log.add;
+      addTearDown(() => logSink = old);
+      final (mock, s) = await _setup();
+      mock.system.adminAuthorized = true;
+      final job = await s.system.setSsh(true);
+      mock.system.finishJob(
+        job.jobId,
+        ok: false,
+        error: const api.ErrorObject(
+          code: api.ApiErrorCode.jobFailed,
+          message: 'the job failed while building',
+        ),
+      );
+      await s.jobs.watch(job.jobId).last;
+      expect(log, hasLength(1));
+      expect(
+        log.single,
+        contains('${api.ApiErrorCode.jobFailed} the job failed while building'),
+      );
     });
 
     test('cancel works before activating, then job_busy', () async {

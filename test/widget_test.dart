@@ -1,6 +1,8 @@
+import 'package:flutter/material.dart' show SnackBar;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart';
+import 'package:hinteros_launcher/src/log.dart';
 
 import 'support/harness.dart';
 
@@ -13,6 +15,17 @@ class _FailingLaunch extends MockDaemon {
         ApiErrorCode.appLaunchFailed,
         'spawn went wrong',
       );
+    }
+    return super.rpc(method, params);
+  }
+}
+
+/// A daemon that no longer knows the app.
+class _GoneLaunch extends MockDaemon {
+  @override
+  Future<Map<String, dynamic>> rpc(String method, Map<String, dynamic> params) {
+    if (method == 'apps.launch') {
+      throw const ApiException(ApiErrorCode.appNotFound, 'no such app: steam');
     }
     return super.rpc(method, params);
   }
@@ -113,13 +126,49 @@ void main() {
     expect(focusLabel(), 'home/apps:0');
   });
 
-  testWidgets('a failed launch shows a message', (t) async {
+  testWidgets('a failed launch says what and which app, and is logged', (
+    t,
+  ) async {
     setView(t);
+    final log = <String>[];
+    final old = logSink;
+    logSink = log.add;
+    addTearDown(() => logSink = old);
     final h = Harness(mock: _FailingLaunch());
     await h.pump(t);
     await keys(t, [enter]);
-    expect(find.textContaining("Couldn't start Steam"), findsOneWidget);
-    expect(find.textContaining('spawn went wrong'), findsOneWidget);
+    expect(find.text("Couldn't start Steam"), findsOneWidget);
+    expect(
+      find.textContaining("Steam, but its program wouldn't run"),
+      findsOneWidget,
+    );
+    expect(find.text('Error 2002: spawn went wrong'), findsOneWidget);
+    expect(
+      log,
+      contains(
+        'hinteros-launcher: start Steam failed: error 2002: spawn went wrong',
+      ),
+    );
+    // A dialog, not a toast: it stays until dismissed.
+    expect(find.byType(SnackBar), findsNothing);
+    await keys(t, [enter]);
+    expect(find.text("Couldn't start Steam"), findsNothing);
+  });
+
+  testWidgets('launching an app the daemon does not know (2001) is explained', (
+    t,
+  ) async {
+    setView(t);
+    final log = <String>[];
+    final old = logSink;
+    logSink = log.add;
+    addTearDown(() => logSink = old);
+    final h = Harness(mock: _GoneLaunch());
+    await h.pump(t);
+    await keys(t, [enter]);
+    expect(find.text("Couldn't start Steam"), findsOneWidget);
+    expect(find.textContaining("isn't in HinterOS's app list"), findsOneWidget);
+    expect(log.single, contains('error 2001'));
   });
 
   testWidgets('shows the apps the daemon lists', (t) async {
@@ -132,6 +181,33 @@ void main() {
     await h.pump(t);
     expect(find.text('Only App'), findsOneWidget);
     expect(find.text('Steam'), findsNothing);
+  });
+
+  testWidgets(
+    'without a steam app Games offers to install it, Home and Apps show no tile',
+    (t) async {
+      setView(t);
+      final h = Harness(
+        mock: MockDaemon(
+          apps: const [App(id: 'only', name: 'Only App', kind: AppKind.web)],
+        ),
+      );
+      await h.pump(t);
+      await keys(t, [up, right, down]); // Games
+      expect(find.text('Steam is not installed'), findsOneWidget);
+      expect(find.text('Install Steam'), findsOneWidget);
+      await keys(t, [up, right, down]); // Apps
+      expect(find.text('Only App'), findsOneWidget);
+      expect(find.text('Steam'), findsNothing);
+    },
+  );
+
+  testWidgets('Steam in apps.list means no prompt in Games', (t) async {
+    setView(t);
+    final h = Harness();
+    await h.pump(t);
+    await keys(t, [up, right, down]);
+    expect(find.text('Steam is not installed'), findsNothing);
   });
 
   testWidgets('says so when the daemon is unreachable', (t) async {

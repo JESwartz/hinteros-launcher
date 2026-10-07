@@ -3,10 +3,21 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../api/api.dart';
+import '../log.dart';
 import '../osk/osk_control.dart';
 import 'app_icons.dart';
 import 'apps_repository.dart';
 import 'games_repository.dart';
+
+/// Something the user asked for failed: a clear sentence naming the app, and the
+/// daemon's error code and message as a detail line (also in the log).
+class Failure {
+  const Failure({required this.title, required this.body, this.detail});
+
+  final String title;
+  final String body;
+  final String? detail;
+}
 
 /// One card of the Continue row.
 class ContinueEntry {
@@ -70,6 +81,11 @@ class LauncherData extends ChangeNotifier {
 
   /// Short user-facing messages (launch failures) for a toast.
   Stream<String> get messages => _messages.stream;
+
+  final _failures = StreamController<Failure>.broadcast();
+
+  /// Failures to show in a dialog (a launch that did not work).
+  Stream<Failure> get failures => _failures.stream;
 
   /// Set when the daemon says to go Home.
   final _homePressed = StreamController<void>.broadcast();
@@ -244,7 +260,7 @@ class LauncherData extends ChangeNotifier {
       if (_recent.length > 8) _recent.removeLast();
       unawaited(refreshRunning());
     } catch (e) {
-      _toast("Couldn't start $name: ${describe(e)}");
+      _fail('start', name, e);
     }
   }
 
@@ -255,7 +271,7 @@ class LauncherData extends ChangeNotifier {
       try {
         await apps.focus(e.id);
       } catch (err) {
-        _toast("Couldn't switch to ${e.name}: ${describe(err)}");
+        _fail('switch to', e.name, err);
       }
       return;
     }
@@ -272,7 +288,7 @@ class LauncherData extends ChangeNotifier {
       await games.launch(g);
       unawaited(refreshRunning());
     } catch (e) {
-      _toast("Couldn't start ${g.name}: ${describe(e)}");
+      _fail('start', g.name, e);
     }
   }
 
@@ -302,7 +318,7 @@ class LauncherData extends ChangeNotifier {
       await apps.close(r.id);
       unawaited(refreshRunning());
     } catch (e) {
-      _toast("Couldn't close ${r.name}: ${describe(e)}");
+      _fail('close', r.name, e);
     }
   }
 
@@ -329,7 +345,36 @@ class LauncherData extends ChangeNotifier {
         unawaited(_refreshAttention());
         return;
       }
-      _toast("Couldn't open Steam: ${describe(e)}");
+      _fail('open', 'Steam', e);
+    }
+  }
+
+  /// [verb] on [name] failed with [e]: logged with the code and message, and
+  /// shown as a sentence naming the app.
+  void _fail(String verb, String name, Object e) {
+    logFailure("$verb $name", e);
+    final code = e is ApiException ? e.code : null;
+    final body = switch (code) {
+      ApiErrorCode.appNotFound =>
+        "$name isn't in HinterOS's app list (any more). It may have been "
+            'removed; the Store can install it again.',
+      ApiErrorCode.appLaunchFailed =>
+        "HinterOS tried to $verb $name, but its program wouldn't run. "
+            'It may be broken or missing.',
+      _ when e is DaemonUnavailableException =>
+        "The launcher lost its connection to the HinterOS service, so $name "
+            "wasn't touched. It reconnects by itself; try again in a moment.",
+      _ => "Something went wrong when trying to $verb $name.",
+    };
+    final detail = switch (e) {
+      ApiException() => 'Error ${e.code}: ${e.message}',
+      DaemonUnavailableException() => 'Not connected (${e.reason})',
+      _ => '$e',
+    };
+    if (!_failures.isClosed) {
+      _failures.add(
+        Failure(title: "Couldn't $verb $name", body: body, detail: detail),
+      );
     }
   }
 
@@ -337,18 +382,13 @@ class LauncherData extends ChangeNotifier {
     if (!_messages.isClosed) _messages.add(m);
   }
 
-  static String describe(Object e) => switch (e) {
-    ApiException() => e.message,
-    DaemonUnavailableException() => 'the HinterOS service is not connected',
-    _ => '$e',
-  };
-
   @override
   void dispose() {
     _disposed = true;
     _statusSub?.cancel();
     _eventSub?.cancel();
     _messages.close();
+    _failures.close();
     _homePressed.close();
     _nav.close();
     super.dispose();

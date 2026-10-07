@@ -19,27 +19,26 @@ class GamesScreen extends StatelessWidget {
     super.key,
     required this.data,
     required this.region,
-    this.steamMissing = false,
     this.onInstallSteam,
   });
 
   final LauncherData data;
   final NavRegion region;
 
-  /// Steam is not installed (Store state): offer to install it.
-  final bool steamMissing;
-
   /// The install flow for Steam (confirm, terms, progress), through the Store.
   final Future<void> Function(BuildContext context)? onInstallSteam;
 
   @override
   Widget build(BuildContext context) {
-    if (steamMissing) {
-      return _SteamPrompt(region: region, onInstall: onInstallSteam);
-    }
     return ListenableBuilder(
       listenable: data,
       builder: (context, _) {
+        // The daemon leaves `steam` out of apps.list while Steam is not
+        // installed (and lists it again after an install: apps_changed).
+        final list = data.appList;
+        if (list != null && !list.any((a) => a.id == 'steam')) {
+          return _SteamPrompt(region: region, onInstall: onInstallSteam);
+        }
         final notice = connectionNotice(data.status);
         final games = data.gameList;
         if (notice != null || games.isEmpty) {

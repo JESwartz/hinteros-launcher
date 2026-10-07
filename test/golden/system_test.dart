@@ -27,7 +27,11 @@ void main() {
       status: status,
     );
     if (installed != null) services.mockStore.setInstalled(installed);
-    return Harness(settings: settings, services: services);
+    final h = Harness(settings: settings, services: services);
+    if (installed != null && !installed.contains('steam')) {
+      h.mock.apps.removeWhere((a) => a.id == 'steam');
+    }
+    return h;
   }
 
   Future<void> shot(

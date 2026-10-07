@@ -18,6 +18,7 @@ import '../theme/hinter_theme.dart';
 import 'apps_screen.dart';
 import 'auth_prompt.dart';
 import 'common.dart';
+import 'dialogs.dart' show showFailureOn;
 import 'games_screen.dart';
 import 'home_screen.dart';
 import 'modal_host.dart';
@@ -186,17 +187,24 @@ class _LauncherShellState extends State<LauncherShell> {
     d.addListener(_onData);
     _subs.add(d.messages.listen(_toast));
     _subs.add(
+      d.failures.listen(
+        (f) => unawaited(
+          showFailureOn(
+            _modals,
+            title: f.title,
+            body: f.body,
+            detail: f.detail,
+          ),
+        ),
+      ),
+    );
+    _subs.add(
       d.homePressed.listen((_) {
         // A modal (a security notice, a job in progress) is not dismissed by Home.
         if (!_modals.isOpen) _goHome(reset: true);
       }),
     );
     _subs.add(d.inputNav.listen((e) => _onAction(e.action, e.phase)));
-    _subs.add(
-      widget.services.store.changes.listen((_) {
-        if (mounted) setState(() {});
-      }),
-    );
     _authPrompts = AuthPrompter(widget.services.auth, _modals);
     _reminders.addListener(_onReminders);
     _reminders.onLateResult = _homeEntered;
@@ -489,9 +497,6 @@ class _LauncherShellState extends State<LauncherShell> {
     Section.games => GamesScreen(
       data: widget.data,
       region: _games,
-      steamMissing:
-          widget.services.store.loaded &&
-          !widget.services.store.installed.contains('steam'),
       onInstallSteam: (context) => installSteam(context, widget.services),
     ),
     Section.store => StoreScreen(
