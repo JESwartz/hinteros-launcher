@@ -67,8 +67,8 @@ all going through the mock's event stream:
 | F5 | a game finishes its update (or, if all are installed, the first needs one): `games_changed` |
 | F6 | an app icon arrives (YouTube, then Plex): `apps_changed` |
 
-While an app has focus the mock sends no `input_nav`, like the daemon. Arrow keys, Enter and
-Escape work in every mode and are the same actions as `input_nav` (see below).
+While an app has focus the mock sends no `input_nav`, like the daemon. Arrow keys, Enter,
+Escape and Backspace work in every mode and are the same actions as `input_nav` (see below).
 
 
 ```
@@ -140,8 +140,8 @@ README, "Desktop preview".
 ### Launching and input
 
 Controller input arrives as `input_nav {action, phase}` events; the keyboard maps onto the same
-`NavAction`s (arrows = directions, Enter = accept, Escape = back, PageUp/PageDown = L1/R1), and
-`NavController.dispatch` (see "Navigation rules") is the only action layer. `press` and `repeat`
+`NavAction`s (arrows = directions, Enter = accept (A), Escape or Backspace = back (B), PageUp/PageDown = L1/R1, Y and X = context and secondary), and
+`NavController.dispatch` (see "Navigation rules") is the only action layer. The table is one function, `navActionForKey` (`lib/src/nav/key_map.dart`), shared by the launcher and the installer. While a text field has the focus (the admin password prompt) Backspace and the letters Y and X are text, not buttons: Backspace deletes, Enter submits, Escape is back. `press` and `repeat`
 move focus (the daemon does the key repeat); `release` never acts. `accept` launches the focused
 card, on `press` only: `apps.launch {id}` for an app, `apps.launch {url:
 "steam://rungameid/<appid>"}` for a game (it then runs as `steam-<appid>`); a failure (2001, 2002,
@@ -196,7 +196,7 @@ params/result schemas that are a `$ref` (the relayed `system.*` results; `displa
 - `test/api/mock08_test.dart`: what the contract test's examples do not show about the 0.8 mock: the order of events and answers around the admin password prompt (`auth.respond` answers before the waiting `ssh.set`), three wrong passwords, cancel, who gets the events and may answer, the Store's states while an apps job runs, `store_changed`, dependencies and conflicts, `more_after_update`, `session.restart`.
 - `test/system/daemon_store_test.dart`: `DaemonStore` over `MockDaemon`: the listing (sorted, states, terms text from the daemon's file path, unfree without readable terms left out, `unavailable {catalog}`, `system_unavailable`, icons from `apps.list`, a slow older answer not overwriting a newer one), following jobs and `store_changed`, `accepted_terms`, `app_conflict`, `insufficient_resources`, `not_found`, `not_available`, `job_busy`, a stale revision retried once (and only once). `test/system/daemon_store_ui_test.dart`: the same through the screens: install with terms and progress, a stale revision, `terms_required` with a newer version, conflicts, no space, remove with delete data (two confirmations), a running app closed first, retired and going-away apps, the update's new and removed apps, the Games tab's "Install Steam", and the session restart offer (also on a desktop session).
 - `test/system/daemon_system_test.dart` runs the real repositories (`DaemonSystem`, `DaemonUpdates`, `DaemonJobs`) over `MockDaemon`'s relay: error mapping, jobs from events, cancel, downgrade acknowledgement, the update check and its cache, `settings.set` with a revision. `test/system/daemon_ui_test.dart` is the same through the Settings screens (SSH without a polkit agent, settings unavailable, About with the DEV badge, a security update through to "Restart session"). `test/osk/osk_auto_show_test.dart`: the keyboard opens and closes with the launcher's text fields.
-- `test/installer/` covers the installer: `flow_test.dart` walks the screens with a fake backend (disk filtering and the two confirmations, password mismatch, SSH off by default, offline disabling the online-only apps, the plan JSON for several choices, progress, exit status 2 and 1 with their codes, typing with the pad on the in-app keyboard), `plan_test.dart`, `progress_test.dart`, `parsers_test.dart` (lsblk, nmcli; the catalog index is in `test/system/catalog_test.dart`, against `test/fixtures/catalog`, the real index with placeholder terms text), `process_backend_test.dart` (the real backend class against a stand-in script: the plan arrives on stdin, never in the arguments), `gamepad_test.dart`, `first_boot_test.dart`.
+- `test/installer/` covers the installer: `flow_test.dart` walks the screens with a fake backend (disk filtering and the two confirmations, password mismatch, SSH off by default, offline disabling the online-only apps, the plan JSON for several choices, progress, exit status 2 and 1 with their codes, typing with the pad on the in-app keyboard), `plan_test.dart`, `progress_test.dart`, `parsers_test.dart` (lsblk, nmcli; the catalog index is in `test/system/catalog_test.dart`, against `test/fixtures/catalog`, the real index with placeholder terms text), `process_backend_test.dart` (the real backend class against a stand-in script: the plan arrives on stdin, never in the arguments), `gamepad_test.dart` (the stick deadzone and hysteresis, key repeat, hotplug, disconnects and permission errors, all over synthetic evdev streams from `test/support/fake_pads.dart`; no real device is ever opened), `input_test.dart` (the installer driven by the keyboard alone and by the stick alone, from Welcome to the restart, and the text-field exceptions), `test/nav/key_map_test.dart`, `first_boot_test.dart`.
 - `test/osk/` drives the on-screen keyboard with the mock backend: layout, D-pad navigation, shift,
   pages, and the exact backend calls for typing `P@ss-w0rd!` with D-pad presses only.
 - `test/integration/` runs the real `hinteros-session` binary: `nix build .#checks.x86_64-linux.integration`.
@@ -259,8 +259,7 @@ flutter run -d linux --dart-entrypoint-args=--installer,--mock,--windowed
 ./result/bin/hinteros-launcher --installer --mock --mock-scenario=refused --windowed
 ```
 
-The arrow keys, Enter, Escape (B), X and Y stand in for the pad, F1 for the View button that
-cancels the keyboard. `--mock-scenario=` is `ok` (default: no network, Wi-Fi "Living Room" with
+**Keyboard (and stick).** Everything works from a USB keyboard and from the Xbox controller alone. Keyboard: arrows move, Enter = A (accept), Backspace or Escape = B (back), Tab and Shift+Tab move the focus, X and Y are secondary and context, PageUp/PageDown the bumpers, F1 the View button. While the in-app keyboard is up, it is a text field: letters, digits and space type, Backspace deletes, Enter submits (Done), Escape cancels (and does not go back), the arrows move around the on-screen keys. Controller: the D-pad and the left stick move (the right stick is ignored), A accepts, B goes back, X and Y are secondary and context, the bumpers are the page buttons; in the on-screen keyboard B deletes, X is Space, Menu is Done and View cancels. The Guide button does nothing in the installer. Held directions repeat like the daemon (after 400 ms, then every 120 ms), for the stick and the D-pad alike. `--mock-scenario=` is `ok` (default: no network, Wi-Fi "Living Room" with
 the password `correct horse`, a successful install after about ten seconds), `online` (a cable is
 plugged in), `refused` (`hinteros-install` exits 2 with `disk-in-use`) or `failed` (exit 1 with
 `install-failed`). The fake backend never runs a program. Without `--mock` the real backend
@@ -278,13 +277,13 @@ about, the install erases the disk.
 | `lib/src/installer/progress.dart` | The stdout lines `{stage, percent, level, message, code?}`, the verdict (exit 0 and a `done` line is success; 2 is "refused, nothing was touched"; 1 or anything else is "failed part-way"; exit 0 with an error line is a failure too), and the plain-words text for every error code |
 | `lib/src/installer/parsers.dart` | `lsblk --json -b` and `nmcli -t` output (`\:` escapes) |
 | `lib/src/system/catalog.dart` | The catalog index (format 2), shared with the Store: `parseCatalogIndex`, `loadCatalogIndex`, the terms reader |
-| `lib/src/installer/gamepad.dart` | Controller input without the daemon: reads the evdev gamepads under `/dev/input` (A accepts, B back, X/Y, bumpers, View/Menu, D-pad with repeat) |
+| `lib/src/installer/gamepad.dart` | Controller input without the daemon: reads the evdev gamepads under `/dev/input` (A accepts, B back, X/Y, bumpers, View/Menu; D-pad and the left stick with a 0.5 deadzone, hysteresis and the daemon's key repeat; a rescan every 2 s for hotplug; `evdev_ioctl.dart` reads the stick range with `EVIOCGABS`) |
 | `lib/src/installer/flow.dart` | `InstallerFlow`: the answers, the steps, the install run |
 | `lib/src/installer/ui/` | The screens, the shared input host (`host.dart`), the in-app keyboard (`text_entry.dart`), the first-boot wizard |
 
 **Keyboard.** There is no daemon on the ISO to type for us, so the installer shows the same
 on-screen keyboard (`OskScreen`, same layouts) with an `InProcessKeyboard` as its `OskBackend`: the
-keys go into the field instead of into uinput. Done or Enter saves, View cancels.
+keys go into the field instead of into uinput. Done, Menu or Enter saves; View or Escape cancels. A physical keyboard types into it directly (`OskScreen(hardwareKeys: true)`).
 
 **Catalog.** One model (`StoreApp`) and one parser (`lib/src/system/catalog.dart`) read the real
 index of the catalog repo (`indexVersion` 2, `schema/index.schema.json` there), for the installer
