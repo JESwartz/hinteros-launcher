@@ -531,10 +531,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
     }
     p.add(
       Text(switch (state) {
-        StoreState.available => 'Not installed.',
+        StoreState.available => 'Not installed for this profile.',
         StoreState.installing => 'Installing...',
         StoreState.removing => 'Removing...',
-        _ => 'Installed.',
+        _ => 'Installed for this profile.',
       }, style: t.label),
       gap: HinterTokens.s3,
     );
@@ -550,6 +550,23 @@ class _AppDetailPageState extends State<AppDetailPage> {
         StatusLine(
           'The next update takes this app away.${_reason(app)} You can '
           'remove it now.',
+        ),
+      );
+    }
+    // An app that needs a service the box does not run cannot be installed
+    // here; only the admin profile can add the service (owner answer).
+    final needs = installed
+        ? const <String>[]
+        : [for (final s in app.missingServices) s.name];
+    if (needs.isNotEmpty) {
+      // Red text, in words (owner answer, apps.md).
+      p.add(
+        Text(
+          '${app.name} needs ${needs.join(' and ')}, which this box does not '
+          'run. The admin profile can install '
+          '${needs.length == 1 ? 'it' : 'them'} in the Server section; then '
+          '${app.name} can be installed here.',
+          style: t.body.copyWith(color: t.danger, fontWeight: FontWeight.w700),
         ),
       );
     }
@@ -569,6 +586,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
           'Install',
           () => installFlow(context, widget.services, app, cat),
           primary: true,
+          enabled: needs.isEmpty,
         ),
         btn('Back', widget.modal.close),
       ],

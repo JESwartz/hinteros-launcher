@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../system/models.dart';
+import '../../system/profiles.dart';
 import '../../theme/hinter_theme.dart';
 import '../dialogs.dart';
 import '../pages.dart';
@@ -149,7 +150,56 @@ class _UpdatesSectionState extends State<UpdatesSection> {
     }
   }
 
-  Future<void> _rollback(Generation? g, Future<void> Function() reload) async {
+  /// What a rollback to [target] does to the profiles (M7): accounts the
+  /// target generation does not have disappear (their homes stay), and
+  /// accounts it has that were removed since come back with an empty home.
+  Future<List<String>> _profileChanges(Generation? target) async {
+    final want = target?.profiles;
+    if (want == null) return const [];
+    final ProfilesState now;
+    try {
+      now = await env.services.profiles.list();
+    } on SystemException {
+      return const [];
+    }
+    final have = {for (final p in now.profiles) p.id};
+    final gone = [
+      for (final p in now.profiles)
+        if (!want.any((w) => w.id == p.id)) p.name,
+    ];
+    final empty = [
+      for (final w in want)
+        if (!have.contains(w.id)) w.name ?? 'Profile ${w.id.substring(1)}',
+    ];
+    String list(List<String> n) => n.length == 1
+        ? n.first
+        : '${n.sublist(0, n.length - 1).join(', ')} and ${n.last}';
+    return [
+      if (gone.isNotEmpty)
+        '${list(gone)} ${gone.length == 1 ? 'is' : 'are'} not in that '
+            'version: ${gone.length == 1 ? 'that profile disappears' : 'those profiles disappear'} '
+            'until you update again. ${gone.length == 1 ? 'Its' : 'Their'} '
+            'files stay on the box.',
+      if (empty.isNotEmpty)
+        '${list(empty)} ${empty.length == 1 ? 'comes' : 'come'} back, but '
+            'empty: ${empty.length == 1 ? 'that profile was' : 'those profiles were'} '
+            'removed since, with everything in ${empty.length == 1 ? 'it' : 'them'}.',
+    ];
+  }
+
+  Future<void> _rollback(
+    Generation? g,
+    Future<void> Function() reload, {
+    List<Generation> gens = const [],
+  }) async {
+    final cur = gens.where((x) => x.current).firstOrNull;
+    final target =
+        g ??
+        gens
+            .where((x) => cur == null || x.generation < cur.generation)
+            .firstOrNull;
+    final changes = await _profileChanges(target);
+    if (!mounted) return;
     final r = await showConfirm(
       context,
       title: g == null
@@ -158,6 +208,7 @@ class _UpdatesSectionState extends State<UpdatesSection> {
       body:
           'The box switches to an earlier version of HinterOS and the '
           'session restarts. Your apps and games stay.',
+      extra: [for (final c in changes) StatusLine(c, error: true)],
       confirmLabel: 'Roll back',
       danger: true,
     );
@@ -316,7 +367,7 @@ class _UpdatesSectionState extends State<UpdatesSection> {
         final canRoll = gens.any((g) => !g.current);
         p.item(
           'rollback',
-          onSelect: canRoll ? () => _rollback(null, reload) : null,
+          onSelect: canRoll ? () => _rollback(null, reload, gens: gens) : null,
           builder: (f) => SettingRow(
             title: 'Roll back to the previous version',
             focused: f,
@@ -332,7 +383,7 @@ class _UpdatesSectionState extends State<UpdatesSection> {
           final g = gens[i];
           p.item(
             'g$i',
-            onSelect: g.current ? null : () => _rollback(g, reload),
+            onSelect: g.current ? null : () => _rollback(g, reload, gens: gens),
             builder: (f) => SettingRow(
               title: 'Generation ${g.generation}',
               focused: f,

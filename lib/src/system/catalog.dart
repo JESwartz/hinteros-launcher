@@ -138,6 +138,6 @@ StoreApp? _parseApp(Map<String, Object?> a, TermsReader readTerms) {
 /// for the apps whose data paths hold more than settings (Steam: the games).
 String? removeDataWarningFor(List<String> dataPaths) =>
     dataPaths.contains('.local/share/Steam')
-    ? 'Games you installed through Steam are deleted too, in every '
-          'profile. They have to be downloaded again.'
+    ? 'Games this profile installed through Steam are deleted too. They '
+          'have to be downloaded again.'
     : null;

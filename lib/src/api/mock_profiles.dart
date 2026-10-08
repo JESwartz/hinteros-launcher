@@ -43,7 +43,12 @@ class MockProfileSession {
     required this.relay,
     required this.isLauncher,
     DateTime Function()? now,
+    this.onTermsAccepted,
   }) : _now = now ?? DateTime.now;
+
+  /// The profile accepted app [id]'s terms (its `apps.list` entry loses
+  /// `needs_terms`).
+  final void Function(String id)? onTermsAccepted;
 
   final void Function(String name, Map<String, dynamic> params) emit;
   final MockSystemRelay relay;
@@ -123,6 +128,7 @@ class MockProfileSession {
     'session.switch_cancel',
     'session.unlock',
     'session.end_guest',
+    'session.lock_state',
   };
 
   static bool handles(String method) =>
@@ -245,6 +251,8 @@ class MockProfileSession {
   ) async {
     if (method.startsWith('system.')) _relayUp();
     switch (method) {
+      case 'session.lock_state':
+        return SessionLockStateResult(locked: screenLocked).toJson();
       case 'profile.current':
         return _current().toJson();
       case 'session.switch_profile':
@@ -538,7 +546,7 @@ class MockProfileSession {
         needsTerms.remove(c.id);
         relay.acceptances.add('${c.id}=$version');
         log.add('accept_terms:${c.id}');
-        emit('apps_changed', const {});
+        onTermsAccepted?.call(c.id);
         return const SystemAppsAcceptTermsResult().toJson();
       case 'system.starter_set.get':
         return SystemStarterSetGetResult(

@@ -239,6 +239,14 @@ class MockUpdates implements UpdatesRepository {
           rev: _hex(g * 0x1234567, 40),
           current: g == 12,
           booted: g == 12,
+          // The accounts each generation has (M7): Sam since 12, Alex
+          // (removed since) in 11, before profiles nothing known.
+          profiles: switch (g) {
+            12 => const [(id: 'p1', name: 'James'), (id: 'p3', name: 'Sam')],
+            11 => const [(id: 'p1', name: 'James'), (id: 'p2', name: 'Alex')],
+            10 => const [(id: 'p1', name: 'James')],
+            _ => null,
+          },
         ),
     ];
   }
@@ -1104,6 +1112,10 @@ class MockStore implements StoreRepository {
   @override
   Set<String> get needsTerms => Set.unmodifiable(_needsTerms);
 
+  /// The profile accepted app [id]'s terms (the session daemon would
+  /// re-read its app list now).
+  void Function(String id)? onTermsAccepted;
+
   /// Apps this profile got with the starter set without accepting their
   /// terms yet.
   void setNeedsTerms(Iterable<String> ids) {
@@ -1133,6 +1145,7 @@ class MockStore implements StoreRepository {
     log.add('accept_terms:$id=$version');
     acceptances.add('$id=$version');
     _needsTerms.remove(id);
+    onTermsAccepted?.call(id);
     _changes.add(null);
   }
 

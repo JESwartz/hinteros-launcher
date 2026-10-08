@@ -284,8 +284,13 @@
           "app": { "$ref": "#/$defs/RunningApp" }
         }
       },
-      "errors": ["app_not_found", "app_launch_failed"],
+      "errors": ["app_not_found", "app_launch_failed", "terms_required"],
       "examples": [
+        {
+          "name": "terms not accepted yet",
+          "params": { "id": "steam" },
+          "error": { "code": 3014, "message": "steam needs its terms accepted (version 2026-09-10)", "data": { "id": "steam", "version": "2026-09-10" } }
+        },
         {
           "name": "steam game",
           "params": { "url": "steam://rungameid/1000001" },
@@ -2082,6 +2087,19 @@
         { "name": "wrong PIN", "params": { "pin": "1111" }, "error": { "code": 3016, "message": "wrong PIN", "data": { "pin": "self" } } }
       ]
     },
+    "session.lock_state": {
+      "summary": "Whether the sleep lock is up now (lock_state follows every change).",
+      "since": "0.12",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": {
+        "type": "object",
+        "required": ["locked"],
+        "additionalProperties": false,
+        "properties": { "locked": { "type": "boolean" } }
+      },
+      "errors": [],
+      "examples": [{ "name": "not locked", "params": {}, "result": { "locked": false } }]
+    },
     "session.end_guest": {
       "summary": "End guest session: guest only. Ends the session like a switch (to the picker) and wipes the guest now (home emptied, app link back to the starter set), as a reboot would.",
       "since": "0.12",
@@ -2211,7 +2229,19 @@
             }
           },
           "max": { "type": "integer", "minimum": 1 },
-          "first_boot": { "type": "boolean" }
+          "first_boot": { "type": "boolean" },
+          "caller": {
+            "description": "Who asked: the caller's profile id (null for a spare), its user, whether it is the guest or a spare.",
+            "type": "object",
+            "required": ["id", "user", "guest", "spare"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "oneOf": [{ "$ref": "#/$defs/ProfileId" }, { "type": "null" }] },
+              "user": { "type": "string" },
+              "guest": { "type": "boolean" },
+              "spare": { "type": "boolean" }
+            }
+          }
         }
       },
       "errors": ["system_unavailable", "permission_denied"],
@@ -3470,7 +3500,8 @@
         "id": { "description": "Stable identifier, used by apps.launch.", "$ref": "#/$defs/AppId" },
         "name": { "description": "Display name.", "type": "string", "minLength": 1 },
         "kind": { "$ref": "#/$defs/AppKind" },
-        "icon": { "description": "Absolute path to a local icon image file (PNG, SVG, ICO, JPEG, WebP), if any. Resolved by the daemon at runtime: an explicit path from the config, else the icon the app's .desktop file names, found in the installed icon themes, else (web apps) a cached download of the site's own icon. It may appear later (see apps_changed) or change. Absent: draw a placeholder, e.g. the first letter of the name.", "type": "string" }
+        "icon": { "description": "Absolute path to a local icon image file (PNG, SVG, ICO, JPEG, WebP), if any. Resolved by the daemon at runtime: an explicit path from the config, else the icon the app's .desktop file names, found in the installed icon themes, else (web apps) a cached download of the site's own icon. It may appear later (see apps_changed) or change. Absent: draw a placeholder, e.g. the first letter of the name.", "type": "string" },
+        "needs_terms": { "description": "0.12: an app this profile got with the starter set whose vendor terms it has not accepted yet. apps.launch of it is terms_required; show the terms (file: absolute path of the text) and accept with system.apps.accept_terms, then launch.", "type": "object", "required": ["title", "version", "url", "file"], "additionalProperties": false, "properties": { "title": { "type": "string", "maxLength": 80 }, "version": { "$ref": "#/$defs/TermsVersion" }, "url": { "type": "string" }, "file": { "type": "string" } } }
       }
     },
     "InstallState": {
@@ -3702,7 +3733,9 @@
         "downloading",
         "building",
         "activating",
-        "finishing"
+        "finishing",
+        "box",
+        "apps"
       ]
     },
     "Severity": {
@@ -4185,7 +4218,8 @@
         "locked_until": { "description": "PIN backoff lock until (Unix seconds), or null.", "oneOf": [{ "type": "integer" }, { "type": "null" }] },
         "active": { "description": "This profile is on screen now.", "type": "boolean" },
         "last_used_at": { "oneOf": [{ "type": "integer" }, { "type": "null" }] },
-        "usage": { "oneOf": [{ "$ref": "#/$defs/ProfileUsage" }, { "type": "null" }] }
+        "usage": { "oneOf": [{ "$ref": "#/$defs/ProfileUsage" }, { "type": "null" }] },
+        "pin_set": { "description": "The profile has a PIN (false: migrated, not set yet).", "type": "boolean" }
       }
     },
     "PublicProfile": {

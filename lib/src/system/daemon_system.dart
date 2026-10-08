@@ -50,6 +50,8 @@ JobStage? _stage(api.Stage? s) => switch (s) {
   api.Stage.building => JobStage.building,
   api.Stage.activating => JobStage.activating,
   api.Stage.finishing => JobStage.finishing,
+  api.Stage.box => JobStage.box,
+  api.Stage.apps => JobStage.apps,
   api.Stage.unknown || null => null,
 };
 

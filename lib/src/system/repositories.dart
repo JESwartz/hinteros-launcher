@@ -247,7 +247,7 @@ abstract class StoreRepository {
   });
 
   /// `apps.remove {ids: [id], revision, delete_data}`; [deleteData] also
-  /// deletes the app's files in every profile. [SystemErrorKind.appConflict]
+  /// deletes the app's files in this profile's home. [SystemErrorKind.appConflict]
   /// when another installed app needs it.
   Future<JobHandle> remove(String id, {bool deleteData = false});
 

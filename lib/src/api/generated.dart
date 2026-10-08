@@ -82,6 +82,7 @@ const apiMethodNames = <String>[
   'session.switch_force_close',
   'session.switch_cancel',
   'session.unlock',
+  'session.lock_state',
   'session.end_guest',
   'greeter.list',
   'greeter.login',
@@ -554,12 +555,55 @@ enum AppKind {
   String toJson() => value;
 }
 
+/// 0.12: an app this profile got with the starter set whose vendor terms it has not accepted yet. apps.launch of it is terms_required; show the terms (file: absolute path of the text) and accept with system.apps.accept_terms, then launch.
+class AppNeedsTerms {
+  const AppNeedsTerms({
+    required this.title,
+    required this.version,
+    required this.url,
+    required this.file,
+  });
+
+  final String title;
+
+  /// A vendor terms version from the catalog.
+  final String version;
+  final String url;
+  final String file;
+
+  factory AppNeedsTerms.fromJson(Map<String, dynamic> json) => AppNeedsTerms(
+    title: json['title'] as String,
+    version: json['version'] as String,
+    url: json['url'] as String,
+    file: json['file'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'version': version,
+    'url': url,
+    'file': file,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppNeedsTerms &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppNeedsTerms(${jsonEncode(toJson())})';
+}
+
 class App {
   const App({
     required this.id,
     required this.name,
     required this.kind,
     this.icon,
+    this.needsTerms,
   });
 
   /// Stable identifier, used by apps.launch.
@@ -574,11 +618,19 @@ class App {
   /// Absolute path to a local icon image file (PNG, SVG, ICO, JPEG, WebP), if any. Resolved by the daemon at runtime: an explicit path from the config, else the icon the app's .desktop file names, found in the installed icon themes, else (web apps) a cached download of the site's own icon. It may appear later (see apps_changed) or change. Absent: draw a placeholder, e.g. the first letter of the name.
   final String? icon;
 
+  /// 0.12: an app this profile got with the starter set whose vendor terms it has not accepted yet. apps.launch of it is terms_required; show the terms (file: absolute path of the text) and accept with system.apps.accept_terms, then launch.
+  final AppNeedsTerms? needsTerms;
+
   factory App.fromJson(Map<String, dynamic> json) => App(
     id: json['id'] as String,
     name: json['name'] as String,
     kind: AppKind.fromJson(json['kind'] as String),
     icon: json['icon'] == null ? null : json['icon'] as String,
+    needsTerms: json['needs_terms'] == null
+        ? null
+        : AppNeedsTerms.fromJson(
+            (json['needs_terms'] as Map).cast<String, dynamic>(),
+          ),
   );
 
   Map<String, dynamic> toJson() => {
@@ -586,6 +638,7 @@ class App {
     'name': name,
     'kind': kind.toJson(),
     'icon': ?icon,
+    if (needsTerms != null) 'needs_terms': needsTerms!.toJson(),
   };
 
   @override
@@ -1400,6 +1453,8 @@ enum Stage {
   building('building'),
   activating('activating'),
   finishing('finishing'),
+  box('box'),
+  apps('apps'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -2496,6 +2551,7 @@ class Profile {
     required this.active,
     required this.lastUsedAt,
     required this.usage,
+    this.pinSet,
   });
 
   /// A profile id: p&lt;N&gt;, server-generated, never reused.
@@ -2518,6 +2574,9 @@ class Profile {
   final int? lastUsedAt;
   final ProfileUsage? usage;
 
+  /// The profile has a PIN (false: migrated, not set yet).
+  final bool? pinSet;
+
   factory Profile.fromJson(Map<String, dynamic> json) => Profile(
     id: json['id'] as String,
     name: json['name'] as String,
@@ -2535,6 +2594,7 @@ class Profile {
     usage: json['usage'] == null
         ? null
         : ProfileUsage.fromJson((json['usage'] as Map).cast<String, dynamic>()),
+    pinSet: json['pin_set'] == null ? null : json['pin_set'] as bool,
   );
 
   Map<String, dynamic> toJson() => {
@@ -2548,6 +2608,7 @@ class Profile {
     'active': active,
     'last_used_at': lastUsedAt,
     'usage': usage == null ? null : usage!.toJson(),
+    'pin_set': ?pinSet,
   };
 
   @override
@@ -6755,6 +6816,48 @@ class SessionUnlockResult {
   String toString() => 'SessionUnlockResult(${jsonEncode(toJson())})';
 }
 
+class SessionLockStateParams {
+  const SessionLockStateParams();
+
+  factory SessionLockStateParams.fromJson(Map<String, dynamic> json) =>
+      SessionLockStateParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SessionLockStateParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SessionLockStateParams(${jsonEncode(toJson())})';
+}
+
+class SessionLockStateResult {
+  const SessionLockStateResult({required this.locked});
+
+  final bool locked;
+
+  factory SessionLockStateResult.fromJson(Map<String, dynamic> json) =>
+      SessionLockStateResult(locked: json['locked'] as bool);
+
+  Map<String, dynamic> toJson() => {'locked': locked};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SessionLockStateResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SessionLockStateResult(${jsonEncode(toJson())})';
+}
+
 class SessionEndGuestParams {
   const SessionEndGuestParams();
 
@@ -7130,18 +7233,64 @@ class SystemProfilesListResultGuest {
   String toString() => 'SystemProfilesListResultGuest(${jsonEncode(toJson())})';
 }
 
+/// Who asked: the caller's profile id (null for a spare), its user, whether it is the guest or a spare.
+class SystemProfilesListResultCaller {
+  const SystemProfilesListResultCaller({
+    required this.id,
+    required this.user,
+    required this.guest,
+    required this.spare,
+  });
+
+  final String? id;
+  final String user;
+  final bool guest;
+  final bool spare;
+
+  factory SystemProfilesListResultCaller.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesListResultCaller(
+        id: json['id'] == null ? null : json['id'] as String,
+        user: json['user'] as String,
+        guest: json['guest'] as bool,
+        spare: json['spare'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'user': user,
+    'guest': guest,
+    'spare': spare,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesListResultCaller &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemProfilesListResultCaller(${jsonEncode(toJson())})';
+}
+
 class SystemProfilesListResult {
   const SystemProfilesListResult({
     required this.profiles,
     required this.guest,
     required this.max,
     required this.firstBoot,
+    this.caller,
   });
 
   final List<Profile> profiles;
   final SystemProfilesListResultGuest guest;
   final int max;
   final bool firstBoot;
+
+  /// Who asked: the caller's profile id (null for a spare), its user, whether it is the guest or a spare.
+  final SystemProfilesListResultCaller? caller;
 
   factory SystemProfilesListResult.fromJson(Map<String, dynamic> json) =>
       SystemProfilesListResult(
@@ -7153,6 +7302,11 @@ class SystemProfilesListResult {
         ),
         max: json['max'] as int,
         firstBoot: json['first_boot'] as bool,
+        caller: json['caller'] == null
+            ? null
+            : SystemProfilesListResultCaller.fromJson(
+                (json['caller'] as Map).cast<String, dynamic>(),
+              ),
       );
 
   Map<String, dynamic> toJson() => {
@@ -7160,6 +7314,7 @@ class SystemProfilesListResult {
     'guest': guest.toJson(),
     'max': max,
     'first_boot': firstBoot,
+    if (caller != null) 'caller': caller!.toJson(),
   };
 
   @override
@@ -10355,6 +10510,13 @@ mixin SessionApiMethods {
       SessionUnlockResult.fromJson(
         await rpc('session.unlock', params.toJson()),
       );
+
+  /// Whether the sleep lock is up now (lock_state follows every change).
+  Future<SessionLockStateResult> sessionLockState([
+    SessionLockStateParams params = const SessionLockStateParams(),
+  ]) async => SessionLockStateResult.fromJson(
+    await rpc('session.lock_state', params.toJson()),
+  );
 
   /// End guest session: guest only. Ends the session like a switch (to the picker) and wipes the guest now (home emptied, app link back to the starter set), as a reboot would.
   Future<SessionEndGuestResult> sessionEndGuest([

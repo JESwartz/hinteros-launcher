@@ -319,7 +319,17 @@ class LauncherData extends ChangeNotifier {
     }
   }
 
+  /// Asked before an app whose vendor terms this profile has not accepted
+  /// yet is started (it came with the starter set, `needs_terms`): the
+  /// first-launch terms. False: it is not started.
+  Future<bool> Function(App app)? beforeLaunch;
+
   Future<void> launchApp(String id, String name) async {
+    final app = appList?.where((a) => a.id == id).firstOrNull;
+    final gate = beforeLaunch;
+    if (app != null && app.needsTerms != null && gate != null) {
+      if (!await gate(app)) return;
+    }
     _beginLaunching(id, name, _iconOf(id));
     try {
       _launched(await apps.launch(id));

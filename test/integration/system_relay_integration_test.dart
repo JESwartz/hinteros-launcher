@@ -477,7 +477,7 @@ void main() {
       expect(store.moreAfterUpdate, isFalse);
       final steam = apps.firstWhere((a) => a.id == 'steam');
       expect(steam.terms!.text, contains('PLACEHOLDER TERMS'));
-      expect(steam.removeDataWarning, contains('Games you installed'));
+      expect(steam.removeDataWarning, contains('Games this profile installed'));
       final plex = apps.firstWhere((a) => a.id == 'plex-htpc');
       expect(plex.terms!.version, '2025-10-30');
       expect(plex.free, isFalse);

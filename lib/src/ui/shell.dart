@@ -19,6 +19,7 @@ import 'apps_screen.dart';
 import 'auth_prompt.dart';
 import 'common.dart';
 import 'dialogs.dart' show Choice, showChoice, showFailureOn;
+import 'profiles/first_launch_terms.dart';
 import 'profiles/session_profile.dart';
 import 'games_screen.dart';
 import 'home_screen.dart';
@@ -196,6 +197,11 @@ class _LauncherShellState extends State<LauncherShell> {
     };
 
     final d = widget.data;
+    d.beforeLaunch = (app) {
+      final c = _scopeContext;
+      if (c == null) return Future.value(false);
+      return firstLaunchTerms(c, widget.services, app, data: d);
+    };
     d.start();
     d.addListener(_onData);
     _profile.addListener(_onProfile);

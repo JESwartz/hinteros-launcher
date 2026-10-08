@@ -444,16 +444,37 @@ class _StagePainter extends CustomPainter {
 /// The vendor terms of [app] in full. The text scrolls with the controller
 /// (up/down a line, the shoulder buttons a page), and "Accept and install"
 /// stays disabled until the end has been reached. Resolves true on accept.
-Future<bool> showTerms(BuildContext context, StoreApp app) async =>
-    await ModalScope.of(context)
-        .show<bool>((context, modal) => TermsScreen(modal: modal, app: app)) ??
+Future<bool> showTerms(
+  BuildContext context,
+  StoreApp app, {
+  String acceptLabel = 'Accept and install',
+  String? note,
+}) async =>
+    await ModalScope.of(context).show<bool>(
+      (context, modal) => TermsScreen(
+        modal: modal,
+        app: app,
+        acceptLabel: acceptLabel,
+        note: note,
+      ),
+    ) ??
     false;
 
 class TermsScreen extends StatefulWidget {
-  const TermsScreen({super.key, required this.modal, required this.app});
+  const TermsScreen({
+    super.key,
+    required this.modal,
+    required this.app,
+    this.acceptLabel = 'Accept and install',
+    this.note,
+  });
 
   final ModalHandle<bool> modal;
   final StoreApp app;
+  final String acceptLabel;
+
+  /// A line above the buttons ("Each profile accepts these for itself").
+  final String? note;
 
   @override
   State<TermsScreen> createState() => _TermsScreenState();
@@ -581,6 +602,10 @@ class _TermsScreenState extends State<TermsScreen> {
                       'end to accept.',
             style: t.caption,
           ),
+          if (widget.note != null) ...[
+            const SizedBox(height: HinterTokens.s1),
+            Text(widget.note!, style: t.caption),
+          ],
           const SizedBox(height: HinterTokens.s2),
           DialogButtons(
             region: region,
@@ -588,7 +613,7 @@ class _TermsScreenState extends State<TermsScreen> {
             buttons: [
               btn('Decline', () => widget.modal.close(false)),
               btn(
-                'Accept and install',
+                widget.acceptLabel,
                 () => widget.modal.close(true),
                 primary: true,
                 enabled: _atEnd,

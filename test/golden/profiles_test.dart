@@ -5,6 +5,7 @@ import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
 import 'package:hinteros_launcher/src/system/mock_system.dart';
 
 import '../profiles/session_test.dart' show frames, harness, keys, openChip;
+import '../profiles/store_profile_test.dart' show termsHarness;
 import '../support/harness.dart';
 import '../support/nav_helpers.dart';
 
@@ -102,5 +103,56 @@ void main() {
     }
     await keys(t, [kEnter]);
     await shot(t, 'first_boot_name');
+  });
+
+  moreGoldens();
+}
+
+void moreGoldens() {
+  Future<void> shot(WidgetTester t, String name) => expectLater(
+    find.byType(MaterialApp),
+    matchesGoldenFile('goldens/profiles_${name}_1080p.png'),
+  );
+
+  testWidgets('first-launch terms', (t) async {
+    setView(t);
+    final h = termsHarness();
+    await h.pump(t);
+    await keys(t, [kEnter]);
+    await shot(t, 'first_launch_terms');
+  });
+
+  testWidgets('Store: needs a service', (t) async {
+    setView(t);
+    final h = Harness(
+      services: MockSystemServices(
+        iconDir: iconDir(),
+        now: fixedNow,
+        extraApps: const [mockServiceApp],
+      ),
+    );
+    await h.pump(t);
+    await openStore(t);
+    for (var i = 0; i < 8; i++) {
+      if (find.text('Crunchyroll').evaluate().isEmpty &&
+          find.text('Music library').evaluate().isNotEmpty) {
+        break;
+      }
+      await keys(t, [kDown]);
+    }
+    await keys(t, [kRight, kEnter]);
+    await shot(t, 'store_needs_service');
+  });
+
+  testWidgets('rollback: profiles that go away or come back empty', (t) async {
+    setView(t);
+    await harness().pump(t);
+    await enterSettingsEntry(t, 'updates');
+    for (var i = 0; i < 10; i++) {
+      if (focusLabel()?.endsWith('/rollback:0') ?? false) break;
+      await keys(t, [kDown]);
+    }
+    await keys(t, [kEnter]);
+    await shot(t, 'rollback_profiles');
   });
 }

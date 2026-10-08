@@ -154,6 +154,7 @@ class MockDaemon extends DaemonConnection {
       relay: system,
       isLauncher: () => clientName == 'hinteros-launcher',
       now: now,
+      onTermsAccepted: (id) => setNeedsTerms(id, null),
     );
   }
 
@@ -470,6 +471,14 @@ class MockDaemon extends DaemonConnection {
       if (known == null) {
         throw ApiException(ApiErrorCode.appNotFound, "no app with id '$id'");
       }
+      final terms = known.needsTerms;
+      if (terms != null) {
+        throw ApiException(
+          ApiErrorCode.termsRequired,
+          '$id needs its terms accepted (version ${terms.version})',
+          TermsRequiredData(id: id, version: terms.version).toJson(),
+        );
+      }
       // Already running: focus it instead.
       final running = _running.where((a) => a.id == id).firstOrNull;
       if (running != null) {
@@ -621,7 +630,30 @@ class MockDaemon extends DaemonConnection {
     final i = apps.indexWhere((a) => a.id == id);
     if (i < 0) return;
     final a = apps[i];
-    apps[i] = App(id: a.id, name: a.name, kind: a.kind, icon: icon);
+    apps[i] = App(
+      id: a.id,
+      name: a.name,
+      kind: a.kind,
+      icon: icon,
+      needsTerms: a.needsTerms,
+    );
+    emitRaw('apps_changed');
+  }
+
+  /// App [id] came with the starter set and its terms are not accepted yet
+  /// ([terms] null: they are): `apps.list`'s `needs_terms`, and its launch
+  /// is `terms_required`.
+  void setNeedsTerms(String id, AppNeedsTerms? terms) {
+    final i = apps.indexWhere((a) => a.id == id);
+    if (i < 0) return;
+    final a = apps[i];
+    apps[i] = App(
+      id: a.id,
+      name: a.name,
+      kind: a.kind,
+      icon: a.icon,
+      needsTerms: terms,
+    );
     emitRaw('apps_changed');
   }
 

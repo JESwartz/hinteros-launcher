@@ -122,7 +122,16 @@ enum JobKind {
   /// Stages a job of this kind can report, in order (system-api.md "Job
   /// model": not every job has every stage).
   List<JobStage> get stages => switch (this) {
-    update || channel || base => JobStage.values,
+    update || channel || base => const [
+      JobStage.preparing,
+      JobStage.fetching,
+      JobStage.verifying,
+      JobStage.evaluating,
+      JobStage.downloading,
+      JobStage.building,
+      JobStage.activating,
+      JobStage.finishing,
+    ],
     updateCheck => const [
       JobStage.preparing,
       JobStage.fetching,
@@ -175,10 +184,17 @@ enum JobStage {
   preparing('Preparing'),
   fetching('Fetching the update'),
   verifying('Checking the signature'),
+
+  /// 0.12: the rebuild that switches on what new apps need box-wide
+  /// (32-bit graphics for Steam).
+  box('Getting the box ready for the apps'),
   evaluating('Working out what changes'),
   downloading('Downloading'),
   building('Building'),
   activating('Switching over'),
+
+  /// 0.12: every profile's apps are rebuilt for the new system.
+  apps('Updating the apps'),
   finishing('Finishing');
 
   const JobStage(this.label);

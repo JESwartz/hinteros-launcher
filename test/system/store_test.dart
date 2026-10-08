@@ -83,7 +83,7 @@ void main() {
     await press(t, [kDown, kRight, kDown, kEnter]); // grid row 1: RetroArch
     expect(find.text('RetroArch'), findsWidgets);
     await press(t, [kEnter]); // Install
-    expect(find.text('Install RetroArch?'), findsOneWidget);
+    expect(find.text('Install RetroArch for this profile?'), findsOneWidget);
     expect(find.textContaining('Emulator cores (400 MB)'), findsOneWidget);
     expect(find.textContaining('about 620 MB'), findsOneWidget);
     await press(t, [kRight, kEnter]); // Install
@@ -96,7 +96,7 @@ void main() {
       await h.pump(t);
       await openApp(t, 1, 1); // Steam (Moonlight comes first)
       await press(t, [kEnter]); // Install
-      expect(find.text('Install Steam?'), findsOneWidget);
+      expect(find.text('Install Steam for this profile?'), findsOneWidget);
       expect(find.textContaining('You read it in full next'), findsOneWidget);
       await press(t, [kRight, kEnter]); // Continue
       expect(find.text('Terms for Steam'), findsOneWidget);
@@ -186,17 +186,17 @@ void main() {
         1,
         1,
       ); // Steam (Moonlight comes first) (installed): detail
-      expect(find.text('Installed.'), findsOneWidget);
+      expect(find.text('Installed for this profile.'), findsOneWidget);
       await press(t, [kRight, kEnter]); // Remove
-      expect(find.text('Remove Steam?'), findsOneWidget);
+      expect(find.text('Remove Steam from this profile?'), findsOneWidget);
       expect(
-        find.textContaining('Games you installed through Steam'),
+        find.textContaining('Games this profile installed through Steam'),
         findsOneWidget,
       );
       await press(t, [kEnter, kDown, kRight, kEnter]); // tick, Remove
       expect(find.text('Delete all data of Steam?'), findsOneWidget);
       expect(
-        find.textContaining('Games you installed through Steam'),
+        find.textContaining('Games this profile installed through Steam'),
         findsOneWidget,
       );
       expect(h.services.mockStore.log, isEmpty, reason: 'nothing yet');
@@ -217,7 +217,7 @@ void main() {
       await h.pump(t);
       await openApp(t, 2, 0, 1); // Video, second row, first column: Plex
       await press(t, [kRight, kEnter]);
-      expect(find.text('Remove Plex?'), findsOneWidget);
+      expect(find.text('Remove Plex from this profile?'), findsOneWidget);
       await press(t, [kDown, kRight, kEnter]);
       expect(find.textContaining('Delete all data'), findsNothing);
       expect(h.services.mockStore.log, ['remove:plex-htpc:false']);
@@ -236,7 +236,7 @@ void main() {
       expect(focusLabel(), 'games/install-steam:0');
       await press(t, [kEnter]);
       // The install flow starts right here, not in the Store tab.
-      expect(find.text('Install Steam?'), findsOneWidget);
+      expect(find.text('Install Steam for this profile?'), findsOneWidget);
       expect(find.textContaining('You read it in full next'), findsOneWidget);
       await press(t, [kRight, kEnter]); // Continue
       expect(find.text('Terms for Steam'), findsOneWidget);

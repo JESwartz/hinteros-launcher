@@ -90,9 +90,9 @@ void main() {
       await h.pump(t);
       await endStartupCheck(t, h);
       await openSteam(t);
-      expect(find.text('Not installed.'), findsOneWidget);
+      expect(find.text('Not installed for this profile.'), findsOneWidget);
       await press(t, [kEnter]); // Install
-      expect(find.text('Install Steam?'), findsOneWidget);
+      expect(find.text('Install Steam for this profile?'), findsOneWidget);
       await press(t, [kRight, kEnter]); // Continue
       expect(find.text('Terms for Steam'), findsOneWidget);
       expect(buttonEnabled(t, 'Accept and install'), isFalse);
@@ -121,7 +121,7 @@ void main() {
       await press(t, [kEnter]); // Close
       // store_changed refreshed the listing: Steam is installed now.
       expect(h.mock.system.installedApps, ['steam']);
-      expect(find.text('Installed.'), findsOneWidget);
+      expect(find.text('Installed for this profile.'), findsOneWidget);
     });
 
     testWidgets('a stale revision is retried once, silently', (t) async {
@@ -244,12 +244,12 @@ void main() {
       await h.pump(t);
       await endStartupCheck(t, h);
       await openSteam(t);
-      expect(find.text('Installed.'), findsOneWidget);
+      expect(find.text('Installed for this profile.'), findsOneWidget);
       await press(t, [kRight, kEnter]); // Remove
-      expect(find.text('Remove Steam?'), findsOneWidget);
+      expect(find.text('Remove Steam from this profile?'), findsOneWidget);
       await press(t, [kEnter, kDown, kRight, kEnter]); // tick, Remove
       expect(find.text('Delete all data of Steam?'), findsOneWidget);
-      expect(find.textContaining('Games you installed'), findsWidgets);
+      expect(find.textContaining('Games this profile installed'), findsWidgets);
       expect(appsLog(h), isEmpty);
       await press(t, [kRight, kEnter]); // Delete data and remove
       expect(appsLog(h), ['apps.remove:steam:data=true']);
@@ -259,7 +259,7 @@ void main() {
       expect(find.text('Done'), findsOneWidget);
       await press(t, [kEnter]);
       expect(h.mock.system.installedApps, isEmpty);
-      expect(find.text('Not installed.'), findsOneWidget);
+      expect(find.text('Not installed for this profile.'), findsOneWidget);
     });
 
     testWidgets('without data: one confirmation, delete_data false', (t) async {
@@ -408,7 +408,7 @@ void main() {
       expect(find.text('Steam is not installed'), findsOneWidget);
       expect(find.text('Install Steam'), findsOneWidget);
       await press(t, [kEnter]);
-      expect(find.text('Install Steam?'), findsOneWidget);
+      expect(find.text('Install Steam for this profile?'), findsOneWidget);
       await press(t, [kRight, kEnter]); // Continue
       await readTerms(t);
       await press(t, [kDown, kRight, kEnter]);

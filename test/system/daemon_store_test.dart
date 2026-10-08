@@ -110,7 +110,10 @@ void main() {
         expect(steam.terms!.version, '2026-09-10');
         expect(steam.terms!.title, 'Steam Subscriber Agreement');
         expect(steam.terms!.text, contains('PLACEHOLDER TERMS'));
-        expect(steam.removeDataWarning, contains('Games you installed'));
+        expect(
+          steam.removeDataWarning,
+          contains('Games this profile installed'),
+        );
         expect(_app(apps, 'youtube').isWeb, isTrue);
         expect(_app(apps, 'retroarch').depends, ['retroarch-cores']);
         expect(_app(apps, 'kodi').conflicts, ['jellyfin']);

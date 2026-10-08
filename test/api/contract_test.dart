@@ -167,6 +167,16 @@ Future<void> _prepareProfiles(
       p.blockSwitch('p3', (id: 'youtube', name: 'YouTube'));
     case ('session.unlock', _):
       p.screenLocked = true;
+    case ('apps.launch', 'terms not accepted yet'):
+      mock.setNeedsTerms(
+        'steam',
+        const AppNeedsTerms(
+          title: 'Steam Subscriber Agreement',
+          version: '2026-09-10',
+          url: 'https://store.steampowered.com/subscriber_agreement/',
+          file: '/run/current-system/sw/share/hinteros/terms/steam-2026-09-10.txt',
+        ),
+      );
     case ('session.end_guest', 'ending'):
       p.current = 'guest';
     case ('greeter.pin', 'answered'):
@@ -368,8 +378,9 @@ void main() {
             await _prepareSystem(mock, method, ex);
           }
           if (MockAuthAgent.handles(method)) await _prepareAuth(mock, ex);
-          if (MockProfileSession.handles(method) &&
-              !method.startsWith('system.')) {
+          if (method == 'apps.launch' ||
+              MockProfileSession.handles(method) &&
+                  !method.startsWith('system.')) {
             await _prepareProfiles(mock, method, ex);
           }
           if (method == 'session.restart' && ex.containsKey('error')) {

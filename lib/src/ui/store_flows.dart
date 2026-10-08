@@ -55,8 +55,9 @@ Future<bool> installFlow(
   ];
   final ok = await showConfirm(
     context,
-    title: 'Install ${app.name}?',
+    title: 'Install ${app.name} for this profile?',
     body:
+        'Other profiles do not get it. '
         'Download and disk space: about ${_sizeLabel(total)}.'
         '${app.onIso ? '' : ' It downloads from the internet, so this box has to be online.'}',
     extra: [
@@ -236,14 +237,15 @@ Future<bool> removeFlow(
   final running = data?.isRunning(app.id) ?? false;
   final first = await showConfirm(
     context,
-    title: 'Remove ${app.name}?',
+    title: 'Remove ${app.name} from this profile?',
     body:
-        'The app is removed from this box. Its settings and files stay, so '
-        'installing it again picks up where you left off.'
+        'The app is removed for this profile; other profiles keep theirs. '
+        'Its settings and files stay, so installing it again picks up where '
+        'you left off.'
         '${running ? ' ${app.name} is running now and is closed first.' : ''}',
-    checkbox: "Also delete this app's data in all profiles",
+    checkbox: "Also delete this app's data in this profile",
     checkboxHint:
-        warning ?? 'Logins, settings and saved files, in every profile.',
+        warning ?? 'Logins, settings and saved files of this profile.',
     confirmLabel: 'Remove',
     danger: true,
   );
@@ -253,7 +255,7 @@ Future<bool> removeFlow(
       context,
       title: 'Delete all data of ${app.name}?',
       body:
-          "This deletes ${app.name}'s data in every profile. It cannot be "
+          "This deletes ${app.name}'s data in this profile. It cannot be "
           'undone.',
       extra: [if (warning != null) StatusLine(warning, error: true)],
       confirmLabel: 'Delete data and remove',
