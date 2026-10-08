@@ -315,7 +315,7 @@ void main() {
     }
   }
 
-  testWidgets('progress, system stage (apps waiting)', (t) async {
+  testWidgets('progress, system stage', (t) async {
     await shot(
       t,
       'progress_system',
@@ -326,7 +326,7 @@ void main() {
     await t.pump(const Duration(seconds: 5));
   });
 
-  testWidgets('progress, apps stage with a failed app', (t) async {
+  testWidgets('progress, apps stage', (t) async {
     await shot(
       t,
       'progress_apps',

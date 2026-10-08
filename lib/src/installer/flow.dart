@@ -401,6 +401,23 @@ class InstallerFlow extends ChangeNotifier {
     return (finished * 100 / _planApps.length).round();
   }
 
+  /// "Installing default apps [1/3]: Firefox" while the apps stage runs.
+  String? get appsLine {
+    if (section != InstallSection.apps || _planApps.isEmpty) return null;
+    var i = _planApps.indexWhere(
+      (a) => _appStates[a.id] == AppInstallState.installing,
+    );
+    if (i < 0) {
+      i = _planApps.indexWhere((a) {
+        final s = _appStates[a.id];
+        return s != AppInstallState.done && s != AppInstallState.failed;
+      });
+    }
+    if (i < 0) i = _planApps.length - 1;
+    return 'Installing default apps [${i + 1}/${_planApps.length}]: '
+        '${_planApps[i].name}';
+  }
+
   /// Names of the apps that could not be installed.
   List<String> get failedAppNames => [
     for (final id in _failedIds) _appName(id),

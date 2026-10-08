@@ -88,11 +88,10 @@ void main() {
       await until(t, () => h.flow.percent >= 57);
       expect(h.flow.section, InstallSection.system);
       expect(find.text('Installing HinterOS'), findsWidgets);
-      expect(find.text('Installing apps'), findsOneWidget);
-      expect(find.text('waiting'), findsNWidgets(2));
+      expect(find.text('Installing apps'), findsNothing);
+      expect(find.byKey(const ValueKey('apps-line')), findsNothing);
       expect(h.flow.systemPercent, h.flow.percent);
       expect(h.flow.appsPercent, 0);
-      expect(find.text('0%'), findsOneWidget);
       await finish(t, h);
     });
 
@@ -103,6 +102,12 @@ void main() {
       await until(t, () => h.flow.section == InstallSection.apps);
       expect(h.flow.systemPercent, 100);
       expect(find.text('Checking your choices'), findsNothing);
+      await t.pump();
+      expect(find.text('Installing apps'), findsNothing);
+      expect(find.text('Installing HinterOS'), findsWidgets);
+      expect(find.textContaining("Installing default apps ["), findsOneWidget);
+      expect(find.byKey(const ValueKey('apps-percent')), findsNothing);
+      expect(h.flow.appsLine, startsWith('Installing default apps [1/2]: '));
       expect(
         h.flow.appProgress.map((a) => a.state),
         contains(AppInstallState.installing),

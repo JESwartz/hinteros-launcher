@@ -54,7 +54,14 @@ class InstallStepView extends StatelessWidget {
     env.region.setRows(const []);
     final inApps = f.section == InstallSection.apps;
     final current = installStages.indexOf(f.progressStage);
-    p.add(_sectionHeader(t, 'Installing HinterOS', f.systemPercent, 'percent'));
+    p.add(
+      _sectionHeader(
+        t,
+        'Installing HinterOS',
+        inApps ? f.appsPercent : f.systemPercent,
+        'percent',
+      ),
+    );
     if (!inApps) {
       p.add(
         Column(
@@ -88,62 +95,20 @@ class InstallStepView extends StatelessWidget {
         p.add(Text(f.progressMessage, style: t.caption), gap: HinterTokens.s1);
       }
     }
-    final appRows = f.appProgress;
-    if (appRows.isNotEmpty) {
-      p.add(
-        _sectionHeader(t, 'Installing apps', f.appsPercent, 'apps-percent'),
-        gap: HinterTokens.s4,
-      );
-      p.add(
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final a in appRows)
-              Padding(
-                key: ValueKey('app-${a.id}'),
-                padding: const EdgeInsets.only(bottom: HinterTokens.s1),
-                child: Row(
-                  children: [
-                    CheckMark(
-                      checked: a.state == AppInstallState.done,
-                      size: 32,
-                    ),
-                    const SizedBox(width: HinterTokens.s2),
-                    Text(
-                      a.name,
-                      style: switch (a.state) {
-                        AppInstallState.installing => t.label.copyWith(
-                          color: t.accent,
-                        ),
-                        AppInstallState.waiting => t.bodyDim,
-                        _ => t.body,
-                      },
-                    ),
-                    const SizedBox(width: HinterTokens.s2),
-                    Text(
-                      switch (a.state) {
-                        AppInstallState.waiting => 'waiting',
-                        AppInstallState.installing => 'installing',
-                        AppInstallState.done => 'done',
-                        AppInstallState.failed => 'failed',
-                      },
-                      style: a.state == AppInstallState.failed
-                          ? t.caption.copyWith(color: t.danger)
-                          : t.caption,
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-        gap: HinterTokens.s2,
-      );
-      if (inApps && f.progressMessage.isNotEmpty) {
+    if (inApps) {
+      final line = f.appsLine;
+      if (line != null) {
+        p.add(
+          Text(line, key: const ValueKey('apps-line'), style: t.body),
+          gap: HinterTokens.s2,
+        );
+      }
+      if (f.progressMessage.isNotEmpty) {
         p.add(Text(f.progressMessage, style: t.caption), gap: HinterTokens.s1);
       }
     }
     for (final w in f.warnings) {
-      if (w.code == 'app-failed') continue; // shown on the app's own row
+      if (w.code == 'app-failed') continue; // listed on the Done screen
       p.add(
         StatusLine('${explainCode(w.code)} (${w.message})'),
         gap: HinterTokens.s2,
