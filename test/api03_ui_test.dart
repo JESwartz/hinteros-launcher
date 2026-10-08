@@ -92,14 +92,14 @@ void main() {
   });
 
   group('close', () {
-    testWidgets('context asks first; Cancel keeps the app', (t) async {
+    testWidgets('Back asks first; Cancel keeps the app', (t) async {
       setView(t);
       final h = Harness();
       await h.pump(t);
       await h.launch(t, 'jellyfin');
       await keys(t, [up]);
       expect(focusLabel(), 'home/continue:0');
-      await keys(t, [y]);
+      await keys(t, [escape]);
       expect(find.text('Close Jellyfin?'), findsOneWidget);
       expect(focusLabel(), 'dialog/buttons:0', reason: 'Cancel is focused');
       // Nothing behind the dialog moves.
@@ -110,7 +110,7 @@ void main() {
       expect(h.mock.running.map((a) => a.id), ['jellyfin']);
       expect(focusLabel(), 'home/continue:0');
       // Back cancels too.
-      await keys(t, [y, escape]);
+      await keys(t, [escape, escape]);
       expect(find.text('Close Jellyfin?'), findsNothing);
       expect(h.mock.running, hasLength(1));
     });
@@ -124,7 +124,7 @@ void main() {
       await h.launch(t, 'jellyfin');
       final seen = <SessionEvent>[];
       h.mock.events.listen(seen.add);
-      await keys(t, [up, y, right, enter]);
+      await keys(t, [up, escape, right, enter]);
       expect(h.mock.running, isEmpty);
       expect(find.text('Close Jellyfin?'), findsNothing);
       expect(find.text('Running'), findsNothing);
@@ -132,7 +132,7 @@ void main() {
       expect(focusLabel(), startsWith('home/'));
     });
 
-    testWidgets('input_nav context works like the key', (t) async {
+    testWidgets('input_nav back works like the key', (t) async {
       setView(t);
       final h = Harness();
       await h.pump(t);
@@ -140,16 +140,25 @@ void main() {
       await h.launch(t, 'steam'); // Steam now has focus; Home gives it back
       h.mock.pressHome();
       await t.pumpAndSettle();
-      h.mock.emitNav(NavAction.context); // on Continue: running apps first
+      h.mock.emitNav(NavAction.back); // on Continue: running apps first
       await t.pumpAndSettle();
       expect(find.textContaining('Close '), findsOneWidget);
+    });
+
+    testWidgets('Y no longer closes a running app', (t) async {
+      setView(t);
+      final h = Harness();
+      await h.pump(t);
+      await h.launch(t, 'jellyfin');
+      await keys(t, [up, y]);
+      expect(find.text('Close Jellyfin?'), findsNothing);
     });
 
     testWidgets('nothing happens on an app that is not running', (t) async {
       setView(t);
       final h = Harness();
       await h.pump(t);
-      await keys(t, [y]);
+      await keys(t, [escape]);
       expect(find.textContaining('Close '), findsNothing);
     });
 
@@ -158,7 +167,7 @@ void main() {
       final h = Harness();
       await h.pump(t);
       await h.launch(t, 'jellyfin');
-      await keys(t, [up, y]);
+      await keys(t, [up, escape]);
       expect(find.text('Close Jellyfin?'), findsOneWidget);
       h.mock.simulateExit('jellyfin');
       await t.pumpAndSettle();
@@ -176,7 +185,7 @@ void main() {
       // Home is not built while Games shows, so it comes back on apps.
       await keys(t, [up, up, right, down]);
       expect(focusLabel(), 'games/r1:2');
-      await keys(t, [y]);
+      await keys(t, [escape]);
       expect(find.text('Close Portal 2?'), findsOneWidget);
       await keys(t, [right, enter]);
       expect(h.mock.running, isEmpty);

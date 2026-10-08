@@ -132,8 +132,8 @@ In a second terminal, in this repo:
 HINTEROS_SESSION_SOCKET=<printed path> nix run . -- --windowed
 ```
 
-The controller works as in the session: D-pad or left stick moves, A launches, B goes back, Y closes
-a running app, X is secondary, bumpers switch tabs, the Xbox button is Home. Reading the pad needs
+The controller works as in the session: D-pad or left stick moves, A launches, B goes back (or, on a running
+app or game, asks to close it), X is secondary, bumpers switch tabs, the Xbox button is Home. Reading the pad needs
 access to the device (a pad on your seat has it through logind, otherwise join the `input` group).
 App icons are resolved from your desktop's icon themes and `.desktop` files, and web apps' icons
 arrive a moment after start (`apps_changed`), so the tiles fill in live.
@@ -156,8 +156,8 @@ not connected) shows a snackbar. Cards of running apps and games carry a "Runnin
 through `apps.running` on connect and on `app_started`, `app_exited` and `focus_changed`; running
 games show on the Continue row with their Steam header art. `home_pressed` goes to Home.
 
-**Close:** the `context` action (gamepad Y / Triangle; keyboard Y or the menu key; `E` with `--mock`)
-on a running app or game (Continue, Apps, Games) opens a confirm dialog "Close <name>?" over the
+**Close:** the `back` action (gamepad B / Circle; keyboard Escape or Backspace) on a running app
+or game (Continue, Apps, Games) opens a confirm dialog "Close <name>?" over the
 screen. It takes all input until answered: Cancel is focused first, Left/Right move, Accept
 chooses, Back cancels, the Home button dismisses it, and it goes away by itself if the app ends
 meanwhile. Confirming calls `apps.close {id}`; `app_exited` (reason `closed`) updates Continue (the

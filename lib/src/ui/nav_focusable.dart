@@ -28,7 +28,8 @@ class NavFocusable extends StatefulWidget {
   /// What accept does.
   final VoidCallback? onSelect;
 
-  /// What the context button (Y/Triangle) does, if anything.
+  /// What Back (B/Circle) does on this item instead of going back: closing
+  /// a running app or game. Null: Back goes back as usual.
   final VoidCallback? onContext;
 
   /// Called when this item gains focus.

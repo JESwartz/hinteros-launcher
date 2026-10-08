@@ -226,7 +226,7 @@ void main() {
         h.mock.pressHome();
         await t.pumpAndSettle();
       },
-      keys: [right, LogicalKeyboardKey.keyY, right],
+      keys: [right, LogicalKeyboardKey.escape, right],
     );
   });
   testWidgets('close confirm, high contrast, text 1.6x', (t) async {
@@ -241,7 +241,7 @@ void main() {
         h.mock.pressHome();
         await t.pumpAndSettle();
       },
-      keys: [LogicalKeyboardKey.keyY],
+      keys: [LogicalKeyboardKey.escape],
     );
   });
   testWidgets('games 4k', (t) async {

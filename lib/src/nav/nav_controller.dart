@@ -251,15 +251,18 @@ class NavController {
         final cb = region._selects['${cur.key}:${region.model.col}'];
         cb?.call();
         return cb != null;
-      case NavAction.context:
-        if (phase != NavPhase.press || region == null) return false;
-        final cur = region.model.currentRow;
-        if (cur == null) return false;
-        final cb = region._contexts['${cur.key}:${region.model.col}'];
-        cb?.call();
-        return cb != null;
       case NavAction.back:
         if (phase != NavPhase.press) return false;
+        // On an item with a close action (a running app or game), Back asks
+        // to close it instead of going back.
+        final cur = region?.model.currentRow;
+        final close = cur == null
+            ? null
+            : region!._contexts['${cur.key}:${region.model.col}'];
+        if (close != null) {
+          close();
+          return true;
+        }
         if (region?.onBack != null && region!.onBack!()) return true;
         final t = region?.backTarget;
         if (t != null && t.hasItems) {

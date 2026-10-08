@@ -55,10 +55,10 @@ enum Section {
 /// - On the tab bar left/right wrap and the section follows focus; down enters
 ///   the section where you left it. While Steam needs attention its banner sits
 ///   between the tab bar and the content and is part of that vertical order.
-/// - Context (Y/Triangle) on a running app or game asks to close it; the
+/// - Back (B/Circle) on a running app or game asks to close it; the
 ///   confirm dialog takes all input until answered (Back cancels).
 ///   Secondary (X) opens Steam when its banner shows.
-/// - Back: detail pane to its list, section content to the Home tab; on Home it
+/// - Back elsewhere: detail pane to its list, section content to the Home tab; on Home it
 ///   does nothing. The Home button always goes to Home with the first card
 ///   focused. Page left/right (L1/R1) switch tabs from anywhere.
 class LauncherShell extends StatefulWidget {
