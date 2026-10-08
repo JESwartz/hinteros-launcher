@@ -5,6 +5,8 @@ import '../settings/launcher_settings.dart';
 import '../theme/hinter_theme.dart';
 import 'focus_frame.dart';
 import 'nav_focusable.dart';
+import 'profiles/profile_ui.dart';
+import '../system/profiles.dart';
 
 /// Top bar: wordmark, section tabs, clock. The tabs are one wrapping row in
 /// [region]; focusing a tab selects its section (like console UIs).
@@ -16,7 +18,16 @@ class TopBar extends StatelessWidget {
     required this.selected,
     required this.onFocusTab,
     required this.time,
+    this.profile,
+    this.onProfile,
   });
+
+  /// The profile chip (colour and initial) after the tabs, as the last item
+  /// of the tab row; null: no chip (no profiles on this box).
+  final CurrentProfile? profile;
+
+  /// A on the chip: Switch profile, Profile settings.
+  final VoidCallback? onProfile;
 
   final NavRegion region;
   final List<String> labels;
@@ -40,9 +51,11 @@ class TopBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // The wordmark makes way for the tabs at large text sizes.
+          // The wordmark makes way for the tabs at large text sizes, and for
+          // the profile chip.
           if (MediaQuery.textScalerOf(context).scale(1) <= 1.0 &&
-              labels.length <= 5) ...[
+              labels.length <= 5 &&
+              profile == null) ...[
             Text(
               'HinterOS',
               style: t.label.copyWith(color: t.accent, letterSpacing: 1),
@@ -66,6 +79,18 @@ class TopBar extends StatelessWidget {
             ),
           ],
           const Spacer(),
+          if (profile != null) ...[
+            NavFocusable(
+              region: region,
+              rowKey: 'tabs',
+              col: labels.length,
+              onSelect: onProfile,
+              scrollIntoView: false,
+              builder: (context, focused) =>
+                  _Chip(profile: profile!, focused: focused, compact: big),
+            ),
+            SizedBox(width: big ? HinterTokens.s2 : HinterTokens.s3),
+          ],
           Text(
             '$hh:$mm',
             style: (big ? t.label : t.title).copyWith(
@@ -73,6 +98,45 @@ class TopBar extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The profile chip: the profile's colour and initial (the name is in the
+/// menu it opens; the bar has no room for it at large text sizes).
+class _Chip extends StatelessWidget {
+  const _Chip({
+    required this.profile,
+    required this.focused,
+    required this.compact,
+  });
+
+  final CurrentProfile profile;
+  final bool focused;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HinterTheme.of(context);
+    return FocusFrame(
+      focused: focused,
+      radius: HinterTokens.radiusPill,
+      scale: 1.05,
+      style: t.focusStyle == FocusStyle.bar ? FocusStyle.ring : null,
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ProfileAvatar(
+              initial: profile.initial,
+              color: profile.color,
+              guest: profile.guest,
+              size: 56,
+            ),
+          ],
+        ),
       ),
     );
   }

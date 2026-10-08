@@ -68,7 +68,20 @@ Future<void> main(List<String> args) async {
     // settings, and the admin password prompt, session restart and the Store
     // of 0.8. The mock asks for the admin password like the real daemon.
     services: mock
-        ? MockSystemServices(autoRunJobs: true, iconDir: iconDir)
+        ? MockSystemServices(
+            autoRunJobs: true,
+            iconDir: iconDir,
+            // `--mock-profile=p3|guest|first-boot`: whose session it is.
+            currentProfile: switch (_mockProfile(args)) {
+              'first-boot' || null => 'p1',
+              final p => p,
+            },
+            setupRequired: _mockProfile(args) == 'first-boot',
+            profileBox: _mockProfile(args) == 'first-boot'
+                ? MockProfileBox(profiles: [])
+                : null,
+            extraApps: const [mockServiceApp],
+          )
         : daemonSystemServices(connection),
     showFps: showFps,
     showServer: _flag(args, '--server', 'HINTEROS_SERVER'),
@@ -83,6 +96,13 @@ Future<void> main(List<String> args) async {
   }
   runApp(app);
 }
+
+String? _mockProfile(List<String> args) =>
+    args
+        .where((a) => a.startsWith('--mock-profile='))
+        .map((a) => a.substring('--mock-profile='.length))
+        .firstOrNull ??
+    Platform.environment['HINTEROS_MOCK_PROFILE'];
 
 /// Where the mock finds its generic icons (`HINTEROS_MOCK_ICONS`, else the
 /// repo fixtures when run from the repo root); null: no icons.

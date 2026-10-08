@@ -18,7 +18,8 @@ import '../theme/hinter_theme.dart';
 import 'apps_screen.dart';
 import 'auth_prompt.dart';
 import 'common.dart';
-import 'dialogs.dart' show showFailureOn;
+import 'dialogs.dart' show Choice, showChoice, showFailureOn;
+import 'profiles/session_profile.dart';
 import 'games_screen.dart';
 import 'home_screen.dart';
 import 'modal_host.dart';
@@ -114,6 +115,17 @@ class _LauncherShellState extends State<LauncherShell> {
   bool _dialogOpen = false;
   NavRegion? _beforeDialog;
 
+  /// A context under the modal scope (for pages the session raises itself).
+  BuildContext? _scopeContext;
+
+  /// The current profile, first-boot mode, the lock screen, switching.
+  late final ProfileSession _profile = ProfileSession(
+    services: widget.services,
+    modals: _modals,
+    context: () => _scopeContext ?? context,
+    running: () => widget.data.running,
+  );
+
   late final List<Section> _sections = [
     for (final s in Section.values)
       if (s != Section.server || widget.showServer) s,
@@ -186,6 +198,17 @@ class _LauncherShellState extends State<LauncherShell> {
     final d = widget.data;
     d.start();
     d.addListener(_onData);
+    _profile.addListener(_onProfile);
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => unawaited(_profile.start()),
+    );
+    _subs.add(
+      d.connection.statusChanges.listen((s) {
+        if (s is Connected && _profile.current == null) {
+          unawaited(_profile.start());
+        }
+      }),
+    );
     _subs.add(d.messages.listen(_toast));
     _subs.add(
       d.failures.listen(
@@ -297,11 +320,59 @@ class _LauncherShellState extends State<LauncherShell> {
     if (_didInitialFocus || !mounted || !_home.hasItems) return;
     _didInitialFocus = true;
     _home.removeListener(_initialFocus);
-    _nav.focusRegion(_home);
+    // A page the session raised first (first-boot mode, the lock) keeps it.
+    _nav.focusRegion(_modals.topRegion ?? _home);
   }
+
+  /// The profile is known (or changed): the chip joins the tab row.
+  void _onProfile() {
+    if (!mounted) return;
+    final n = _sections.length + (_profile.current == null ? 0 : 1);
+    if (_tabs.model.rows.firstOrNull?.length != n) {
+      _tabs.setRows([NavRow('tabs', n)]);
+    }
+    setState(() {});
+  }
+
+  /// A on the profile chip.
+  Future<void> _profileMenu() async {
+    final c = _scopeContext;
+    final me = _profile.current;
+    if (c == null || me == null) return;
+    final choice = await showChoice<String>(
+      c,
+      title: me.displayName,
+      choices: [
+        const Choice('Switch profile', 'switch'),
+        if (!me.guest) const Choice('Profile settings', 'settings'),
+        if (me.guest) const Choice('End guest session', 'end', danger: true),
+      ],
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case 'switch':
+        await _profile.switchProfile(_scopeContext ?? c);
+      case 'settings':
+        _openProfileSettings();
+      case 'end':
+        await _profile.endGuest(_scopeContext ?? c);
+    }
+  }
+
+  /// Settings, on the Profiles entry.
+  void _openProfileSettings() => _openSection(
+    Section.settings,
+    _settingsList,
+    prepare: () {
+      _settingsList.model.goTo(settingsEntryIds.indexOf('profiles'), 0);
+      _settingsList.changed();
+    },
+  );
 
   @override
   void dispose() {
+    _profile.removeListener(_onProfile);
+    _profile.dispose();
     _reminders.removeListener(_onReminders);
     _authPrompts.dispose();
     _reminders.dispose();
@@ -530,6 +601,7 @@ class _LauncherShellState extends State<LauncherShell> {
       list: _settingsList,
       detail: _settingsDetail,
       onEnterDetail: () => _nav.focusRegion(_settingsDetail),
+      profileSession: _profile,
     ),
     // Phase 2.
     Section.server => const Notice(
@@ -561,6 +633,8 @@ class _LauncherShellState extends State<LauncherShell> {
                       selected: _sections.indexOf(_section),
                       onFocusTab: (i) => _setSection(_sections[i]),
                       time: _time,
+                      profile: _profile.current,
+                      onProfile: () => unawaited(_profileMenu()),
                     ),
                     if (_updateBannerVisible && _reminders.update != null)
                       UpdateBanner(
@@ -596,6 +670,12 @@ class _LauncherShellState extends State<LauncherShell> {
                     ),
                   ),
                 if (widget.showFps) const FpsOverlay(),
+                Builder(
+                  builder: (c) {
+                    _scopeContext = c;
+                    return const SizedBox.shrink();
+                  },
+                ),
               ],
             ),
           ),

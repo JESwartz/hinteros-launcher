@@ -220,8 +220,18 @@ class MockProfiles implements ProfilesRepository {
     for (final p in box.profiles) box.info(p, activeId: currentId),
   ]);
 
+  /// The next `profile.current` fails (no daemon).
+  bool failNextCurrent = false;
+
   @override
   Future<CurrentProfile> current() async {
+    if (failNextCurrent) {
+      failNextCurrent = false;
+      throw const SystemException(
+        SystemErrorKind.unavailable,
+        'The launcher is not connected to HinterOS.',
+      );
+    }
     if (isGuest) {
       return CurrentProfile(
         id: CurrentProfile.guestId,

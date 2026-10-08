@@ -212,8 +212,10 @@ void main() {
 
   testWidgets('says so when the daemon is unreachable', (t) async {
     setView(t);
-    await Harness(mock: StuckConnection(const Unreachable('no such file')))
-        .pump(t);
+    final h = Harness(mock: StuckConnection(const Unreachable('no such file')));
+    // No daemon, no profile: the wordmark instead of the profile chip.
+    h.services.mockProfiles.failNextCurrent = true;
+    await h.pump(t);
     expect(find.text('HinterOS'), findsOneWidget);
     expect(find.textContaining("Can't reach"), findsOneWidget);
     expect(find.textContaining('no such file'), findsOneWidget);

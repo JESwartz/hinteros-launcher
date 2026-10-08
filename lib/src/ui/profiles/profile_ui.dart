@@ -535,6 +535,7 @@ Future<String?> showPinEntry(
   bool disclaimer = false,
   DateTime Function()? now,
   List<({String label, VoidCallback onSelect})> extraActions = const [],
+  bool canLeave = true,
 }) => ModalScope.of(context).show<String>(
   (context, modal) => PinEntryPage(
     modal: modal,
@@ -547,6 +548,7 @@ Future<String?> showPinEntry(
     disclaimer: disclaimer,
     now: now,
     extraActions: extraActions,
+    canLeave: canLeave,
   ),
 );
 

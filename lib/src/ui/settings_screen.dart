@@ -12,6 +12,8 @@ import 'system/system_sections.dart';
 import 'common.dart' show EdgeFade;
 import 'focus_frame.dart';
 import 'nav_focusable.dart';
+import 'profiles/profiles_section.dart';
+import 'profiles/session_profile.dart';
 
 /// One entry of the settings list and the options its detail pane offers.
 class _Setting {
@@ -51,6 +53,11 @@ const _items = [
     'Show typed passwords on the on-screen keyboard',
     'Off: in password fields the keyboard shows dots instead of what you type (so passwords stay off the TV), apart from the newest character for a moment. Other text always shows as typed. A on a text field opens the keyboard; anywhere else, hold Guide and press Y.',
     'Typed passwords on keyboard',
+  ),
+  _Setting(
+    'profiles',
+    'Profiles',
+    'Who uses this box: names, colours, PINs, and switching.',
   ),
   _Setting(
     'net',
@@ -166,7 +173,11 @@ class SettingsScreen extends StatelessWidget {
     required this.list,
     required this.detail,
     required this.onEnterDetail,
+    this.profileSession,
   });
+
+  /// The shell's profile session (Settings -> Profiles switches with it).
+  final ProfileSession? profileSession;
 
   final SettingsController settings;
   final SystemServices services;
@@ -235,6 +246,7 @@ class SettingsScreen extends StatelessWidget {
                   region: detail,
                   settings: settings,
                   services: services,
+                  profileSession: profileSession,
                 ),
               ),
             ],
@@ -306,8 +318,10 @@ class _Detail extends StatelessWidget {
     required this.region,
     required this.settings,
     required this.services,
+    this.profileSession,
   });
 
+  final ProfileSession? profileSession;
   final _Setting setting;
   final List<_Option> options;
   final NavRegion region;
@@ -332,10 +346,15 @@ class _Detail extends StatelessWidget {
             if (_systemIds.contains(setting.id))
               KeyedSubtree(
                 key: ValueKey(setting.id),
-                child: _systemSection(
-                  setting.id,
-                  SectionEnv(services: services, region: region),
-                ),
+                child: setting.id == 'profiles'
+                    ? ProfilesSection(
+                        SectionEnv(services: services, region: region),
+                        session: profileSession,
+                      )
+                    : _systemSection(
+                        setting.id,
+                        SectionEnv(services: services, region: region),
+                      ),
               )
             else ...[
               for (var i = 0; i < options.length; i++) ...[
@@ -471,6 +490,7 @@ class _Preview extends StatelessWidget {
 
 /// The entries that show a system section instead of local options.
 const _systemIds = {
+  'profiles',
   'net',
   'bt',
   'display',

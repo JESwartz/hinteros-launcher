@@ -99,10 +99,13 @@ class ModalController extends ChangeNotifier {
       // Decided now, not at close time: the caller may have opened the next
       // page (a progress page after a form) in between.
       final next = _stack.isEmpty ? null : _stack.last.region;
-      final back = next ?? e.previous;
+      var back = next ?? e.previous;
+      // Nothing was focused before it opened: where the host starts.
+      if (back == null || back == e.region) back = nav.fallback?.call();
       if (back != null) {
         if (back.hasItems || next != null) nav.focusRegion(back);
       }
+      if (nav.active == e.region) nav.active = null;
       // The nodes are no longer in the tree after this frame.
       e.region.dispose();
     });

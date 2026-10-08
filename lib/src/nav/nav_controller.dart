@@ -42,6 +42,11 @@ class NavRegion extends ChangeNotifier {
   /// stepping) instead of moving focus.
   bool Function(NavDir dir)? interceptMove;
 
+  /// Asked before anything else with every action and phase (releases
+  /// too) while this region holds focus; return true to consume it. For
+  /// "hold A for 3 seconds".
+  bool Function(NavAction action, NavPhase phase)? onRaw;
+
   /// Asked first on other actions (page left/right, secondary, ...) while
   /// this region holds focus; return true to consume them.
   bool Function(NavAction action)? onAction;
@@ -223,6 +228,7 @@ class NavController {
 
   /// Returns true if the action was consumed.
   bool dispatch(NavAction action, NavPhase phase) {
+    if (active?.onRaw?.call(action, phase) ?? false) return true;
     if (phase == NavPhase.release || phase == NavPhase.unknown) return false;
     final region = active;
     switch (action) {

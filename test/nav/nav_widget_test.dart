@@ -59,8 +59,10 @@ void main() {
     await keys(t, [up]);
     expect(focusLabel(), 'tabs/tabs:0');
     await keys(t, [left]);
-    expect(focusLabel(), 'tabs/tabs:4', reason: 'wraps to Settings');
-    await keys(t, [right]);
+    expect(focusLabel(), 'tabs/tabs:5', reason: 'wraps to the profile chip');
+    await keys(t, [left]);
+    expect(focusLabel(), 'tabs/tabs:4', reason: 'then Settings');
+    await keys(t, [right, right]);
     expect(focusLabel(), 'tabs/tabs:0');
     await keys(t, [down]);
     expect(focusLabel(), 'home/apps:0');
@@ -152,8 +154,8 @@ void main() {
     await keys(t, [up, right, right, right, right, down]);
     await keys(
       t,
-      List.filled(5, down),
-    ); // text, contrast, focus, motion, osk, then Network
+      List.filled(6, down),
+    ); // text, contrast, focus, motion, osk, profiles, then Network
     expect(focusLabel(), 'settings-list/net:0');
     await keys(t, [right]);
     expect(focusLabel(), 'settings-detail/wifi:0');
