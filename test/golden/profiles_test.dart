@@ -7,7 +7,8 @@ import 'package:hinteros_launcher/src/system/mock_system.dart';
 import 'package:hinteros_launcher/src/ui/profiles/profile_loading.dart';
 
 import '../profiles/loading_test.dart' show appWith, public;
-import '../profiles/session_test.dart' show frames, harness, keys, openChip;
+import '../profiles/session_test.dart'
+    show frames, harness, keys, openChip, typePin;
 import '../profiles/store_profile_test.dart' show termsHarness;
 import '../support/harness.dart';
 import '../support/nav_helpers.dart';
@@ -42,6 +43,7 @@ void main() {
     await h.pump(t);
     await openChip(t);
     await keys(t, [kEnter, kRight, kEnter]);
+    await typePin(t, '1357', settle: false); // Sam is locked
     await frames(t, 10);
     await shot(t, 'not_responding');
   });
@@ -73,17 +75,30 @@ void main() {
     await shot(t, 'settings_highcontrast_text160');
   });
 
-  testWidgets('hold to remove', (t) async {
+  testWidgets('remove: the PIN with Delete held', (t) async {
     setView(t);
     await harness().pump(t);
     await enterSettingsEntry(t, 'profiles');
-    await keys(t, [kDown, kEnter, kDown, kDown, kEnter, kRight, kEnter]);
+    // Sam, Remove (after Switch to this profile, Rename, new PIN), Remove.
+    await keys(t, [kDown, kEnter, kDown, kDown, kDown, kEnter, kRight, kEnter]);
+    for (final c in '2468'.split('')) {
+      await t.sendKeyEvent(LogicalKeyboardKey(0x30 + int.parse(c)));
+    }
+    await t.pump();
     await t.sendKeyDownEvent(LogicalKeyboardKey.enter);
     await t.pump();
     await t.pump(const Duration(milliseconds: 1500));
-    await shot(t, 'hold_remove');
+    await shot(t, 'delete_pin_hold');
     await t.sendKeyUpEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
+  });
+
+  testWidgets('switch to a locked profile: its PIN in this session', (t) async {
+    setView(t);
+    await harness().pump(t);
+    await openChip(t);
+    await keys(t, [kEnter, kRight, kEnter]);
+    await shot(t, 'switch_pin');
   });
 
   testWidgets('first boot: create your profile', (t) async {

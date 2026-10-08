@@ -302,8 +302,10 @@ class DaemonProfiles implements ProfilesRepository {
   }
 
   @override
-  Future<void> switchTo(String id) => guardCall(
-    () => _conn.sessionSwitchProfile(api.SessionSwitchProfileParams(id: id)),
+  Future<void> switchTo(String id, {String? pin}) => guardCall(
+    () => _conn.sessionSwitchProfile(
+      api.SessionSwitchProfileParams(id: id, pin: pin),
+    ),
   );
 
   @override

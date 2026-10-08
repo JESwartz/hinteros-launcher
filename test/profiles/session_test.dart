@@ -62,6 +62,7 @@ Future<void> openChip(WidgetTester t) async {
 
 void main() {
   appearanceTests();
+  pickerRefreshTests();
   testWidgets('the chip opens Switch profile and Profile settings', (t) async {
     setView(t);
     final h = harness();
@@ -91,12 +92,29 @@ void main() {
     }
     expect(find.byKey(const ValueKey('current-badge')), findsOneWidget);
     expect(focusLabel(), endsWith('/tiles:0'));
-    // Sam: no question (YouTube is not a game), straight to Switching.
-    await keys(t, [right, enter], settle: false);
+    // Sam is locked: Sam's PIN first, in this session (YouTube is not a
+    // game: no other question). A wrong one changes nothing; B goes back.
+    await keys(t, [right, enter]);
+    expect(find.text('Switch to Sam'), findsOneWidget);
+    expect(
+      find.textContaining('Nothing in this profile closes until'),
+      findsOneWidget,
+    );
+    await typePin(t, '0000');
+    expect(find.text("That PIN didn't match."), findsOneWidget);
+    expect(h.services.mockProfiles.log, isNot(contains('switch:p3')));
+    await keys(t, [escape]);
+    expect(find.text('Switch to Sam'), findsNothing);
+    expect(find.textContaining('Switching'), findsNothing);
+    expect(h.mock.running.map((a) => a.id), contains('youtube'));
+    // Back on the chip. Again, with the right PIN: then the switch.
+    expect(focusLabel(), 'tabs/tabs:5');
+    await keys(t, [enter, enter, right, enter]);
+    await typePin(t, '1357', settle: false);
     expect(h.services.mockProfiles.log, contains('switch:p3'));
     expect(find.text('Switching to Sam'), findsOneWidget);
     await frames(t, 20);
-    expect(find.text('Opening the profile picker...'), findsOneWidget);
+    expect(find.text('Opening Sam...'), findsOneWidget);
     expect(h.services.mockProfiles.switchedTo, 'p3');
   });
 
@@ -109,16 +127,31 @@ void main() {
     await h.pump(t);
     await openChip(t);
     await keys(t, [enter, right, enter]); // Switch profile, Sam
+    await typePin(t, '1357', settle: false);
     await frames(t, 10);
-    expect(find.text("YouTube isn't responding (10 s)."), findsOneWidget);
+    expect(find.textContaining("YouTube isn't responding ("), findsOneWidget);
+    // The time keeps counting from the daemon's waited_s, a second a second.
+    int shown() {
+      final w = t.widget<Text>(
+        find.byWidgetPredicate(
+          (w) => w is Text && (w.data ?? '').contains("isn't responding"),
+        ),
+      );
+      return int.parse(RegExp(r'\((\d+) s\)').firstMatch(w.data!)!.group(1)!);
+    }
+
+    final first = shown();
+    expect(first, inInclusiveRange(10, 11));
+    await t.pump(const Duration(seconds: 3));
+    expect(shown(), first + 3);
     expect(
       find.text('Force-closing it may lose unsaved data.'),
       findsOneWidget,
     );
     expect(focusLabel(), endsWith('/buttons:0'));
     await keys(t, [enter], settle: false); // Keep waiting
-    await frames(t, 10);
-    expect(find.text("YouTube isn't responding (20 s)."), findsOneWidget);
+    await t.pump(const Duration(milliseconds: 1050));
+    expect(find.textContaining("YouTube isn't responding (2"), findsOneWidget);
     await keys(t, [right, enter], settle: false); // Force close
     await frames(t, 20);
     expect(h.services.mockProfiles.log, contains('force_close:youtube'));
@@ -132,6 +165,7 @@ void main() {
     await h.pump(t);
     await openChip(t);
     await keys(t, [enter, right, enter]);
+    await typePin(t, '1357', settle: false);
     await frames(t, 10);
     await keys(t, [right, right, enter], settle: false);
     await frames(t, 10);
@@ -192,6 +226,9 @@ void main() {
     expect(find.text('Step 1 of 5'), findsOneWidget);
     await keys(t, [enter]); // the name field: the text dialog
     await t.enterText(find.byType(EditableText), 'James');
+    // Enter only closes the keyboard (focus on Done); Done takes the name.
+    await keys(t, [enter]);
+    expect(find.byType(EditableText), findsOneWidget);
     await keys(t, [enter]);
     await keys(t, [down, enter]); // Continue
     await keys(t, [enter]); // the first colour
@@ -283,8 +320,8 @@ void main() {
     await keys(t, [enter, right, enter]); // Switch profile, Sam
     expect(find.text('Celeste is still running'), findsOneWidget);
     expect(h.services.mockProfiles.log, isNot(contains('switch:p3')));
-    await keys(t, [right, enter], settle: false); // Close it and switch
-    await frames(t);
+    await keys(t, [right, enter]); // Close it and switch
+    await typePin(t, '1357', settle: false); // Sam is locked
     expect(h.services.mockProfiles.log, contains('switch:p3'));
     expect(find.text('Switching to Sam'), findsOneWidget);
     await frames(t, 20);
@@ -325,5 +362,23 @@ void appearanceTests() {
       highContrast: true,
       reduceMotion: false,
     ));
+  });
+}
+
+void pickerRefreshTests() {
+  testWidgets('the in-session picker follows profiles_changed', (t) async {
+    setView(t);
+    final h = harness();
+    await h.pump(t);
+    await openChip(t);
+    await keys(t, [enter]); // Switch profile
+    expect(find.text('Sam'), findsOneWidget);
+    // Removed meanwhile (from another session, or a job that just ended).
+    final job = await h.services.mockProfiles.remove('p3', '2468');
+    h.services.mockJobs.finish(job.jobId);
+    await t.pumpAndSettle();
+    expect(find.text('Who is watching?'), findsOneWidget);
+    expect(find.text('Sam'), findsNothing);
+    expect(find.text('James'), findsOneWidget);
   });
 }

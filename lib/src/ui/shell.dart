@@ -211,6 +211,11 @@ class _LauncherShellState extends State<LauncherShell> {
     };
     d.start();
     d.addListener(_onData);
+    if (_grace) {
+      _graceTimer = Timer(startupGrace, () {
+        if (mounted) setState(() => _grace = false);
+      });
+    }
     if (_loading) {
       d.addListener(_checkLoading);
       _loadingCap = Timer(_loadingMax, _endLoading);
@@ -294,9 +299,15 @@ class _LauncherShellState extends State<LauncherShell> {
   }
 
   /// The data layer changed: the banner and the close dialog follow it.
+  bool _hidingConnection = false;
+
   void _onData() {
     if (!mounted) return;
     final d = widget.data;
+    if (_hideConnection != _hidingConnection) {
+      _hidingConnection = _hideConnection;
+      setState(() {});
+    }
     if ((d.launching != null) != _launchShown) {
       _launchShown = d.launching != null;
       setState(() {});
@@ -338,7 +349,17 @@ class _LauncherShellState extends State<LauncherShell> {
   Timer? _loadingCap;
 
   /// How long the loading page waits for Home's data at most.
-  static const _loadingMax = Duration(seconds: 15);
+  static const _loadingMax = Duration(seconds: 20);
+
+  /// The session's start (with [LauncherShell.startup]): until it is over,
+  /// a connection that is not up (yet, or again: the session daemon is
+  /// restarted once as a new session starts) shows the loading page, never
+  /// "Can't reach the HinterOS service". After it, a real failure shows.
+  static const startupGrace = Duration(seconds: 20);
+  late bool _grace = widget.startup != null;
+  Timer? _graceTimer;
+
+  bool get _hideConnection => _grace && widget.data.status is! Connected;
 
   void _checkLoading() {
     if (!_loading || !mounted) return;
@@ -455,6 +476,7 @@ class _LauncherShellState extends State<LauncherShell> {
     widget.data.removeListener(_onData);
     widget.data.removeListener(_checkLoading);
     _loadingCap?.cancel();
+    _graceTimer?.cancel();
     _clock?.cancel();
     for (final s in _subs) {
       s.cancel();
@@ -747,7 +769,7 @@ class _LauncherShellState extends State<LauncherShell> {
                       iconPath: l.iconPath,
                     ),
                   ),
-                if (_loading)
+                if (_loading || _hideConnection)
                   Positioned.fill(
                     child: ProfileLoadingPage(identity: _loadingIdentity()),
                   ),

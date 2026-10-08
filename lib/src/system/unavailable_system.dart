@@ -224,7 +224,7 @@ class UnavailableProfiles implements ProfilesRepository {
   Future<JobHandle?> setStarterSet(List<String> ids, String adminPin) =>
       Future.error(_gone);
   @override
-  Future<void> switchTo(String id) => Future.error(_gone);
+  Future<void> switchTo(String id, {String? pin}) => Future.error(_gone);
   @override
   Future<void> keepWaiting() => Future.error(_gone);
   @override

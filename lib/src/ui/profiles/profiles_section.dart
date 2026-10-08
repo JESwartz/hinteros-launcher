@@ -1,6 +1,7 @@
 /// Settings -> Profiles: every profile with its storage, Add profile, and per
-/// profile Rename, Colour, PIN, Locked, App history and Remove. Actions on
-/// another profile ask for the admin PIN on the same pad. The admin profile
+/// profile Switch to this profile (another one), Rename, Colour, PIN,
+/// Lock/Unlock, App history and Remove (a held Delete on its PIN pad).
+/// Actions on another profile ask for the admin PIN on the same pad. The admin profile
 /// also gets Starter apps and Guest on/off. In the guest's session only
 /// Switch profile and End guest session.
 library;
@@ -110,6 +111,8 @@ class _ProfilesSectionState extends State<ProfilesSection> {
           ? 'Your profile.'
           : "Changing another profile needs the admin profile's PIN.",
       choices: [
+        if (!own && !me.guest && widget.session != null)
+          const Choice('Switch to this profile', 'switch'),
         const Choice('Rename', 'rename'),
         if (own) const Choice('Colour', 'color'),
         if (own) const Choice('Change PIN', 'pin'),
@@ -118,7 +121,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
         if (!own && !p.admin) const Choice('Give it a new PIN', 'reset'),
         if (own)
           Choice(
-            p.locked ? 'Stop asking for the PIN' : 'Lock this profile',
+            p.locked ? 'Unlock this profile' : 'Lock this profile',
             'lock',
           ),
         if (own) const Choice('App history', 'history'),
@@ -127,6 +130,8 @@ class _ProfilesSectionState extends State<ProfilesSection> {
     );
     if (choice == null || !mounted) return;
     switch (choice) {
+      case 'switch':
+        await widget.session!.switchToProfile(context, p);
       case 'rename':
         await _rename(p, own);
       case 'color':
@@ -250,13 +255,13 @@ class _ProfilesSectionState extends State<ProfilesSection> {
   Future<void> _lock(ProfileInfo p) async {
     await showPinEntry(
       context,
-      title: p.locked ? 'Stop asking for the PIN' : 'Lock this profile',
+      title: p.locked ? 'Unlock this profile' : 'Lock this profile',
       forgotPinFor: p.name,
       body: p.locked
-          ? 'Your profile will open without the PIN. Type your PIN to '
-                'confirm.'
-          : 'Your profile will ask for its PIN to open, also after sleep. '
-                'Type your PIN to confirm.',
+          ? 'Unlocked, your profile opens without the PIN. Type your PIN '
+                'to confirm.'
+          : 'Locked, your profile asks for its PIN to open, also after '
+                'sleep. Type your PIN to confirm.',
       disclaimer: true,
       check: (pin) async {
         try {
@@ -284,20 +289,19 @@ class _ProfilesSectionState extends State<ProfilesSection> {
       danger: true,
     );
     if (ok == null || !mounted) return;
-    final held = await showHoldToConfirm(
-      context,
-      title: 'Remove ${p.name}',
-      body: 'Hold A for 3 seconds to remove ${p.name}.',
-    );
-    if (!held || !mounted) return;
     JobHandle? job;
+    // The PIN, then Delete held for 3 seconds (letting go early starts over).
     await showPinEntry(
       context,
       title: 'Remove ${p.name}',
       body: own
-          ? 'Type your PIN to remove your profile.'
-          : "Type the admin profile's PIN to remove ${p.name}.",
+          ? 'Type your PIN, then hold A on Delete for 3 seconds to remove '
+                'your profile.'
+          : "Type the admin profile's PIN, then hold A on Delete for 3 "
+                'seconds to remove ${p.name}.',
       forgotPinFor: own ? p.name : forgotPinAdmin,
+      submitLabel: 'Delete',
+      holdToSubmit: const Duration(seconds: 3),
       check: (pin) async {
         try {
           job = await _p.remove(p.id, pin);
@@ -476,17 +480,6 @@ class _ProfilesSectionState extends State<ProfilesSection> {
                 : 'A name, a colour and a PIN. Takes about a minute.',
           ),
           gap: HinterTokens.s3,
-        );
-        p.item(
-          'switch',
-          onSelect: session == null
-              ? null
-              : () => unawaited(session.switchProfile(context)),
-          builder: (f) => SettingRow(
-            title: 'Switch profile',
-            focused: f,
-            subtitle: 'Everything running in your profile closes first.',
-          ),
         );
         if (me.admin) {
           p.add(

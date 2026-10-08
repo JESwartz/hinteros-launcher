@@ -97,8 +97,15 @@ class MockProfileBox {
   MockProfile get admin => profiles.firstWhere((p) => p.admin);
 
   /// Checks [pin] against profile [p] as the service does: 3 free failures,
-  /// then a lock that doubles. Throws `pin_required` naming [kind].
+  /// then a lock that doubles; none for the admin profile's PIN. Throws
+  /// `pin_required` naming [kind].
   void checkPin(MockProfile p, String? pin, PinKind kind) {
+    if (p.admin) {
+      p.failures = 0;
+      p.lockedUntil = null;
+      if (pin != null && pin == p.pin) return;
+      throw _pinRequired(kind, null);
+    }
     final t = now();
     final until = p.lockedUntil;
     if (until != null && t.isBefore(until)) {
@@ -487,7 +494,7 @@ class MockProfiles implements ProfilesRepository {
   }
 
   @override
-  Future<void> switchTo(String id) async {
+  Future<void> switchTo(String id, {String? pin}) async {
     _maybeFail();
     if (id == currentId) {
       throw const SystemException(
@@ -496,7 +503,11 @@ class MockProfiles implements ProfilesRepository {
         data: {'field': 'id', 'reason': 'same'},
       );
     }
-    if (id != CurrentProfile.guestId) _profile(id);
+    if (id != CurrentProfile.guestId) {
+      final p = _profile(id);
+      // A locked target: its PIN first, before anything closes.
+      if (p.locked && p.pin != null) box.checkPin(p, pin, PinKind.target);
+    }
     if (_switching) {
       throw const SystemException(
         SystemErrorKind.jobBusy,

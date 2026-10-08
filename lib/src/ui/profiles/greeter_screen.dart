@@ -94,6 +94,9 @@ class _GreeterAppState extends State<GreeterApp> {
   );
 }
 
+/// How often the picker reads greeter.list again while it is up.
+const greeterRefreshEvery = Duration(seconds: 3);
+
 class GreeterScreen extends StatefulWidget {
   const GreeterScreen({
     super.key,
@@ -135,11 +138,35 @@ class _GreeterScreenState extends State<GreeterScreen> {
   ConsoleController get _c => widget.console;
   DateTime _now() => (widget.now ?? DateTime.now)();
 
+  /// The tiles follow the public view while the picker is up (a profile removed
+  /// or added meanwhile, e.g. removing your own profile ends your session
+  /// before the removal job is done): greeter.list again every few seconds.
+  Timer? _refresh;
+
   @override
   void initState() {
     super.initState();
     _c.onBack = () => true;
     unawaited(_load());
+    _refresh = Timer.periodic(greeterRefreshEvery, (_) => unawaited(_reload()));
+  }
+
+  static String _signature(PickerView v) => [
+    for (final p in v.profiles)
+      '${p.id}|${p.name}|${p.color}|${p.locked}|${p.admin}|${p.lockedUntil}',
+    'guest:${v.guest}',
+  ].join(';');
+
+  Future<void> _reload() async {
+    final old = _view;
+    if (old == null || _entering != null || _goingStraight) return;
+    try {
+      final v = await widget.greeter.load();
+      if (!mounted || _entering != null) return;
+      if (_signature(v) != _signature(old)) setState(() => _view = v);
+    } catch (_) {
+      // The next tick tries again.
+    }
   }
 
   Future<void> _load() async {
@@ -192,6 +219,7 @@ class _GreeterScreenState extends State<GreeterScreen> {
   @override
   void dispose() {
     _retry?.cancel();
+    _refresh?.cancel();
     super.dispose();
   }
 

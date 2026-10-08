@@ -409,8 +409,9 @@ abstract class ProfilesRepository {
   Future<JobHandle?> setStarterSet(List<String> ids, String adminPin);
 
   /// `session.switch_profile`. The session ends afterwards; follow
-  /// [switchEvents] until then.
-  Future<void> switchTo(String id);
+  /// [switchEvents] until then. A locked target needs its [pin]: wrong or
+  /// missing throws `pin_required {pin: target}` and nothing closes.
+  Future<void> switchTo(String id, {String? pin});
 
   /// `switch_progress` and `switch_blocked`.
   Stream<SwitchEvent> get switchEvents;

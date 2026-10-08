@@ -195,9 +195,25 @@ Future<void> _prepareProfiles(
       p.byId('p1')!.failures = 3;
     case ('system.profiles.set_pin', 'first PIN after the migration'):
       p.byId('p1')!.pin = null;
+    // The admin profile's PIN has no backoff: Sam's session, Sam's wait.
     case ('system.profiles.unlock', 'locked out'):
-      p.byId('p1')!.lockedUntil =
-          DateTime.now().millisecondsSinceEpoch ~/ 1000 + 4;
+      p
+        ..current = 'p3'
+        ..byId('p3')!.lockedUntil =
+            DateTime.now().millisecondsSinceEpoch ~/ 1000 + 4;
+    case ('system.profiles.switch' || 'session.switch_profile', 'to Sam'):
+      p.byId('p3')!.locked = false;
+    case ('system.profiles.switch' || 'session.switch_profile', _)
+        when name.contains('Kim'):
+      p.profiles.add(
+        MockWireProfile(
+          id: 'p4',
+          name: 'Kim',
+          color: ProfileColor.green,
+          pin: '2468',
+          locked: true,
+        ),
+      );
     case ('system.apps.list', 'not migrated yet'):
       p.schema1 = true;
     case ('system.apps.accept_terms', _):

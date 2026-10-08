@@ -322,8 +322,8 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
             builder: (_, f) => SettingRow(
               title: 'Lock this profile',
               subtitle:
-                  'Ask for the PIN to open it, also when the box wakes from '
-                  'sleep. Off: it opens without the PIN.',
+                  'On: locked, it asks for the PIN to open, also when the box '
+                  'wakes from sleep. Off: unlocked, it opens without the PIN.',
               focused: f,
               trailing: ToggleMark(on: _locked),
             ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hinteros_launcher/src/api/api.dart' show Connecting;
+import 'package:hinteros_launcher/src/api/api.dart'
+    show Connecting, Unreachable;
 import 'package:hinteros_launcher/src/app.dart';
 import 'package:hinteros_launcher/src/system/profiles.dart';
 import 'package:hinteros_launcher/src/ui/profiles/profile_loading.dart';
@@ -64,18 +65,44 @@ void main() {
     expect(find.text('YouTube'), findsWidgets);
   });
 
-  testWidgets('no answer: the page gives way after 15 s', (t) async {
+  testWidgets('no answer: the page gives way after 20 s', (t) async {
     setView(t);
     final h = Harness(mock: StuckConnection(const Connecting()));
     await t.pumpWidget(appWith(h, const LoadingIdentity()));
     const page = ValueKey('profile-loading');
     expect(find.byKey(page), findsOneWidget);
-    await t.pump(const Duration(seconds: 10));
+    await t.pump(const Duration(seconds: 15));
     expect(find.byKey(page), findsOneWidget);
     await t.pump(const Duration(seconds: 6));
     await t.pump();
     expect(find.byKey(const ValueKey('profile-loading')), findsNothing);
     expect(find.text('Connecting to the HinterOS service'), findsOneWidget);
+  });
+
+  testWidgets('a connection error while the session starts: the loading page', (
+    t,
+  ) async {
+    setView(t);
+    final h = Harness(
+      mock: StuckConnection(const Unreachable('connection refused')),
+    );
+    await t.pumpWidget(appWith(h, const LoadingIdentity(name: 'James')));
+    const page = ValueKey('profile-loading');
+    for (final s in [1, 5, 12]) {
+      await t.pump(Duration(seconds: s));
+      expect(find.byKey(page), findsOneWidget, reason: '$s s');
+      expect(find.text('Loading James…'), findsOneWidget);
+      // Covered by the page (the shell below still has the notice).
+      expect(find.textContaining("Can't reach").hitTestable(), findsNothing);
+    }
+    // It really fails: after the start, the error.
+    await t.pump(const Duration(seconds: 3));
+    await t.pump();
+    expect(find.byKey(page), findsNothing);
+    expect(
+      find.textContaining("Can't reach the HinterOS service"),
+      findsOneWidget,
+    );
   });
 
   testWidgets('without a startup identity there is no loading page', (t) async {

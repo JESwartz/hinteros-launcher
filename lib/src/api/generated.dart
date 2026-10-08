@@ -56,6 +56,7 @@ const apiMethodNames = <String>[
   'system.profiles.reset_pin',
   'system.profiles.remove',
   'system.profiles.switch',
+  'system.profiles.switch_cancel',
   'system.profiles.unlock',
   'system.guest.set',
   'system.display.save_mode',
@@ -5481,14 +5482,20 @@ class SystemProfilesRemoveResult {
 }
 
 class SystemProfilesSwitchParams {
-  const SystemProfilesSwitchParams({required this.id});
+  const SystemProfilesSwitchParams({required this.id, this.pin});
 
   final Object id;
 
-  factory SystemProfilesSwitchParams.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesSwitchParams(id: json['id']);
+  /// 4 to 8 digits. Never logged.
+  final String? pin;
 
-  Map<String, dynamic> toJson() => {'id': id};
+  factory SystemProfilesSwitchParams.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesSwitchParams(
+        id: json['id'],
+        pin: json['pin'] == null ? null : json['pin'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'id': id, 'pin': ?pin};
 
   @override
   bool operator ==(Object other) =>
@@ -5520,6 +5527,50 @@ class SystemProfilesSwitchResult {
 
   @override
   String toString() => 'SystemProfilesSwitchResult(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesSwitchCancelParams {
+  const SystemProfilesSwitchCancelParams();
+
+  factory SystemProfilesSwitchCancelParams.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemProfilesSwitchCancelParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesSwitchCancelParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemProfilesSwitchCancelParams(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesSwitchCancelResult {
+  const SystemProfilesSwitchCancelResult();
+
+  factory SystemProfilesSwitchCancelResult.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemProfilesSwitchCancelResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesSwitchCancelResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemProfilesSwitchCancelResult(${jsonEncode(toJson())})';
 }
 
 class SystemProfilesUnlockParams {
@@ -7783,14 +7834,20 @@ class ProfileCurrentResult {
 }
 
 class SessionSwitchProfileParams {
-  const SessionSwitchProfileParams({required this.id});
+  const SessionSwitchProfileParams({required this.id, this.pin});
 
   final Object id;
 
-  factory SessionSwitchProfileParams.fromJson(Map<String, dynamic> json) =>
-      SessionSwitchProfileParams(id: json['id']);
+  /// 4 to 8 digits. Never logged.
+  final String? pin;
 
-  Map<String, dynamic> toJson() => {'id': id};
+  factory SessionSwitchProfileParams.fromJson(Map<String, dynamic> json) =>
+      SessionSwitchProfileParams(
+        id: json['id'],
+        pin: json['pin'] == null ? null : json['pin'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'id': id, 'pin': ?pin};
 
   @override
   bool operator ==(Object other) =>
@@ -10668,13 +10725,23 @@ mixin SessionApiMethods {
     await rpc('system.profiles.remove', params.toJson()),
   );
 
-  /// Relayed to the system service's profiles.switch. Choose the next profile (0.4): writes the switch hint the greeter reads. It selects; it authorises nothing.
+  /// Relayed to the system service's profiles.switch. Choose the next profile (0.4): writes the switch hint the greeter reads. A locked target needs its PIN here, before the caller's session closes anything.
   ///
-  /// id is a profile id or guest. For the caller's own id it also issues a one-time resume token (session.restart: a locked profile comes back without its PIN), valid 60 s. The session daemon then ends the session (session.switch_profile).
+  /// id is a profile id or guest. A locked profile (with a PIN) other than the caller's own needs pin = the target's PIN: wrong or missing is pin_required {pin: target, retry_after_ms?} and nothing is written; right, the hint carries a one-time token for the target (single use, bound to its user, valid 60 s), so the greeter enters it without any UI. The same caller may call again without pin while its token is live to extend hint and token by 60 s (a switch waiting for apps to close). The admin profile's PIN has no backoff. For the caller's own id it issues a one-time resume token (session.restart). Unlocked profiles and the guest need no PIN. The session daemon then ends the session (session.switch_profile).
   Future<SystemProfilesSwitchResult> systemProfilesSwitch(
     SystemProfilesSwitchParams params,
   ) async => SystemProfilesSwitchResult.fromJson(
     await rpc('system.profiles.switch', params.toJson()),
+  );
+
+  /// Relayed to the system service's profiles.switch_cancel. Drop the caller's switch hint and its token (0.4): the switch was cancelled and the session stays.
+  ///
+  /// Only a hint the caller wrote is removed; otherwise nothing happens.
+  Future<SystemProfilesSwitchCancelResult> systemProfilesSwitchCancel([
+    SystemProfilesSwitchCancelParams params =
+        const SystemProfilesSwitchCancelParams(),
+  ]) async => SystemProfilesSwitchCancelResult.fromJson(
+    await rpc('system.profiles.switch_cancel', params.toJson()),
   );
 
   /// Relayed to the system service's profiles.unlock. The caller's PIN after sleep (0.4): the lock screen of a locked profile.
@@ -10961,9 +11028,9 @@ mixin SessionApiMethods {
     await rpc('profile.current', params.toJson()),
   );
 
-  /// Switch to another profile (0.12): writes the switch hint (system.profiles.switch), then closes every app (SIGTERM, no silent force-close) and Steam (steam -shutdown), and ends this session; the greeter takes over. Answers once the hint is written; progress comes as switch_progress, a stuck app as switch_blocked.
+  /// Switch to another profile (0.12): writes the switch hint (system.profiles.switch with the PIN of a locked target; a wrong or missing PIN is pin_required {pin: target} and nothing closes), then closes every app (SIGTERM, no silent force-close) and Steam (steam -shutdown), and ends this session; the greeter takes over. Answers once the hint is written; progress comes as switch_progress, a stuck app as switch_blocked.
   ///
-  /// invalid_params {field: id, reason: same} for the own profile. While a switch runs a second one is invalid_params {reason: busy}.
+  /// invalid_params {field: id, reason: same} for the own profile. While a switch runs a second one is invalid_params {reason: busy}. pin: the target's PIN, needed for a locked profile (asked in the session before anything closes); the hint then carries a one-time token, so the greeter enters the target with no UI. While closing takes long the daemon extends the token; switch_cancel drops it.
   Future<SessionSwitchProfileResult> sessionSwitchProfile(
     SessionSwitchProfileParams params,
   ) async => SessionSwitchProfileResult.fromJson(

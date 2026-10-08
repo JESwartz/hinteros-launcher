@@ -8,14 +8,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../api/api.dart' show AppSource, NavAction, NavPhase, RunningApp;
+import '../../api/api.dart' show AppSource, RunningApp;
 import '../../nav/nav_model.dart';
 import '../../system/models.dart';
 import '../../system/repositories.dart';
 import '../../theme/hinter_theme.dart';
 import '../dialogs.dart';
 import '../modal_host.dart';
-import '../nav_focusable.dart';
 import '../pages.dart' show FullPage;
 import '../widgets.dart';
 import 'first_boot_page.dart';
@@ -33,6 +32,8 @@ EditText sessionEditText(BuildContext context) =>
       body: hint,
       submitLabel: 'Done',
       submit: (text) async => nameProblem(text),
+      // The keyboard's Enter only closes it; Done or Cancel decides.
+      enterSubmits: false,
     );
 
 /// The current profile and the pages the session itself raises.
@@ -245,7 +246,8 @@ class ProfileSession extends ChangeNotifier {
   /// Switch profile: the same picker as at boot, over the session. The
   /// current profile stays open (choosing it, or B, goes back to it); another
   /// profile or Guest goes straight to the Switching page (one confirmation
-  /// only while a game runs); Add profile creates one and switches to it.
+  /// only while a game runs; a locked profile's PIN first); Add profile
+  /// creates one and switches to it.
   Future<void> switchProfile(BuildContext context) async {
     final ProfilesState state;
     try {
@@ -268,6 +270,7 @@ class ProfileSession extends ChangeNotifier {
         state: state,
         current: me,
         system: services.system,
+        changes: profiles.changes,
       ),
     );
     if (tile == null || tile.current || !context.mounted) return;
@@ -280,12 +283,50 @@ class ProfileSession extends ChangeNotifier {
       if (made == null || !context.mounted) return;
       if (!await _confirmGame(context)) return;
       if (!context.mounted) return;
-      await startSwitch(context, made.id, made.name);
+      // Its PIN was just typed twice: no third time.
+      await startSwitch(
+        context,
+        made.id,
+        made.name,
+        pin: made.locked ? made.pin : null,
+      );
       return;
     }
     if (!await _confirmGame(context)) return;
     if (!context.mounted) return;
-    await startSwitch(context, tile.id!, tile.name);
+    await startSwitch(
+      context,
+      tile.id!,
+      tile.name,
+      locked: tile.locked,
+      avatar: tile.kind == PickerTileKind.profile
+          ? ProfileAvatar(
+              initial: tile.initial ?? '?',
+              color: tile.color,
+              locked: true,
+              size: 200,
+            )
+          : null,
+    );
+  }
+
+  /// "Switch to this profile" (Settings -> Profiles): as choosing its tile in
+  /// the picker.
+  Future<void> switchToProfile(BuildContext context, ProfileInfo p) async {
+    if (!await _confirmGame(context)) return;
+    if (!context.mounted) return;
+    await startSwitch(
+      context,
+      p.id,
+      p.name,
+      locked: p.locked,
+      avatar: ProfileAvatar(
+        initial: p.initial,
+        color: p.color,
+        locked: true,
+        size: 200,
+      ),
+    );
   }
 
   /// A running game loses what it has not saved: the one question before a
@@ -306,19 +347,58 @@ class ProfileSession extends ChangeNotifier {
   }
 
   /// `session.switch_profile`, then the Switching page until the session
-  /// ends (or the switch is cancelled).
-  Future<void> startSwitch(BuildContext context, String id, String name) async {
-    try {
-      await profiles.switchTo(id);
-    } on SystemException catch (e) {
-      if (context.mounted) {
-        await showMessage(context, title: "Couldn't switch", body: e.message);
-      }
-      return;
-    }
+  /// ends (or the switch is cancelled). A [locked] profile's PIN is asked
+  /// first, on the PIN pad, while this session stays as it is: a wrong PIN
+  /// says so and B goes back, nothing closes. Only the right PIN starts the
+  /// switch (the daemon checks it before closing anything, and the greeter
+  /// then enters the profile without asking again). [pin]: already known
+  /// (a profile just created).
+  Future<void> startSwitch(
+    BuildContext context,
+    String id,
+    String name, {
+    bool locked = false,
+    String? pin,
+    ProfileAvatar? avatar,
+  }) async {
+    // From here on, switch events belong to this switch (not to one started
+    // elsewhere).
     _switching = true;
-    _lock?.close();
     try {
+      if (locked && pin == null) {
+        final typed = await showPinEntry(
+          context,
+          title: 'Switch to $name',
+          body:
+              "Type $name's PIN. Nothing in this profile closes until it is "
+              'right.',
+          avatar: avatar,
+          forgotPinFor: name,
+          check: (p) async {
+            try {
+              await profiles.switchTo(id, pin: p);
+              return const PinAccepted();
+            } catch (e) {
+              return PinAttempt.fromError(e);
+            }
+          },
+        );
+        if (typed == null) return;
+      } else {
+        try {
+          await profiles.switchTo(id, pin: pin);
+        } on SystemException catch (e) {
+          if (context.mounted) {
+            await showMessage(
+              context,
+              title: "Couldn't switch",
+              body: e.message,
+            );
+          }
+          return;
+        }
+      }
+      _lock?.close();
       await modals.show<void>(
         (context, modal) => SwitchingPage(
           modal: modal,
@@ -396,7 +476,7 @@ class ProfileSession extends ChangeNotifier {
 
 /// A new profile from Settings or the in-session picker: the form, the
 /// create job ("Getting things ready"). Null: given up or it failed (said).
-Future<({String id, String name})?> createProfileFlow(
+Future<({String id, String name, String pin, bool locked})?> createProfileFlow(
   BuildContext context,
   SystemServices services, {
   required List<String> taken,
@@ -434,7 +514,9 @@ Future<({String id, String name})?> createProfileFlow(
     job: job.job,
     what: "Creating ${form.name}'s profile... (about a minute)",
   );
-  return ok ? (id: job.id, name: form.name) : null;
+  return ok
+      ? (id: job.id, name: form.name, pin: form.pin, locked: form.locked)
+      : null;
 }
 
 /// The picker inside a session: the boot picker's screen with the current
@@ -447,11 +529,16 @@ class SessionPickerPage extends StatefulWidget {
     required this.state,
     required this.current,
     this.system,
+    this.changes,
   });
 
   final ModalHandle<PickerTile> modal;
   final ProfilesState state;
   final CurrentProfile? current;
+
+  /// `profiles_changed`: the tiles follow it (a profile removed or added
+  /// while the picker is up).
+  final Stream<List<ProfileInfo>>? changes;
 
   /// Power (sleep, restart, shut down); null: no Power row.
   final SystemRepository? system;
@@ -463,6 +550,31 @@ class SessionPickerPage extends StatefulWidget {
 class _SessionPickerPageState extends State<SessionPickerPage> {
   String? _message;
   bool _focused = false;
+  late ProfilesState _state = widget.state;
+  StreamSubscription<List<ProfileInfo>>? _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    _sub = widget.changes?.listen((list) {
+      if (!mounted) return;
+      setState(
+        () => _state = ProfilesState(
+          profiles: list,
+          guestEnabled: _state.guestEnabled,
+          guestUsage: _state.guestUsage,
+          max: _state.max,
+          firstBoot: _state.firstBoot,
+        ),
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    unawaited(_sub?.cancel());
+    super.dispose();
+  }
 
   bool get _guestSession => widget.current?.guest ?? false;
 
@@ -470,7 +582,7 @@ class _SessionPickerPageState extends State<SessionPickerPage> {
     final me = widget.current?.id;
     return pickerTiles(
       profiles: [
-        for (final p in widget.state.profiles)
+        for (final p in _state.profiles)
           PickerTile.profile(
             id: p.id,
             name: p.name,
@@ -481,9 +593,9 @@ class _SessionPickerPageState extends State<SessionPickerPage> {
             current: !_guestSession && p.id == me,
           ),
       ],
-      guest: widget.state.guestEnabled || _guestSession,
+      guest: _state.guestEnabled || _guestSession,
       guestCurrent: _guestSession,
-      max: widget.state.max,
+      max: _state.max,
     );
   }
 
@@ -560,6 +672,22 @@ class _SwitchingPageState extends State<SwitchingPage> {
   String? _error;
   bool _busy = false;
 
+  /// Seconds since the last `switch_blocked`: the pop-up keeps counting
+  /// ("YouTube isn't responding (14 s)") from its `waited_s`.
+  int _since = 0;
+  Timer? _tick;
+
+  void _setBlocked(SwitchBlocked? b) {
+    _blocked = b;
+    _since = 0;
+    _tick?.cancel();
+    _tick = b == null
+        ? null
+        : Timer.periodic(const Duration(seconds: 1), (_) {
+            if (mounted) setState(() => _since++);
+          });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -581,14 +709,15 @@ class _SwitchingPageState extends State<SwitchingPage> {
     switch (e) {
       case SwitchProgress():
         _progress = e;
-        _blocked = null;
+        _setBlocked(null);
       case SwitchBlocked():
-        _blocked = e;
+        _setBlocked(e);
     }
   }
 
   @override
   void dispose() {
+    _tick?.cancel();
     _sub?.cancel();
     super.dispose();
   }
@@ -606,7 +735,7 @@ class _SwitchingPageState extends State<SwitchingPage> {
         widget.modal.close();
         return;
       }
-      setState(() => _blocked = null);
+      setState(() => _setBlocked(null));
     } on SystemException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
@@ -623,11 +752,13 @@ class _SwitchingPageState extends State<SwitchingPage> {
     final stage = switch (_progress.stage) {
       SwitchStage.closingApps =>
         _progress.appName == null
-            ? 'Closing the apps...'
+            ? 'Closing apps...'
             : 'Closing ${_progress.appName}...',
       SwitchStage.closingSteam => 'Closing Steam (it saves to the cloud)...',
-      SwitchStage.ending ||
-      SwitchStage.cancelled => 'Opening the profile picker...',
+      SwitchStage.ending || SwitchStage.cancelled =>
+        widget.targetName == null
+            ? 'Opening the profile picker...'
+            : 'Opening ${widget.targetName}...',
     };
     return FullPage(
       title: widget.targetName == null
@@ -641,7 +772,7 @@ class _SwitchingPageState extends State<SwitchingPage> {
             StatusLine(stage, busy: true)
           else ...[
             Text(
-              "${b.appName} isn't responding (${b.waited.inSeconds} s).",
+              "${b.appName} isn't responding (${b.waited.inSeconds + _since} s).",
               style: t.title,
             ),
             const SizedBox(height: HinterTokens.s1),
@@ -680,107 +811,6 @@ class _SwitchingPageState extends State<SwitchingPage> {
                       enabled: !_busy,
                     ),
                   ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------- hold A
-
-/// "Hold A for 3 seconds to remove Sam": A held down fills the bar; letting
-/// go early starts over. Resolves true when held long enough.
-Future<bool> showHoldToConfirm(
-  BuildContext context, {
-  required String title,
-  required String body,
-  Duration hold = const Duration(seconds: 3),
-}) async =>
-    await ModalScope.of(context).show<bool>(
-      (context, modal) =>
-          HoldToConfirmPage(modal: modal, title: title, body: body, hold: hold),
-    ) ??
-    false;
-
-class HoldToConfirmPage extends StatefulWidget {
-  const HoldToConfirmPage({
-    super.key,
-    required this.modal,
-    required this.title,
-    required this.body,
-    this.hold = const Duration(seconds: 3),
-  });
-
-  final ModalHandle<bool> modal;
-  final String title;
-  final String body;
-  final Duration hold;
-
-  @override
-  State<HoldToConfirmPage> createState() => _HoldToConfirmPageState();
-}
-
-class _HoldToConfirmPageState extends State<HoldToConfirmPage>
-    with SingleTickerProviderStateMixin {
-  late final _bar = AnimationController(vsync: this, duration: widget.hold)
-    ..addStatusListener((s) {
-      if (s == AnimationStatus.completed) widget.modal.close(true);
-    });
-
-  @override
-  void initState() {
-    super.initState();
-    widget.modal.region.onRaw = (action, phase) {
-      if (action != NavAction.accept) return false;
-      if (phase == NavPhase.press) {
-        unawaited(_bar.forward(from: 0));
-      } else if (phase == NavPhase.release) {
-        _bar.stop();
-        _bar.value = 0;
-      }
-      return true;
-    };
-  }
-
-  @override
-  void dispose() {
-    _bar.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HinterTheme.of(context);
-    final region = widget.modal.region;
-    region.setRows([const NavRow('hold', 1)]);
-    return FullPage(
-      title: widget.title,
-      subtitle: 'B goes back.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(widget.body, style: t.body),
-          const SizedBox(height: HinterTokens.s4),
-          NavFocusable(
-            region: region,
-            rowKey: 'hold',
-            col: 0,
-            scrollIntoView: false,
-            builder: (_, f) => HButton(
-              label: 'Hold A',
-              focused: f,
-              danger: true,
-              primary: true,
-            ),
-          ),
-          const SizedBox(height: HinterTokens.s3),
-          SizedBox(
-            width: 900,
-            child: AnimatedBuilder(
-              animation: _bar,
-              builder: (context, _) => HBar(fraction: _bar.value),
-            ),
           ),
         ],
       ),

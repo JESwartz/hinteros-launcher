@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../nav/nav_controller.dart';
@@ -431,7 +433,9 @@ class _NavTextFieldState extends State<NavTextField> {
 /// Asks for a line of text. [submit] runs on "OK"/Enter with the text and
 /// returns an error message to show (the dialog stays open, so a wrong
 /// password can be retried) or null when it worked (the dialog closes with
-/// the text). Null result: cancelled.
+/// the text). Null result: cancelled. [enterSubmits] false: Enter (the
+/// on-screen keyboard's too) only closes the keyboard and moves to the
+/// submit button; the person still chooses it or Cancel.
 Future<String?> showTextEntry(
   BuildContext context, {
   required String title,
@@ -442,8 +446,10 @@ Future<String?> showTextEntry(
   String submitLabel = 'OK',
   Future<String?> Function(String text)? submit,
   Widget? extra,
+  bool enterSubmits = true,
 }) => ModalScope.of(context).show<String>(
   (context, modal) => _TextEntryDialog(
+    enterSubmits: enterSubmits,
     modal: modal,
     title: title,
     body: body,
@@ -458,6 +464,7 @@ Future<String?> showTextEntry(
 
 class _TextEntryDialog extends StatefulWidget {
   const _TextEntryDialog({
+    required this.enterSubmits,
     required this.modal,
     required this.title,
     required this.body,
@@ -478,6 +485,7 @@ class _TextEntryDialog extends StatefulWidget {
   final String submitLabel;
   final Future<String?> Function(String text)? submit;
   final Widget? extra;
+  final bool enterSubmits;
 
   @override
   State<_TextEntryDialog> createState() => _TextEntryDialogState();
@@ -546,7 +554,13 @@ class _TextEntryDialogState extends State<_TextEntryDialog> {
           controller: _text,
           obscure: widget.secret && !_reveal,
           hint: widget.hint,
-          onSubmit: _submit,
+          onSubmit: widget.enterSubmits
+              ? _submit
+              : () {
+                  region.model.goTo(widget.secret ? 2 : 1, 1);
+                  region.changed();
+                  unawaited(region.focusCurrent());
+                },
         ),
         if (widget.secret) ...[
           const SizedBox(height: HinterTokens.s2),

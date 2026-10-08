@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../api/api.dart' show NavAction, NavPhase;
 import '../../nav/nav_controller.dart';
 import '../../nav/nav_model.dart';
 import '../../system/models.dart';
@@ -281,6 +282,12 @@ class PinController extends ChangeNotifier {
 /// A to press, B deletes (B with nothing typed calls [onBackEmpty]), the
 /// bottom row is Delete, 0 and OK. Digits show as dots. A physical keyboard
 /// types digits; Enter is OK. No auto-submit (PINs have 4 to 8 digits).
+///
+/// [holdToSubmit] (removing a profile): the OK key ([submitLabel], "Delete")
+/// must be held down that long, A or Enter. Pressing it turns it slightly red
+/// at once and fills it with red from the left; letting go early empties it
+/// and nothing happens; full, [onSubmit] runs. The key that deletes a digit
+/// is then called "Erase".
 class PinPad extends StatefulWidget {
   const PinPad({
     super.key,
@@ -290,6 +297,7 @@ class PinPad extends StatefulWidget {
     this.onBackEmpty,
     this.enabled = true,
     this.submitLabel = 'OK',
+    this.holdToSubmit,
   });
 
   final NavRegion region;
@@ -302,6 +310,7 @@ class PinPad extends StatefulWidget {
   /// False while a backoff lock lasts: the keys are dimmed and do nothing.
   final bool enabled;
   final String submitLabel;
+  final Duration? holdToSubmit;
 
   /// The rows the pad puts in its region.
   static const rows = [
@@ -315,17 +324,82 @@ class PinPad extends StatefulWidget {
   State<PinPad> createState() => _PinPadState();
 }
 
-class _PinPadState extends State<PinPad> {
+class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
+  AnimationController? _hold;
+
+  /// The submit key is held down right now.
+  bool _holding = false;
+
   @override
   void initState() {
     super.initState();
     widget.region.onBack = _back;
+    final h = widget.holdToSubmit;
+    if (h != null) {
+      _hold = AnimationController(vsync: this, duration: h)
+        ..addStatusListener((s) {
+          if (s != AnimationStatus.completed || !_holding) return;
+          _holding = false;
+          if (mounted) setState(() {});
+          widget.onSubmit();
+          _hold?.value = 0;
+        });
+      widget.region.onRaw = _raw;
+    }
   }
 
   @override
   void didUpdateWidget(PinPad old) {
     super.didUpdateWidget(old);
-    if (old.region != widget.region) widget.region.onBack = _back;
+    if (old.region != widget.region) {
+      widget.region.onBack = _back;
+      if (_hold != null) widget.region.onRaw = _raw;
+    }
+  }
+
+  @override
+  void dispose() {
+    if (widget.region.onRaw == _raw) widget.region.onRaw = null;
+    _hold?.dispose();
+    super.dispose();
+  }
+
+  bool get _onSubmitKey =>
+      widget.region.model.currentRow?.key == 'pin3' &&
+      widget.region.model.col == 2;
+
+  bool get _canSubmit => widget.enabled && validPin(widget.controller.pin);
+
+  /// A (press, repeats, release) while the pad's region has focus: on the
+  /// submit key it is the hold; anywhere else the usual press.
+  bool _raw(NavAction a, NavPhase phase) {
+    if (a != NavAction.accept) return false;
+    switch (phase) {
+      case NavPhase.press:
+        if (!_onSubmitKey) return false;
+        _startHold();
+        return true;
+      case NavPhase.release:
+        _stopHold();
+        return false;
+      case NavPhase.repeat || NavPhase.unknown:
+        return _onSubmitKey;
+    }
+  }
+
+  void _startHold() {
+    final h = _hold;
+    if (h == null || _holding || !_canSubmit) return;
+    setState(() => _holding = true);
+    unawaited(h.forward(from: 0));
+  }
+
+  void _stopHold() {
+    final h = _hold;
+    if (h == null || !_holding) return;
+    h.stop();
+    h.value = 0;
+    setState(() => _holding = false);
   }
 
   bool _back() {
@@ -341,10 +415,20 @@ class _PinPadState extends State<PinPad> {
   }
 
   void _submit() {
-    if (widget.enabled && validPin(widget.controller.pin)) widget.onSubmit();
+    // Held, not pressed (the hold runs it).
+    if (_hold != null) return;
+    if (_canSubmit) widget.onSubmit();
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    final enter =
+        e.logicalKey == LogicalKeyboardKey.enter ||
+        e.logicalKey == LogicalKeyboardKey.numpadEnter;
+    if (enter && _hold != null) {
+      if (e is KeyDownEvent) _startHold();
+      if (e is KeyUpEvent) _stopHold();
+      return KeyEventResult.handled;
+    }
     if (e is! KeyDownEvent && e is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
@@ -353,8 +437,7 @@ class _PinPadState extends State<PinPad> {
       _digit(c);
       return KeyEventResult.handled;
     }
-    if (e.logicalKey == LogicalKeyboardKey.enter ||
-        e.logicalKey == LogicalKeyboardKey.numpadEnter) {
+    if (enter) {
       if (e is KeyDownEvent) _submit();
       return KeyEventResult.handled;
     }
@@ -363,18 +446,19 @@ class _PinPadState extends State<PinPad> {
 
   @override
   Widget build(BuildContext context) {
-    const labels = [
-      ['1', '2', '3'],
-      ['4', '5', '6'],
-      ['7', '8', '9'],
-      ['Delete', '0', 'OK'],
+    final hold = _hold;
+    final labels = [
+      const ['1', '2', '3'],
+      const ['4', '5', '6'],
+      const ['7', '8', '9'],
+      [hold == null ? 'Delete' : 'Erase', '0', 'OK'],
     ];
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
       onKeyEvent: _onKey,
       child: ListenableBuilder(
-        listenable: widget.controller,
+        listenable: Listenable.merge([widget.controller, ?hold]),
         builder: (context, _) => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -393,7 +477,7 @@ class _PinPadState extends State<PinPad> {
                       col: c,
                       scrollIntoView: false,
                       onSelect: switch (labels[r][c]) {
-                        'Delete' => () => widget.controller.delete(),
+                        'Delete' || 'Erase' => () => widget.controller.delete(),
                         'OK' => _submit,
                         final d => () => _digit(d),
                       },
@@ -406,9 +490,11 @@ class _PinPadState extends State<PinPad> {
                             widget.enabled &&
                             (labels[r][c] != 'OK' ||
                                 validPin(widget.controller.pin)) &&
-                            (labels[r][c] != 'Delete' ||
-                                !widget.controller.isEmpty),
+                            (r < 3 || c != 0 || !widget.controller.isEmpty),
                         wide: labels[r][c].length > 1,
+                        hold: hold != null && labels[r][c] == 'OK'
+                            ? (_holding ? hold.value : null)
+                            : null,
                       ),
                     ),
                   ],
@@ -428,6 +514,7 @@ class _Key extends StatelessWidget {
     required this.focused,
     required this.enabled,
     required this.wide,
+    this.hold,
   });
 
   final String label;
@@ -435,9 +522,15 @@ class _Key extends StatelessWidget {
   final bool enabled;
   final bool wide;
 
+  /// Held down (0 to 1 of the time needed): a light red key filling with
+  /// red from the left. Null: not held.
+  final double? hold;
+
   @override
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
+    final base = focused ? t.surfaceHigh : t.surface;
+    final h = hold;
     return FocusFrame(
       focused: focused,
       radius: HinterTokens.radiusSmall,
@@ -445,20 +538,40 @@ class _Key extends StatelessWidget {
       child: Container(
         width: 150,
         height: 104,
-        alignment: Alignment.center,
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: focused ? t.surfaceHigh : t.surface,
+          color: h == null ? base : Color.lerp(base, t.danger, 0.35),
           borderRadius: BorderRadius.circular(HinterTokens.radiusSmall),
           border: Border.all(
-            color: enabled ? t.textDim : t.textDim.withValues(alpha: 0.4),
+            color: h != null
+                ? t.danger
+                : (enabled ? t.textDim : t.textDim.withValues(alpha: 0.4)),
             width: 2,
           ),
         ),
-        child: Text(
-          label,
-          style: (wide ? t.label : t.title).copyWith(
-            color: enabled ? t.text : t.textDim.withValues(alpha: 0.6),
-          ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (h != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: h.clamp(0.0, 1.0),
+                  heightFactor: 1,
+                  child: ColoredBox(color: t.danger),
+                ),
+              ),
+            Center(
+              child: Text(
+                label,
+                style: (wide ? t.label : t.title).copyWith(
+                  color: h != null
+                      ? t.text
+                      : (enabled ? t.text : t.textDim.withValues(alpha: 0.6)),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -565,8 +678,10 @@ Future<String?> showPinEntry(
   List<({String label, VoidCallback onSelect})> extraActions = const [],
   bool canLeave = true,
   String? forgotPinFor,
+  Duration? holdToSubmit,
 }) => ModalScope.of(context).show<String>(
   (context, modal) => PinEntryPage(
+    holdToSubmit: holdToSubmit,
     forgotPinFor: forgotPinFor,
     modal: modal,
     title: title,
@@ -597,6 +712,7 @@ class PinEntryPage extends StatefulWidget {
     this.canLeave = true,
     this.extraActions = const [],
     this.forgotPinFor,
+    this.holdToSubmit,
   });
 
   final ModalHandle<String> modal;
@@ -618,6 +734,10 @@ class PinEntryPage extends StatefulWidget {
   /// Asking for an existing PIN: whose ([forgotPinAdmin] for the admin
   /// profile's). Shows how a forgotten one is removed. Null: a new PIN is
   /// being chosen (no hint).
+  /// The submit key ([submitLabel]) is held this long instead of pressed
+  /// (removing a profile).
+  final Duration? holdToSubmit;
+
   final String? forgotPinFor;
 
   @override
@@ -730,7 +850,12 @@ class _PinEntryPageState extends State<PinEntryPage> {
                   const StatusLine('Checking...', busy: true),
                 const SizedBox(height: HinterTokens.s3),
                 Text(
-                  'Type the PIN with the pad, then OK. B deletes a digit'
+                  '${switch (widget.holdToSubmit) {
+                    null => 'Type the PIN with the pad, then OK.',
+                    final h => 'Type the PIN with the pad, then hold A on '
+                        '${widget.submitLabel} for ${h.inSeconds} seconds; '
+                        'letting go early stops it.',
+                  }} B deletes a digit'
                   '${widget.canLeave ? '; B with nothing typed goes back' : ''}.',
                   style: t.caption,
                 ),
@@ -753,6 +878,7 @@ class _PinEntryPageState extends State<PinEntryPage> {
                 controller: _pin,
                 enabled: !_busy && until == null,
                 submitLabel: widget.submitLabel,
+                holdToSubmit: widget.holdToSubmit,
                 onSubmit: () => unawaited(_submit()),
                 onBackEmpty: widget.canLeave ? widget.modal.close : null,
               ),

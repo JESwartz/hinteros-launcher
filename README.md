@@ -110,21 +110,32 @@ launcher's proposal until the daemon's M7 schema is vendored (see `m7/DECISIONS.
   `system.profiles.setup_admin`), the one-time "Set your PIN" (`pin_set` false) and the sleep
   lock screen (`screen_locked`, `lock_state`, `session.unlock`). The profile chip (last item of
   the tab row) opens Switch profile / Profile settings (End guest session for the guest).
-  Switch profile (chip, lock screen, Settings) opens the boot picker's screen over the session:
+  Switch profile (chip, lock screen) opens the boot picker's screen over the session:
   the open profile is marked "Open" and focused, choosing it (or B) goes back to where you were
   (nothing is called); another profile or Guest goes straight to the Switching page
   (`switch_progress`) and the not-responding pop-up (`switch_blocked`: Keep waiting, Force
   close, Cancel switch), with one question only while a Steam game runs; Add profile creates one
-  ("Getting things ready") and switches to it. The target's PIN is asked by the picker on the
-  other side.
+  ("Getting things ready") and switches to it. A locked profile's PIN is asked first, in this
+  session, on the same PIN pad ("Switch to Sam"): a wrong PIN says so and nothing closes, B goes
+  back; only the right one starts the switch (`session.switch_profile {id, pin}`), and the greeter
+  then enters the profile with no picker. The not-responding pop-up counts up every second from
+  `switch_blocked.waited_s`.
+- **Session start**: "Loading Sam…" until Home has its data (at most 20 s); during the first 20 s a
+  connection that is not up (yet, or again: the session daemon restarts once as a session
+  starts) shows that page, never "Can't reach the HinterOS service".
+- **Text fields in the profile flows** (names): Enter, also the on-screen keyboard's, only closes
+  the keyboard and moves to Done; Done or Cancel decides.
 - **Forgotten PIN**: every page that asks for an existing PIN (picker, lock screen, own-PIN
   checks, admin-PIN prompts) says "Forgot your PIN?": the person who set up the box removes it
   from a terminal (`sudo hinteros-system reset-pin <name>`), and the profile chooses a new one
   ("Set your PIN") at its next start. There is no in-UI recovery of the admin profile's PIN;
   another profile's PIN can still be reset with the admin PIN.
-- **Settings -> Profiles** (`profiles_section.dart`): profiles with storage, Add profile, Rename,
-  Colour, Change PIN, Lock this profile, App history (per-profile app rollback), Remove (two
-  confirmations, "Hold A for 3 seconds", the PIN); the admin profile also edits the starter apps
+- **Settings -> Profiles** (`profiles_section.dart`): profiles with storage and Add profile; a
+  profile's options: Switch to this profile (another one; as in the picker, its PIN first if
+  locked), Rename, Colour, Change PIN, Lock this profile / Unlock this profile, App history
+  (per-profile app rollback), Remove (the confirmation, then the PIN pad whose OK is Delete,
+  held for 3 seconds: it turns light red at once and fills with red; letting go early empties
+  it; a wrong PIN deletes nothing); the admin profile also edits the starter apps
   and turns the guest on or off. Actions on another profile ask for the admin PIN on the same
   pad.
 - **Apps per profile**: the Store installs and removes "for this profile"; an app that needs a
@@ -709,8 +720,9 @@ The comparator allows 0.05% differing pixels.
 `test/golden/greeter_test.dart` covers the picker (`greeter_*`: tiles, PIN pad with the "Forgot your
 PIN?" hint, Add profile, `greeter_loading` after a login) and `test/golden/profiles_test.dart` the
 profile screens in a session (`profiles_*`: the chip menu, `profiles_switch_picker` with the open
-profile marked, not responding, the lock screen, Settings -> Profiles, `profiles_startup_loading`
-for the first frames).
+profile marked, `profiles_switch_pin` (a locked target's PIN in the session), not responding,
+the lock screen, Settings -> Profiles, `profiles_delete_pin_hold` (Delete half held),
+`profiles_startup_loading` for the first frames).
 
 ```
 nix run .#update-goldens   # renders them in the Nix sandbox (same environment as the check), copies them in

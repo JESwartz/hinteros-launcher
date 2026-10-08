@@ -41,14 +41,30 @@ void main() {
       await p.rename('p3', 'Samantha', adminPin: '2468');
       expect(m.profiles.byId('p3')!.name, 'Samantha');
 
-      // The backoff: the 4th wrong PIN locks.
-      for (var i = 0; i < 3; i++) {
-        await expectLater(p.setLocked(true, '0000'), throwsA(anything));
+      // The admin profile's PIN has no backoff: wrong stays only wrong.
+      for (var i = 0; i < 6; i++) {
+        final e = await p
+            .setLocked(true, '0000')
+            .then<Object?>((_) => null, onError: (Object e) => e);
+        expect(PinRefusal.of(e!)!.retryAt, isNull);
       }
-      final e = await p
-          .setLocked(true, '0000')
-          .then<Object?>((_) => null, onError: (Object e) => e);
-      expect(PinRefusal.of(e!)!.retryAt, isNotNull);
+      await p.setLocked(true, '2468');
+
+      // A locked target: its PIN before anything closes (a wrong one
+      // starts nothing).
+      await expectLater(
+        p.switchTo('p3', pin: '0000'),
+        throwsA(
+          isA<SystemException>().having(
+            (e) => PinRefusal.of(e)!.kind,
+            'pin',
+            PinKind.target,
+          ),
+        ),
+      );
+      expect(m.profiles.log, isNot(contains('switch:p3')));
+      await p.switchTo('p3', pin: '1357');
+      expect(m.profiles.log, contains('switch:p3'));
     });
 
     test('create and remove are jobs with their kinds', () async {
@@ -77,7 +93,7 @@ void main() {
       m.profiles.blockingApp = (id: 'youtube', name: 'YouTube');
       final events = <SwitchEvent>[];
       final sub = p.switchEvents.listen(events.add);
-      await p.switchTo('p3');
+      await p.switchTo('p3', pin: '1357');
       await Future<void>.delayed(Duration.zero);
       expect(events.first, isA<SwitchProgress>());
       final b = events.whereType<SwitchBlocked>().single;

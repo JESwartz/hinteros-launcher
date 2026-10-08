@@ -79,6 +79,7 @@ class Picker {
 }
 
 void main() {
+  refreshTests();
   testWidgets('the picker lists the profiles, Guest and Add profile; '
       'an unlocked profile opens at once', (t) async {
     final p = Picker(t);
@@ -275,5 +276,21 @@ void main() {
     await p.press(NavAction.back);
     expect(find.text('Who is watching?'), findsOneWidget);
     expect(p.greeter.log, contains('cancel'));
+  });
+}
+
+void refreshTests() {
+  testWidgets('the tiles follow the public view: a removed profile goes', (
+    t,
+  ) async {
+    final p = Picker(t);
+    await p.pump();
+    expect(find.text('Sam'), findsOneWidget);
+    // Removed meanwhile (its removal job ended after the picker came up).
+    p.box.profiles.removeWhere((x) => x.id == 'p3');
+    await t.pump(greeterRefreshEvery);
+    await t.pumpAndSettle();
+    expect(find.text('Sam'), findsNothing);
+    expect(find.text('James'), findsOneWidget);
   });
 }

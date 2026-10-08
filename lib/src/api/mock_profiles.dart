@@ -179,8 +179,16 @@ class MockProfileSession {
   );
 
   /// The service's PIN check with its backoff: 3 free failures, then 30 s
-  /// (the mock's first lock), doubling.
+  /// (the mock's first lock), doubling. The admin profile's PIN has no
+  /// backoff: wrong is only wrong.
   void _check(MockWireProfile p, String? pin, String which) {
+    if (p.admin) {
+      p
+        ..failures = 0
+        ..lockedUntil = null;
+      if (pin != null && pin == p.pin) return;
+      throw _pinRequired(which);
+    }
     final until = p.lockedUntil;
     if (until != null && _nowS < until) {
       throw _pinRequired(which, (until - _nowS) * 1000);
@@ -199,6 +207,11 @@ class MockProfileSession {
       throw _pinRequired(which, s * 1000);
     }
     throw _pinRequired(which);
+  }
+
+  /// A locked target other than this session's profile: its PIN first.
+  void _lockedTarget(MockWireProfile t, String? pin) {
+    if (t.id != current && t.locked && t.pin != null) _check(t, pin, 'target');
   }
 
   MockWireProfile _profile(String id) =>
@@ -262,7 +275,8 @@ class MockProfileSession {
       case 'profile.current':
         return _current().toJson();
       case 'session.switch_profile':
-        return _switchTo(SessionSwitchProfileParams.fromJson(p).id as String);
+        final c = SessionSwitchProfileParams.fromJson(p);
+        return _switchTo(c.id as String, pin: c.pin);
       case 'session.switch_wait':
         if (!_blocked) {
           throw const ApiException(
@@ -572,10 +586,14 @@ class MockProfileSession {
         onTermsAccepted?.call(c.id);
         return const SystemAppsAcceptTermsResult().toJson();
       case 'system.profiles.switch':
-        final id = SystemProfilesSwitchParams.fromJson(p).id as String;
-        if (id != 'guest') _profile(id);
+        final c = SystemProfilesSwitchParams.fromJson(p);
+        final id = c.id as String;
+        if (id != 'guest') _lockedTarget(_profile(id), c.pin);
         log.add('switch_hint:$id');
         return const SystemProfilesSwitchResult().toJson();
+      case 'system.profiles.switch_cancel':
+        log.add('switch_hint_dropped');
+        return const SystemProfilesSwitchCancelResult().toJson();
       case 'system.profiles.unlock':
         final c = SystemProfilesUnlockParams.fromJson(p);
         _check(_profile(current), c.pin, 'self');
@@ -698,7 +716,7 @@ class MockProfileSession {
 
   // ---- the switch
 
-  Map<String, dynamic> _switchTo(String id) {
+  Map<String, dynamic> _switchTo(String id, {String? pin}) {
     if (id == current) {
       throw const ApiException(
         ApiErrorCode.invalidParams,
@@ -706,7 +724,7 @@ class MockProfileSession {
         {'field': 'id', 'reason': 'same'},
       );
     }
-    if (id != 'guest') _profile(id);
+    if (id != 'guest') _lockedTarget(_profile(id), pin);
     if (_switching) {
       throw const ApiException(
         ApiErrorCode.invalidParams,
