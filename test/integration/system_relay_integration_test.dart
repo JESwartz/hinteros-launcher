@@ -184,7 +184,7 @@ void main() {
         final c = await session('${dir.path}/no-such-system.sock');
         await c.waitConnected();
         expect(c.status, isA<Connected>());
-        expect((c.status as Connected).apiVersion, '0.10');
+        expect((c.status as Connected).apiVersion, '0.11');
 
         final e = await c.systemInfo().then<ApiException?>(
           (_) => null,
@@ -438,7 +438,7 @@ void main() {
     test('store.list: the index merged with the installed apps', () async {
       final c = await withSystem(catalog: true);
       await c.waitConnected();
-      expect((c.status as Connected).apiVersion, '0.10');
+      expect((c.status as Connected).apiVersion, '0.11');
       // state.json of the fake root lists steam as installed.
       expect((await c.systemSettingsGet()).settings.apps, ['steam']);
       final l = await c.storeList();

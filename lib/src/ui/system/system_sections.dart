@@ -197,12 +197,15 @@ class _UpdatesSectionState extends State<UpdatesSection> {
         } else if (a != null) {
           p.add(
             StatusLine(
-              'Update available: ${a.version}'
+              'Update available: HinterOS ${a.version}'
               '${a.isSecurity ? ' (security update, severity ${a.severity!.label})' : ''}. '
               '${a.summary}',
               error: a.isSecurity,
             ),
           );
+          if (a.securitySummary != null) {
+            p.add(Text(a.securitySummary!, style: t.body));
+          }
         } else if (status.checkedAt != null) {
           p.add(const StatusLine('HinterOS is up to date.', ok: true));
         } else {
@@ -239,7 +242,7 @@ class _UpdatesSectionState extends State<UpdatesSection> {
             onSelect: () async {
               final r = await showConfirm(
                 context,
-                title: 'Update to ${a.version}?',
+                title: 'Update to HinterOS ${a.version}?',
                 body:
                     'It downloads, installs and then restarts your session. '
                     'If it fails, nothing is changed.',

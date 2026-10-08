@@ -400,7 +400,7 @@ class MockUpdates implements UpdatesRepository {
 }
 
 UpdateStatus mockUpToDate() => const UpdateStatus(
-  currentVersion: '2026.10.1',
+  currentVersion: '0.6.0',
   currentRev: 'a3f9c0de5b1e4c7a9d2f8b6e0c1a3d5f7b9e2c4a',
 );
 
@@ -408,7 +408,7 @@ UpdateStatus mockUpToDate() => const UpdateStatus(
 AvailableUpdate mockOrdinaryUpdate({bool catalogChanged = true}) =>
     AvailableUpdate(
       rev: '5d1c8e3f7a2b4096c1e8d3f5a7b9c0e2d4f6a8b1',
-      version: '2026.10.2',
+      version: '0.6.1',
       date: DateTime(2026, 10, 5),
       summary: 'New apps in the Store, Wi-Fi reconnect fix.',
       signer: 'release',
@@ -419,18 +419,21 @@ AvailableUpdate mockOrdinaryUpdate({bool catalogChanged = true}) =>
 
 AvailableUpdate mockSecurityUpdate({
   SecuritySeverity severity = SecuritySeverity.high,
+  String? securitySummary =
+      'A website could take over the browser in a profile.',
 }) => AvailableUpdate(
   rev: '9e4b2a7c1d6f3085b2c9e7a4d1f6b3c8e5a2d9f0',
-  version: '2026.10.3',
+  version: '0.6.2',
   date: DateTime(2026, 10, 6),
   summary: 'Fixes a flaw in the web engine used by Firefox and the web apps.',
   severity: severity,
+  securitySummary: securitySummary,
   signer: 'release',
   newApps: const [CatalogChange('mpv', 'Video player')],
 );
 
 UpdateStatus mockBehind(AvailableUpdate a) => UpdateStatus(
-  currentVersion: '2026.10.1',
+  currentVersion: '0.6.0',
   currentRev: 'a3f9c0de5b1e4c7a9d2f8b6e0c1a3d5f7b9e2c4a',
   available: a,
   checkedAt: DateTime(2026, 10, 6, 8),

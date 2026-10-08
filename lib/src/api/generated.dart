@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.10).
+// Source: schema/session-api.json (session API 0.11).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.10';
+const apiVersion = '0.11';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -1414,6 +1414,8 @@ class AvailableUpdate {
     required this.commits,
     required this.newApps,
     required this.removedApps,
+    this.version,
+    this.securitySummary,
   });
 
   /// A full git commit id.
@@ -1437,6 +1439,12 @@ class AvailableUpdate {
 
   /// Installed apps the update takes away (removed from, or missing in, the target's catalog); null if unknown (since 0.3). The update screen names them with the reason.
   final List<RemovedApp>? removedApps;
+
+  /// (Session API 0.11; optional in system API 0.3.) The release rev carries: its release/version file if that matches ^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$ (at most 32 characters), otherwise the first 12 hex digits of rev. The launcher shows 'HinterOS &lt;version&gt;'. Absent from older services: show the short rev.
+  final String? version;
+
+  /// (Session API 0.11; optional in system API 0.3.) The newest Security-Summary: trailer among the new commits: one line (control characters removed), at most 120 characters; the security notice shows it under the severity. Null if none; absent from older services.
+  final String? securitySummary;
 
   factory AvailableUpdate.fromJson(Map<String, dynamic> json) =>
       AvailableUpdate(
@@ -1464,6 +1472,10 @@ class AvailableUpdate {
                         RemovedApp.fromJson((x as Map).cast<String, dynamic>()),
                   )
                   .toList(),
+        version: json['version'] == null ? null : json['version'] as String,
+        securitySummary: json['security_summary'] == null
+            ? null
+            : json['security_summary'] as String,
       );
 
   Map<String, dynamic> toJson() => {
@@ -1479,6 +1491,8 @@ class AvailableUpdate {
     'removed_apps': removedApps == null
         ? null
         : removedApps!.map((x) => x.toJson()).toList(),
+    'version': ?version,
+    'security_summary': ?securitySummary,
   };
 
   @override

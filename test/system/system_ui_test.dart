@@ -142,7 +142,7 @@ void main() {
       final h = harness();
       await h.pump(t);
       await enterSettingsEntry(t, 'about');
-      expect(find.text('2026.10.1'), findsOneWidget);
+      expect(find.text('0.6.0'), findsOneWidget);
       expect(find.text('hinteros-livingroom.local'), findsOneWidget);
     });
   });
@@ -289,7 +289,7 @@ void main() {
       await enterSettingsEntry(t, 'updates');
       await press(t, [kEnter]); // Check for updates
       expect(
-        find.textContaining('Update available: 2026.10.2'),
+        find.textContaining('Update available: HinterOS 0.6.1'),
         findsOneWidget,
       );
       await press(t, [kDown, kEnter, kRight, kEnter]); // Update now, confirm
@@ -328,7 +328,7 @@ void main() {
       expect(find.textContaining('Nothing was changed'), findsOneWidget);
       await press(t, [kEnter]); // Close
       expect(find.text("The update didn't finish"), findsNothing);
-      expect(h.services.mockUpdates.status.currentVersion, '2026.10.1');
+      expect(h.services.mockUpdates.status.currentVersion, '0.6.0');
     });
 
     testWidgets('cancel works before activation, not after', (t) async {
@@ -377,7 +377,7 @@ void main() {
       expect(find.text('Restart session'), findsOneWidget);
       await press(t, [kEnter]);
       expect(h.services.mockSystem.log, ['session:restart']);
-      expect(h.services.mockUpdates.status.currentVersion, '2026.10.2');
+      expect(h.services.mockUpdates.status.currentVersion, '0.6.1');
     });
 
     testWidgets('an unreachable update server is said plainly', (t) async {
