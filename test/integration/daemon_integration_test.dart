@@ -40,11 +40,19 @@ void main() {
     keyLog = File('${dir.path}/keys.log');
     // A dev-desktop session: no gamescope, no InputPlumber, and two configured
     // apps that exit by themselves (`sleep` keeps running until the test ends).
+    // A Steam binary for the built-in `steam` entry (the Nix sandbox has
+    // none on PATH); never started here.
+    final steam = File('${dir.path}/steam')
+      ..writeAsStringSync('#!/bin/sh\nexit 0\n');
+    Process.runSync('chmod', ['755', steam.path]);
     final config = File('${dir.path}/session.toml')
       ..writeAsStringSync('''
 [osk]
 # No keyboard process to start; the daemon still tracks its visibility.
 command = []
+
+[steam]
+path = "${steam.path}"
 
 [[apps]]
 id = "sleeper"
@@ -130,8 +138,8 @@ icon = "$iconFixture"
       final c = client = DaemonClient(socketPath: sock);
       await c.subscribeTo([EventName.homePressed]);
       final connected = await c.waitConnected();
-      expect(connected.apiVersion, '0.10');
-      expect(apiVersion, '0.10');
+      expect(connected.apiVersion, '0.12');
+      expect(apiVersion, '0.12');
       expect(connected.server.name, 'hinteros-session');
 
       expect((await c.ping(const PingParams(nonce: 'hi'))).nonce, 'hi');
@@ -356,7 +364,7 @@ icon = "$iconFixture"
         await launcher.subscribeTo([EventName.oskVisibility]);
         await launcher.waitConnected();
         final oskHello = await osk.connection.waitConnected();
-        expect(oskHello.apiVersion, '0.10');
+        expect(oskHello.apiVersion, '0.12');
         expect(
           (osk.connection as DaemonClient).clientInfo.name,
           'hinteros-osk',

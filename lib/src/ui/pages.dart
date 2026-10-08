@@ -834,6 +834,14 @@ class _SecurityNoticeState extends State<SecurityNotice> {
                     style: t.title.copyWith(color: t.danger),
                   ),
                 ),
+                if (u.securitySummary != null) ...[
+                  const SizedBox(height: HinterTokens.s2),
+                  Text(
+                    u.securitySummary!,
+                    key: const ValueKey('security-summary'),
+                    style: t.title,
+                  ),
+                ],
                 const SizedBox(height: HinterTokens.s3),
                 Text(
                   'HinterOS ${u.version} fixes a security problem.',

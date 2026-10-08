@@ -180,10 +180,8 @@ class DaemonStore implements StoreRepository {
       removeDataWarning: removeDataWarningFor(a.dataPaths),
       state: state,
       statusReason: a.statusReason,
-      missingServices: [
-        for (final s in a.missingServices ?? const <api.NamedApp>[])
-          (id: s.id, name: s.name),
-      ],
+      // Services are not in the store yet (M10): store.list carries no
+      // missing_services, so nothing is greyed out for one.
     );
   }
 
@@ -234,8 +232,9 @@ class DaemonStore implements StoreRepository {
       return (await _conn.systemAppsList()).revision;
     } on api.ApiException catch (e) {
       final data = e.data is Map ? e.data! as Map : const {};
+      // `unavailable {service: profiles, reason: schema1}`.
       final schema1 =
-          e.code == api.ApiErrorCode.unavailable && data['service'] == 'apps';
+          e.code == api.ApiErrorCode.unavailable && data['reason'] == 'schema1';
       if (!schema1 && e.code != api.ApiErrorCode.methodNotFound) rethrow;
       return (await _conn.systemSettingsGet()).revision;
     }

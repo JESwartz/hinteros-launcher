@@ -436,7 +436,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
           p.add(
             Text(
               'You are using the guest profile. Everything in it is cleared '
-              'when the box restarts, or now with End guest session.',
+              'when the box restarts.',
               style: t.body,
             ),
           );

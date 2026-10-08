@@ -37,16 +37,16 @@
       "examples": [
         {
           "name": "accepted",
-          "params": { "api_version": "0.10", "client": { "name": "hinteros-launcher", "version": "0.1.0" } },
-          "result": { "api_version": "0.10", "server": { "name": "hinteros-session", "version": "0.1.0" } }
+          "params": { "api_version": "0.12", "client": { "name": "hinteros-launcher", "version": "0.1.0" } },
+          "result": { "api_version": "0.12", "server": { "name": "hinteros-session", "version": "0.1.0" } }
         },
         {
           "name": "major mismatch",
           "params": { "api_version": "1.0", "client": { "name": "hinteros-launcher", "version": "2.0.0" } },
           "error": {
             "code": 1002,
-            "message": "API version mismatch: client 1.0, server 0.10",
-            "data": { "client_api_version": "1.0", "server_api_version": "0.10" }
+            "message": "API version mismatch: client 1.0, server 0.12",
+            "data": { "client_api_version": "1.0", "server_api_version": "0.12" }
           }
         }
       ]
@@ -286,11 +286,6 @@
       },
       "errors": ["app_not_found", "app_launch_failed", "terms_required"],
       "examples": [
-        {
-          "name": "terms not accepted yet",
-          "params": { "id": "steam" },
-          "error": { "code": 3014, "message": "steam needs its terms accepted (version 2026-09-10)", "data": { "id": "steam", "version": "2026-09-10" } }
-        },
         {
           "name": "steam game",
           "params": { "url": "steam://rungameid/1000001" },
@@ -668,14 +663,19 @@
           },
           "settings": {
             "type": "object",
-            "required": ["base", "ssh", "apps"],
+            "required": ["base", "ssh"],
             "additionalProperties": false,
             "properties": {
               "base": { "$ref": "#/$defs/Base" },
               "apps": {
-                "description": "Catalog app ids installed from the Store (state.json apps), in install order (since 0.3).",
+                "description": "Schema-1 boxes: catalog app ids installed box-wide from the Store (state.json apps), in install order (since 0.3). Absent on schema-2 boxes (0.4: apps are per profile, see apps.list).",
                 "type": "array",
                 "items": { "$ref": "#/$defs/CatalogId" }
+              },
+              "requirements": {
+                "description": "Schema-2 boxes (0.4): the box features that are on (read-only).",
+                "type": "array",
+                "items": { "$ref": "#/$defs/BoxFeature" }
               },
               "ssh": {
                 "type": "object",
@@ -1110,7 +1110,9 @@
                 "security": "high",
                 "commits": 12,
                 "new_apps": [{ "id": "moonlight", "name": "Moonlight" }],
-                "removed_apps": []
+                "removed_apps": [],
+                "version": "0.2.0",
+                "security_summary": "A website could take over the browser in a profile."
               },
               "checked_at": 1791300100
             }
@@ -1295,7 +1297,7 @@
     },
     "system.apps.install": {
       "summary": "Relayed to the system service's apps.install. Install Store apps (job). Action org.hinteros.system.apps.",
-      "description": "ids (1 to 8 catalog ids) must be in the running generation's catalog index (/run/current-system/sw/share/hinteros/catalog.json, never the caller's copy) with status available; their depends are added (transitively). Ids already installed are skipped; if nothing is left the result is job_id null. A conflict between a new app and an installed or requested one is app_conflict. Every new app with vendor terms needs accepted_terms[id] equal to the catalog's terms.version, else terms_required (the box records the acceptance: id, version, time, uid and profile, in the audit log and /var/lib/hinteros/terms-accepted.json). revision must be settings.get's (state_conflict otherwise). Free disk space must cover the new apps' sizeMiB plus the usual rebuild margin (insufficient_resources). The job writes state.json's apps from the service's typed state and runs the apply flow.",
+      "description": "ids (1 to 8 catalog ids) must be in the running generation's catalog index (/run/current-system/sw/share/hinteros/catalog.json, never the caller's copy) with status available; their depends are added (transitively). Ids already installed are skipped; if nothing is left the result is job_id null. A conflict between a new app and an installed or requested one is app_conflict. Every new app with vendor terms needs accepted_terms[id] equal to the catalog's terms.version, else terms_required (the box records the acceptance: id, version, time, uid and profile, in the audit log and /var/lib/hinteros/terms-accepted.json). revision must be settings.get's (state_conflict otherwise); 0.4, schema-2 boxes: the app revision from apps.list, and the apps are installed into the caller's own profile (a new generation of its Nix profile, no system rebuild unless a box feature must be turned on first: stage box). Free disk space must cover the new apps' sizeMiB plus the usual rebuild margin (insufficient_resources). The job writes state.json's apps from the service's typed state and runs the apply flow.",
       "since": "0.3",
       "params": {
         "type": "object",
@@ -1362,6 +1364,1204 @@
           "error": { "code": 3013, "message": "youtube depends on firefox", "data": { "id": "firefox", "conflicts_with": "youtube" } }
         },
         { "name": "not installed", "params": { "ids": ["plex-htpc"], "revision": "6b2c1e0b9f4a7d3c5e8f1a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d", "delete_data": false }, "error": { "code": 3010, "message": "plex-htpc is not installed" } }
+      ],
+      "relay": true
+    },
+    "system.apps.list": {
+      "summary": "Relayed to the system service's apps.list. The caller's own apps (0.4, schema-2 boxes): its current app env.",
+      "description": "Read-only. The caller is resolved from its uid: a profile (or the guest). revision stands for the current app generation; pass it to apps.install/apps.remove as revision. needs_terms: ids whose vendor terms this profile has not accepted at the catalog's current version (apps that came with the starter set); the launcher shows the terms on first launch and calls apps.accept_terms. A spare account gets an empty list. Schema-1 boxes (not migrated yet): unavailable {service: profiles, reason: schema1}.",
+      "since": "0.4",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": {
+        "type": "object",
+        "required": ["revision", "generation", "ids", "needs_terms", "box"],
+        "additionalProperties": false,
+        "properties": {
+          "revision": { "$ref": "#/$defs/Revision" },
+          "generation": { "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }] },
+          "ids": { "type": "array", "items": { "$ref": "#/$defs/CatalogId" } },
+          "needs_terms": { "type": "array", "items": { "$ref": "#/$defs/CatalogId" } },
+          "box": { "type": "array", "items": { "$ref": "#/$defs/BoxFeature" } }
+        }
+      },
+      "errors": ["system_unavailable", "permission_denied", "unavailable"],
+      "examples": [
+        { "name": "a profile with Steam from the starter set", "params": {}, "result": { "revision": "6b2c1e0b9f4a7d3c5e8f1a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d", "generation": 3, "ids": ["firefox", "steam", "youtube"], "needs_terms": ["steam"], "box": ["graphics32", "steam-devices"] } },
+        { "name": "not migrated yet", "params": {}, "error": { "code": 4001, "message": "this box has not moved to per-profile apps yet", "data": { "service": "profiles", "reason": "schema1" } } }
+      ],
+      "relay": true
+    },
+    "system.apps.generations": {
+      "summary": "Relayed to the system service's apps.generations. The caller's app generations (0.4), newest first.",
+      "description": "Read-only. Every generation of the caller's Nix profile of apps (the newest 3 plus the current one are kept), with the ids of its env and the system revision it was built against. apps.rollback takes one of them.",
+      "since": "0.4",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": {
+        "type": "object",
+        "required": ["generations"],
+        "additionalProperties": false,
+        "properties": {
+          "generations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["generation", "date", "ids", "system_rev", "current"],
+              "additionalProperties": false,
+              "properties": {
+                "generation": { "type": "integer", "minimum": 1 },
+                "date": { "type": "integer" },
+                "ids": { "type": "array", "items": { "$ref": "#/$defs/CatalogId" } },
+                "system_rev": { "oneOf": [{ "type": "string", "maxLength": 64 }, { "type": "null" }] },
+                "current": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      },
+      "errors": ["system_unavailable", "permission_denied", "unavailable"],
+      "examples": [
+        { "name": "two generations", "params": {}, "result": { "generations": [
+          { "generation": 2, "date": 1791300000, "ids": ["moonlight", "youtube"], "system_rev": "0f3c5a9e2b7d4c1a8e6f9b0d2c4e6a8b1d3f5a7c", "current": true },
+          { "generation": 1, "date": 1791200000, "ids": ["youtube"], "system_rev": "0f3c5a9e2b7d4c1a8e6f9b0d2c4e6a8b1d3f5a7c", "current": false } ] } }
+      ],
+      "relay": true
+    },
+    "system.apps.rollback": {
+      "summary": "Relayed to the system service's apps.rollback. Switch the caller's apps back to an earlier generation (job, 0.4). Action org.hinteros.system.apps.",
+      "description": "generation must be one of apps.generations and not the current one (not_found otherwise). If its env needs box features that are off, the job first runs the box stage (a system rebuild). Job kind apps_rollback.",
+      "since": "0.4",
+      "params": {
+        "type": "object",
+        "required": ["generation"],
+        "additionalProperties": false,
+        "properties": { "generation": { "type": "integer", "minimum": 1 } }
+      },
+      "result": { "$ref": "#/$defs/JobRef", "type": "object" },
+      "errors": ["system_unavailable", "permission_denied", "authentication_required", "rate_limited", "job_busy", "insufficient_resources", "not_found", "unavailable"],
+      "examples": [
+        { "name": "back to generation 1", "params": { "generation": 1 }, "result": { "job_id": "3f9a0c2b7e4d1a65" } },
+        { "name": "the current one", "params": { "generation": 2 }, "error": { "code": 3010, "message": "app generation 2 is not on disk or is the current one" } }
+      ],
+      "relay": true
+    },
+    "system.apps.accept_terms": {
+      "summary": "Relayed to the system service's apps.accept_terms. Accept an installed app's vendor terms for the caller's profile (0.4). Action org.hinteros.system.apps.",
+      "description": "For apps that reached the profile without an acceptance (the starter set): id must be in the caller's env and have terms, version must be the running catalog's terms.version (invalid_params otherwise). Records {version, accepted_at, by: <user>, profile: <id>} in terms-accepted.json and the audit log; then the id leaves apps.list's needs_terms. Accepting what is already accepted is a no-op.",
+      "since": "0.4",
+      "params": {
+        "type": "object",
+        "required": ["id", "version"],
+        "additionalProperties": false,
+        "properties": { "id": { "$ref": "#/$defs/CatalogId" }, "version": { "$ref": "#/$defs/TermsVersion" } }
+      },
+      "result": { "type": "object", "additionalProperties": false, "properties": {} },
+      "errors": ["system_unavailable", "permission_denied", "authentication_required", "rate_limited", "not_found", "unavailable"],
+      "examples": [
+        { "name": "Steam on first launch", "params": { "id": "steam", "version": "2026-09-10" }, "result": {} },
+        { "name": "an older version", "params": { "id": "steam", "version": "2025-01-01" }, "error": { "code": -32602, "message": "the current terms version of steam is 2026-09-10", "data": { "field": "version", "reason": "not_current" } } }
+      ],
+      "relay": true
+    },
+    "system.profiles.list": {
+      "summary": "Relayed to the system service's profiles.list. The profiles (0.4). Read-only; starts a usage scan when the data is older than an hour.",
+      "description": "Every account of the running state.json that has metadata, with the caller (spares are not listed; first_boot: no admin profile exists). On a schema-1 box, p1 as an implicit profile after the migration created profiles.json.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "profiles",
+          "guest",
+          "max",
+          "first_boot",
+          "caller"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "color",
+                "user",
+                "admin",
+                "locked",
+                "locked_until",
+                "active",
+                "last_used_at",
+                "usage",
+                "pin_set"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/ProfileId"
+                },
+                "name": {
+                  "$ref": "#/$defs/ProfileName"
+                },
+                "color": {
+                  "$ref": "#/$defs/ProfileColor"
+                },
+                "user": {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                "admin": {
+                  "type": "boolean"
+                },
+                "locked": {
+                  "type": "boolean"
+                },
+                "locked_until": {
+                  "description": "The PIN backoff lock (Unix seconds) while it is on.",
+                  "oneOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "active": {
+                  "description": "Its session is the one on screen.",
+                  "type": "boolean"
+                },
+                "last_used_at": {
+                  "oneOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "usage": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/ProfileUsage"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "pin_set": {
+                  "description": "false: a migrated profile without a PIN yet (show 'Set your PIN'). Always true on a schema-1 box (before the migration there are no PINs).",
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "guest": {
+            "type": "object",
+            "required": [
+              "enabled",
+              "usage"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "usage": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/ProfileUsage"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "max": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "first_boot": {
+            "type": "boolean"
+          },
+          "caller": {
+            "type": "object",
+            "required": [
+              "id",
+              "user",
+              "guest",
+              "spare"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/ProfileId"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "user": {
+                "type": "string",
+                "maxLength": 32
+              },
+              "guest": {
+                "type": "boolean"
+              },
+              "spare": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        "system_unavailable"
+      ],
+      "examples": [
+        {
+          "name": "two profiles",
+          "params": {},
+          "result": {
+            "profiles": [
+              {
+                "id": "p1",
+                "name": "James",
+                "color": "teal",
+                "user": "hinteros",
+                "admin": true,
+                "locked": false,
+                "locked_until": null,
+                "active": true,
+                "last_used_at": 1791300000,
+                "usage": {
+                  "total_bytes": 52000000000,
+                  "steam_games_bytes": 48000000000,
+                  "at": 1791300000
+                },
+                "pin_set": true
+              },
+              {
+                "id": "p3",
+                "name": "Sam",
+                "color": "orange",
+                "user": "hinteros-p3",
+                "admin": false,
+                "locked": true,
+                "locked_until": null,
+                "active": false,
+                "last_used_at": null,
+                "usage": null,
+                "pin_set": true
+              }
+            ],
+            "guest": {
+              "enabled": true,
+              "usage": null
+            },
+            "max": 8,
+            "first_boot": false,
+            "caller": {
+              "id": "p1",
+              "user": "hinteros",
+              "guest": false,
+              "spare": false
+            }
+          }
+        }
+      ],
+      "relay": true
+    },
+    "system.profiles.create": {
+      "summary": "Relayed to the system service's profiles.create. Create a profile (job, a rebuild that adds the account). Action org.hinteros.system.profiles.create; also on greeter.sock.",
+      "description": "name 1 to 32 characters (trimmed, no control or format characters; duplicates allowed), color one of ProfileColor (default teal), pin 4 to 8 digits, locked as chosen, revision = settings.get's. At 8 profiles: profile_limit. The id is taken from the counter at once (never reused, even if the job fails). On success the job writes the metadata and the PIN hash, gives the account the starter env, and (from the greeter) a one-time token so the greeter enters it without the PIN. Job kind profiles_create.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "name",
+          "pin",
+          "locked",
+          "revision"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/ProfileName"
+          },
+          "color": {
+            "$ref": "#/$defs/ProfileColor"
+          },
+          "pin": {
+            "$ref": "#/$defs/Pin"
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "revision": {
+            "$ref": "#/$defs/Revision"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "$ref": "#/$defs/JobId"
+          },
+          "id": {
+            "$ref": "#/$defs/ProfileId"
+          }
+        }
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited",
+        "job_busy",
+        "insufficient_resources",
+        "state_conflict",
+        "profile_limit",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "Sam",
+          "params": {
+            "name": "Sam",
+            "color": "orange",
+            "pin": "2468",
+            "locked": true,
+            "revision": "6b2c1e0b9f4a7d3c5e8f1a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d"
+          },
+          "result": {
+            "job_id": "3f9a0c2b7e4d1a65",
+            "id": "p3"
+          }
+        },
+        {
+          "name": "full",
+          "params": {
+            "name": "Nine",
+            "pin": "1357",
+            "locked": false,
+            "revision": "6b2c1e0b9f4a7d3c5e8f1a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d"
+          },
+          "error": {
+            "code": 3015,
+            "message": "there are already 8 profiles",
+            "data": {
+              "max": 8
+            }
+          }
+        }
+      ],
+      "relay": true
+    },
+    "system.profiles.setup_admin": {
+      "summary": "Relayed to the system service's profiles.setup_admin. First-boot mode: make the caller's spare account the admin profile (0.4). No job, no rebuild, no network.",
+      "description": "Only a spare caller, only while no admin profile exists (else permission_denied {reason: profile}). Writes the metadata (admin) and the PIN hash; the account's app profile is set to the starter env right after (a short apps job when the box is idle).",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "name",
+          "pin",
+          "locked"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/ProfileName"
+          },
+          "color": {
+            "$ref": "#/$defs/ProfileColor"
+          },
+          "pin": {
+            "$ref": "#/$defs/Pin"
+          },
+          "locked": {
+            "type": "boolean"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/ProfileId"
+          }
+        }
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "first boot",
+          "params": {
+            "name": "James",
+            "color": "teal",
+            "pin": "2468",
+            "locked": false
+          },
+          "result": {
+            "id": "p1"
+          }
+        }
+      ],
+      "relay": true
+    },
+    "system.profiles.rename": {
+      "summary": "Relayed to the system service's profiles.rename. Rename a profile (0.4). Own: no PIN; another: the admin PIN.",
+      "description": "pin_required {pin: admin} (with retry_after_ms during the backoff lock) when renaming another profile without the right admin PIN.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/ProfileId"
+          },
+          "name": {
+            "$ref": "#/$defs/ProfileName"
+          },
+          "pin": {
+            "$ref": "#/$defs/Pin"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited",
+        "not_found",
+        "pin_required",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "own",
+          "params": {
+            "id": "p1",
+            "name": "Jim"
+          },
+          "result": {}
+        },
+        {
+          "name": "another, no PIN",
+          "params": {
+            "id": "p3",
+            "name": "Sammy"
+          },
+          "error": {
+            "code": 3016,
+            "message": "the admin PIN is needed",
+            "data": {
+              "pin": "admin"
+            }
+          }
+        }
+      ],
+      "relay": true
+    },
+    "system.profiles.set_appearance": {
+      "summary": "Relayed to the system service's profiles.set_appearance. The caller's colour and the appearance mirrored for the picker (0.4).",
+      "description": "text_scale 0.5 to 3.0. The picker uses the most accessible combination of all profiles' values.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "$ref": "#/$defs/ProfileColor"
+          },
+          "text_scale": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 3.0
+          },
+          "high_contrast": {
+            "type": "boolean"
+          },
+          "reduce_motion": {
+            "type": "boolean"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "bigger text",
+          "params": {
+            "text_scale": 1.25
+          },
+          "result": {}
+        }
+      ],
+      "relay": true
+    },
+    "system.profiles.set_pin": {
+      "summary": "Relayed to the system service's profiles.set_pin. Change the caller's PIN (0.4). current_pin is required once a PIN is set (a migrated profile sets its first PIN without it).",
+      "description": "pin_required {pin: self} for a missing or wrong current_pin (with the backoff).",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "pin"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "pin": {
+            "$ref": "#/$defs/Pin"
+          },
+          "current_pin": {
+            "$ref": "#/$defs/Pin"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited",
+        "pin_required",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "first PIN after the migration",
+          "params": {
+            "pin": "2468"
+          },
+          "result": {}
+        },
+        {
+          "name": "wrong current PIN",
+          "params": {
+            "pin": "1357",
+            "current_pin": "0000"
+          },
+          "error": {
+            "code": 3016,
+            "message": "that PIN didn't match",
+            "data": {
+              "pin": "self"
+            }
+          }
+        }
+      ],
+      "relay": true
+    },
+    "system.profiles.set_locked": {
+      "summary": "Relayed to the system service's profiles.set_locked. Whether the caller's profile asks for its PIN to enter (0.4). Own PIN.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "locked",
+          "pin"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "locked": {
+            "type": "boolean"
+          },
+          "pin": {
+            "$ref": "#/$defs/Pin"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited",
+        "pin_required",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "lock",
+          "params": {
+            "locked": true,
+            "pin": "2468"
+          },
+          "result": {}
+        }
+      ],
+      "relay": true
+    },
+    "system.profiles.reset_pin": {
+      "summary": "Relayed to the system service's profiles.reset_pin. Set another profile's PIN with the admin PIN (0.4). The admin profile's own: the admin account's password (polkit org.hinteros.system.profiles.recover, interactive) instead.",
+      "description": "For the admin profile admin_pin is not used; the service asks polkit for org.hinteros.system.profiles.recover with the session daemon's agent (authentication_required when dismissed). The target's backoff is reset.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "id",
+          "new_pin"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/ProfileId"
+          },
+          "new_pin": {
+            "$ref": "#/$defs/Pin"
+          },
+          "admin_pin": {
+            "$ref": "#/$defs/Pin"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited",
+        "not_found",
+        "pin_required",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "Sam forgot",
+          "params": {
+            "id": "p3",
+            "new_pin": "1357",
+            "admin_pin": "2468"
+          },
+          "result": {}
+        },
+        {
+          "name": "admin PIN missing",
+          "params": {
+            "id": "p3",
+            "new_pin": "1357"
+          },
+          "error": {
+            "code": 3016,
+            "message": "the admin PIN is needed",
+            "data": {
+              "pin": "admin"
+            }
+          }
+        }
+      ],
+      "relay": true
+    },
+    "system.profiles.remove": {
+      "summary": "Relayed to the system service's profiles.remove. Remove a profile, its home and its apps (job, a rebuild). Own PIN for yourself, the admin PIN for others; never the admin profile.",
+      "description": "confirm_id must equal id. The job kills every process of the account, rebuilds without it, then deletes the home (no symlink is followed, one filesystem), the PIN, the metadata, the app profile links and the registry entry. A failed or cancelled job deletes nothing. Removing your own profile: end the session first (the launcher switches to the picker). invalid_params {field: id, reason: admin} for the admin profile. Job kind profiles_remove.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "id",
+          "confirm_id",
+          "pin",
+          "revision"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/ProfileId"
+          },
+          "confirm_id": {
+            "$ref": "#/$defs/ProfileId"
+          },
+          "pin": {
+            "$ref": "#/$defs/Pin"
+          },
+          "revision": {
+            "$ref": "#/$defs/Revision"
+          }
+        }
+      },
+      "result": {
+        "$ref": "#/$defs/JobRef",
+        "type": "object"
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited",
+        "job_busy",
+        "insufficient_resources",
+        "state_conflict",
+        "not_found",
+        "pin_required",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "Sam, by the admin",
+          "params": {
+            "id": "p3",
+            "confirm_id": "p3",
+            "pin": "2468",
+            "revision": "6b2c1e0b9f4a7d3c5e8f1a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d"
+          },
+          "result": {
+            "job_id": "3f9a0c2b7e4d1a65"
+          }
+        },
+        {
+          "name": "the admin profile",
+          "params": {
+            "id": "p1",
+            "confirm_id": "p1",
+            "pin": "2468",
+            "revision": "6b2c1e0b9f4a7d3c5e8f1a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d"
+          },
+          "error": {
+            "code": -32602,
+            "message": "the admin profile cannot be removed",
+            "data": {
+              "field": "id",
+              "reason": "admin"
+            }
+          }
+        }
+      ],
+      "relay": true
+    },
+    "system.profiles.switch": {
+      "summary": "Relayed to the system service's profiles.switch. Choose the next profile (0.4): writes the switch hint the greeter reads. It selects; it authorises nothing.",
+      "description": "id is a profile id or guest. For the caller's own id it also issues a one-time resume token (session.restart: a locked profile comes back without its PIN), valid 60 s. The session daemon then ends the session (session.switch_profile).",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ProfileId"
+              },
+              {
+                "const": "guest"
+              }
+            ]
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited",
+        "not_found",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "to Sam",
+          "params": {
+            "id": "p3"
+          },
+          "result": {}
+        },
+        {
+          "name": "guest",
+          "params": {
+            "id": "guest"
+          },
+          "result": {}
+        }
+      ],
+      "relay": true
+    },
+    "system.profiles.unlock": {
+      "summary": "Relayed to the system service's profiles.unlock. The caller's PIN after sleep (0.4): the lock screen of a locked profile.",
+      "description": "pin_required {pin: self, retry_after_ms?} when wrong or during the backoff lock.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "pin"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "pin": {
+            "$ref": "#/$defs/Pin"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited",
+        "pin_required",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "right",
+          "params": {
+            "pin": "2468"
+          },
+          "result": {}
+        },
+        {
+          "name": "locked out",
+          "params": {
+            "pin": "2468"
+          },
+          "error": {
+            "code": 3016,
+            "message": "too many tries",
+            "data": {
+              "pin": "self",
+              "retry_after_ms": 4000
+            }
+          }
+        }
+      ],
+      "relay": true
+    },
+    "system.guest.set": {
+      "summary": "Relayed to the system service's guest.set. Turn the guest account on or off (job, a rebuild). Admin PIN. Action org.hinteros.system.starter.",
+      "description": "job_id null when it is already so. Job kind guest_set.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "admin_pin"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "admin_pin": {
+            "$ref": "#/$defs/Pin"
+          }
+        }
+      },
+      "result": {
+        "$ref": "#/$defs/JobRef",
+        "type": "object"
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited",
+        "job_busy",
+        "insufficient_resources",
+        "pin_required",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "off",
+          "params": {
+            "enabled": false,
+            "admin_pin": "2468"
+          },
+          "result": {
+            "job_id": "3f9a0c2b7e4d1a65"
+          }
+        }
+      ],
+      "relay": true
+    },
+    "system.display.save_mode": {
+      "summary": "Relayed to the system service's display.save_mode. Make a display mode the box's (0.4): stored in runtime.json, published as /run/hinteros/gamescope-modes for every profile's session. Action org.hinteros.system.settings.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "display",
+          "width",
+          "height",
+          "refresh"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "display": {
+            "description": "The display as gamescope names it in GAMESCOPE_MODE_SAVE_FILE (<make> <model>).",
+            "type": "string",
+            "pattern": "^[^:\\n]{1,128}$"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 320,
+            "maximum": 16384
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 200,
+            "maximum": 16384
+          },
+          "refresh": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited"
+      ],
+      "examples": [
+        {
+          "name": "4K 60",
+          "params": {
+            "display": "LG Electronics LG TV",
+            "width": 3840,
+            "height": 2160,
+            "refresh": 60
+          },
+          "result": {}
+        }
+      ],
+      "relay": true
+    },
+    "system.audio.save_output": {
+      "summary": "Relayed to the system service's audio.save_output. Make an audio output the box's (0.4): stored in runtime.json, published as /run/hinteros/audio-output. Action org.hinteros.system.settings.",
+      "description": "node is a PipeWire node name.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "node"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "node": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited"
+      ],
+      "examples": [
+        {
+          "name": "HDMI",
+          "params": {
+            "node": "alsa_output.pci-0000_00_1f.3.hdmi-stereo"
+          },
+          "result": {}
+        }
+      ],
+      "relay": true
+    },
+    "system.starter_set.get": {
+      "summary": "Relayed to the system service's starter_set.get. The starter set: the apps every new profile and guest session starts with (0.4). Read-only.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "ids",
+          "updated_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CatalogId"
+            }
+          },
+          "updated_at": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "errors": [
+        "system_unavailable",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "the installer's picks",
+          "params": {},
+          "result": {
+            "ids": [
+              "firefox",
+              "youtube"
+            ],
+            "updated_at": 1791300000
+          }
+        }
+      ],
+      "relay": true
+    },
+    "system.starter_set.set": {
+      "summary": "Relayed to the system service's starter_set.set. Change the starter set (job). Admin PIN; ids must be apps the admin profile has now. Action org.hinteros.system.starter.",
+      "description": "0 to 16 ids, each in the admin profile's current env, else invalid_params {field: ids, reason: not_in_admin_profile}. The job builds the new starter env (an evaluation only), with the box stage when a feature is off. Only profiles and guest sessions created afterwards get it. Job kind starter_set.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "ids",
+          "pin"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/$defs/CatalogId"
+            }
+          },
+          "pin": {
+            "$ref": "#/$defs/Pin"
+          }
+        }
+      },
+      "result": {
+        "$ref": "#/$defs/JobRef",
+        "type": "object"
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited",
+        "job_busy",
+        "insufficient_resources",
+        "pin_required",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "add Steam",
+          "params": {
+            "ids": [
+              "firefox",
+              "steam",
+              "youtube"
+            ],
+            "pin": "2468"
+          },
+          "result": {
+            "job_id": "3f9a0c2b7e4d1a65"
+          }
+        }
       ],
       "relay": true
     },
@@ -1924,6 +3124,683 @@
         { "name": "already over", "params": { "cookie": "3-6f1c0e2a9b7d4c58-1-0a9f3e1d2c4b5a69" }, "error": { "code": 3010, "message": "no authentication request 3-6f1c0e2a9b7d4c58-1-0a9f3e1d2c4b5a69" } }
       ]
     },
+    "profile.current": {
+      "summary": "Who this session is (0.12). The launcher asks at start: setup_required starts the first-boot wizard; pin_set false shows the unskippable 'Set your PIN' screen; screen_locked shows the lock screen.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "color",
+          "admin",
+          "locked",
+          "guest",
+          "setup_required",
+          "pin_set",
+          "screen_locked"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ProfileId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "color": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ProfileColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "admin": {
+            "type": "boolean"
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "guest": {
+            "type": "boolean"
+          },
+          "setup_required": {
+            "type": "boolean"
+          },
+          "pin_set": {
+            "type": "boolean"
+          },
+          "screen_locked": {
+            "type": "boolean"
+          }
+        }
+      },
+      "errors": [
+        "system_unavailable"
+      ],
+      "examples": [
+        {
+          "name": "James",
+          "params": {},
+          "result": {
+            "id": "p1",
+            "name": "James",
+            "color": "teal",
+            "admin": true,
+            "locked": false,
+            "guest": false,
+            "setup_required": false,
+            "pin_set": true,
+            "screen_locked": false
+          }
+        },
+        {
+          "name": "first boot",
+          "params": {},
+          "result": {
+            "id": "p1",
+            "name": null,
+            "color": null,
+            "admin": false,
+            "locked": false,
+            "guest": false,
+            "setup_required": true,
+            "pin_set": false,
+            "screen_locked": false
+          }
+        }
+      ]
+    },
+    "session.switch_profile": {
+      "summary": "Switch to another profile (0.12): writes the switch hint (system.profiles.switch), then closes every app (SIGTERM, no silent force-close) and Steam (steam -shutdown), and ends this session; the greeter takes over. Answers once the hint is written; progress comes as switch_progress, a stuck app as switch_blocked.",
+      "description": "invalid_params {field: id, reason: same} for the own profile. While a switch runs a second one is invalid_params {reason: busy}.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ProfileId"
+              },
+              {
+                "const": "guest"
+              }
+            ]
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited",
+        "not_found",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "to Sam",
+          "params": {
+            "id": "p3"
+          },
+          "result": {}
+        },
+        {
+          "name": "itself",
+          "params": {
+            "id": "p1"
+          },
+          "error": {
+            "code": -32602,
+            "message": "that is this profile",
+            "data": {
+              "field": "id",
+              "reason": "same"
+            }
+          }
+        }
+      ]
+    },
+    "session.switch_wait": {
+      "summary": "Keep waiting for the blocked app (another switch.wait_s, 10 s).",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [],
+      "examples": [
+        {
+          "name": "wait",
+          "params": {},
+          "result": {}
+        }
+      ]
+    },
+    "session.switch_force_close": {
+      "summary": "Force-close the blocked app (SIGKILL of its process group; for Steam, its processes). Unsaved data may be lost.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "app"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "app": {
+            "$ref": "#/$defs/AppId"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "app_not_found"
+      ],
+      "examples": [
+        {
+          "name": "YouTube",
+          "params": {
+            "app": "youtube"
+          },
+          "result": {}
+        }
+      ]
+    },
+    "session.switch_cancel": {
+      "summary": "Stop the switch: this profile stays (what already closed is gone). switch_progress {stage: cancelled} follows.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [],
+      "examples": [
+        {
+          "name": "cancel",
+          "params": {},
+          "result": {}
+        }
+      ]
+    },
+    "session.lock_state": {
+      "summary": "Whether the sleep lock is up (0.12).",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "locked"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "locked": {
+            "type": "boolean"
+          }
+        }
+      },
+      "errors": [],
+      "examples": [
+        {
+          "name": "unlocked",
+          "params": {},
+          "result": {
+            "locked": false
+          }
+        }
+      ]
+    },
+    "session.unlock": {
+      "summary": "The PIN on the sleep lock screen (relays system.profiles.unlock); lock_state {locked: false} follows.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "pin"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "pin": {
+            "$ref": "#/$defs/Pin"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "rate_limited",
+        "pin_required",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "right",
+          "params": {
+            "pin": "2468"
+          },
+          "result": {}
+        },
+        {
+          "name": "wrong",
+          "params": {
+            "pin": "0000"
+          },
+          "error": {
+            "code": 3016,
+            "message": "that PIN didn't match",
+            "data": {
+              "pin": "self"
+            }
+          }
+        }
+      ]
+    },
+    "session.end_guest": {
+      "summary": "Guest only: end the guest session now (like a switch, to the picker). The guest's home and apps are wiped at the next boot.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "permission_denied"
+      ],
+      "examples": [
+        {
+          "name": "end",
+          "params": {},
+          "result": {}
+        }
+      ]
+    },
+    "greeter.list": {
+      "summary": "The picker's profiles (the service's public view). Greeter mode only (hinteros-session --greeter); only the hinteros-launcher connection may call it (else not_authorized).",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "profiles",
+          "guest",
+          "first_boot",
+          "focus",
+          "appearance"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "color",
+                "locked",
+                "admin",
+                "locked_until"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/ProfileId"
+                },
+                "name": {
+                  "$ref": "#/$defs/ProfileName"
+                },
+                "color": {
+                  "$ref": "#/$defs/ProfileColor"
+                },
+                "locked": {
+                  "type": "boolean"
+                },
+                "admin": {
+                  "type": "boolean"
+                },
+                "locked_until": {
+                  "oneOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "guest": {
+            "type": "boolean"
+          },
+          "first_boot": {
+            "type": "boolean"
+          },
+          "focus": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ProfileId"
+              },
+              {
+                "const": "guest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "appearance": {
+            "type": "object",
+            "required": [
+              "text_scale",
+              "high_contrast",
+              "reduce_motion"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "text_scale": {
+                "type": "number"
+              },
+              "high_contrast": {
+                "type": "boolean"
+              },
+              "reduce_motion": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        "not_authorized",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "two profiles",
+          "params": {},
+          "result": {
+            "profiles": [
+              {
+                "id": "p1",
+                "name": "James",
+                "color": "teal",
+                "locked": false,
+                "admin": true,
+                "locked_until": null
+              },
+              {
+                "id": "p3",
+                "name": "Sam",
+                "color": "orange",
+                "locked": true,
+                "admin": false,
+                "locked_until": null
+              }
+            ],
+            "guest": true,
+            "first_boot": false,
+            "focus": "p1",
+            "appearance": {
+              "text_scale": 1.0,
+              "high_contrast": false,
+              "reduce_motion": false
+            }
+          }
+        }
+      ]
+    },
+    "greeter.login": {
+      "summary": "Enter a profile (or the guest) through greetd. An unlocked one starts at once (greeter_result {ok: true}); a locked one asks for its PIN (greeter_prompt {kind: pin}). Greeter mode only (hinteros-session --greeter); only the hinteros-launcher connection may call it (else not_authorized).",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ProfileId"
+              },
+              {
+                "const": "guest"
+              }
+            ]
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "not_authorized",
+        "not_found",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "Sam",
+          "params": {
+            "id": "p3"
+          },
+          "result": {}
+        }
+      ]
+    },
+    "greeter.pin": {
+      "summary": "Answer the PIN prompt. greeter_result follows: ok, or not ok with locked_seconds during the backoff (the greetd conversation is then over; log in again). Greeter mode only (hinteros-session --greeter); only the hinteros-launcher connection may call it (else not_authorized).",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "pin"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "pin": {
+            "$ref": "#/$defs/Pin"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "not_authorized",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "PIN",
+          "params": {
+            "pin": "2468"
+          },
+          "result": {}
+        }
+      ]
+    },
+    "greeter.cancel": {
+      "summary": "Back from the PIN pad: cancel the greetd conversation. Greeter mode only (hinteros-session --greeter); only the hinteros-launcher connection may call it (else not_authorized).",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "result": {
+        "type": "object",
+        "required": [],
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "errors": [
+        "not_authorized"
+      ],
+      "examples": [
+        {
+          "name": "back",
+          "params": {},
+          "result": {}
+        }
+      ]
+    },
+    "greeter.create": {
+      "summary": "Add profile from the picker (system profiles.create over greeter.sock; a rebuild of about a minute). Job events follow; on success call greeter.login {id} (a one-time token: no PIN prompt). Greeter mode only (hinteros-session --greeter); only the hinteros-launcher connection may call it (else not_authorized).",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "name",
+          "pin",
+          "locked"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/ProfileName"
+          },
+          "color": {
+            "$ref": "#/$defs/ProfileColor"
+          },
+          "pin": {
+            "$ref": "#/$defs/Pin"
+          },
+          "locked": {
+            "type": "boolean"
+          }
+        }
+      },
+      "result": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "id"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "$ref": "#/$defs/JobId"
+          },
+          "id": {
+            "$ref": "#/$defs/ProfileId"
+          }
+        }
+      },
+      "errors": [
+        "not_authorized",
+        "unavailable",
+        "system_unavailable",
+        "permission_denied",
+        "rate_limited",
+        "job_busy",
+        "insufficient_resources",
+        "state_conflict",
+        "profile_limit"
+      ],
+      "examples": [
+        {
+          "name": "Sam",
+          "params": {
+            "name": "Sam",
+            "color": "orange",
+            "pin": "1357",
+            "locked": true
+          },
+          "result": {
+            "job_id": "3f9a0c2b7e4d1a65",
+            "id": "p3"
+          }
+        }
+      ]
+    },
     "session.restart": {
       "summary": "Restart the TV session: the compositor, the launcher and everything started in it, and the session daemon itself.",
       "description": "For job_finished {session_restart_required: true} (and system_unavailable {reason: version_mismatch}). The daemon answers first, then asks logind to terminate the user's graphical session on seat0 (a greetd session: greetd's default_session starts it again at once, with the new generation's programs), then asks the user's systemd to restart the session daemon's own unit. Apps the daemon started end with it. Only a session started by greetd is ever terminated (never a desktop session). unavailable {service: logind}: no such session, or logind cannot be reached.",
@@ -1984,584 +3861,6 @@
         },
         { "name": "no catalog", "params": {}, "error": { "code": 4001, "message": "no catalog index on this system", "data": { "service": "catalog", "reason": "missing" } } }
       ]
-    },
-    "profile.current": {
-      "summary": "The profile this session belongs to (the daemon's own user).",
-      "description": "setup_required: the account is a spare in first-boot mode (no admin profile exists); the launcher runs its first-boot wizard, which ends with system.profiles.setup_admin. pin_set false: a profile migrated from a single-user box without a PIN yet; the launcher asks for one before Home (system.profiles.set_pin without current_pin). screen_locked: the sleep lock is up right now (lock_state follows every change). The guest has guest true, no PIN and is never locked or admin.",
-      "since": "0.12",
-      "params": { "type": "object", "additionalProperties": false, "properties": {} },
-      "result": {
-        "type": "object",
-        "required": ["id", "name", "color", "admin", "locked", "guest", "setup_required", "pin_set", "screen_locked"],
-        "additionalProperties": false,
-        "properties": {
-          "id": { "$ref": "#/$defs/ProfileTarget" },
-          "name": { "description": "Null for a spare account in first-boot mode.", "oneOf": [{ "$ref": "#/$defs/ProfileName" }, { "type": "null" }] },
-          "color": { "oneOf": [{ "$ref": "#/$defs/ProfileColor" }, { "type": "null" }] },
-          "admin": { "type": "boolean" },
-          "locked": { "description": "The profile asks for its PIN to enter (at the picker and after sleep).", "type": "boolean" },
-          "guest": { "type": "boolean" },
-          "setup_required": { "type": "boolean" },
-          "pin_set": { "type": "boolean" },
-          "screen_locked": { "type": "boolean" }
-        }
-      },
-      "errors": ["system_unavailable"],
-      "examples": [
-        { "name": "admin profile", "params": {}, "result": { "id": "p1", "name": "James", "color": "teal", "admin": true, "locked": false, "guest": false, "setup_required": false, "pin_set": true, "screen_locked": false } },
-        { "name": "first boot", "params": {}, "result": { "id": "p1", "name": null, "color": null, "admin": false, "locked": false, "guest": false, "setup_required": true, "pin_set": false, "screen_locked": false } },
-        { "name": "guest", "params": {}, "result": { "id": "guest", "name": "Guest", "color": null, "admin": false, "locked": false, "guest": true, "setup_required": false, "pin_set": false, "screen_locked": false } }
-      ]
-    },
-    "session.switch_profile": {
-      "summary": "Switch to another profile (or the guest): close everything running here, then end this session; the greeter takes over.",
-      "description": "The daemon calls system.profiles.switch {id} (writes the switch hint), brings the launcher to the front, sends SIGTERM to every running app (switch_progress closing_apps), asks Steam to exit (closing_steam). Nothing is force-closed silently: an app still running after switch.wait_s (10 s; Steam 15 s) produces switch_blocked and waits for session.switch_wait, session.switch_force_close or session.switch_cancel. Then it hides the keyboard, resets InputPlumber and ends its logind session (switch_progress ending). The reply comes when the switch has started, before anything closes. invalid_params {reason: same} for the session's own profile; not_found for an unknown profile; job_busy while a switch is already under way.",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["id"],
-        "additionalProperties": false,
-        "properties": { "id": { "$ref": "#/$defs/ProfileTarget" } }
-      },
-      "result": { "type": "object", "additionalProperties": false, "properties": {} },
-      "errors": ["not_found", "job_busy", "system_unavailable", "permission_denied"],
-      "examples": [
-        { "name": "to Sam", "params": { "id": "p3" }, "result": {} },
-        { "name": "to the guest", "params": { "id": "guest" }, "result": {} },
-        { "name": "own profile", "params": { "id": "p1" }, "error": { "code": -32602, "message": "that is this session's profile", "data": { "field": "id", "reason": "same" } } },
-        { "name": "unknown profile", "params": { "id": "p9" }, "error": { "code": 3010, "message": "no profile p9" } }
-      ]
-    },
-    "session.switch_wait": {
-      "summary": "The not-responding pop-up's Keep waiting: wait another switch.wait_s for the blocked app (switch_blocked again if it is still running).",
-      "since": "0.12",
-      "params": { "type": "object", "additionalProperties": false, "properties": {} },
-      "result": { "type": "object", "additionalProperties": false, "properties": {} },
-      "errors": ["not_found"],
-      "examples": [
-        { "name": "waiting", "params": {}, "result": {} },
-        { "name": "no switch", "params": {}, "error": { "code": 3010, "message": "no switch is waiting" } }
-      ]
-    },
-    "session.switch_force_close": {
-      "summary": "The not-responding pop-up's Force close: SIGKILL the app's process group; the switch continues.",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["app"],
-        "additionalProperties": false,
-        "properties": { "app": { "$ref": "#/$defs/AppId" } }
-      },
-      "result": { "type": "object", "additionalProperties": false, "properties": {} },
-      "errors": ["not_found"],
-      "examples": [
-        { "name": "force close", "params": { "app": "youtube" }, "result": {} },
-        { "name": "not blocking", "params": { "app": "steam" }, "error": { "code": 3010, "message": "steam is not blocking the switch" } }
-      ]
-    },
-    "session.switch_cancel": {
-      "summary": "The not-responding pop-up's Cancel switch: the profile stays (with whatever already closed gone); the hint is withdrawn.",
-      "since": "0.12",
-      "params": { "type": "object", "additionalProperties": false, "properties": {} },
-      "result": { "type": "object", "additionalProperties": false, "properties": {} },
-      "errors": ["not_found"],
-      "examples": [
-        { "name": "cancelled", "params": {}, "result": {} },
-        { "name": "no switch", "params": {}, "error": { "code": 3010, "message": "no switch is under way" } }
-      ]
-    },
-    "session.unlock": {
-      "summary": "The sleep lock screen's PIN: relays system.profiles.unlock {pin} (the profile's own PIN, same backoff). lock_state {locked: false} follows.",
-      "description": "A wrong PIN or an active backoff is pin_required {pin: self, retry_after_ms?}. Without a lock up: invalid_params {reason: not_locked}.",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["pin"],
-        "additionalProperties": false,
-        "properties": { "pin": { "$ref": "#/$defs/Pin" } }
-      },
-      "result": { "type": "object", "additionalProperties": false, "properties": {} },
-      "errors": ["pin_required", "system_unavailable"],
-      "examples": [
-        { "name": "unlocked", "params": { "pin": "2468" }, "result": {} },
-        { "name": "wrong PIN", "params": { "pin": "1111" }, "error": { "code": 3016, "message": "wrong PIN", "data": { "pin": "self" } } }
-      ]
-    },
-    "session.lock_state": {
-      "summary": "Whether the sleep lock is up now (lock_state follows every change).",
-      "since": "0.12",
-      "params": { "type": "object", "additionalProperties": false, "properties": {} },
-      "result": {
-        "type": "object",
-        "required": ["locked"],
-        "additionalProperties": false,
-        "properties": { "locked": { "type": "boolean" } }
-      },
-      "errors": [],
-      "examples": [{ "name": "not locked", "params": {}, "result": { "locked": false } }]
-    },
-    "session.end_guest": {
-      "summary": "End guest session: guest only. Ends the session like a switch (to the picker) and wipes the guest now (home emptied, app link back to the starter set), as a reboot would.",
-      "since": "0.12",
-      "params": { "type": "object", "additionalProperties": false, "properties": {} },
-      "result": { "type": "object", "additionalProperties": false, "properties": {} },
-      "errors": ["system_unavailable"],
-      "examples": [
-        { "name": "ending", "params": {}, "result": {} },
-        { "name": "not the guest", "params": {}, "error": { "code": -32602, "message": "only the guest session can be ended this way", "data": { "field": "session", "reason": "not_guest" } } }
-      ]
-    },
-    "greeter.list": {
-      "summary": "Greeter mode only: the picker's view of the box (/run/hinteros/profiles-public.json).",
-      "description": "focus: the profile to focus first (the switch target, else the last used). appearance: the most accessible combination of the profiles' mirrored appearance. job: a profile job the picker should show (a removal that ended this session), else null. Only the hinteros-launcher connection may call greeter.* (not_authorized); a daemon not in greeter mode answers unavailable {service: greeter}.",
-      "since": "0.12",
-      "params": { "type": "object", "additionalProperties": false, "properties": {} },
-      "result": {
-        "type": "object",
-        "required": ["profiles", "guest", "first_boot", "focus", "appearance", "job"],
-        "additionalProperties": false,
-        "properties": {
-          "profiles": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/PublicProfile" } },
-          "guest": { "description": "The guest is enabled.", "type": "boolean" },
-          "first_boot": { "type": "boolean" },
-          "focus": { "oneOf": [{ "$ref": "#/$defs/ProfileTarget" }, { "type": "null" }] },
-          "appearance": { "$ref": "#/$defs/Appearance" },
-          "job": { "oneOf": [{ "$ref": "#/$defs/JobId" }, { "type": "null" }] }
-        }
-      },
-      "errors": ["unavailable", "not_authorized"],
-      "examples": [
-        {
-          "name": "two profiles",
-          "params": {},
-          "result": {
-            "profiles": [
-              { "id": "p1", "name": "James", "color": "teal", "locked": false, "admin": true, "locked_until": null },
-              { "id": "p3", "name": "Sam", "color": "orange", "locked": true, "admin": false, "locked_until": null }
-            ],
-            "guest": true, "first_boot": false, "focus": "p1",
-            "appearance": { "text_scale": 1.0, "high_contrast": false, "reduce_motion": false },
-            "job": null
-          }
-        },
-        { "name": "not the greeter", "params": {}, "error": { "code": 4001, "message": "this daemon is not in greeter mode", "data": { "service": "greeter", "reason": "not_greeter" } } }
-      ]
-    },
-    "greeter.login": {
-      "summary": "Greeter mode only: start entering a profile (greetd create_session).",
-      "description": "An unlocked profile, the guest or a holder of a one-time token (a just-created profile) starts at once: greeter_result {ok: true}, and the greeter session ends. A locked profile gets greeter_prompt {kind: pin}; answer with greeter.pin. Another login in progress is cancelled first.",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["id"],
-        "additionalProperties": false,
-        "properties": { "id": { "$ref": "#/$defs/ProfileTarget" } }
-      },
-      "result": { "type": "object", "additionalProperties": false, "properties": {} },
-      "errors": ["not_found", "unavailable", "not_authorized"],
-      "examples": [
-        { "name": "Sam", "params": { "id": "p3" }, "result": {} },
-        { "name": "unknown", "params": { "id": "p9" }, "error": { "code": 3010, "message": "no profile p9" } }
-      ]
-    },
-    "greeter.pin": {
-      "summary": "Greeter mode only: the PIN for the greeter_prompt of the login in progress. The PIN goes to greetd and is wiped; greeter_result follows.",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["pin"],
-        "additionalProperties": false,
-        "properties": { "pin": { "$ref": "#/$defs/Pin" } }
-      },
-      "result": { "type": "object", "additionalProperties": false, "properties": {} },
-      "errors": ["unavailable", "not_authorized"],
-      "examples": [
-        { "name": "answered", "params": { "pin": "2468" }, "result": {} },
-        { "name": "nothing asked", "params": { "pin": "2468" }, "error": { "code": -32602, "message": "no PIN prompt is waiting", "data": { "field": "pin", "reason": "no_prompt" } } }
-      ]
-    },
-    "greeter.cancel": {
-      "summary": "Greeter mode only: give up the login in progress (greetd cancel_session). Nothing in progress is not an error.",
-      "since": "0.12",
-      "params": { "type": "object", "additionalProperties": false, "properties": {} },
-      "result": { "type": "object", "additionalProperties": false, "properties": {} },
-      "errors": ["unavailable", "not_authorized"],
-      "examples": [{ "name": "cancelled", "params": {}, "result": {} }]
-    },
-    "greeter.create": {
-      "summary": "Greeter mode only: Add profile from the picker (profiles.create over greeter.sock, a job of about a minute). When the job succeeds, greeter.login {id} enters the new profile without its PIN (one-time token).",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["name", "pin", "locked"],
-        "additionalProperties": false,
-        "properties": {
-          "name": { "$ref": "#/$defs/ProfileName" },
-          "color": { "$ref": "#/$defs/ProfileColor" },
-          "pin": { "$ref": "#/$defs/Pin" },
-          "locked": { "type": "boolean" }
-        }
-      },
-      "result": { "$ref": "#/$defs/ProfileJobRef", "type": "object" },
-      "errors": ["profile_limit", "job_busy", "insufficient_resources", "unavailable", "not_authorized"],
-      "examples": [
-        { "name": "create", "params": { "name": "Robin", "color": "green", "pin": "1357", "locked": false }, "result": { "job_id": "3f9a0c2b7e4d1a65", "id": "p4" } },
-        { "name": "full", "params": { "name": "Robin", "pin": "1357", "locked": false }, "error": { "code": 3015, "message": "this box already has 8 profiles", "data": { "max": 8 } } }
-      ]
-    },
-    "system.profiles.list": {
-      "summary": "Relayed to the system service's profiles.list. The profiles of this box, the guest and the limit. Read-only; starts a usage scan when the numbers are older than an hour.",
-      "since": "0.12",
-      "params": { "type": "object", "additionalProperties": false, "properties": {} },
-      "result": {
-        "type": "object",
-        "required": ["profiles", "guest", "max", "first_boot"],
-        "additionalProperties": false,
-        "properties": {
-          "profiles": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/Profile" } },
-          "guest": {
-            "type": "object",
-            "required": ["enabled", "usage"],
-            "additionalProperties": false,
-            "properties": {
-              "enabled": { "type": "boolean" },
-              "usage": { "oneOf": [{ "$ref": "#/$defs/ProfileUsage" }, { "type": "null" }] }
-            }
-          },
-          "max": { "type": "integer", "minimum": 1 },
-          "first_boot": { "type": "boolean" },
-          "caller": {
-            "description": "Who asked: the caller's profile id (null for a spare), its user, whether it is the guest or a spare.",
-            "type": "object",
-            "required": ["id", "user", "guest", "spare"],
-            "additionalProperties": false,
-            "properties": {
-              "id": { "oneOf": [{ "$ref": "#/$defs/ProfileId" }, { "type": "null" }] },
-              "user": { "type": "string" },
-              "guest": { "type": "boolean" },
-              "spare": { "type": "boolean" }
-            }
-          }
-        }
-      },
-      "errors": ["system_unavailable", "permission_denied"],
-      "examples": [
-        {
-          "name": "two profiles",
-          "params": {},
-          "result": {
-            "profiles": [
-              { "id": "p1", "name": "James", "color": "teal", "user": "hinteros", "admin": true, "locked": false, "locked_until": null, "active": true, "last_used_at": 1791240000, "usage": { "total_bytes": 52000000000, "steam_games_bytes": 48000000000, "at": 1791239000 } },
-              { "id": "p3", "name": "Sam", "color": "orange", "user": "hinteros-p3", "admin": false, "locked": true, "locked_until": null, "active": false, "last_used_at": 1791150000, "usage": null }
-            ],
-            "guest": { "enabled": true, "usage": null },
-            "max": 8,
-            "first_boot": false
-          }
-        }
-      ],
-      "relay": true
-    },
-    "system.profiles.create": {
-      "summary": "Relayed to the system service's profiles.create. Add a profile (job profiles_create: a rebuild that adds the account, about a minute). Action org.hinteros.system.profiles.create.",
-      "description": "revision must be settings.get's (state_conflict otherwise). At 8 profiles: profile_limit. On success the profile has its metadata, PIN and lock flag, and its apps are the starter set; profiles_changed follows.",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["name", "pin", "locked", "revision"],
-        "additionalProperties": false,
-        "properties": {
-          "name": { "$ref": "#/$defs/ProfileName" },
-          "color": { "$ref": "#/$defs/ProfileColor" },
-          "pin": { "$ref": "#/$defs/Pin" },
-          "locked": { "type": "boolean" },
-          "revision": { "$ref": "#/$defs/Revision" }
-        }
-      },
-      "result": { "$ref": "#/$defs/ProfileJobRef", "type": "object" },
-      "errors": ["system_unavailable", "permission_denied", "rate_limited", "job_busy", "insufficient_resources", "state_conflict", "profile_limit"],
-      "examples": [
-        { "name": "create", "params": { "name": "Robin", "color": "green", "pin": "1357", "locked": true, "revision": "6b2c1e0b9f4a7d3c5e8f1a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d" }, "result": { "job_id": "3f9a0c2b7e4d1a65", "id": "p4" } },
-        { "name": "full", "params": { "name": "Robin", "pin": "1357", "locked": false, "revision": "6b2c1e0b9f4a7d3c5e8f1a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d" }, "error": { "code": 3015, "message": "this box already has 8 profiles", "data": { "max": 8 } } }
-      ],
-      "relay": true
-    },
-    "system.profiles.setup_admin": {
-      "summary": "Relayed to the system service's profiles.setup_admin. First-boot mode: make the caller's spare account the admin profile (metadata, PIN, apps = the starter set). No job, no rebuild, no network.",
-      "description": "Only a spare caller, only while no admin profile exists (permission_denied otherwise).",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["name", "pin", "locked"],
-        "additionalProperties": false,
-        "properties": {
-          "name": { "$ref": "#/$defs/ProfileName" },
-          "color": { "$ref": "#/$defs/ProfileColor" },
-          "pin": { "$ref": "#/$defs/Pin" },
-          "locked": { "type": "boolean" }
-        }
-      },
-      "result": {
-        "type": "object",
-        "required": ["id"],
-        "additionalProperties": false,
-        "properties": { "id": { "$ref": "#/$defs/ProfileId" } }
-      },
-      "errors": ["system_unavailable", "permission_denied", "rate_limited"],
-      "examples": [
-        { "name": "first profile", "params": { "name": "James", "color": "teal", "pin": "2468", "locked": false }, "result": { "id": "p1" } },
-        { "name": "admin exists", "params": { "name": "James", "pin": "2468", "locked": false }, "error": { "code": 3002, "message": "an admin profile exists already", "data": { "action": "org.hinteros.system.profiles", "reason": "polkit" } } }
-      ],
-      "relay": true
-    },
-    "system.profiles.rename": {
-      "summary": "Relayed to the system service's profiles.rename. Own profile: no PIN. Another profile: the admin PIN (pin_required {pin: admin} without it or when wrong).",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["id", "name"],
-        "additionalProperties": false,
-        "properties": {
-          "id": { "$ref": "#/$defs/ProfileId" },
-          "name": { "$ref": "#/$defs/ProfileName" },
-          "pin": { "$ref": "#/$defs/Pin" }
-        }
-      },
-      "result": { "type": "object", "additionalProperties": false, "properties": {} },
-      "errors": ["system_unavailable", "permission_denied", "rate_limited", "not_found", "pin_required"],
-      "examples": [
-        { "name": "own", "params": { "id": "p1", "name": "Jim" }, "result": {} },
-        { "name": "other, no PIN", "params": { "id": "p3", "name": "Samantha" }, "error": { "code": 3016, "message": "the admin PIN is needed", "data": { "pin": "admin" } } }
-      ],
-      "relay": true
-    },
-    "system.profiles.set_appearance": {
-      "summary": "Relayed to the system service's profiles.set_appearance. Own profile's colour and the appearance mirrored for the picker.",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "color": { "$ref": "#/$defs/ProfileColor" },
-          "text_scale": { "type": "number", "minimum": 0.5, "maximum": 3 },
-          "high_contrast": { "type": "boolean" },
-          "reduce_motion": { "type": "boolean" }
-        }
-      },
-      "result": { "type": "object", "additionalProperties": false, "properties": {} },
-      "errors": ["system_unavailable", "permission_denied", "rate_limited"],
-      "examples": [{ "name": "colour", "params": { "color": "purple" }, "result": {} }],
-      "relay": true
-    },
-    "system.profiles.set_pin": {
-      "summary": "Relayed to the system service's profiles.set_pin. Change the own PIN with the current one (current_pin left out only while no PIN is set: the migration's first PIN).",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["pin"],
-        "additionalProperties": false,
-        "properties": { "pin": { "$ref": "#/$defs/Pin" }, "current_pin": { "$ref": "#/$defs/Pin" } }
-      },
-      "result": { "type": "object", "additionalProperties": false, "properties": {} },
-      "errors": ["system_unavailable", "permission_denied", "rate_limited", "pin_required"],
-      "examples": [
-        { "name": "changed", "params": { "pin": "8642", "current_pin": "2468" }, "result": {} },
-        { "name": "wrong current PIN", "params": { "pin": "8642", "current_pin": "1111" }, "error": { "code": 3016, "message": "wrong PIN", "data": { "pin": "self" } } }
-      ],
-      "relay": true
-    },
-    "system.profiles.set_locked": {
-      "summary": "Relayed to the system service's profiles.set_locked. Own profile's lock flag, with the own PIN.",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["locked", "pin"],
-        "additionalProperties": false,
-        "properties": { "locked": { "type": "boolean" }, "pin": { "$ref": "#/$defs/Pin" } }
-      },
-      "result": { "type": "object", "additionalProperties": false, "properties": {} },
-      "errors": ["system_unavailable", "permission_denied", "rate_limited", "pin_required"],
-      "examples": [
-        { "name": "lock", "params": { "locked": true, "pin": "2468" }, "result": {} },
-        { "name": "too many tries", "params": { "locked": true, "pin": "1111" }, "error": { "code": 3016, "message": "too many wrong PINs, try again later", "data": { "pin": "self", "retry_after_ms": 30000 } } }
-      ],
-      "relay": true
-    },
-    "system.profiles.reset_pin": {
-      "summary": "Relayed to the system service's profiles.reset_pin. Give another profile a new PIN with the admin PIN; for the admin profile itself no admin_pin, but the admin account's password (polkit org.hinteros.system.profiles.recover, the agent prompt).",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["id", "new_pin"],
-        "additionalProperties": false,
-        "properties": { "id": { "$ref": "#/$defs/ProfileId" }, "new_pin": { "$ref": "#/$defs/Pin" }, "admin_pin": { "$ref": "#/$defs/Pin" } }
-      },
-      "result": { "type": "object", "additionalProperties": false, "properties": {} },
-      "errors": ["system_unavailable", "permission_denied", "authentication_required", "rate_limited", "not_found", "pin_required"],
-      "examples": [
-        { "name": "reset Sam's PIN", "params": { "id": "p3", "new_pin": "0000", "admin_pin": "2468" }, "result": {} },
-        { "name": "wrong admin PIN", "params": { "id": "p3", "new_pin": "0000", "admin_pin": "1111" }, "error": { "code": 3016, "message": "wrong PIN", "data": { "pin": "admin" } } }
-      ],
-      "relay": true
-    },
-    "system.profiles.remove": {
-      "summary": "Relayed to the system service's profiles.remove. Remove a profile with everything in it (job profiles_remove). Own PIN for the own profile (the session then ends, as in a switch), the admin PIN for another. Never the admin profile (invalid_params {reason: admin}).",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["id", "confirm_id", "pin", "revision"],
-        "additionalProperties": false,
-        "properties": {
-          "id": { "$ref": "#/$defs/ProfileId" },
-          "confirm_id": { "$ref": "#/$defs/ProfileId" },
-          "pin": { "$ref": "#/$defs/Pin" },
-          "revision": { "$ref": "#/$defs/Revision" }
-        }
-      },
-      "result": { "$ref": "#/$defs/JobRef", "type": "object" },
-      "errors": ["system_unavailable", "permission_denied", "rate_limited", "job_busy", "state_conflict", "not_found", "pin_required"],
-      "examples": [
-        { "name": "remove Sam", "params": { "id": "p3", "confirm_id": "p3", "pin": "2468", "revision": "6b2c1e0b9f4a7d3c5e8f1a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d" }, "result": { "job_id": "3f9a0c2b7e4d1a65" } },
-        { "name": "the admin profile", "params": { "id": "p1", "confirm_id": "p1", "pin": "2468", "revision": "6b2c1e0b9f4a7d3c5e8f1a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d" }, "error": { "code": -32602, "message": "the admin profile cannot be removed", "data": { "field": "id", "reason": "admin" } } }
-      ],
-      "relay": true
-    },
-    "system.guest.set": {
-      "summary": "Relayed to the system service's guest.set. Guest on or off (job guest_set, a rebuild), with the admin PIN.",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["enabled", "admin_pin"],
-        "additionalProperties": false,
-        "properties": { "enabled": { "type": "boolean" }, "admin_pin": { "$ref": "#/$defs/Pin" } }
-      },
-      "result": { "$ref": "#/$defs/JobRef", "type": "object" },
-      "errors": ["system_unavailable", "permission_denied", "rate_limited", "job_busy", "pin_required"],
-      "examples": [
-        { "name": "off", "params": { "enabled": false, "admin_pin": "2468" }, "result": { "job_id": "3f9a0c2b7e4d1a65" } },
-        { "name": "already on", "params": { "enabled": true, "admin_pin": "2468" }, "result": { "job_id": null } }
-      ],
-      "relay": true
-    },
-    "system.apps.list": {
-      "summary": "Relayed to the system service's apps.list. The caller's own apps (its current app env's manifest). Read-only.",
-      "description": "revision stands for the caller's current app generation: pass it as system.apps.install and system.apps.remove's revision. needs_terms: apps that came with the starter set whose vendor terms this profile has not accepted yet (ask on first launch, system.apps.accept_terms). On a box not migrated to per-profile apps: unavailable {service: apps, reason: schema1} (then settings.get's revision and apps apply).",
-      "since": "0.12",
-      "params": { "type": "object", "additionalProperties": false, "properties": {} },
-      "result": {
-        "type": "object",
-        "required": ["generation", "revision", "ids", "needs_terms", "box"],
-        "additionalProperties": false,
-        "properties": {
-          "generation": { "type": "integer", "minimum": 0 },
-          "revision": { "$ref": "#/$defs/Revision" },
-          "ids": { "type": "array", "items": { "$ref": "#/$defs/CatalogId" } },
-          "needs_terms": { "type": "array", "items": { "$ref": "#/$defs/CatalogId" } },
-          "box": { "description": "Box features the caller's apps need.", "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$" } }
-        }
-      },
-      "errors": ["system_unavailable", "unavailable"],
-      "examples": [
-        { "name": "starter set with Steam", "params": {}, "result": { "generation": 1, "revision": "9e0d1c2b3a4f5e6d7c8b9a0f1e2d3c4b5a6f7e8d9c0b1a2f3e4d5c6b7a8f9e0d", "ids": ["firefox", "steam", "youtube"], "needs_terms": ["steam"], "box": ["graphics32", "steam-devices"] } },
-        { "name": "not migrated", "params": {}, "error": { "code": 4001, "message": "this box still has box-wide apps", "data": { "service": "apps", "reason": "schema1" } } }
-      ],
-      "relay": true
-    },
-    "system.apps.generations": {
-      "summary": "Relayed to the system service's apps.generations. The caller's app generations (current plus up to 3 earlier), newest first. Read-only.",
-      "since": "0.12",
-      "params": { "type": "object", "additionalProperties": false, "properties": {} },
-      "result": {
-        "type": "object",
-        "required": ["generations"],
-        "additionalProperties": false,
-        "properties": { "generations": { "type": "array", "items": { "$ref": "#/$defs/AppGeneration" } } }
-      },
-      "errors": ["system_unavailable", "unavailable"],
-      "examples": [
-        {
-          "name": "after installing Moonlight",
-          "params": {},
-          "result": {
-            "generations": [
-              { "generation": 2, "date": 1791240000, "ids": ["firefox", "moonlight", "youtube"], "system_rev": "0f3c5a9e2b7d4c1a8e6f9b0d2c4e6a8b1d3f5a7c", "current": true },
-              { "generation": 1, "date": 1790000000, "ids": ["firefox", "youtube"], "system_rev": null, "current": false }
-            ]
-          }
-        }
-      ],
-      "relay": true
-    },
-    "system.apps.rollback": {
-      "summary": "Relayed to the system service's apps.rollback. Put the caller's apps back to an earlier generation (job apps_rollback; the box stage first if it needs a box feature that is off).",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["generation"],
-        "additionalProperties": false,
-        "properties": { "generation": { "type": "integer", "minimum": 1 } }
-      },
-      "result": { "$ref": "#/$defs/JobRef", "type": "object" },
-      "errors": ["system_unavailable", "permission_denied", "rate_limited", "job_busy", "not_found", "unavailable"],
-      "examples": [
-        { "name": "back to 1", "params": { "generation": 1 }, "result": { "job_id": "3f9a0c2b7e4d1a65" } },
-        { "name": "current", "params": { "generation": 2 }, "error": { "code": 3010, "message": "generation 2 is the current one" } }
-      ],
-      "relay": true
-    },
-    "system.apps.accept_terms": {
-      "summary": "Relayed to the system service's apps.accept_terms. Accept the vendor terms of an app in needs_terms (first launch of a starter-set app). version must be the running catalog's terms version. Recorded by this profile.",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["id", "version"],
-        "additionalProperties": false,
-        "properties": { "id": { "$ref": "#/$defs/CatalogId" }, "version": { "$ref": "#/$defs/TermsVersion" } }
-      },
-      "result": { "type": "object", "additionalProperties": false, "properties": {} },
-      "errors": ["system_unavailable", "permission_denied", "rate_limited", "not_found", "terms_required"],
-      "examples": [
-        { "name": "Steam", "params": { "id": "steam", "version": "2026-09-10" }, "result": {} },
-        { "name": "old version", "params": { "id": "steam", "version": "2025-01-01" }, "error": { "code": 3014, "message": "steam's terms are at version 2026-09-10", "data": { "id": "steam", "version": "2026-09-10" } } }
-      ],
-      "relay": true
-    },
-    "system.starter_set.get": {
-      "summary": "Relayed to the system service's starter_set.get. The apps every new profile and guest session starts with. Read-only.",
-      "since": "0.12",
-      "params": { "type": "object", "additionalProperties": false, "properties": {} },
-      "result": {
-        "type": "object",
-        "required": ["ids", "updated_at"],
-        "additionalProperties": false,
-        "properties": {
-          "ids": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/CatalogId" } },
-          "updated_at": { "oneOf": [{ "type": "integer" }, { "type": "null" }] }
-        }
-      },
-      "errors": ["system_unavailable"],
-      "examples": [{ "name": "installer picks", "params": {}, "result": { "ids": ["firefox", "youtube"], "updated_at": 1790000000 } }],
-      "relay": true
-    },
-    "system.starter_set.set": {
-      "summary": "Relayed to the system service's starter_set.set. Change the starter set (job starter_set) with the admin PIN; ids must be among the admin profile's current apps (invalid_params {reason: not_in_admin_profile}). Affects only profiles and guest sessions created afterwards.",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["ids", "pin"],
-        "additionalProperties": false,
-        "properties": {
-          "ids": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/CatalogId" } },
-          "pin": { "$ref": "#/$defs/Pin" }
-        }
-      },
-      "result": { "$ref": "#/$defs/JobRef", "type": "object" },
-      "errors": ["system_unavailable", "permission_denied", "rate_limited", "job_busy", "pin_required"],
-      "examples": [
-        { "name": "add Jellyfin", "params": { "ids": ["firefox", "jellyfin", "youtube"], "pin": "2468" }, "result": { "job_id": "3f9a0c2b7e4d1a65" } },
-        { "name": "wrong PIN", "params": { "ids": ["firefox"], "pin": "1111" }, "error": { "code": 3016, "message": "wrong PIN", "data": { "pin": "admin" } } }
-      ],
-      "relay": true
     }
 
   },
@@ -2994,99 +4293,227 @@
       "examples": [{ "name": "changed", "params": {} }]
     },
     "switch_progress": {
-      "summary": "A profile switch (session.switch_profile) moved on: closing_apps (app: the one being closed, when known), closing_steam, ending (the session ends next). The launcher shows the Switching screen.",
+      "summary": "0.12: a profile switch is closing apps, closing Steam, ending the session, or was cancelled. app: the app being closed.",
       "since": "0.12",
       "params": {
         "type": "object",
-        "required": ["stage"],
+        "required": [
+          "stage"
+        ],
         "additionalProperties": false,
         "properties": {
-          "stage": { "enum": ["closing_apps", "closing_steam", "ending"] },
-          "app": { "$ref": "#/$defs/NamedApp" }
+          "stage": {
+            "$ref": "#/$defs/SwitchStage"
+          },
+          "app": {
+            "type": "object",
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/AppId"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
         }
       },
       "examples": [
-        { "name": "closing YouTube", "params": { "stage": "closing_apps", "app": { "id": "youtube", "name": "YouTube" } } },
-        { "name": "ending", "params": { "stage": "ending" } }
+        {
+          "name": "closing",
+          "params": {
+            "stage": "closing_apps"
+          }
+        },
+        {
+          "name": "Steam",
+          "params": {
+            "stage": "closing_steam",
+            "app": {
+              "id": "steam",
+              "name": "Steam"
+            }
+          }
+        }
       ]
     },
     "switch_blocked": {
-      "summary": "An app (or Steam, or a game) has not closed waited_s seconds into a switch. The launcher, in front, asks: Keep waiting (session.switch_wait), Force close (session.switch_force_close) or Cancel switch (session.switch_cancel).",
+      "summary": "0.12: an app has not closed after waited_s seconds. Show 'X isn't responding (N s). Force-closing it may lose unsaved data.' with Keep waiting (session.switch_wait), Force close (session.switch_force_close) and Cancel switch (session.switch_cancel). Nothing is killed until Force close.",
       "since": "0.12",
       "params": {
         "type": "object",
-        "required": ["app", "waited_s"],
+        "required": [
+          "app",
+          "waited_s"
+        ],
         "additionalProperties": false,
         "properties": {
-          "app": { "$ref": "#/$defs/NamedApp" },
-          "waited_s": { "type": "integer", "minimum": 0 }
+          "app": {
+            "type": "object",
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/AppId"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "waited_s": {
+            "type": "integer",
+            "minimum": 0
+          }
         }
       },
-      "examples": [{ "name": "YouTube", "params": { "app": { "id": "youtube", "name": "YouTube" }, "waited_s": 10 } }]
+      "examples": [
+        {
+          "name": "YouTube",
+          "params": {
+            "app": {
+              "id": "youtube",
+              "name": "YouTube"
+            },
+            "waited_s": 10
+          }
+        }
+      ]
     },
     "lock_state": {
-      "summary": "The sleep lock of a locked profile: locked true before the box sleeps (the launcher is in front, apps keep running behind it; show the PIN pad on resume), false after session.unlock.",
+      "summary": "0.12: the sleep lock went up (before the box sleeps, for a locked profile) or down (session.unlock).",
       "since": "0.12",
       "params": {
         "type": "object",
-        "required": ["locked"],
+        "required": [
+          "locked"
+        ],
         "additionalProperties": false,
-        "properties": { "locked": { "type": "boolean" } }
+        "properties": {
+          "locked": {
+            "type": "boolean"
+          }
+        }
       },
-      "examples": [{ "name": "locked", "params": { "locked": true } }, { "name": "unlocked", "params": { "locked": false } }]
+      "examples": [
+        {
+          "name": "locked",
+          "params": {
+            "locked": true
+          }
+        }
+      ]
+    },
+    "greeter_prompt": {
+      "summary": "Greeter mode: greetd asks for the profile's PIN; show the PIN pad.",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "pin"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "name": "PIN",
+          "params": {
+            "kind": "pin"
+          }
+        }
+      ]
+    },
+    "greeter_result": {
+      "summary": "Greeter mode: the login ended: ok (the session starts, the greeter goes away) or not (wrong PIN; locked_seconds during the backoff: 'Too many tries. Try again in N seconds').",
+      "since": "0.12",
+      "params": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "locked_seconds": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "examples": [
+        {
+          "name": "in",
+          "params": {
+            "ok": true
+          }
+        },
+        {
+          "name": "wait",
+          "params": {
+            "ok": false,
+            "locked_seconds": 30
+          }
+        }
+      ]
     },
     "profiles_changed": {
-      "summary": "The profiles changed: after a profile job, a rename, a PIN, lock or appearance change. profiles is what system.profiles.list's profiles would say now (also for profile.current's fields).",
+      "summary": "0.12: the profiles changed (a profile job, a rename, a PIN, lock or appearance change); profiles as system.profiles.list's.",
       "since": "0.12",
       "params": {
         "type": "object",
-        "required": ["profiles"],
+        "required": [
+          "profiles"
+        ],
         "additionalProperties": false,
-        "properties": { "profiles": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/Profile" } } }
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ProfileInfo"
+            }
+          }
+        }
       },
       "examples": [
         {
           "name": "renamed",
           "params": {
             "profiles": [
-              { "id": "p1", "name": "Jim", "color": "teal", "user": "hinteros", "admin": true, "locked": false, "locked_until": null, "active": true, "last_used_at": 1791240000, "usage": null }
+              {
+                "id": "p1",
+                "name": "Jim",
+                "color": "teal",
+                "user": "hinteros",
+                "admin": true,
+                "locked": false,
+                "locked_until": null,
+                "active": true,
+                "last_used_at": null,
+                "usage": null,
+                "pin_set": true
+              }
             ]
           }
         }
-      ]
-    },
-    "greeter_prompt": {
-      "summary": "Greeter mode only: greetd asks something for the login in progress. kind pin: show the PIN pad (answer with greeter.pin). info and error carry greetd's message.",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["id", "kind"],
-        "additionalProperties": false,
-        "properties": {
-          "id": { "$ref": "#/$defs/ProfileTarget" },
-          "kind": { "enum": ["pin", "info", "error"] },
-          "message": { "type": "string", "maxLength": 300 }
-        }
-      },
-      "examples": [{ "name": "PIN", "params": { "id": "p3", "kind": "pin" } }]
-    },
-    "greeter_result": {
-      "summary": "Greeter mode only: the login in progress ended. ok: the profile's session starts and the greeter exits. Not ok: a wrong PIN, or locked_seconds while the backoff lock lasts (show 'Try again in N seconds'); greetd's session was cancelled, a new greeter.login starts over.",
-      "since": "0.12",
-      "params": {
-        "type": "object",
-        "required": ["id", "ok"],
-        "additionalProperties": false,
-        "properties": {
-          "id": { "$ref": "#/$defs/ProfileTarget" },
-          "ok": { "type": "boolean" },
-          "locked_seconds": { "type": "integer", "minimum": 0 }
-        }
-      },
-      "examples": [
-        { "name": "entering", "params": { "id": "p3", "ok": true } },
-        { "name": "wrong PIN", "params": { "id": "p3", "ok": false } },
-        { "name": "locked", "params": { "id": "p3", "ok": false, "locked_seconds": 30 } }
       ]
     }
 
@@ -3139,7 +4566,8 @@
             "enum": [
               "seat",
               "polkit",
-              "peer"
+              "peer",
+              "profile"
             ]
           }
         }
@@ -3329,6 +4757,23 @@
         "properties": { "id": { "$ref": "#/$defs/CatalogId" }, "conflicts_with": { "$ref": "#/$defs/CatalogId" } }
       }
     },
+    "profile_limit": {
+      "code": 3015,
+      "since": "0.12",
+      "summary": "profiles.create with the most profiles there may be (8; the guest does not count).",
+      "data": { "type": "object", "required": ["max"], "additionalProperties": false, "properties": { "max": { "type": "integer" } } }
+    },
+    "pin_required": {
+      "code": 3016,
+      "since": "0.12",
+      "summary": "A PIN is missing or wrong: the caller's own (self), the admin profile's (admin) or the profile being entered (target). retry_after_ms while the backoff lock is on (3 free failures, then 1 s doubling to 5 min, per profile).",
+      "data": {
+        "type": "object",
+        "required": ["pin"],
+        "additionalProperties": false,
+        "properties": { "pin": { "enum": ["self", "admin", "target"] }, "retry_after_ms": { "type": "integer", "minimum": 0 } }
+      }
+    },
     "terms_required": {
       "code": 3014,
       "since": "0.3",
@@ -3369,7 +4814,7 @@
         "required": ["service", "reason"],
         "additionalProperties": false,
         "properties": {
-          "service": { "enum": ["networkmanager", "bluez", "audio", "display", "logind", "catalog", "polkit", "apps", "greeter"] },
+          "service": { "enum": ["networkmanager", "bluez", "audio", "display", "logind", "catalog", "polkit", "profiles"] },
           "reason": { "type": "string", "maxLength": 300 }
         }
       }
@@ -3397,31 +4842,6 @@
         "type": "object",
         "additionalProperties": false,
         "properties": { "who": { "type": "string", "maxLength": 300 }, "why": { "type": "string", "maxLength": 300 } }
-      }
-    },
-    "profile_limit": {
-      "code": 3015,
-      "since": "0.12",
-      "summary": "profiles.create (greeter.create): the box has the most profiles it can have (the guest does not count).",
-      "data": {
-        "type": "object",
-        "required": ["max"],
-        "additionalProperties": false,
-        "properties": { "max": { "type": "integer", "minimum": 1 } }
-      }
-    },
-    "pin_required": {
-      "code": 3016,
-      "since": "0.12",
-      "summary": "A method needs a PIN that is missing or wrong: self (the caller's), admin (the admin profile's) or target (the profile being entered). retry_after_ms while the profile's backoff lock is active (3 free failures, then 1 s doubling up to 5 min).",
-      "data": {
-        "type": "object",
-        "required": ["pin"],
-        "additionalProperties": false,
-        "properties": {
-          "pin": { "enum": ["self", "admin", "target"] },
-          "retry_after_ms": { "type": "integer", "minimum": 0 }
-        }
       }
     }
 
@@ -3501,7 +4921,19 @@
         "name": { "description": "Display name.", "type": "string", "minLength": 1 },
         "kind": { "$ref": "#/$defs/AppKind" },
         "icon": { "description": "Absolute path to a local icon image file (PNG, SVG, ICO, JPEG, WebP), if any. Resolved by the daemon at runtime: an explicit path from the config, else the icon the app's .desktop file names, found in the installed icon themes, else (web apps) a cached download of the site's own icon. It may appear later (see apps_changed) or change. Absent: draw a placeholder, e.g. the first letter of the name.", "type": "string" },
-        "needs_terms": { "description": "0.12: an app this profile got with the starter set whose vendor terms it has not accepted yet. apps.launch of it is terms_required; show the terms (file: absolute path of the text) and accept with system.apps.accept_terms, then launch.", "type": "object", "required": ["title", "version", "url", "file"], "additionalProperties": false, "properties": { "title": { "type": "string", "maxLength": 80 }, "version": { "$ref": "#/$defs/TermsVersion" }, "url": { "type": "string" }, "file": { "type": "string" } } }
+        "needs_terms": {
+          "description": "0.12: the app came with the starter set and this profile has not accepted its vendor terms yet. Show the full text (file) on first launch; accept with system.apps.accept_terms {id, version}, decline leaves it installed and unlaunched (offer Remove). apps.launch refuses it with terms_required meanwhile.",
+          "type": "object",
+          "required": ["title", "version", "url", "retrieved", "file"],
+          "additionalProperties": false,
+          "properties": {
+            "title": { "type": "string", "maxLength": 80 },
+            "version": { "$ref": "#/$defs/TermsVersion" },
+            "url": { "type": "string", "maxLength": 300 },
+            "retrieved": { "type": "string", "maxLength": 10 },
+            "file": { "description": "Absolute path of the full text on this box.", "type": "string" }
+          }
+        }
       }
     },
     "InstallState": {
@@ -3622,11 +5054,28 @@
         "apps_install",
         "apps_remove",
         "apps_rollback",
+        "starter_set",
+        "migrate_apps",
         "profiles_create",
         "profiles_remove",
-        "guest_set",
-        "starter_set"
+        "guest_set"
       ]
+    },
+    "ProfileId": { "description": "A profile id.", "type": "string", "pattern": "^p[1-9][0-9]{0,2}$" },
+    "ProfileName": { "description": "A display name: 1 to 32 characters, trimmed, no control or format characters.", "type": "string", "minLength": 1, "maxLength": 128 },
+    "ProfileColor": { "enum": ["teal", "blue", "purple", "pink", "red", "orange", "yellow", "green"] },
+    "Pin": { "description": "4 to 8 digits. Never logged.", "type": "string", "pattern": "^[0-9]{4,8}$" },
+    "ProfileUsage": {
+      "type": "object",
+      "required": ["total_bytes", "steam_games_bytes", "at"],
+      "additionalProperties": false,
+      "properties": { "total_bytes": { "type": "integer", "minimum": 0 }, "steam_games_bytes": { "type": "integer", "minimum": 0 }, "at": { "type": "integer" } }
+    },
+    "SwitchStage": { "enum": ["closing_apps", "closing_steam", "ending", "cancelled"] },
+    "ProfileInfo": {"type": "object", "required": ["id", "name", "color", "user", "admin", "locked", "locked_until", "active", "last_used_at", "usage", "pin_set"], "additionalProperties": false, "properties": {"id": {"$ref": "#/$defs/ProfileId"}, "name": {"$ref": "#/$defs/ProfileName"}, "color": {"$ref": "#/$defs/ProfileColor"}, "user": {"type": "string", "maxLength": 32}, "admin": {"type": "boolean"}, "locked": {"type": "boolean"}, "locked_until": {"oneOf": [{"type": "integer"}, {"type": "null"}]}, "active": {"type": "boolean"}, "last_used_at": {"oneOf": [{"type": "integer"}, {"type": "null"}]}, "usage": {"oneOf": [{"$ref": "#/$defs/ProfileUsage"}, {"type": "null"}]}, "pin_set": {"type": "boolean"}}},
+    "BoxFeature": {
+      "description": "A box feature (catalog format 3): box-wide configuration an app needs, turned on when any owner has such an app.",
+      "enum": ["graphics32", "steam-devices"]
     },
     "CatalogId": { "description": "Catalog app id (state.json apps).", "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$" },
     "TermsVersion": { "description": "A vendor terms version from the catalog.", "type": "string", "pattern": "^[A-Za-z0-9._-]{1,32}$" },
@@ -3711,8 +5160,7 @@
         "redistributable": { "type": "boolean" },
         "status": { "$ref": "#/$defs/CatalogStatus" },
         "status_reason": { "oneOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }] },
-        "state": { "$ref": "#/$defs/StoreState" },
-        "missing_services": { "description": "0.12: services (box-wide, admin profile only) this app needs that are not enabled on this box. Absent or empty: none. While any is missing the app cannot be installed: say which service, and that the admin profile can install it in the Server section.", "type": "array", "items": { "$ref": "#/$defs/NamedApp" } }
+        "state": { "$ref": "#/$defs/StoreState" }
       }
     },
 
@@ -3729,13 +5177,13 @@
         "preparing",
         "fetching",
         "verifying",
+        "box",
         "evaluating",
         "downloading",
         "building",
         "activating",
-        "finishing",
-        "box",
-        "apps"
+        "apps",
+        "finishing"
       ]
     },
     "Severity": {
@@ -3802,7 +5250,20 @@
         "booted": {
           "type": "boolean"
         },
-        "profiles": { "description": "0.12: the accounts in that generation's state.json (null: unknown, e.g. no config snapshot). The rollback screen names the profiles a rollback would remove and those that would come back with an empty home.", "oneOf": [{ "type": "array", "items": { "$ref": "#/$defs/GenerationProfile" } }, { "type": "null" }] }
+        "profiles": {
+          "description": "The accounts in that generation's state.json with their current names (null: no longer a profile); absent if its state.json cannot be read (since 0.4). The rollback screen lists the profiles a rollback would drop or bring back empty.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/GenerationProfile" }
+        }
+      }
+    },
+    "GenerationProfile": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/ProfileId" },
+        "name": { "oneOf": [{ "$ref": "#/$defs/ProfileName" }, { "type": "null" }] }
       }
     },
     "AvailableUpdate": {
@@ -3858,6 +5319,14 @@
         "removed_apps": {
           "description": "Installed apps the update takes away (removed from, or missing in, the target's catalog); null if unknown (since 0.3). The update screen names them with the reason.",
           "oneOf": [{ "type": "array", "items": { "$ref": "#/$defs/RemovedApp" } }, { "type": "null" }]
+        },
+        "version": {
+          "description": "(Session API 0.11; optional in system API 0.3.) The release rev carries: its release/version file if that matches ^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$ (at most 32 characters), otherwise the first 12 hex digits of rev. The launcher shows 'HinterOS <version>'. Absent from older services: show the short rev.",
+          "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 32 }, { "type": "null" }]
+        },
+        "security_summary": {
+          "description": "(Session API 0.11; optional in system API 0.3.) The newest Security-Summary: trailer among the new commits: one line (control characters removed), at most 120 characters; the security notice shows it under the severity. Null if none; absent from older services.",
+          "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 120 }, { "type": "null" }]
         }
       }
     },
@@ -3927,6 +5396,20 @@
               "type": "null"
             }
           ]
+        },
+        "apps_not_updated": {
+          "description": "0.4: app envs the final apps stage could not rebuild; each keeps its previous generation, which still works. Absent when there were none.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["owner", "ids", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "owner": { "description": "A profile id, starter or guest.", "type": "string", "pattern": "^(p[1-9][0-9]{0,2}|starter|guest)$" },
+              "ids": { "type": "array", "items": { "$ref": "#/$defs/CatalogId" } },
+              "reason": { "type": "string", "maxLength": 300 }
+            }
+          }
         }
       }
     },
@@ -4187,96 +5670,6 @@
         "reboot": { "$ref": "#/$defs/PowerCapability" },
         "poweroff": { "$ref": "#/$defs/PowerCapability" }
       }
-    },
-    "ProfileId": { "description": "A profile id: p<N>, server-generated, never reused.", "type": "string", "pattern": "^p[1-9][0-9]{0,2}$" },
-    "ProfileTarget": { "description": "A profile id, or 'guest'.", "type": "string", "pattern": "^(p[1-9][0-9]{0,2}|guest)$" },
-    "ProfileName": { "description": "A display name: 1 to 32 characters, trimmed, no control or format characters. Never a username.", "type": "string", "minLength": 1, "maxLength": 32 },
-    "ProfileColor": { "description": "The profile's colour (tile and chip). Clients must treat unknown values like teal.", "type": "string", "enum": ["teal", "blue", "purple", "pink", "red", "orange", "yellow", "green"] },
-    "Pin": { "description": "4 to 8 ASCII digits. Never logged.", "type": "string", "pattern": "^[0-9]{4,8}$" },
-    "ProfileUsage": {
-      "description": "Disk use of a profile's home (hinteros-usage.service), app store paths not included.",
-      "type": "object",
-      "required": ["total_bytes", "steam_games_bytes", "at"],
-      "additionalProperties": false,
-      "properties": {
-        "total_bytes": { "type": "integer", "minimum": 0 },
-        "steam_games_bytes": { "type": "integer", "minimum": 0 },
-        "at": { "description": "Measured (Unix seconds).", "type": "integer" }
-      }
-    },
-    "Profile": {
-      "type": "object",
-      "required": ["id", "name", "color", "user", "admin", "locked", "locked_until", "active", "last_used_at", "usage"],
-      "additionalProperties": false,
-      "properties": {
-        "id": { "$ref": "#/$defs/ProfileId" },
-        "name": { "$ref": "#/$defs/ProfileName" },
-        "color": { "$ref": "#/$defs/ProfileColor" },
-        "user": { "type": "string", "pattern": "^hinteros(-p[1-9][0-9]{0,2})?$" },
-        "admin": { "type": "boolean" },
-        "locked": { "type": "boolean" },
-        "locked_until": { "description": "PIN backoff lock until (Unix seconds), or null.", "oneOf": [{ "type": "integer" }, { "type": "null" }] },
-        "active": { "description": "This profile is on screen now.", "type": "boolean" },
-        "last_used_at": { "oneOf": [{ "type": "integer" }, { "type": "null" }] },
-        "usage": { "oneOf": [{ "$ref": "#/$defs/ProfileUsage" }, { "type": "null" }] },
-        "pin_set": { "description": "The profile has a PIN (false: migrated, not set yet).", "type": "boolean" }
-      }
-    },
-    "PublicProfile": {
-      "description": "What the picker may know of a profile (profiles-public.json).",
-      "type": "object",
-      "required": ["id", "name", "color", "locked", "admin", "locked_until"],
-      "additionalProperties": false,
-      "properties": {
-        "id": { "$ref": "#/$defs/ProfileId" },
-        "name": { "$ref": "#/$defs/ProfileName" },
-        "color": { "$ref": "#/$defs/ProfileColor" },
-        "locked": { "type": "boolean" },
-        "admin": { "type": "boolean" },
-        "locked_until": { "oneOf": [{ "type": "integer" }, { "type": "null" }] }
-      }
-    },
-    "Appearance": {
-      "type": "object",
-      "required": ["text_scale", "high_contrast", "reduce_motion"],
-      "additionalProperties": false,
-      "properties": {
-        "text_scale": { "type": "number", "minimum": 0.5, "maximum": 3 },
-        "high_contrast": { "type": "boolean" },
-        "reduce_motion": { "type": "boolean" }
-      }
-    },
-    "ProfileJobRef": {
-      "description": "A started profile job and the id the new profile will have.",
-      "type": "object",
-      "required": ["job_id", "id"],
-      "additionalProperties": false,
-      "properties": { "job_id": { "$ref": "#/$defs/JobId" }, "id": { "$ref": "#/$defs/ProfileId" } }
-    },
-    "NamedApp": {
-      "type": "object",
-      "required": ["id", "name"],
-      "additionalProperties": false,
-      "properties": { "id": { "$ref": "#/$defs/AppId" }, "name": { "type": "string", "minLength": 1 } }
-    },
-    "AppGeneration": {
-      "type": "object",
-      "required": ["generation", "date", "ids", "system_rev", "current"],
-      "additionalProperties": false,
-      "properties": {
-        "generation": { "type": "integer", "minimum": 1 },
-        "date": { "description": "Created (Unix seconds).", "type": "integer" },
-        "ids": { "type": "array", "items": { "$ref": "#/$defs/CatalogId" } },
-        "system_rev": { "description": "The system revision the env was built against.", "oneOf": [{ "$ref": "#/$defs/Rev" }, { "type": "null" }] },
-        "current": { "type": "boolean" }
-      }
-    },
-    "GenerationProfile": {
-      "description": "An account in a system generation's state.json, with its name when this box still knows it.",
-      "type": "object",
-      "required": ["id", "name"],
-      "additionalProperties": false,
-      "properties": { "id": { "$ref": "#/$defs/ProfileId" }, "name": { "oneOf": [{ "$ref": "#/$defs/ProfileName" }, { "type": "null" }] } }
     }
 
 

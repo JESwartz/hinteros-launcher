@@ -94,6 +94,20 @@ class ProfileSession extends ChangeNotifier {
     if (me == null) return;
     current = c.copyWith(name: me.name, color: me.color, locked: me.locked);
     notifyListeners();
+    // A schema-1 box reports no PIN to set until its migration ran; ask for
+    // one as soon as the migrated profile has none.
+    if (c.pinSet && !c.guest && !_askingPin) unawaited(_recheckPin());
+  }
+
+  Future<void> _recheckPin() async {
+    try {
+      final c = await profiles.current();
+      if (c.pinSet || c.guest || c.setupRequired || _askingPin) return;
+      current = current?.copyWith(pinSet: false);
+      await _setFirstPin();
+    } on SystemException {
+      // Asked again with the next change or start.
+    }
   }
 
   // ---- first boot and the first PIN
@@ -115,9 +129,22 @@ class ProfileSession extends ChangeNotifier {
     );
   }
 
+  bool _askingPin = false;
+
   Future<void> _setFirstPin() async {
+    if (_askingPin) return;
+    _askingPin = true;
+    try {
+      await _askFirstPin();
+    } finally {
+      _askingPin = false;
+    }
+  }
+
+  Future<void> _askFirstPin() async {
     final ctx = context();
     String? first;
+    var unavailable = false;
     while (true) {
       first = await showPinEntry(
         ctx,
@@ -142,11 +169,20 @@ class ProfileSession extends ChangeNotifier {
           try {
             await profiles.setPin(pin);
             return const PinAccepted();
+          } on SystemException catch (e) {
+            if (e.kind == SystemErrorKind.unavailable) {
+              // No PINs on this box yet (schema 1): never trap the person
+              // behind a page that cannot succeed.
+              unavailable = true;
+              return const PinAccepted();
+            }
+            return PinAttempt.fromError(e);
           } catch (e) {
             return PinAttempt.fromError(e);
           }
         },
       );
+      if (unavailable) return;
       if (again != null) break;
       if (!ctx.mounted) return;
     }
@@ -307,8 +343,9 @@ class ProfileSession extends ChangeNotifier {
       context,
       title: 'End the guest session?',
       body:
-          'Everything the guest did is cleared now: sign-ins, installed apps '
-          'and files. Then the profile picker opens.',
+          'The guest session ends and the profile picker opens. Everything '
+          'the guest did (sign-ins, installed apps, files) is removed when '
+          'the box restarts.',
       confirmLabel: 'End guest session',
       danger: true,
     );
@@ -468,7 +505,13 @@ class _SwitchingPageState extends State<SwitchingPage> {
     final f = widget.first;
     if (f != null) _apply(f);
     _sub = widget.profiles.switchEvents.listen((e) {
-      if (mounted) setState(() => _apply(e));
+      if (!mounted) return;
+      if (e is SwitchProgress && e.stage == SwitchStage.cancelled) {
+        // Cancelled (here or by another client): the session stays.
+        widget.modal.close();
+        return;
+      }
+      setState(() => _apply(e));
     });
   }
 
@@ -521,7 +564,8 @@ class _SwitchingPageState extends State<SwitchingPage> {
             ? 'Closing the apps...'
             : 'Closing ${_progress.appName}...',
       SwitchStage.closingSteam => 'Closing Steam (it saves to the cloud)...',
-      SwitchStage.ending => 'Opening the profile picker...',
+      SwitchStage.ending ||
+      SwitchStage.cancelled => 'Opening the profile picker...',
     };
     return FullPage(
       title: widget.targetName == null

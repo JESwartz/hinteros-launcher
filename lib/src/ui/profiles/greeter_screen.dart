@@ -115,7 +115,6 @@ class _GreeterScreenState extends State<GreeterScreen> {
   /// Set once a profile's session is starting: the picker is done.
   String? _entering;
   bool _focusedFirst = false;
-  bool _shownJob = false;
   String? _message;
 
   ConsoleController get _c => widget.console;
@@ -137,7 +136,6 @@ class _GreeterScreenState extends State<GreeterScreen> {
         _error = null;
       });
       widget.onAppearance?.call(v.appearance);
-      _maybeShowJob(v);
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e);
@@ -155,24 +153,6 @@ class _GreeterScreenState extends State<GreeterScreen> {
   void dispose() {
     _retry?.cancel();
     super.dispose();
-  }
-
-  /// A removal that ended the last session: its progress, once.
-  void _maybeShowJob(PickerView v) {
-    final id = v.jobId;
-    if (id == null || _shownJob) return;
-    _shownJob = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      await showProfileJob(
-        context,
-        jobs: widget.jobs,
-        job: JobHandle(id, JobKind.profileRemove),
-        what: 'Removing a profile',
-        title: 'Removing the profile',
-      );
-      if (mounted) await _load();
-    });
   }
 
   /// The tiles in order: the profiles, Guest, Add profile.

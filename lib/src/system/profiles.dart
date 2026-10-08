@@ -262,7 +262,14 @@ sealed class SwitchEvent {
   const SwitchEvent();
 }
 
-enum SwitchStage { closingApps, closingSteam, ending }
+enum SwitchStage {
+  closingApps,
+  closingSteam,
+  ending,
+
+  /// `session.switch_cancel` stopped it; the session stays.
+  cancelled,
+}
 
 final class SwitchProgress extends SwitchEvent {
   const SwitchProgress(this.stage, {this.appId, this.appName});
@@ -470,7 +477,6 @@ class PickerView {
     this.firstBoot = false,
     this.focus,
     this.appearance = const PickerAppearance(),
-    this.jobId,
   });
 
   final List<PickerProfile> profiles;
@@ -480,9 +486,6 @@ class PickerView {
   /// The profile to focus first: a switch's target, else the last used.
   final String? focus;
   final PickerAppearance appearance;
-
-  /// A profile job to show (the removal that ended the last session).
-  final String? jobId;
 
   PickerProfile? byId(String id) =>
       profiles.where((p) => p.id == id).firstOrNull;

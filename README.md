@@ -51,7 +51,7 @@ launcher installed, or without those variables (`--mock`, development), it stays
 | `tool/gen_api.dart` | Generator: schema to `lib/src/api/generated.dart` (models, typed method stubs, sealed event class, error codes) |
 | `lib/src/api/generated.dart` | Generated, committed. Do not edit |
 | `lib/src/api/client.dart` | `DaemonClient`: handshake, request correlation, events, subscribe, reconnect |
-| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.10 methods and events: the relayed `system.*` API, the runtime settings, the admin password prompt, `session.restart` and the Store) |
+| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.11 methods and events: the relayed `system.*` API, the runtime settings, the admin password prompt, `session.restart` and the Store) |
 | `lib/src/osk/` | The on-screen keyboard: `OskBackend` (+ mock), layouts, state, UI |
 | `tool/gen_mock_art.dart` | Draws the placeholder cover art in `test/fixtures/art/` (committed; no network, no third-party pictures) |
 | `tool/gen_mock_icons.dart` | Draws the generic placeholder app icons in `test/fixtures/icons/` (plain shapes, PNG and one SVG; no logos, no network) |
@@ -275,7 +275,7 @@ params/result schemas that are a `$ref` (the relayed `system.*` results; `displa
   the daemon repo (`crates/hinteros-system/tests/common`), which cannot be used from Dart; those
   paths (`ssh.set` to `authentication_required`, jobs and their events) are covered against the
   mock daemon's relay, whose answers the contract test checks against the schema.
-  `runtime_integration_test.dart`: the launcher and the on-screen keyboard say hello at 0.10; with `--no-runtime` every Wi-Fi, Bluetooth, audio, display and power method answers `unavailable` naming its service (`networkmanager`, `bluez`, `audio`, `display`, `logind`) while ping and `apps.list` work, and the real repositories say "<service> isn't available on this box". **Not covered:** `--runtime-bus` with fake NetworkManager, BlueZ, logind, PipeWire and gamescope. The daemon's fakes are Rust test helpers inside its own integration tests (`crates/hinteros-session/tests/runtime_*`), not programs, so nothing from Dart can start them; those paths (wrong password, pairing with a passkey, keep and revert, `power_inhibited`) run against the mock daemon, whose answers the contract test checks against every schema example. The other integration tests start the daemon with `--no-runtime`, so they never reach the host's system bus.
+  `runtime_integration_test.dart`: the launcher and the on-screen keyboard say hello at 0.11; with `--no-runtime` every Wi-Fi, Bluetooth, audio, display and power method answers `unavailable` naming its service (`networkmanager`, `bluez`, `audio`, `display`, `logind`) while ping and `apps.list` work, and the real repositories say "<service> isn't available on this box". **Not covered:** `--runtime-bus` with fake NetworkManager, BlueZ, logind, PipeWire and gamescope. The daemon's fakes are Rust test helpers inside its own integration tests (`crates/hinteros-session/tests/runtime_*`), not programs, so nothing from Dart can start them; those paths (wrong password, pairing with a passkey, keep and revert, `power_inhibited`) run against the mock daemon, whose answers the contract test checks against every schema example. The other integration tests start the daemon with `--no-runtime`, so they never reach the host's system bus.
   0.8 (`system_relay_integration_test.dart`): with a real `hinteros-system` and the real session daemon both reading the fixture catalog (`--catalog-index test/fixtures/catalog/catalog.json`, the real index format) `store.list` returns the index merged with state.json's installed apps (by name, Steam `installed`, the rest `available`, terms with the absolute path of a text that exists), and the real `DaemonStore` reads it with the terms text; without the index it is `unavailable {service: catalog}`, without the system service `system_unavailable`. `auth.respond` and `auth.cancel` with no pending request are `not_found` (the repository: cancel is quiet, respond is `notFound`), a client that is not the launcher gets `not_authorized`, and `session.restart` with logind pointed at a bus that does not exist is `unavailable {service: logind}` (**never run it against a real bus**: a greetd session would end). **Not covered:** everything that needs real polkit and PAM (the prompt end to end with a password, `system.apps.install` / `remove` on a real service, `session.restart` ending a greetd session): the daemon repo's VM tests `polkit-agent`, `store-install` and `session-restart`. The daemons are started with `--no-auth-agent`, so they never register with this machine's polkit.
   It is a separate check and is skipped by plain `flutter test` unless `HINTEROS_SESSION_BIN`
   points at the binary (and `HINTEROS_SYSTEM_BIN` at `hinteros-system`) (and `HINTEROS_STEAM_FIXTURE` at `crates/hinteros-session/tests/fixtures/steam-home`
@@ -617,7 +617,10 @@ through their stages by themselves.
   connection, and is tried again after 5, 15, 45 and 120 s while the system service is not up
   yet, since it can start after the session; the update check is a job whose result arrives with
   `job_finished`, or comes straight back when cached within 60 s). The version of an update is
-  its date (the wire has no release name), the notice's severity is `available.security`. Behind its channel, Home shows a
+  `available.version` ("HinterOS 0.6.1", session API 0.11) when that is a release version, else
+  its date (the daemon's short-rev fallback, or an older daemon); the notice's severity is
+  `available.security`, with `available.security_summary` under it when the release has one (also
+  on Settings, Updates). Behind its channel, Home shows a
   non-modal banner ("See update" leads to Settings, Updates) at startup and on every return to Home.
   A **security update** (severity trailer) shows a full-screen notice instead: the severity, a
   visible countdown, and for 5 seconds buttons, Back and Home do nothing; then "Later" (focused
@@ -664,7 +667,7 @@ through their stages by themselves.
 The UI reads through `AppsRepository` (apps, running, launch, close, Steam attention and focus) and
 `GamesRepository` (`games.list`, launch by Steam URL) in `lib/src/data/`, combined in
 `LauncherData`, which owns all daemon traffic and re-queries on connect and on events (the daemon
-does not replay them). The client speaks session API 0.10 (during 0.x the minor must match); the on-screen keyboard's connection too.
+does not replay them). The client speaks session API 0.11 (during 0.x the minor must match); the on-screen keyboard's connection too.
 
 ### Fonts
 

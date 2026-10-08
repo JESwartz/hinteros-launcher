@@ -76,10 +76,13 @@ SystemException systemExceptionFrom(Object e) {
       case api.ApiErrorCode.permissionDenied:
         return SystemException(
           SystemErrorKind.permissionDenied,
-          data['reason'] == 'polkit'
-              ? 'The admin password was wrong too many times. Nothing was '
-                    'changed.'
-              : 'This is not allowed on this box right now.',
+          switch (data['reason']) {
+            'polkit' =>
+              'The admin password was wrong too many times. Nothing was '
+                  'changed.',
+            'profile' => 'Only a profile can do this.',
+            _ => 'This is not allowed on this box right now.',
+          },
           data: data,
         );
       case api.ApiErrorCode.authenticationRequired:
@@ -209,8 +212,7 @@ String runtimeServiceName(String service) => switch (service) {
   'display' => 'Display control',
   'logind' => 'Power control',
   'catalog' => 'The Store',
-  'apps' => 'Apps per profile',
-  'greeter' => 'The profile picker',
+  'profiles' => 'Profiles',
   'polkit' => 'The admin password check',
   _ => 'This',
 };

@@ -9,8 +9,14 @@ import 'package:hinteros_launcher/src/system/repositories.dart';
 
 const _rev = '9a8b7c6d5e4f30211a2b3c4d5e6f708192a3b4c5';
 
-api.AvailableUpdate _update({api.Severity? security}) => api.AvailableUpdate(
+api.AvailableUpdate _update({
+  api.Severity? security,
+  String? version,
+  String? securitySummary,
+}) => api.AvailableUpdate(
   rev: _rev,
+  version: version,
+  securitySummary: securitySummary,
   date: 1791300000,
   summary: 'Fixes a flaw in the web engine.',
   signer: 'release@hinteros',
@@ -406,6 +412,48 @@ void main() {
       expect(again.available!.rev, _rev);
       expect(mock.system.runningJobId, isNull);
       expect(again.available!.isSecurity, isFalse);
+    });
+
+    test('the release version and the security summary', () async {
+      final (mock, s) = await _setup();
+      mock.system.nextUpdate = _update(
+        security: api.Severity.high,
+        version: '0.6.1',
+        securitySummary: 'A website could take over the browser.',
+      );
+      final f = s.updates.check();
+      await pumpEventQueue();
+      mock.system.finishJob(mock.system.runningJobId!);
+      final a = (await f).available!;
+      expect(a.version, '0.6.1');
+      expect(a.securitySummary, 'A website could take over the browser.');
+    });
+
+    test('without a release version the update is named by its date', () async {
+      for (final v in [null, '9a8b7c6d5e4f', 'v0.6']) {
+        final (mock, s) = await _setup();
+        mock.system.nextUpdate = _update(version: v, securitySummary: '  ');
+        final f = s.updates.check();
+        await pumpEventQueue();
+        mock.system.finishJob(mock.system.runningJobId!);
+        final a = (await f).available!;
+        final d = DateTime.fromMillisecondsSinceEpoch(1791300000 * 1000);
+        expect(
+          a.version,
+          '${d.year}.${d.month.toString().padLeft(2, '0')}.'
+          '${d.day.toString().padLeft(2, '0')}',
+          reason: '$v',
+        );
+        expect(a.securitySummary, isNull);
+      }
+    });
+
+    test('releaseVersion accepts only release versions', () {
+      expect(releaseVersion('0.6.1'), '0.6.1');
+      expect(releaseVersion('1.0.0-rc.1'), '1.0.0-rc.1');
+      for (final v in [null, '', '9a8b7c6d5e4f', '0.6', '0.6.1+b', 'x0.6.1']) {
+        expect(releaseVersion(v), isNull, reason: '$v');
+      }
     });
 
     test('severities map: medium is moderate', () async {

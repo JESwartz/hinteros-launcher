@@ -42,6 +42,26 @@ const apiMethodNames = <String>[
   'system.base.set',
   'system.apps.install',
   'system.apps.remove',
+  'system.apps.list',
+  'system.apps.generations',
+  'system.apps.rollback',
+  'system.apps.accept_terms',
+  'system.profiles.list',
+  'system.profiles.create',
+  'system.profiles.setup_admin',
+  'system.profiles.rename',
+  'system.profiles.set_appearance',
+  'system.profiles.set_pin',
+  'system.profiles.set_locked',
+  'system.profiles.reset_pin',
+  'system.profiles.remove',
+  'system.profiles.switch',
+  'system.profiles.unlock',
+  'system.guest.set',
+  'system.display.save_mode',
+  'system.audio.save_output',
+  'system.starter_set.get',
+  'system.starter_set.set',
   'system.jobs.get',
   'system.jobs.list',
   'system.jobs.cancel',
@@ -74,37 +94,21 @@ const apiMethodNames = <String>[
   'power.poweroff',
   'auth.respond',
   'auth.cancel',
-  'session.restart',
-  'store.list',
   'profile.current',
   'session.switch_profile',
   'session.switch_wait',
   'session.switch_force_close',
   'session.switch_cancel',
-  'session.unlock',
   'session.lock_state',
+  'session.unlock',
   'session.end_guest',
   'greeter.list',
   'greeter.login',
   'greeter.pin',
   'greeter.cancel',
   'greeter.create',
-  'system.profiles.list',
-  'system.profiles.create',
-  'system.profiles.setup_admin',
-  'system.profiles.rename',
-  'system.profiles.set_appearance',
-  'system.profiles.set_pin',
-  'system.profiles.set_locked',
-  'system.profiles.reset_pin',
-  'system.profiles.remove',
-  'system.guest.set',
-  'system.apps.list',
-  'system.apps.generations',
-  'system.apps.rollback',
-  'system.apps.accept_terms',
-  'system.starter_set.get',
-  'system.starter_set.set',
+  'session.restart',
+  'store.list',
 ];
 
 /// Event names in the schema.
@@ -132,9 +136,9 @@ const apiEventNames = <String>[
   'switch_progress',
   'switch_blocked',
   'lock_state',
-  'profiles_changed',
   'greeter_prompt',
   'greeter_result',
+  'profiles_changed',
 ];
 
 /// Error name to JSON-RPC code.
@@ -164,6 +168,8 @@ const apiErrorCodesByName = <String, int>{
   'needs_acknowledgement': 3011,
   'authentication_required': 3012,
   'app_conflict': 3013,
+  'profile_limit': 3015,
+  'pin_required': 3016,
   'terms_required': 3014,
   'system_unavailable': 3001,
   'unavailable': 4001,
@@ -171,8 +177,6 @@ const apiErrorCodesByName = <String, int>{
   'wrong_password': 4003,
   'not_authorized': 4004,
   'power_inhibited': 4005,
-  'profile_limit': 3015,
-  'pin_required': 3016,
 };
 
 /// JSON-RPC error codes of the session API.
@@ -252,6 +256,12 @@ abstract final class ApiErrorCode {
   /// apps.install: id conflicts with conflicts_with (installed or also requested). apps.remove: conflicts_with, which stays installed, depends on id.
   static const appConflict = 3013;
 
+  /// profiles.create with the most profiles there may be (8; the guest does not count).
+  static const profileLimit = 3015;
+
+  /// A PIN is missing or wrong: the caller's own (self), the admin profile's (admin) or the profile being entered (target). retry_after_ms while the backoff lock is on (3 free failures, then 1 s doubling to 5 min, per profile).
+  static const pinRequired = 3016;
+
   /// apps.install: app id has vendor terms and accepted_terms does not name their current version (show the terms, then retry with it).
   static const termsRequired = 3014;
 
@@ -272,12 +282,6 @@ abstract final class ApiErrorCode {
 
   /// logind refused suspend, reboot or power off because an inhibitor lock blocks it (a system job is switching over). The message is logind's.
   static const powerInhibited = 4005;
-
-  /// profiles.create (greeter.create): the box has the most profiles it can have (the guest does not count).
-  static const profileLimit = 3015;
-
-  /// A method needs a PIN that is missing or wrong: self (the caller's), admin (the admin profile's) or target (the profile being entered). retry_after_ms while the profile's backoff lock is active (3 free failures, then 1 s doubling up to 5 min).
-  static const pinRequired = 3016;
 }
 
 /// MAJOR.MINOR
@@ -303,6 +307,15 @@ typedef Revision = String;
 typedef Fingerprint = String;
 typedef PolkitAction = String;
 
+/// A profile id.
+typedef ProfileId = String;
+
+/// A display name: 1 to 32 characters, trimmed, no control or format characters.
+typedef ProfileName = String;
+
+/// 4 to 8 digits. Never logged.
+typedef Pin = String;
+
 /// Catalog app id (state.json apps).
 typedef CatalogId = String;
 
@@ -314,18 +327,6 @@ typedef AuthCookie = String;
 
 /// A Bluetooth address, upper case.
 typedef BtAddress = String;
-
-/// A profile id: p&lt;N&gt;, server-generated, never reused.
-typedef ProfileId = String;
-
-/// A profile id, or 'guest'.
-typedef ProfileTarget = String;
-
-/// A display name: 1 to 32 characters, trimmed, no control or format characters. Never a username.
-typedef ProfileName = String;
-
-/// 4 to 8 ASCII digits. Never logged.
-typedef Pin = String;
 
 /// Name and build version of one side of the connection (informational, for logs).
 class Peer {
@@ -555,12 +556,13 @@ enum AppKind {
   String toJson() => value;
 }
 
-/// 0.12: an app this profile got with the starter set whose vendor terms it has not accepted yet. apps.launch of it is terms_required; show the terms (file: absolute path of the text) and accept with system.apps.accept_terms, then launch.
+/// 0.12: the app came with the starter set and this profile has not accepted its vendor terms yet. Show the full text (file) on first launch; accept with system.apps.accept_terms {id, version}, decline leaves it installed and unlaunched (offer Remove). apps.launch refuses it with terms_required meanwhile.
 class AppNeedsTerms {
   const AppNeedsTerms({
     required this.title,
     required this.version,
     required this.url,
+    required this.retrieved,
     required this.file,
   });
 
@@ -569,12 +571,16 @@ class AppNeedsTerms {
   /// A vendor terms version from the catalog.
   final String version;
   final String url;
+  final String retrieved;
+
+  /// Absolute path of the full text on this box.
   final String file;
 
   factory AppNeedsTerms.fromJson(Map<String, dynamic> json) => AppNeedsTerms(
     title: json['title'] as String,
     version: json['version'] as String,
     url: json['url'] as String,
+    retrieved: json['retrieved'] as String,
     file: json['file'] as String,
   );
 
@@ -582,6 +588,7 @@ class AppNeedsTerms {
     'title': title,
     'version': version,
     'url': url,
+    'retrieved': retrieved,
     'file': file,
   };
 
@@ -618,7 +625,7 @@ class App {
   /// Absolute path to a local icon image file (PNG, SVG, ICO, JPEG, WebP), if any. Resolved by the daemon at runtime: an explicit path from the config, else the icon the app's .desktop file names, found in the installed icon themes, else (web apps) a cached download of the site's own icon. It may appear later (see apps_changed) or change. Absent: draw a placeholder, e.g. the first letter of the name.
   final String? icon;
 
-  /// 0.12: an app this profile got with the starter set whose vendor terms it has not accepted yet. apps.launch of it is terms_required; show the terms (file: absolute path of the text) and accept with system.apps.accept_terms, then launch.
+  /// 0.12: the app came with the starter set and this profile has not accepted its vendor terms yet. Show the full text (file) on first launch; accept with system.apps.accept_terms {id, version}, decline leaves it installed and unlaunched (offer Remove). apps.launch refuses it with terms_required meanwhile.
   final AppNeedsTerms? needsTerms;
 
   factory App.fromJson(Map<String, dynamic> json) => App(
@@ -1026,10 +1033,11 @@ enum JobKind {
   appsInstall('apps_install'),
   appsRemove('apps_remove'),
   appsRollback('apps_rollback'),
+  starterSet('starter_set'),
+  migrateApps('migrate_apps'),
   profilesCreate('profiles_create'),
   profilesRemove('profiles_remove'),
   guestSet('guest_set'),
-  starterSet('starter_set'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -1038,6 +1046,180 @@ enum JobKind {
   final String value;
 
   factory JobKind.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+enum ProfileColor {
+  teal('teal'),
+  blue('blue'),
+  purple('purple'),
+  pink('pink'),
+  red('red'),
+  orange('orange'),
+  yellow('yellow'),
+  green('green'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const ProfileColor(this.value);
+  final String value;
+
+  factory ProfileColor.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+class ProfileUsage {
+  const ProfileUsage({
+    required this.totalBytes,
+    required this.steamGamesBytes,
+    required this.at,
+  });
+
+  final int totalBytes;
+  final int steamGamesBytes;
+  final int at;
+
+  factory ProfileUsage.fromJson(Map<String, dynamic> json) => ProfileUsage(
+    totalBytes: json['total_bytes'] as int,
+    steamGamesBytes: json['steam_games_bytes'] as int,
+    at: json['at'] as int,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'total_bytes': totalBytes,
+    'steam_games_bytes': steamGamesBytes,
+    'at': at,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ProfileUsage &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'ProfileUsage(${jsonEncode(toJson())})';
+}
+
+enum SwitchStage {
+  closingApps('closing_apps'),
+  closingSteam('closing_steam'),
+  ending('ending'),
+  cancelled('cancelled'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const SwitchStage(this.value);
+  final String value;
+
+  factory SwitchStage.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+class ProfileInfo {
+  const ProfileInfo({
+    required this.id,
+    required this.name,
+    required this.color,
+    required this.user,
+    required this.admin,
+    required this.locked,
+    required this.lockedUntil,
+    required this.active,
+    required this.lastUsedAt,
+    required this.usage,
+    required this.pinSet,
+  });
+
+  /// A profile id.
+  final String id;
+
+  /// A display name: 1 to 32 characters, trimmed, no control or format characters.
+  final String name;
+  final ProfileColor color;
+  final String user;
+  final bool admin;
+  final bool locked;
+  final int? lockedUntil;
+  final bool active;
+  final int? lastUsedAt;
+  final ProfileUsage? usage;
+  final bool pinSet;
+
+  factory ProfileInfo.fromJson(Map<String, dynamic> json) => ProfileInfo(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    color: ProfileColor.fromJson(json['color'] as String),
+    user: json['user'] as String,
+    admin: json['admin'] as bool,
+    locked: json['locked'] as bool,
+    lockedUntil: json['locked_until'] == null
+        ? null
+        : json['locked_until'] as int,
+    active: json['active'] as bool,
+    lastUsedAt: json['last_used_at'] == null
+        ? null
+        : json['last_used_at'] as int,
+    usage: json['usage'] == null
+        ? null
+        : ProfileUsage.fromJson((json['usage'] as Map).cast<String, dynamic>()),
+    pinSet: json['pin_set'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'color': color.toJson(),
+    'user': user,
+    'admin': admin,
+    'locked': locked,
+    'locked_until': lockedUntil,
+    'active': active,
+    'last_used_at': lastUsedAt,
+    'usage': usage == null ? null : usage!.toJson(),
+    'pin_set': pinSet,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ProfileInfo &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'ProfileInfo(${jsonEncode(toJson())})';
+}
+
+/// A box feature (catalog format 3): box-wide configuration an app needs, turned on when any owner has such an app.
+enum BoxFeature {
+  graphics32('graphics32'),
+  steamDevices('steam-devices'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const BoxFeature(this.value);
+  final String value;
+
+  factory BoxFeature.fromJson(String value) => values.firstWhere(
     (e) => e != unknown && e.value == value,
     orElse: () => unknown,
   );
@@ -1254,29 +1436,6 @@ class StoreAppTerms {
   String toString() => 'StoreAppTerms(${jsonEncode(toJson())})';
 }
 
-class NamedApp {
-  const NamedApp({required this.id, required this.name});
-
-  /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'. 'steam' is Steam itself (Big Picture and its other windows).
-  final String id;
-  final String name;
-
-  factory NamedApp.fromJson(Map<String, dynamic> json) =>
-      NamedApp(id: json['id'] as String, name: json['name'] as String);
-
-  Map<String, dynamic> toJson() => {'id': id, 'name': name};
-
-  @override
-  bool operator ==(Object other) =>
-      other is NamedApp && jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'NamedApp(${jsonEncode(toJson())})';
-}
-
 /// A catalog entry (hinteros-catalog index version 2, fields in snake_case) with its state on this box. Removed entries (tombstones) only have id, name and status_reason; the other fields are empty.
 class StoreApp {
   const StoreApp({
@@ -1303,7 +1462,6 @@ class StoreApp {
     required this.status,
     required this.statusReason,
     required this.state,
-    this.missingServices,
   });
 
   /// Catalog app id (state.json apps).
@@ -1345,9 +1503,6 @@ class StoreApp {
   final String? statusReason;
   final StoreState state;
 
-  /// 0.12: services (box-wide, admin profile only) this app needs that are not enabled on this box. Absent or empty: none. While any is missing the app cannot be installed: say which service, and that the admin profile can install it in the Server section.
-  final List<NamedApp>? missingServices;
-
   factory StoreApp.fromJson(Map<String, dynamic> json) => StoreApp(
     id: json['id'] as String,
     name: json['name'] as String,
@@ -1378,11 +1533,6 @@ class StoreApp {
         ? null
         : json['status_reason'] as String,
     state: StoreState.fromJson(json['state'] as String),
-    missingServices: json['missing_services'] == null
-        ? null
-        : (json['missing_services'] as List)
-              .map((x) => NamedApp.fromJson((x as Map).cast<String, dynamic>()))
-              .toList(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -1409,8 +1559,6 @@ class StoreApp {
     'status': status.toJson(),
     'status_reason': statusReason,
     'state': state.toJson(),
-    if (missingServices != null)
-      'missing_services': missingServices!.map((x) => x.toJson()).toList(),
   };
 
   @override
@@ -1448,13 +1596,13 @@ enum Stage {
   preparing('preparing'),
   fetching('fetching'),
   verifying('verifying'),
+  box('box'),
   evaluating('evaluating'),
   downloading('downloading'),
   building('building'),
   activating('activating'),
-  finishing('finishing'),
-  box('box'),
   apps('apps'),
+  finishing('finishing'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -1512,11 +1660,10 @@ class JobRef {
   String toString() => 'JobRef(${jsonEncode(toJson())})';
 }
 
-/// An account in a system generation's state.json, with its name when this box still knows it.
 class GenerationProfile {
   const GenerationProfile({required this.id, required this.name});
 
-  /// A profile id: p&lt;N&gt;, server-generated, never reused.
+  /// A profile id.
   final String id;
   final String? name;
 
@@ -1560,7 +1707,7 @@ class Generation {
   final bool current;
   final bool booted;
 
-  /// 0.12: the accounts in that generation's state.json (null: unknown, e.g. no config snapshot). The rollback screen names the profiles a rollback would remove and those that would come back with an empty home.
+  /// The accounts in that generation's state.json with their current names (null: no longer a profile); absent if its state.json cannot be read (since 0.4). The rollback screen lists the profiles a rollback would drop or bring back empty.
   final List<GenerationProfile>? profiles;
 
   factory Generation.fromJson(Map<String, dynamic> json) => Generation(
@@ -1610,6 +1757,8 @@ class AvailableUpdate {
     required this.commits,
     required this.newApps,
     required this.removedApps,
+    this.version,
+    this.securitySummary,
   });
 
   /// A full git commit id.
@@ -1633,6 +1782,12 @@ class AvailableUpdate {
 
   /// Installed apps the update takes away (removed from, or missing in, the target's catalog); null if unknown (since 0.3). The update screen names them with the reason.
   final List<RemovedApp>? removedApps;
+
+  /// (Session API 0.11; optional in system API 0.3.) The release rev carries: its release/version file if that matches ^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$ (at most 32 characters), otherwise the first 12 hex digits of rev. The launcher shows 'HinterOS &lt;version&gt;'. Absent from older services: show the short rev.
+  final String? version;
+
+  /// (Session API 0.11; optional in system API 0.3.) The newest Security-Summary: trailer among the new commits: one line (control characters removed), at most 120 characters; the security notice shows it under the severity. Null if none; absent from older services.
+  final String? securitySummary;
 
   factory AvailableUpdate.fromJson(Map<String, dynamic> json) =>
       AvailableUpdate(
@@ -1660,6 +1815,10 @@ class AvailableUpdate {
                         RemovedApp.fromJson((x as Map).cast<String, dynamic>()),
                   )
                   .toList(),
+        version: json['version'] == null ? null : json['version'] as String,
+        securitySummary: json['security_summary'] == null
+            ? null
+            : json['security_summary'] as String,
       );
 
   Map<String, dynamic> toJson() => {
@@ -1675,6 +1834,8 @@ class AvailableUpdate {
     'removed_apps': removedApps == null
         ? null
         : removedApps!.map((x) => x.toJson()).toList(),
+    'version': ?version,
+    'security_summary': ?securitySummary,
   };
 
   @override
@@ -1735,18 +1896,77 @@ class UpdateCheckResult {
   String toString() => 'UpdateCheckResult(${jsonEncode(toJson())})';
 }
 
+class AppliedResultAppsNotUpdatedItem {
+  const AppliedResultAppsNotUpdatedItem({
+    required this.owner,
+    required this.ids,
+    required this.reason,
+  });
+
+  /// A profile id, starter or guest.
+  final String owner;
+  final List<String> ids;
+  final String reason;
+
+  factory AppliedResultAppsNotUpdatedItem.fromJson(Map<String, dynamic> json) =>
+      AppliedResultAppsNotUpdatedItem(
+        owner: json['owner'] as String,
+        ids: (json['ids'] as List).map((x) => x as String).toList(),
+        reason: json['reason'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'owner': owner,
+    'ids': ids,
+    'reason': reason,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppliedResultAppsNotUpdatedItem &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'AppliedResultAppsNotUpdatedItem(${jsonEncode(toJson())})';
+}
+
 class AppliedResult {
-  const AppliedResult({required this.generation, required this.rev});
+  const AppliedResult({
+    required this.generation,
+    required this.rev,
+    this.appsNotUpdated,
+  });
 
   final int? generation;
   final String? rev;
 
+  /// 0.4: app envs the final apps stage could not rebuild; each keeps its previous generation, which still works. Absent when there were none.
+  final List<AppliedResultAppsNotUpdatedItem>? appsNotUpdated;
+
   factory AppliedResult.fromJson(Map<String, dynamic> json) => AppliedResult(
     generation: json['generation'] == null ? null : json['generation'] as int,
     rev: json['rev'] == null ? null : json['rev'] as String,
+    appsNotUpdated: json['apps_not_updated'] == null
+        ? null
+        : (json['apps_not_updated'] as List)
+              .map(
+                (x) => AppliedResultAppsNotUpdatedItem.fromJson(
+                  (x as Map).cast<String, dynamic>(),
+                ),
+              )
+              .toList(),
   );
 
-  Map<String, dynamic> toJson() => {'generation': generation, 'rev': rev};
+  Map<String, dynamic> toJson() => {
+    'generation': generation,
+    'rev': rev,
+    if (appsNotUpdated != null)
+      'apps_not_updated': appsNotUpdated!.map((x) => x.toJson()).toList(),
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -2474,315 +2694,6 @@ class PowerCapabilities {
 
   @override
   String toString() => 'PowerCapabilities(${jsonEncode(toJson())})';
-}
-
-/// The profile's colour (tile and chip). Clients must treat unknown values like teal.
-enum ProfileColor {
-  teal('teal'),
-  blue('blue'),
-  purple('purple'),
-  pink('pink'),
-  red('red'),
-  orange('orange'),
-  yellow('yellow'),
-  green('green'),
-
-  /// A value this client does not know (newer daemon).
-  unknown('unknown');
-
-  const ProfileColor(this.value);
-  final String value;
-
-  factory ProfileColor.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
-
-  String toJson() => value;
-}
-
-/// Disk use of a profile's home (hinteros-usage.service), app store paths not included.
-class ProfileUsage {
-  const ProfileUsage({
-    required this.totalBytes,
-    required this.steamGamesBytes,
-    required this.at,
-  });
-
-  final int totalBytes;
-  final int steamGamesBytes;
-
-  /// Measured (Unix seconds).
-  final int at;
-
-  factory ProfileUsage.fromJson(Map<String, dynamic> json) => ProfileUsage(
-    totalBytes: json['total_bytes'] as int,
-    steamGamesBytes: json['steam_games_bytes'] as int,
-    at: json['at'] as int,
-  );
-
-  Map<String, dynamic> toJson() => {
-    'total_bytes': totalBytes,
-    'steam_games_bytes': steamGamesBytes,
-    'at': at,
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is ProfileUsage &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'ProfileUsage(${jsonEncode(toJson())})';
-}
-
-class Profile {
-  const Profile({
-    required this.id,
-    required this.name,
-    required this.color,
-    required this.user,
-    required this.admin,
-    required this.locked,
-    required this.lockedUntil,
-    required this.active,
-    required this.lastUsedAt,
-    required this.usage,
-    this.pinSet,
-  });
-
-  /// A profile id: p&lt;N&gt;, server-generated, never reused.
-  final String id;
-
-  /// A display name: 1 to 32 characters, trimmed, no control or format characters. Never a username.
-  final String name;
-
-  /// The profile's colour (tile and chip). Clients must treat unknown values like teal.
-  final ProfileColor color;
-  final String user;
-  final bool admin;
-  final bool locked;
-
-  /// PIN backoff lock until (Unix seconds), or null.
-  final int? lockedUntil;
-
-  /// This profile is on screen now.
-  final bool active;
-  final int? lastUsedAt;
-  final ProfileUsage? usage;
-
-  /// The profile has a PIN (false: migrated, not set yet).
-  final bool? pinSet;
-
-  factory Profile.fromJson(Map<String, dynamic> json) => Profile(
-    id: json['id'] as String,
-    name: json['name'] as String,
-    color: ProfileColor.fromJson(json['color'] as String),
-    user: json['user'] as String,
-    admin: json['admin'] as bool,
-    locked: json['locked'] as bool,
-    lockedUntil: json['locked_until'] == null
-        ? null
-        : json['locked_until'] as int,
-    active: json['active'] as bool,
-    lastUsedAt: json['last_used_at'] == null
-        ? null
-        : json['last_used_at'] as int,
-    usage: json['usage'] == null
-        ? null
-        : ProfileUsage.fromJson((json['usage'] as Map).cast<String, dynamic>()),
-    pinSet: json['pin_set'] == null ? null : json['pin_set'] as bool,
-  );
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'color': color.toJson(),
-    'user': user,
-    'admin': admin,
-    'locked': locked,
-    'locked_until': lockedUntil,
-    'active': active,
-    'last_used_at': lastUsedAt,
-    'usage': usage == null ? null : usage!.toJson(),
-    'pin_set': ?pinSet,
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is Profile && jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'Profile(${jsonEncode(toJson())})';
-}
-
-/// What the picker may know of a profile (profiles-public.json).
-class PublicProfile {
-  const PublicProfile({
-    required this.id,
-    required this.name,
-    required this.color,
-    required this.locked,
-    required this.admin,
-    required this.lockedUntil,
-  });
-
-  /// A profile id: p&lt;N&gt;, server-generated, never reused.
-  final String id;
-
-  /// A display name: 1 to 32 characters, trimmed, no control or format characters. Never a username.
-  final String name;
-
-  /// The profile's colour (tile and chip). Clients must treat unknown values like teal.
-  final ProfileColor color;
-  final bool locked;
-  final bool admin;
-  final int? lockedUntil;
-
-  factory PublicProfile.fromJson(Map<String, dynamic> json) => PublicProfile(
-    id: json['id'] as String,
-    name: json['name'] as String,
-    color: ProfileColor.fromJson(json['color'] as String),
-    locked: json['locked'] as bool,
-    admin: json['admin'] as bool,
-    lockedUntil: json['locked_until'] == null
-        ? null
-        : json['locked_until'] as int,
-  );
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'color': color.toJson(),
-    'locked': locked,
-    'admin': admin,
-    'locked_until': lockedUntil,
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is PublicProfile &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'PublicProfile(${jsonEncode(toJson())})';
-}
-
-class Appearance {
-  const Appearance({
-    required this.textScale,
-    required this.highContrast,
-    required this.reduceMotion,
-  });
-
-  final num textScale;
-  final bool highContrast;
-  final bool reduceMotion;
-
-  factory Appearance.fromJson(Map<String, dynamic> json) => Appearance(
-    textScale: json['text_scale'] as num,
-    highContrast: json['high_contrast'] as bool,
-    reduceMotion: json['reduce_motion'] as bool,
-  );
-
-  Map<String, dynamic> toJson() => {
-    'text_scale': textScale,
-    'high_contrast': highContrast,
-    'reduce_motion': reduceMotion,
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is Appearance && jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'Appearance(${jsonEncode(toJson())})';
-}
-
-/// A started profile job and the id the new profile will have.
-class ProfileJobRef {
-  const ProfileJobRef({required this.jobId, required this.id});
-
-  /// Server-issued job id.
-  final String jobId;
-
-  /// A profile id: p&lt;N&gt;, server-generated, never reused.
-  final String id;
-
-  factory ProfileJobRef.fromJson(Map<String, dynamic> json) =>
-      ProfileJobRef(jobId: json['job_id'] as String, id: json['id'] as String);
-
-  Map<String, dynamic> toJson() => {'job_id': jobId, 'id': id};
-
-  @override
-  bool operator ==(Object other) =>
-      other is ProfileJobRef &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'ProfileJobRef(${jsonEncode(toJson())})';
-}
-
-class AppGeneration {
-  const AppGeneration({
-    required this.generation,
-    required this.date,
-    required this.ids,
-    required this.systemRev,
-    required this.current,
-  });
-
-  final int generation;
-
-  /// Created (Unix seconds).
-  final int date;
-  final List<String> ids;
-
-  /// The system revision the env was built against.
-  final String? systemRev;
-  final bool current;
-
-  factory AppGeneration.fromJson(Map<String, dynamic> json) => AppGeneration(
-    generation: json['generation'] as int,
-    date: json['date'] as int,
-    ids: (json['ids'] as List).map((x) => x as String).toList(),
-    systemRev: json['system_rev'] == null ? null : json['system_rev'] as String,
-    current: json['current'] as bool,
-  );
-
-  Map<String, dynamic> toJson() => {
-    'generation': generation,
-    'date': date,
-    'ids': ids,
-    'system_rev': systemRev,
-    'current': current,
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is AppGeneration &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'AppGeneration(${jsonEncode(toJson())})';
 }
 
 class HelloParams {
@@ -3808,20 +3719,31 @@ class SystemSettingsGetResultSettingsSsh {
 class SystemSettingsGetResultSettings {
   const SystemSettingsGetResultSettings({
     required this.base,
-    required this.apps,
+    this.apps,
+    this.requirements,
     required this.ssh,
   });
 
   final Base base;
 
-  /// Catalog app ids installed from the Store (state.json apps), in install order (since 0.3).
-  final List<String> apps;
+  /// Schema-1 boxes: catalog app ids installed box-wide from the Store (state.json apps), in install order (since 0.3). Absent on schema-2 boxes (0.4: apps are per profile, see apps.list).
+  final List<String>? apps;
+
+  /// Schema-2 boxes (0.4): the box features that are on (read-only).
+  final List<BoxFeature>? requirements;
   final SystemSettingsGetResultSettingsSsh ssh;
 
   factory SystemSettingsGetResultSettings.fromJson(Map<String, dynamic> json) =>
       SystemSettingsGetResultSettings(
         base: Base.fromJson(json['base'] as String),
-        apps: (json['apps'] as List).map((x) => x as String).toList(),
+        apps: json['apps'] == null
+            ? null
+            : (json['apps'] as List).map((x) => x as String).toList(),
+        requirements: json['requirements'] == null
+            ? null
+            : (json['requirements'] as List)
+                  .map((x) => BoxFeature.fromJson(x as String))
+                  .toList(),
         ssh: SystemSettingsGetResultSettingsSsh.fromJson(
           (json['ssh'] as Map).cast<String, dynamic>(),
         ),
@@ -3829,7 +3751,9 @@ class SystemSettingsGetResultSettings {
 
   Map<String, dynamic> toJson() => {
     'base': base.toJson(),
-    'apps': apps,
+    'apps': ?apps,
+    if (requirements != null)
+      'requirements': requirements!.map((x) => x.toJson()).toList(),
     'ssh': ssh.toJson(),
   };
 
@@ -4542,6 +4466,1360 @@ class SystemAppsRemoveResult {
 
   @override
   String toString() => 'SystemAppsRemoveResult(${jsonEncode(toJson())})';
+}
+
+class SystemAppsListParams {
+  const SystemAppsListParams();
+
+  factory SystemAppsListParams.fromJson(Map<String, dynamic> json) =>
+      SystemAppsListParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAppsListParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAppsListParams(${jsonEncode(toJson())})';
+}
+
+class SystemAppsListResult {
+  const SystemAppsListResult({
+    required this.revision,
+    required this.generation,
+    required this.ids,
+    required this.needsTerms,
+    required this.box,
+  });
+
+  /// SHA-256 of state.json, hex.
+  final String revision;
+  final int? generation;
+  final List<String> ids;
+  final List<String> needsTerms;
+  final List<BoxFeature> box;
+
+  factory SystemAppsListResult.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemAppsListResult(
+    revision: json['revision'] as String,
+    generation: json['generation'] == null ? null : json['generation'] as int,
+    ids: (json['ids'] as List).map((x) => x as String).toList(),
+    needsTerms: (json['needs_terms'] as List).map((x) => x as String).toList(),
+    box: (json['box'] as List)
+        .map((x) => BoxFeature.fromJson(x as String))
+        .toList(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'revision': revision,
+    'generation': generation,
+    'ids': ids,
+    'needs_terms': needsTerms,
+    'box': box.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAppsListResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAppsListResult(${jsonEncode(toJson())})';
+}
+
+class SystemAppsGenerationsParams {
+  const SystemAppsGenerationsParams();
+
+  factory SystemAppsGenerationsParams.fromJson(Map<String, dynamic> json) =>
+      SystemAppsGenerationsParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAppsGenerationsParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAppsGenerationsParams(${jsonEncode(toJson())})';
+}
+
+class SystemAppsGenerationsResultGenerationsItem {
+  const SystemAppsGenerationsResultGenerationsItem({
+    required this.generation,
+    required this.date,
+    required this.ids,
+    required this.systemRev,
+    required this.current,
+  });
+
+  final int generation;
+  final int date;
+  final List<String> ids;
+  final String? systemRev;
+  final bool current;
+
+  factory SystemAppsGenerationsResultGenerationsItem.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemAppsGenerationsResultGenerationsItem(
+    generation: json['generation'] as int,
+    date: json['date'] as int,
+    ids: (json['ids'] as List).map((x) => x as String).toList(),
+    systemRev: json['system_rev'] == null ? null : json['system_rev'] as String,
+    current: json['current'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'generation': generation,
+    'date': date,
+    'ids': ids,
+    'system_rev': systemRev,
+    'current': current,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAppsGenerationsResultGenerationsItem &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemAppsGenerationsResultGenerationsItem(${jsonEncode(toJson())})';
+}
+
+class SystemAppsGenerationsResult {
+  const SystemAppsGenerationsResult({required this.generations});
+
+  final List<SystemAppsGenerationsResultGenerationsItem> generations;
+
+  factory SystemAppsGenerationsResult.fromJson(Map<String, dynamic> json) =>
+      SystemAppsGenerationsResult(
+        generations: (json['generations'] as List)
+            .map(
+              (x) => SystemAppsGenerationsResultGenerationsItem.fromJson(
+                (x as Map).cast<String, dynamic>(),
+              ),
+            )
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'generations': generations.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAppsGenerationsResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAppsGenerationsResult(${jsonEncode(toJson())})';
+}
+
+class SystemAppsRollbackParams {
+  const SystemAppsRollbackParams({required this.generation});
+
+  final int generation;
+
+  factory SystemAppsRollbackParams.fromJson(Map<String, dynamic> json) =>
+      SystemAppsRollbackParams(generation: json['generation'] as int);
+
+  Map<String, dynamic> toJson() => {'generation': generation};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAppsRollbackParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAppsRollbackParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemAppsRollbackResult {
+  const SystemAppsRollbackResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemAppsRollbackResult.fromJson(Map<String, dynamic> json) =>
+      SystemAppsRollbackResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAppsRollbackResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAppsRollbackResult(${jsonEncode(toJson())})';
+}
+
+class SystemAppsAcceptTermsParams {
+  const SystemAppsAcceptTermsParams({required this.id, required this.version});
+
+  /// Catalog app id (state.json apps).
+  final String id;
+
+  /// A vendor terms version from the catalog.
+  final String version;
+
+  factory SystemAppsAcceptTermsParams.fromJson(Map<String, dynamic> json) =>
+      SystemAppsAcceptTermsParams(
+        id: json['id'] as String,
+        version: json['version'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'id': id, 'version': version};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAppsAcceptTermsParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAppsAcceptTermsParams(${jsonEncode(toJson())})';
+}
+
+class SystemAppsAcceptTermsResult {
+  const SystemAppsAcceptTermsResult();
+
+  factory SystemAppsAcceptTermsResult.fromJson(Map<String, dynamic> json) =>
+      SystemAppsAcceptTermsResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAppsAcceptTermsResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAppsAcceptTermsResult(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesListParams {
+  const SystemProfilesListParams();
+
+  factory SystemProfilesListParams.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesListParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesListParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesListParams(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesListResultProfilesItem {
+  const SystemProfilesListResultProfilesItem({
+    required this.id,
+    required this.name,
+    required this.color,
+    required this.user,
+    required this.admin,
+    required this.locked,
+    required this.lockedUntil,
+    required this.active,
+    required this.lastUsedAt,
+    required this.usage,
+    required this.pinSet,
+  });
+
+  /// A profile id.
+  final String id;
+
+  /// A display name: 1 to 32 characters, trimmed, no control or format characters.
+  final String name;
+  final ProfileColor color;
+  final String user;
+  final bool admin;
+  final bool locked;
+
+  /// The PIN backoff lock (Unix seconds) while it is on.
+  final int? lockedUntil;
+
+  /// Its session is the one on screen.
+  final bool active;
+  final int? lastUsedAt;
+  final ProfileUsage? usage;
+
+  /// false: a migrated profile without a PIN yet (show 'Set your PIN'). Always true on a schema-1 box (before the migration there are no PINs).
+  final bool pinSet;
+
+  factory SystemProfilesListResultProfilesItem.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemProfilesListResultProfilesItem(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    color: ProfileColor.fromJson(json['color'] as String),
+    user: json['user'] as String,
+    admin: json['admin'] as bool,
+    locked: json['locked'] as bool,
+    lockedUntil: json['locked_until'] == null
+        ? null
+        : json['locked_until'] as int,
+    active: json['active'] as bool,
+    lastUsedAt: json['last_used_at'] == null
+        ? null
+        : json['last_used_at'] as int,
+    usage: json['usage'] == null
+        ? null
+        : ProfileUsage.fromJson((json['usage'] as Map).cast<String, dynamic>()),
+    pinSet: json['pin_set'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'color': color.toJson(),
+    'user': user,
+    'admin': admin,
+    'locked': locked,
+    'locked_until': lockedUntil,
+    'active': active,
+    'last_used_at': lastUsedAt,
+    'usage': usage == null ? null : usage!.toJson(),
+    'pin_set': pinSet,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesListResultProfilesItem &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemProfilesListResultProfilesItem(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesListResultGuest {
+  const SystemProfilesListResultGuest({
+    required this.enabled,
+    required this.usage,
+  });
+
+  final bool enabled;
+  final ProfileUsage? usage;
+
+  factory SystemProfilesListResultGuest.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesListResultGuest(
+        enabled: json['enabled'] as bool,
+        usage: json['usage'] == null
+            ? null
+            : ProfileUsage.fromJson(
+                (json['usage'] as Map).cast<String, dynamic>(),
+              ),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'enabled': enabled,
+    'usage': usage == null ? null : usage!.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesListResultGuest &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesListResultGuest(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesListResultCaller {
+  const SystemProfilesListResultCaller({
+    required this.id,
+    required this.user,
+    required this.guest,
+    required this.spare,
+  });
+
+  final String? id;
+  final String user;
+  final bool guest;
+  final bool spare;
+
+  factory SystemProfilesListResultCaller.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesListResultCaller(
+        id: json['id'] == null ? null : json['id'] as String,
+        user: json['user'] as String,
+        guest: json['guest'] as bool,
+        spare: json['spare'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'user': user,
+    'guest': guest,
+    'spare': spare,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesListResultCaller &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemProfilesListResultCaller(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesListResult {
+  const SystemProfilesListResult({
+    required this.profiles,
+    required this.guest,
+    required this.max,
+    required this.firstBoot,
+    required this.caller,
+  });
+
+  final List<SystemProfilesListResultProfilesItem> profiles;
+  final SystemProfilesListResultGuest guest;
+  final int max;
+  final bool firstBoot;
+  final SystemProfilesListResultCaller caller;
+
+  factory SystemProfilesListResult.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesListResult(
+        profiles: (json['profiles'] as List)
+            .map(
+              (x) => SystemProfilesListResultProfilesItem.fromJson(
+                (x as Map).cast<String, dynamic>(),
+              ),
+            )
+            .toList(),
+        guest: SystemProfilesListResultGuest.fromJson(
+          (json['guest'] as Map).cast<String, dynamic>(),
+        ),
+        max: json['max'] as int,
+        firstBoot: json['first_boot'] as bool,
+        caller: SystemProfilesListResultCaller.fromJson(
+          (json['caller'] as Map).cast<String, dynamic>(),
+        ),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'profiles': profiles.map((x) => x.toJson()).toList(),
+    'guest': guest.toJson(),
+    'max': max,
+    'first_boot': firstBoot,
+    'caller': caller.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesListResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesListResult(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesCreateParams {
+  const SystemProfilesCreateParams({
+    required this.name,
+    this.color,
+    required this.pin,
+    required this.locked,
+    required this.revision,
+  });
+
+  /// A display name: 1 to 32 characters, trimmed, no control or format characters.
+  final String name;
+  final ProfileColor? color;
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+  final bool locked;
+
+  /// SHA-256 of state.json, hex.
+  final String revision;
+
+  factory SystemProfilesCreateParams.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesCreateParams(
+        name: json['name'] as String,
+        color: json['color'] == null
+            ? null
+            : ProfileColor.fromJson(json['color'] as String),
+        pin: json['pin'] as String,
+        locked: json['locked'] as bool,
+        revision: json['revision'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    if (color != null) 'color': color!.toJson(),
+    'pin': pin,
+    'locked': locked,
+    'revision': revision,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesCreateParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesCreateParams(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesCreateResult {
+  const SystemProfilesCreateResult({required this.jobId, required this.id});
+
+  /// Server-issued job id.
+  final String jobId;
+
+  /// A profile id.
+  final String id;
+
+  factory SystemProfilesCreateResult.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesCreateResult(
+        jobId: json['job_id'] as String,
+        id: json['id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId, 'id': id};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesCreateResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesCreateResult(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesSetupAdminParams {
+  const SystemProfilesSetupAdminParams({
+    required this.name,
+    this.color,
+    required this.pin,
+    required this.locked,
+  });
+
+  /// A display name: 1 to 32 characters, trimmed, no control or format characters.
+  final String name;
+  final ProfileColor? color;
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+  final bool locked;
+
+  factory SystemProfilesSetupAdminParams.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesSetupAdminParams(
+        name: json['name'] as String,
+        color: json['color'] == null
+            ? null
+            : ProfileColor.fromJson(json['color'] as String),
+        pin: json['pin'] as String,
+        locked: json['locked'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    if (color != null) 'color': color!.toJson(),
+    'pin': pin,
+    'locked': locked,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesSetupAdminParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemProfilesSetupAdminParams(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesSetupAdminResult {
+  const SystemProfilesSetupAdminResult({required this.id});
+
+  /// A profile id.
+  final String id;
+
+  factory SystemProfilesSetupAdminResult.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesSetupAdminResult(id: json['id'] as String);
+
+  Map<String, dynamic> toJson() => {'id': id};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesSetupAdminResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemProfilesSetupAdminResult(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesRenameParams {
+  const SystemProfilesRenameParams({
+    required this.id,
+    required this.name,
+    this.pin,
+  });
+
+  /// A profile id.
+  final String id;
+
+  /// A display name: 1 to 32 characters, trimmed, no control or format characters.
+  final String name;
+
+  /// 4 to 8 digits. Never logged.
+  final String? pin;
+
+  factory SystemProfilesRenameParams.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesRenameParams(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        pin: json['pin'] == null ? null : json['pin'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'pin': ?pin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesRenameParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesRenameParams(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesRenameResult {
+  const SystemProfilesRenameResult();
+
+  factory SystemProfilesRenameResult.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesRenameResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesRenameResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesRenameResult(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesSetAppearanceParams {
+  const SystemProfilesSetAppearanceParams({
+    this.color,
+    this.textScale,
+    this.highContrast,
+    this.reduceMotion,
+  });
+
+  final ProfileColor? color;
+  final num? textScale;
+  final bool? highContrast;
+  final bool? reduceMotion;
+
+  factory SystemProfilesSetAppearanceParams.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemProfilesSetAppearanceParams(
+    color: json['color'] == null
+        ? null
+        : ProfileColor.fromJson(json['color'] as String),
+    textScale: json['text_scale'] == null ? null : json['text_scale'] as num,
+    highContrast: json['high_contrast'] == null
+        ? null
+        : json['high_contrast'] as bool,
+    reduceMotion: json['reduce_motion'] == null
+        ? null
+        : json['reduce_motion'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {
+    if (color != null) 'color': color!.toJson(),
+    'text_scale': ?textScale,
+    'high_contrast': ?highContrast,
+    'reduce_motion': ?reduceMotion,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesSetAppearanceParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemProfilesSetAppearanceParams(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesSetAppearanceResult {
+  const SystemProfilesSetAppearanceResult();
+
+  factory SystemProfilesSetAppearanceResult.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemProfilesSetAppearanceResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesSetAppearanceResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemProfilesSetAppearanceResult(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesSetPinParams {
+  const SystemProfilesSetPinParams({required this.pin, this.currentPin});
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  /// 4 to 8 digits. Never logged.
+  final String? currentPin;
+
+  factory SystemProfilesSetPinParams.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesSetPinParams(
+        pin: json['pin'] as String,
+        currentPin: json['current_pin'] == null
+            ? null
+            : json['current_pin'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'pin': pin, 'current_pin': ?currentPin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesSetPinParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesSetPinParams(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesSetPinResult {
+  const SystemProfilesSetPinResult();
+
+  factory SystemProfilesSetPinResult.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesSetPinResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesSetPinResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesSetPinResult(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesSetLockedParams {
+  const SystemProfilesSetLockedParams({
+    required this.locked,
+    required this.pin,
+  });
+
+  final bool locked;
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  factory SystemProfilesSetLockedParams.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesSetLockedParams(
+        locked: json['locked'] as bool,
+        pin: json['pin'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'locked': locked, 'pin': pin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesSetLockedParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesSetLockedParams(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesSetLockedResult {
+  const SystemProfilesSetLockedResult();
+
+  factory SystemProfilesSetLockedResult.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesSetLockedResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesSetLockedResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesSetLockedResult(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesResetPinParams {
+  const SystemProfilesResetPinParams({
+    required this.id,
+    required this.newPin,
+    this.adminPin,
+  });
+
+  /// A profile id.
+  final String id;
+
+  /// 4 to 8 digits. Never logged.
+  final String newPin;
+
+  /// 4 to 8 digits. Never logged.
+  final String? adminPin;
+
+  factory SystemProfilesResetPinParams.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesResetPinParams(
+        id: json['id'] as String,
+        newPin: json['new_pin'] as String,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'new_pin': newPin,
+    'admin_pin': ?adminPin,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesResetPinParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesResetPinParams(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesResetPinResult {
+  const SystemProfilesResetPinResult();
+
+  factory SystemProfilesResetPinResult.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesResetPinResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesResetPinResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesResetPinResult(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesRemoveParams {
+  const SystemProfilesRemoveParams({
+    required this.id,
+    required this.confirmId,
+    required this.pin,
+    required this.revision,
+  });
+
+  /// A profile id.
+  final String id;
+
+  /// A profile id.
+  final String confirmId;
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  /// SHA-256 of state.json, hex.
+  final String revision;
+
+  factory SystemProfilesRemoveParams.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesRemoveParams(
+        id: json['id'] as String,
+        confirmId: json['confirm_id'] as String,
+        pin: json['pin'] as String,
+        revision: json['revision'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'confirm_id': confirmId,
+    'pin': pin,
+    'revision': revision,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesRemoveParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesRemoveParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemProfilesRemoveResult {
+  const SystemProfilesRemoveResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemProfilesRemoveResult.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesRemoveResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesRemoveResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesRemoveResult(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesSwitchParams {
+  const SystemProfilesSwitchParams({required this.id});
+
+  final Object id;
+
+  factory SystemProfilesSwitchParams.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesSwitchParams(id: json['id']);
+
+  Map<String, dynamic> toJson() => {'id': id};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesSwitchParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesSwitchParams(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesSwitchResult {
+  const SystemProfilesSwitchResult();
+
+  factory SystemProfilesSwitchResult.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesSwitchResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesSwitchResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesSwitchResult(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesUnlockParams {
+  const SystemProfilesUnlockParams({required this.pin});
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  factory SystemProfilesUnlockParams.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesUnlockParams(pin: json['pin'] as String);
+
+  Map<String, dynamic> toJson() => {'pin': pin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesUnlockParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesUnlockParams(${jsonEncode(toJson())})';
+}
+
+class SystemProfilesUnlockResult {
+  const SystemProfilesUnlockResult();
+
+  factory SystemProfilesUnlockResult.fromJson(Map<String, dynamic> json) =>
+      SystemProfilesUnlockResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemProfilesUnlockResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemProfilesUnlockResult(${jsonEncode(toJson())})';
+}
+
+class SystemGuestSetParams {
+  const SystemGuestSetParams({required this.enabled, required this.adminPin});
+
+  final bool enabled;
+
+  /// 4 to 8 digits. Never logged.
+  final String adminPin;
+
+  factory SystemGuestSetParams.fromJson(Map<String, dynamic> json) =>
+      SystemGuestSetParams(
+        enabled: json['enabled'] as bool,
+        adminPin: json['admin_pin'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'enabled': enabled, 'admin_pin': adminPin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemGuestSetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemGuestSetParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemGuestSetResult {
+  const SystemGuestSetResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemGuestSetResult.fromJson(Map<String, dynamic> json) =>
+      SystemGuestSetResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemGuestSetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemGuestSetResult(${jsonEncode(toJson())})';
+}
+
+class SystemDisplaySaveModeParams {
+  const SystemDisplaySaveModeParams({
+    required this.display,
+    required this.width,
+    required this.height,
+    required this.refresh,
+  });
+
+  /// The display as gamescope names it in GAMESCOPE_MODE_SAVE_FILE (&lt;make&gt; &lt;model&gt;).
+  final String display;
+  final int width;
+  final int height;
+  final int refresh;
+
+  factory SystemDisplaySaveModeParams.fromJson(Map<String, dynamic> json) =>
+      SystemDisplaySaveModeParams(
+        display: json['display'] as String,
+        width: json['width'] as int,
+        height: json['height'] as int,
+        refresh: json['refresh'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'display': display,
+    'width': width,
+    'height': height,
+    'refresh': refresh,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemDisplaySaveModeParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemDisplaySaveModeParams(${jsonEncode(toJson())})';
+}
+
+class SystemDisplaySaveModeResult {
+  const SystemDisplaySaveModeResult();
+
+  factory SystemDisplaySaveModeResult.fromJson(Map<String, dynamic> json) =>
+      SystemDisplaySaveModeResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemDisplaySaveModeResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemDisplaySaveModeResult(${jsonEncode(toJson())})';
+}
+
+class SystemAudioSaveOutputParams {
+  const SystemAudioSaveOutputParams({required this.node});
+
+  final String node;
+
+  factory SystemAudioSaveOutputParams.fromJson(Map<String, dynamic> json) =>
+      SystemAudioSaveOutputParams(node: json['node'] as String);
+
+  Map<String, dynamic> toJson() => {'node': node};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAudioSaveOutputParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAudioSaveOutputParams(${jsonEncode(toJson())})';
+}
+
+class SystemAudioSaveOutputResult {
+  const SystemAudioSaveOutputResult();
+
+  factory SystemAudioSaveOutputResult.fromJson(Map<String, dynamic> json) =>
+      SystemAudioSaveOutputResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAudioSaveOutputResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAudioSaveOutputResult(${jsonEncode(toJson())})';
+}
+
+class SystemStarterSetGetParams {
+  const SystemStarterSetGetParams();
+
+  factory SystemStarterSetGetParams.fromJson(Map<String, dynamic> json) =>
+      SystemStarterSetGetParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemStarterSetGetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemStarterSetGetParams(${jsonEncode(toJson())})';
+}
+
+class SystemStarterSetGetResult {
+  const SystemStarterSetGetResult({required this.ids, required this.updatedAt});
+
+  final List<String> ids;
+  final int? updatedAt;
+
+  factory SystemStarterSetGetResult.fromJson(Map<String, dynamic> json) =>
+      SystemStarterSetGetResult(
+        ids: (json['ids'] as List).map((x) => x as String).toList(),
+        updatedAt: json['updated_at'] == null
+            ? null
+            : json['updated_at'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {'ids': ids, 'updated_at': updatedAt};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemStarterSetGetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemStarterSetGetResult(${jsonEncode(toJson())})';
+}
+
+class SystemStarterSetSetParams {
+  const SystemStarterSetSetParams({required this.ids, required this.pin});
+
+  final List<String> ids;
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  factory SystemStarterSetSetParams.fromJson(Map<String, dynamic> json) =>
+      SystemStarterSetSetParams(
+        ids: (json['ids'] as List).map((x) => x as String).toList(),
+        pin: json['pin'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'ids': ids, 'pin': pin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemStarterSetSetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemStarterSetSetParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemStarterSetSetResult {
+  const SystemStarterSetSetResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemStarterSetSetResult.fromJson(Map<String, dynamic> json) =>
+      SystemStarterSetSetResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemStarterSetSetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemStarterSetSetResult(${jsonEncode(toJson())})';
 }
 
 class SystemJobsGetParams {
@@ -6422,104 +7700,6 @@ class AuthCancelResult {
   String toString() => 'AuthCancelResult(${jsonEncode(toJson())})';
 }
 
-class SessionRestartParams {
-  const SessionRestartParams();
-
-  factory SessionRestartParams.fromJson(Map<String, dynamic> json) =>
-      SessionRestartParams();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SessionRestartParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SessionRestartParams(${jsonEncode(toJson())})';
-}
-
-class SessionRestartResult {
-  const SessionRestartResult();
-
-  factory SessionRestartResult.fromJson(Map<String, dynamic> json) =>
-      SessionRestartResult();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SessionRestartResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SessionRestartResult(${jsonEncode(toJson())})';
-}
-
-class StoreListParams {
-  const StoreListParams();
-
-  factory StoreListParams.fromJson(Map<String, dynamic> json) =>
-      StoreListParams();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is StoreListParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'StoreListParams(${jsonEncode(toJson())})';
-}
-
-class StoreListResult {
-  const StoreListResult({
-    required this.indexVersion,
-    required this.apps,
-    required this.moreAfterUpdate,
-  });
-
-  final int indexVersion;
-  final List<StoreApp> apps;
-  final bool moreAfterUpdate;
-
-  factory StoreListResult.fromJson(Map<String, dynamic> json) =>
-      StoreListResult(
-        indexVersion: json['index_version'] as int,
-        apps: (json['apps'] as List)
-            .map((x) => StoreApp.fromJson((x as Map).cast<String, dynamic>()))
-            .toList(),
-        moreAfterUpdate: json['more_after_update'] as bool,
-      );
-
-  Map<String, dynamic> toJson() => {
-    'index_version': indexVersion,
-    'apps': apps.map((x) => x.toJson()).toList(),
-    'more_after_update': moreAfterUpdate,
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is StoreListResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'StoreListResult(${jsonEncode(toJson())})';
-}
-
 class ProfileCurrentParams {
   const ProfileCurrentParams();
 
@@ -6553,15 +7733,10 @@ class ProfileCurrentResult {
     required this.screenLocked,
   });
 
-  /// A profile id, or 'guest'.
-  final String id;
-
-  /// Null for a spare account in first-boot mode.
+  final String? id;
   final String? name;
   final ProfileColor? color;
   final bool admin;
-
-  /// The profile asks for its PIN to enter (at the picker and after sleep).
   final bool locked;
   final bool guest;
   final bool setupRequired;
@@ -6570,7 +7745,7 @@ class ProfileCurrentResult {
 
   factory ProfileCurrentResult.fromJson(Map<String, dynamic> json) =>
       ProfileCurrentResult(
-        id: json['id'] as String,
+        id: json['id'] == null ? null : json['id'] as String,
         name: json['name'] == null ? null : json['name'] as String,
         color: json['color'] == null
             ? null
@@ -6610,11 +7785,10 @@ class ProfileCurrentResult {
 class SessionSwitchProfileParams {
   const SessionSwitchProfileParams({required this.id});
 
-  /// A profile id, or 'guest'.
-  final String id;
+  final Object id;
 
   factory SessionSwitchProfileParams.fromJson(Map<String, dynamic> json) =>
-      SessionSwitchProfileParams(id: json['id'] as String);
+      SessionSwitchProfileParams(id: json['id']);
 
   Map<String, dynamic> toJson() => {'id': id};
 
@@ -6773,49 +7947,6 @@ class SessionSwitchCancelResult {
   String toString() => 'SessionSwitchCancelResult(${jsonEncode(toJson())})';
 }
 
-class SessionUnlockParams {
-  const SessionUnlockParams({required this.pin});
-
-  /// 4 to 8 ASCII digits. Never logged.
-  final String pin;
-
-  factory SessionUnlockParams.fromJson(Map<String, dynamic> json) =>
-      SessionUnlockParams(pin: json['pin'] as String);
-
-  Map<String, dynamic> toJson() => {'pin': pin};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SessionUnlockParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SessionUnlockParams(${jsonEncode(toJson())})';
-}
-
-class SessionUnlockResult {
-  const SessionUnlockResult();
-
-  factory SessionUnlockResult.fromJson(Map<String, dynamic> json) =>
-      SessionUnlockResult();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SessionUnlockResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SessionUnlockResult(${jsonEncode(toJson())})';
-}
-
 class SessionLockStateParams {
   const SessionLockStateParams();
 
@@ -6856,6 +7987,49 @@ class SessionLockStateResult {
 
   @override
   String toString() => 'SessionLockStateResult(${jsonEncode(toJson())})';
+}
+
+class SessionUnlockParams {
+  const SessionUnlockParams({required this.pin});
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  factory SessionUnlockParams.fromJson(Map<String, dynamic> json) =>
+      SessionUnlockParams(pin: json['pin'] as String);
+
+  Map<String, dynamic> toJson() => {'pin': pin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SessionUnlockParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SessionUnlockParams(${jsonEncode(toJson())})';
+}
+
+class SessionUnlockResult {
+  const SessionUnlockResult();
+
+  factory SessionUnlockResult.fromJson(Map<String, dynamic> json) =>
+      SessionUnlockResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SessionUnlockResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SessionUnlockResult(${jsonEncode(toJson())})';
 }
 
 class SessionEndGuestParams {
@@ -6918,6 +8092,95 @@ class GreeterListParams {
   String toString() => 'GreeterListParams(${jsonEncode(toJson())})';
 }
 
+class GreeterListResultProfilesItem {
+  const GreeterListResultProfilesItem({
+    required this.id,
+    required this.name,
+    required this.color,
+    required this.locked,
+    required this.admin,
+    required this.lockedUntil,
+  });
+
+  /// A profile id.
+  final String id;
+
+  /// A display name: 1 to 32 characters, trimmed, no control or format characters.
+  final String name;
+  final ProfileColor color;
+  final bool locked;
+  final bool admin;
+  final int? lockedUntil;
+
+  factory GreeterListResultProfilesItem.fromJson(Map<String, dynamic> json) =>
+      GreeterListResultProfilesItem(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        color: ProfileColor.fromJson(json['color'] as String),
+        locked: json['locked'] as bool,
+        admin: json['admin'] as bool,
+        lockedUntil: json['locked_until'] == null
+            ? null
+            : json['locked_until'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'color': color.toJson(),
+    'locked': locked,
+    'admin': admin,
+    'locked_until': lockedUntil,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is GreeterListResultProfilesItem &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'GreeterListResultProfilesItem(${jsonEncode(toJson())})';
+}
+
+class GreeterListResultAppearance {
+  const GreeterListResultAppearance({
+    required this.textScale,
+    required this.highContrast,
+    required this.reduceMotion,
+  });
+
+  final num textScale;
+  final bool highContrast;
+  final bool reduceMotion;
+
+  factory GreeterListResultAppearance.fromJson(Map<String, dynamic> json) =>
+      GreeterListResultAppearance(
+        textScale: json['text_scale'] as num,
+        highContrast: json['high_contrast'] as bool,
+        reduceMotion: json['reduce_motion'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'text_scale': textScale,
+    'high_contrast': highContrast,
+    'reduce_motion': reduceMotion,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is GreeterListResultAppearance &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'GreeterListResultAppearance(${jsonEncode(toJson())})';
+}
+
 class GreeterListResult {
   const GreeterListResult({
     required this.profiles,
@@ -6925,32 +8188,29 @@ class GreeterListResult {
     required this.firstBoot,
     required this.focus,
     required this.appearance,
-    required this.job,
   });
 
-  final List<PublicProfile> profiles;
-
-  /// The guest is enabled.
+  final List<GreeterListResultProfilesItem> profiles;
   final bool guest;
   final bool firstBoot;
-  final String? focus;
-  final Appearance appearance;
-  final String? job;
+  final Object? focus;
+  final GreeterListResultAppearance appearance;
 
   factory GreeterListResult.fromJson(Map<String, dynamic> json) =>
       GreeterListResult(
         profiles: (json['profiles'] as List)
             .map(
-              (x) => PublicProfile.fromJson((x as Map).cast<String, dynamic>()),
+              (x) => GreeterListResultProfilesItem.fromJson(
+                (x as Map).cast<String, dynamic>(),
+              ),
             )
             .toList(),
         guest: json['guest'] as bool,
         firstBoot: json['first_boot'] as bool,
-        focus: json['focus'] == null ? null : json['focus'] as String,
-        appearance: Appearance.fromJson(
+        focus: json['focus'] == null ? null : json['focus'],
+        appearance: GreeterListResultAppearance.fromJson(
           (json['appearance'] as Map).cast<String, dynamic>(),
         ),
-        job: json['job'] == null ? null : json['job'] as String,
       );
 
   Map<String, dynamic> toJson() => {
@@ -6959,7 +8219,6 @@ class GreeterListResult {
     'first_boot': firstBoot,
     'focus': focus,
     'appearance': appearance.toJson(),
-    'job': job,
   };
 
   @override
@@ -6977,11 +8236,10 @@ class GreeterListResult {
 class GreeterLoginParams {
   const GreeterLoginParams({required this.id});
 
-  /// A profile id, or 'guest'.
-  final String id;
+  final Object id;
 
   factory GreeterLoginParams.fromJson(Map<String, dynamic> json) =>
-      GreeterLoginParams(id: json['id'] as String);
+      GreeterLoginParams(id: json['id']);
 
   Map<String, dynamic> toJson() => {'id': id};
 
@@ -7020,7 +8278,7 @@ class GreeterLoginResult {
 class GreeterPinParams {
   const GreeterPinParams({required this.pin});
 
-  /// 4 to 8 ASCII digits. Never logged.
+  /// 4 to 8 digits. Never logged.
   final String pin;
 
   factory GreeterPinParams.fromJson(Map<String, dynamic> json) =>
@@ -7108,13 +8366,11 @@ class GreeterCreateParams {
     required this.locked,
   });
 
-  /// A display name: 1 to 32 characters, trimmed, no control or format characters. Never a username.
+  /// A display name: 1 to 32 characters, trimmed, no control or format characters.
   final String name;
-
-  /// The profile's colour (tile and chip). Clients must treat unknown values like teal.
   final ProfileColor? color;
 
-  /// 4 to 8 ASCII digits. Never logged.
+  /// 4 to 8 digits. Never logged.
   final String pin;
   final bool locked;
 
@@ -7147,14 +8403,13 @@ class GreeterCreateParams {
   String toString() => 'GreeterCreateParams(${jsonEncode(toJson())})';
 }
 
-/// A started profile job and the id the new profile will have.
 class GreeterCreateResult {
   const GreeterCreateResult({required this.jobId, required this.id});
 
   /// Server-issued job id.
   final String jobId;
 
-  /// A profile id: p&lt;N&gt;, server-generated, never reused.
+  /// A profile id.
   final String id;
 
   factory GreeterCreateResult.fromJson(Map<String, dynamic> json) =>
@@ -7177,1046 +8432,102 @@ class GreeterCreateResult {
   String toString() => 'GreeterCreateResult(${jsonEncode(toJson())})';
 }
 
-class SystemProfilesListParams {
-  const SystemProfilesListParams();
+class SessionRestartParams {
+  const SessionRestartParams();
 
-  factory SystemProfilesListParams.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesListParams();
+  factory SessionRestartParams.fromJson(Map<String, dynamic> json) =>
+      SessionRestartParams();
 
   Map<String, dynamic> toJson() => {};
 
   @override
   bool operator ==(Object other) =>
-      other is SystemProfilesListParams &&
+      other is SessionRestartParams &&
       jsonEncode(toJson()) == jsonEncode(other.toJson());
 
   @override
   int get hashCode => jsonEncode(toJson()).hashCode;
 
   @override
-  String toString() => 'SystemProfilesListParams(${jsonEncode(toJson())})';
+  String toString() => 'SessionRestartParams(${jsonEncode(toJson())})';
 }
 
-class SystemProfilesListResultGuest {
-  const SystemProfilesListResultGuest({
-    required this.enabled,
-    required this.usage,
-  });
+class SessionRestartResult {
+  const SessionRestartResult();
 
-  final bool enabled;
-  final ProfileUsage? usage;
+  factory SessionRestartResult.fromJson(Map<String, dynamic> json) =>
+      SessionRestartResult();
 
-  factory SystemProfilesListResultGuest.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesListResultGuest(
-        enabled: json['enabled'] as bool,
-        usage: json['usage'] == null
-            ? null
-            : ProfileUsage.fromJson(
-                (json['usage'] as Map).cast<String, dynamic>(),
-              ),
-      );
-
-  Map<String, dynamic> toJson() => {
-    'enabled': enabled,
-    'usage': usage == null ? null : usage!.toJson(),
-  };
+  Map<String, dynamic> toJson() => {};
 
   @override
   bool operator ==(Object other) =>
-      other is SystemProfilesListResultGuest &&
+      other is SessionRestartResult &&
       jsonEncode(toJson()) == jsonEncode(other.toJson());
 
   @override
   int get hashCode => jsonEncode(toJson()).hashCode;
 
   @override
-  String toString() => 'SystemProfilesListResultGuest(${jsonEncode(toJson())})';
+  String toString() => 'SessionRestartResult(${jsonEncode(toJson())})';
 }
 
-/// Who asked: the caller's profile id (null for a spare), its user, whether it is the guest or a spare.
-class SystemProfilesListResultCaller {
-  const SystemProfilesListResultCaller({
-    required this.id,
-    required this.user,
-    required this.guest,
-    required this.spare,
-  });
+class StoreListParams {
+  const StoreListParams();
 
-  final String? id;
-  final String user;
-  final bool guest;
-  final bool spare;
+  factory StoreListParams.fromJson(Map<String, dynamic> json) =>
+      StoreListParams();
 
-  factory SystemProfilesListResultCaller.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesListResultCaller(
-        id: json['id'] == null ? null : json['id'] as String,
-        user: json['user'] as String,
-        guest: json['guest'] as bool,
-        spare: json['spare'] as bool,
-      );
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'user': user,
-    'guest': guest,
-    'spare': spare,
-  };
+  Map<String, dynamic> toJson() => {};
 
   @override
   bool operator ==(Object other) =>
-      other is SystemProfilesListResultCaller &&
+      other is StoreListParams &&
       jsonEncode(toJson()) == jsonEncode(other.toJson());
 
   @override
   int get hashCode => jsonEncode(toJson()).hashCode;
 
   @override
-  String toString() =>
-      'SystemProfilesListResultCaller(${jsonEncode(toJson())})';
+  String toString() => 'StoreListParams(${jsonEncode(toJson())})';
 }
 
-class SystemProfilesListResult {
-  const SystemProfilesListResult({
-    required this.profiles,
-    required this.guest,
-    required this.max,
-    required this.firstBoot,
-    this.caller,
+class StoreListResult {
+  const StoreListResult({
+    required this.indexVersion,
+    required this.apps,
+    required this.moreAfterUpdate,
   });
 
-  final List<Profile> profiles;
-  final SystemProfilesListResultGuest guest;
-  final int max;
-  final bool firstBoot;
+  final int indexVersion;
+  final List<StoreApp> apps;
+  final bool moreAfterUpdate;
 
-  /// Who asked: the caller's profile id (null for a spare), its user, whether it is the guest or a spare.
-  final SystemProfilesListResultCaller? caller;
-
-  factory SystemProfilesListResult.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesListResult(
-        profiles: (json['profiles'] as List)
-            .map((x) => Profile.fromJson((x as Map).cast<String, dynamic>()))
+  factory StoreListResult.fromJson(Map<String, dynamic> json) =>
+      StoreListResult(
+        indexVersion: json['index_version'] as int,
+        apps: (json['apps'] as List)
+            .map((x) => StoreApp.fromJson((x as Map).cast<String, dynamic>()))
             .toList(),
-        guest: SystemProfilesListResultGuest.fromJson(
-          (json['guest'] as Map).cast<String, dynamic>(),
-        ),
-        max: json['max'] as int,
-        firstBoot: json['first_boot'] as bool,
-        caller: json['caller'] == null
-            ? null
-            : SystemProfilesListResultCaller.fromJson(
-                (json['caller'] as Map).cast<String, dynamic>(),
-              ),
+        moreAfterUpdate: json['more_after_update'] as bool,
       );
 
   Map<String, dynamic> toJson() => {
-    'profiles': profiles.map((x) => x.toJson()).toList(),
-    'guest': guest.toJson(),
-    'max': max,
-    'first_boot': firstBoot,
-    if (caller != null) 'caller': caller!.toJson(),
+    'index_version': indexVersion,
+    'apps': apps.map((x) => x.toJson()).toList(),
+    'more_after_update': moreAfterUpdate,
   };
 
   @override
   bool operator ==(Object other) =>
-      other is SystemProfilesListResult &&
+      other is StoreListResult &&
       jsonEncode(toJson()) == jsonEncode(other.toJson());
 
   @override
   int get hashCode => jsonEncode(toJson()).hashCode;
 
   @override
-  String toString() => 'SystemProfilesListResult(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesCreateParams {
-  const SystemProfilesCreateParams({
-    required this.name,
-    this.color,
-    required this.pin,
-    required this.locked,
-    required this.revision,
-  });
-
-  /// A display name: 1 to 32 characters, trimmed, no control or format characters. Never a username.
-  final String name;
-
-  /// The profile's colour (tile and chip). Clients must treat unknown values like teal.
-  final ProfileColor? color;
-
-  /// 4 to 8 ASCII digits. Never logged.
-  final String pin;
-  final bool locked;
-
-  /// SHA-256 of state.json, hex.
-  final String revision;
-
-  factory SystemProfilesCreateParams.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesCreateParams(
-        name: json['name'] as String,
-        color: json['color'] == null
-            ? null
-            : ProfileColor.fromJson(json['color'] as String),
-        pin: json['pin'] as String,
-        locked: json['locked'] as bool,
-        revision: json['revision'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {
-    'name': name,
-    if (color != null) 'color': color!.toJson(),
-    'pin': pin,
-    'locked': locked,
-    'revision': revision,
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesCreateParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemProfilesCreateParams(${jsonEncode(toJson())})';
-}
-
-/// A started profile job and the id the new profile will have.
-class SystemProfilesCreateResult {
-  const SystemProfilesCreateResult({required this.jobId, required this.id});
-
-  /// Server-issued job id.
-  final String jobId;
-
-  /// A profile id: p&lt;N&gt;, server-generated, never reused.
-  final String id;
-
-  factory SystemProfilesCreateResult.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesCreateResult(
-        jobId: json['job_id'] as String,
-        id: json['id'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {'job_id': jobId, 'id': id};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesCreateResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemProfilesCreateResult(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesSetupAdminParams {
-  const SystemProfilesSetupAdminParams({
-    required this.name,
-    this.color,
-    required this.pin,
-    required this.locked,
-  });
-
-  /// A display name: 1 to 32 characters, trimmed, no control or format characters. Never a username.
-  final String name;
-
-  /// The profile's colour (tile and chip). Clients must treat unknown values like teal.
-  final ProfileColor? color;
-
-  /// 4 to 8 ASCII digits. Never logged.
-  final String pin;
-  final bool locked;
-
-  factory SystemProfilesSetupAdminParams.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesSetupAdminParams(
-        name: json['name'] as String,
-        color: json['color'] == null
-            ? null
-            : ProfileColor.fromJson(json['color'] as String),
-        pin: json['pin'] as String,
-        locked: json['locked'] as bool,
-      );
-
-  Map<String, dynamic> toJson() => {
-    'name': name,
-    if (color != null) 'color': color!.toJson(),
-    'pin': pin,
-    'locked': locked,
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesSetupAdminParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() =>
-      'SystemProfilesSetupAdminParams(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesSetupAdminResult {
-  const SystemProfilesSetupAdminResult({required this.id});
-
-  /// A profile id: p&lt;N&gt;, server-generated, never reused.
-  final String id;
-
-  factory SystemProfilesSetupAdminResult.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesSetupAdminResult(id: json['id'] as String);
-
-  Map<String, dynamic> toJson() => {'id': id};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesSetupAdminResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() =>
-      'SystemProfilesSetupAdminResult(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesRenameParams {
-  const SystemProfilesRenameParams({
-    required this.id,
-    required this.name,
-    this.pin,
-  });
-
-  /// A profile id: p&lt;N&gt;, server-generated, never reused.
-  final String id;
-
-  /// A display name: 1 to 32 characters, trimmed, no control or format characters. Never a username.
-  final String name;
-
-  /// 4 to 8 ASCII digits. Never logged.
-  final String? pin;
-
-  factory SystemProfilesRenameParams.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesRenameParams(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        pin: json['pin'] == null ? null : json['pin'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'pin': ?pin};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesRenameParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemProfilesRenameParams(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesRenameResult {
-  const SystemProfilesRenameResult();
-
-  factory SystemProfilesRenameResult.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesRenameResult();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesRenameResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemProfilesRenameResult(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesSetAppearanceParams {
-  const SystemProfilesSetAppearanceParams({
-    this.color,
-    this.textScale,
-    this.highContrast,
-    this.reduceMotion,
-  });
-
-  /// The profile's colour (tile and chip). Clients must treat unknown values like teal.
-  final ProfileColor? color;
-  final num? textScale;
-  final bool? highContrast;
-  final bool? reduceMotion;
-
-  factory SystemProfilesSetAppearanceParams.fromJson(
-    Map<String, dynamic> json,
-  ) => SystemProfilesSetAppearanceParams(
-    color: json['color'] == null
-        ? null
-        : ProfileColor.fromJson(json['color'] as String),
-    textScale: json['text_scale'] == null ? null : json['text_scale'] as num,
-    highContrast: json['high_contrast'] == null
-        ? null
-        : json['high_contrast'] as bool,
-    reduceMotion: json['reduce_motion'] == null
-        ? null
-        : json['reduce_motion'] as bool,
-  );
-
-  Map<String, dynamic> toJson() => {
-    if (color != null) 'color': color!.toJson(),
-    'text_scale': ?textScale,
-    'high_contrast': ?highContrast,
-    'reduce_motion': ?reduceMotion,
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesSetAppearanceParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() =>
-      'SystemProfilesSetAppearanceParams(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesSetAppearanceResult {
-  const SystemProfilesSetAppearanceResult();
-
-  factory SystemProfilesSetAppearanceResult.fromJson(
-    Map<String, dynamic> json,
-  ) => SystemProfilesSetAppearanceResult();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesSetAppearanceResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() =>
-      'SystemProfilesSetAppearanceResult(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesSetPinParams {
-  const SystemProfilesSetPinParams({required this.pin, this.currentPin});
-
-  /// 4 to 8 ASCII digits. Never logged.
-  final String pin;
-
-  /// 4 to 8 ASCII digits. Never logged.
-  final String? currentPin;
-
-  factory SystemProfilesSetPinParams.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesSetPinParams(
-        pin: json['pin'] as String,
-        currentPin: json['current_pin'] == null
-            ? null
-            : json['current_pin'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {'pin': pin, 'current_pin': ?currentPin};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesSetPinParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemProfilesSetPinParams(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesSetPinResult {
-  const SystemProfilesSetPinResult();
-
-  factory SystemProfilesSetPinResult.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesSetPinResult();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesSetPinResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemProfilesSetPinResult(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesSetLockedParams {
-  const SystemProfilesSetLockedParams({
-    required this.locked,
-    required this.pin,
-  });
-
-  final bool locked;
-
-  /// 4 to 8 ASCII digits. Never logged.
-  final String pin;
-
-  factory SystemProfilesSetLockedParams.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesSetLockedParams(
-        locked: json['locked'] as bool,
-        pin: json['pin'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {'locked': locked, 'pin': pin};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesSetLockedParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemProfilesSetLockedParams(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesSetLockedResult {
-  const SystemProfilesSetLockedResult();
-
-  factory SystemProfilesSetLockedResult.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesSetLockedResult();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesSetLockedResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemProfilesSetLockedResult(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesResetPinParams {
-  const SystemProfilesResetPinParams({
-    required this.id,
-    required this.newPin,
-    this.adminPin,
-  });
-
-  /// A profile id: p&lt;N&gt;, server-generated, never reused.
-  final String id;
-
-  /// 4 to 8 ASCII digits. Never logged.
-  final String newPin;
-
-  /// 4 to 8 ASCII digits. Never logged.
-  final String? adminPin;
-
-  factory SystemProfilesResetPinParams.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesResetPinParams(
-        id: json['id'] as String,
-        newPin: json['new_pin'] as String,
-        adminPin: json['admin_pin'] == null
-            ? null
-            : json['admin_pin'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'new_pin': newPin,
-    'admin_pin': ?adminPin,
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesResetPinParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemProfilesResetPinParams(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesResetPinResult {
-  const SystemProfilesResetPinResult();
-
-  factory SystemProfilesResetPinResult.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesResetPinResult();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesResetPinResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemProfilesResetPinResult(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesRemoveParams {
-  const SystemProfilesRemoveParams({
-    required this.id,
-    required this.confirmId,
-    required this.pin,
-    required this.revision,
-  });
-
-  /// A profile id: p&lt;N&gt;, server-generated, never reused.
-  final String id;
-
-  /// A profile id: p&lt;N&gt;, server-generated, never reused.
-  final String confirmId;
-
-  /// 4 to 8 ASCII digits. Never logged.
-  final String pin;
-
-  /// SHA-256 of state.json, hex.
-  final String revision;
-
-  factory SystemProfilesRemoveParams.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesRemoveParams(
-        id: json['id'] as String,
-        confirmId: json['confirm_id'] as String,
-        pin: json['pin'] as String,
-        revision: json['revision'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'confirm_id': confirmId,
-    'pin': pin,
-    'revision': revision,
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesRemoveParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemProfilesRemoveParams(${jsonEncode(toJson())})';
-}
-
-/// A started job, or null when there was nothing to do.
-class SystemProfilesRemoveResult {
-  const SystemProfilesRemoveResult({required this.jobId});
-
-  final String? jobId;
-
-  factory SystemProfilesRemoveResult.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesRemoveResult(
-        jobId: json['job_id'] == null ? null : json['job_id'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {'job_id': jobId};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesRemoveResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemProfilesRemoveResult(${jsonEncode(toJson())})';
-}
-
-class SystemGuestSetParams {
-  const SystemGuestSetParams({required this.enabled, required this.adminPin});
-
-  final bool enabled;
-
-  /// 4 to 8 ASCII digits. Never logged.
-  final String adminPin;
-
-  factory SystemGuestSetParams.fromJson(Map<String, dynamic> json) =>
-      SystemGuestSetParams(
-        enabled: json['enabled'] as bool,
-        adminPin: json['admin_pin'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {'enabled': enabled, 'admin_pin': adminPin};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemGuestSetParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemGuestSetParams(${jsonEncode(toJson())})';
-}
-
-/// A started job, or null when there was nothing to do.
-class SystemGuestSetResult {
-  const SystemGuestSetResult({required this.jobId});
-
-  final String? jobId;
-
-  factory SystemGuestSetResult.fromJson(Map<String, dynamic> json) =>
-      SystemGuestSetResult(
-        jobId: json['job_id'] == null ? null : json['job_id'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {'job_id': jobId};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemGuestSetResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemGuestSetResult(${jsonEncode(toJson())})';
-}
-
-class SystemAppsListParams {
-  const SystemAppsListParams();
-
-  factory SystemAppsListParams.fromJson(Map<String, dynamic> json) =>
-      SystemAppsListParams();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemAppsListParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemAppsListParams(${jsonEncode(toJson())})';
-}
-
-class SystemAppsListResult {
-  const SystemAppsListResult({
-    required this.generation,
-    required this.revision,
-    required this.ids,
-    required this.needsTerms,
-    required this.box,
-  });
-
-  final int generation;
-
-  /// SHA-256 of state.json, hex.
-  final String revision;
-  final List<String> ids;
-  final List<String> needsTerms;
-
-  /// Box features the caller's apps need.
-  final List<String> box;
-
-  factory SystemAppsListResult.fromJson(Map<String, dynamic> json) =>
-      SystemAppsListResult(
-        generation: json['generation'] as int,
-        revision: json['revision'] as String,
-        ids: (json['ids'] as List).map((x) => x as String).toList(),
-        needsTerms: (json['needs_terms'] as List)
-            .map((x) => x as String)
-            .toList(),
-        box: (json['box'] as List).map((x) => x as String).toList(),
-      );
-
-  Map<String, dynamic> toJson() => {
-    'generation': generation,
-    'revision': revision,
-    'ids': ids,
-    'needs_terms': needsTerms,
-    'box': box,
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemAppsListResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemAppsListResult(${jsonEncode(toJson())})';
-}
-
-class SystemAppsGenerationsParams {
-  const SystemAppsGenerationsParams();
-
-  factory SystemAppsGenerationsParams.fromJson(Map<String, dynamic> json) =>
-      SystemAppsGenerationsParams();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemAppsGenerationsParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemAppsGenerationsParams(${jsonEncode(toJson())})';
-}
-
-class SystemAppsGenerationsResult {
-  const SystemAppsGenerationsResult({required this.generations});
-
-  final List<AppGeneration> generations;
-
-  factory SystemAppsGenerationsResult.fromJson(Map<String, dynamic> json) =>
-      SystemAppsGenerationsResult(
-        generations: (json['generations'] as List)
-            .map(
-              (x) => AppGeneration.fromJson((x as Map).cast<String, dynamic>()),
-            )
-            .toList(),
-      );
-
-  Map<String, dynamic> toJson() => {
-    'generations': generations.map((x) => x.toJson()).toList(),
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemAppsGenerationsResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemAppsGenerationsResult(${jsonEncode(toJson())})';
-}
-
-class SystemAppsRollbackParams {
-  const SystemAppsRollbackParams({required this.generation});
-
-  final int generation;
-
-  factory SystemAppsRollbackParams.fromJson(Map<String, dynamic> json) =>
-      SystemAppsRollbackParams(generation: json['generation'] as int);
-
-  Map<String, dynamic> toJson() => {'generation': generation};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemAppsRollbackParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemAppsRollbackParams(${jsonEncode(toJson())})';
-}
-
-/// A started job, or null when there was nothing to do.
-class SystemAppsRollbackResult {
-  const SystemAppsRollbackResult({required this.jobId});
-
-  final String? jobId;
-
-  factory SystemAppsRollbackResult.fromJson(Map<String, dynamic> json) =>
-      SystemAppsRollbackResult(
-        jobId: json['job_id'] == null ? null : json['job_id'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {'job_id': jobId};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemAppsRollbackResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemAppsRollbackResult(${jsonEncode(toJson())})';
-}
-
-class SystemAppsAcceptTermsParams {
-  const SystemAppsAcceptTermsParams({required this.id, required this.version});
-
-  /// Catalog app id (state.json apps).
-  final String id;
-
-  /// A vendor terms version from the catalog.
-  final String version;
-
-  factory SystemAppsAcceptTermsParams.fromJson(Map<String, dynamic> json) =>
-      SystemAppsAcceptTermsParams(
-        id: json['id'] as String,
-        version: json['version'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {'id': id, 'version': version};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemAppsAcceptTermsParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemAppsAcceptTermsParams(${jsonEncode(toJson())})';
-}
-
-class SystemAppsAcceptTermsResult {
-  const SystemAppsAcceptTermsResult();
-
-  factory SystemAppsAcceptTermsResult.fromJson(Map<String, dynamic> json) =>
-      SystemAppsAcceptTermsResult();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemAppsAcceptTermsResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemAppsAcceptTermsResult(${jsonEncode(toJson())})';
-}
-
-class SystemStarterSetGetParams {
-  const SystemStarterSetGetParams();
-
-  factory SystemStarterSetGetParams.fromJson(Map<String, dynamic> json) =>
-      SystemStarterSetGetParams();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemStarterSetGetParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemStarterSetGetParams(${jsonEncode(toJson())})';
-}
-
-class SystemStarterSetGetResult {
-  const SystemStarterSetGetResult({required this.ids, required this.updatedAt});
-
-  final List<String> ids;
-  final int? updatedAt;
-
-  factory SystemStarterSetGetResult.fromJson(Map<String, dynamic> json) =>
-      SystemStarterSetGetResult(
-        ids: (json['ids'] as List).map((x) => x as String).toList(),
-        updatedAt: json['updated_at'] == null
-            ? null
-            : json['updated_at'] as int,
-      );
-
-  Map<String, dynamic> toJson() => {'ids': ids, 'updated_at': updatedAt};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemStarterSetGetResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemStarterSetGetResult(${jsonEncode(toJson())})';
-}
-
-class SystemStarterSetSetParams {
-  const SystemStarterSetSetParams({required this.ids, required this.pin});
-
-  final List<String> ids;
-
-  /// 4 to 8 ASCII digits. Never logged.
-  final String pin;
-
-  factory SystemStarterSetSetParams.fromJson(Map<String, dynamic> json) =>
-      SystemStarterSetSetParams(
-        ids: (json['ids'] as List).map((x) => x as String).toList(),
-        pin: json['pin'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {'ids': ids, 'pin': pin};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemStarterSetSetParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemStarterSetSetParams(${jsonEncode(toJson())})';
-}
-
-/// A started job, or null when there was nothing to do.
-class SystemStarterSetSetResult {
-  const SystemStarterSetSetResult({required this.jobId});
-
-  final String? jobId;
-
-  factory SystemStarterSetSetResult.fromJson(Map<String, dynamic> json) =>
-      SystemStarterSetSetResult(
-        jobId: json['job_id'] == null ? null : json['job_id'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {'job_id': jobId};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemStarterSetSetResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemStarterSetSetResult(${jsonEncode(toJson())})';
+  String toString() => 'StoreListResult(${jsonEncode(toJson())})';
 }
 
 /// The global Home button was pressed. The launcher brings itself to the front.
@@ -9088,38 +9399,48 @@ final class StoreChangedEvent extends SessionEvent {
   String toString() => 'StoreChangedEvent(${jsonEncode(toJson())})';
 }
 
-enum SwitchProgressEventStage {
-  closingApps('closing_apps'),
-  closingSteam('closing_steam'),
-  ending('ending'),
+class SwitchProgressEventApp {
+  const SwitchProgressEventApp({required this.id, required this.name});
 
-  /// A value this client does not know (newer daemon).
-  unknown('unknown');
+  /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'. 'steam' is Steam itself (Big Picture and its other windows).
+  final String id;
+  final String name;
 
-  const SwitchProgressEventStage(this.value);
-  final String value;
+  factory SwitchProgressEventApp.fromJson(Map<String, dynamic> json) =>
+      SwitchProgressEventApp(
+        id: json['id'] as String,
+        name: json['name'] as String,
+      );
 
-  factory SwitchProgressEventStage.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  Map<String, dynamic> toJson() => {'id': id, 'name': name};
 
-  String toJson() => value;
+  @override
+  bool operator ==(Object other) =>
+      other is SwitchProgressEventApp &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SwitchProgressEventApp(${jsonEncode(toJson())})';
 }
 
-/// A profile switch (session.switch_profile) moved on: closing_apps (app: the one being closed, when known), closing_steam, ending (the session ends next). The launcher shows the Switching screen.
+/// 0.12: a profile switch is closing apps, closing Steam, ending the session, or was cancelled. app: the app being closed.
 final class SwitchProgressEvent extends SessionEvent {
   const SwitchProgressEvent({required this.stage, this.app});
 
-  final SwitchProgressEventStage stage;
-  final NamedApp? app;
+  final SwitchStage stage;
+  final SwitchProgressEventApp? app;
 
   factory SwitchProgressEvent.fromJson(Map<String, dynamic> json) =>
       SwitchProgressEvent(
-        stage: SwitchProgressEventStage.fromJson(json['stage'] as String),
+        stage: SwitchStage.fromJson(json['stage'] as String),
         app: json['app'] == null
             ? null
-            : NamedApp.fromJson((json['app'] as Map).cast<String, dynamic>()),
+            : SwitchProgressEventApp.fromJson(
+                (json['app'] as Map).cast<String, dynamic>(),
+              ),
       );
 
   Map<String, dynamic> toJson() => {
@@ -9145,16 +9466,45 @@ final class SwitchProgressEvent extends SessionEvent {
   String toString() => 'SwitchProgressEvent(${jsonEncode(toJson())})';
 }
 
-/// An app (or Steam, or a game) has not closed waited_s seconds into a switch. The launcher, in front, asks: Keep waiting (session.switch_wait), Force close (session.switch_force_close) or Cancel switch (session.switch_cancel).
+class SwitchBlockedEventApp {
+  const SwitchBlockedEventApp({required this.id, required this.name});
+
+  /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'. 'steam' is Steam itself (Big Picture and its other windows).
+  final String id;
+  final String name;
+
+  factory SwitchBlockedEventApp.fromJson(Map<String, dynamic> json) =>
+      SwitchBlockedEventApp(
+        id: json['id'] as String,
+        name: json['name'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SwitchBlockedEventApp &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SwitchBlockedEventApp(${jsonEncode(toJson())})';
+}
+
+/// 0.12: an app has not closed after waited_s seconds. Show 'X isn't responding (N s). Force-closing it may lose unsaved data.' with Keep waiting (session.switch_wait), Force close (session.switch_force_close) and Cancel switch (session.switch_cancel). Nothing is killed until Force close.
 final class SwitchBlockedEvent extends SessionEvent {
   const SwitchBlockedEvent({required this.app, required this.waitedS});
 
-  final NamedApp app;
+  final SwitchBlockedEventApp app;
   final int waitedS;
 
   factory SwitchBlockedEvent.fromJson(Map<String, dynamic> json) =>
       SwitchBlockedEvent(
-        app: NamedApp.fromJson((json['app'] as Map).cast<String, dynamic>()),
+        app: SwitchBlockedEventApp.fromJson(
+          (json['app'] as Map).cast<String, dynamic>(),
+        ),
         waitedS: json['waited_s'] as int,
       );
 
@@ -9178,7 +9528,7 @@ final class SwitchBlockedEvent extends SessionEvent {
   String toString() => 'SwitchBlockedEvent(${jsonEncode(toJson())})';
 }
 
-/// The sleep lock of a locked profile: locked true before the box sleeps (the launcher is in front, apps keep running behind it; show the PIN pad on resume), false after session.unlock.
+/// 0.12: the sleep lock went up (before the box sleeps, for a locked profile) or down (session.unlock).
 final class LockStateEvent extends SessionEvent {
   const LockStateEvent({required this.locked});
 
@@ -9207,16 +9557,101 @@ final class LockStateEvent extends SessionEvent {
   String toString() => 'LockStateEvent(${jsonEncode(toJson())})';
 }
 
-/// The profiles changed: after a profile job, a rename, a PIN, lock or appearance change. profiles is what system.profiles.list's profiles would say now (also for profile.current's fields).
+enum GreeterPromptEventKind {
+  pin('pin'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const GreeterPromptEventKind(this.value);
+  final String value;
+
+  factory GreeterPromptEventKind.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+/// Greeter mode: greetd asks for the profile's PIN; show the PIN pad.
+final class GreeterPromptEvent extends SessionEvent {
+  const GreeterPromptEvent({required this.kind});
+
+  final GreeterPromptEventKind kind;
+
+  factory GreeterPromptEvent.fromJson(Map<String, dynamic> json) =>
+      GreeterPromptEvent(
+        kind: GreeterPromptEventKind.fromJson(json['kind'] as String),
+      );
+
+  Map<String, dynamic> toJson() => {'kind': kind.toJson()};
+
+  @override
+  String get name => 'greeter_prompt';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is GreeterPromptEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'GreeterPromptEvent(${jsonEncode(toJson())})';
+}
+
+/// Greeter mode: the login ended: ok (the session starts, the greeter goes away) or not (wrong PIN; locked_seconds during the backoff: 'Too many tries. Try again in N seconds').
+final class GreeterResultEvent extends SessionEvent {
+  const GreeterResultEvent({required this.ok, this.lockedSeconds});
+
+  final bool ok;
+  final int? lockedSeconds;
+
+  factory GreeterResultEvent.fromJson(Map<String, dynamic> json) =>
+      GreeterResultEvent(
+        ok: json['ok'] as bool,
+        lockedSeconds: json['locked_seconds'] == null
+            ? null
+            : json['locked_seconds'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {'ok': ok, 'locked_seconds': ?lockedSeconds};
+
+  @override
+  String get name => 'greeter_result';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is GreeterResultEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'GreeterResultEvent(${jsonEncode(toJson())})';
+}
+
+/// 0.12: the profiles changed (a profile job, a rename, a PIN, lock or appearance change); profiles as system.profiles.list's.
 final class ProfilesChangedEvent extends SessionEvent {
   const ProfilesChangedEvent({required this.profiles});
 
-  final List<Profile> profiles;
+  final List<ProfileInfo> profiles;
 
   factory ProfilesChangedEvent.fromJson(Map<String, dynamic> json) =>
       ProfilesChangedEvent(
         profiles: (json['profiles'] as List)
-            .map((x) => Profile.fromJson((x as Map).cast<String, dynamic>()))
+            .map(
+              (x) => ProfileInfo.fromJson((x as Map).cast<String, dynamic>()),
+            )
             .toList(),
       );
 
@@ -9240,115 +9675,6 @@ final class ProfilesChangedEvent extends SessionEvent {
 
   @override
   String toString() => 'ProfilesChangedEvent(${jsonEncode(toJson())})';
-}
-
-enum GreeterPromptEventKind {
-  pin('pin'),
-  info('info'),
-  error('error'),
-
-  /// A value this client does not know (newer daemon).
-  unknown('unknown');
-
-  const GreeterPromptEventKind(this.value);
-  final String value;
-
-  factory GreeterPromptEventKind.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
-
-  String toJson() => value;
-}
-
-/// Greeter mode only: greetd asks something for the login in progress. kind pin: show the PIN pad (answer with greeter.pin). info and error carry greetd's message.
-final class GreeterPromptEvent extends SessionEvent {
-  const GreeterPromptEvent({
-    required this.id,
-    required this.kind,
-    this.message,
-  });
-
-  /// A profile id, or 'guest'.
-  final String id;
-  final GreeterPromptEventKind kind;
-  final String? message;
-
-  factory GreeterPromptEvent.fromJson(Map<String, dynamic> json) =>
-      GreeterPromptEvent(
-        id: json['id'] as String,
-        kind: GreeterPromptEventKind.fromJson(json['kind'] as String),
-        message: json['message'] == null ? null : json['message'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'kind': kind.toJson(),
-    'message': ?message,
-  };
-
-  @override
-  String get name => 'greeter_prompt';
-
-  @override
-  Map<String, dynamic> get params => toJson();
-
-  @override
-  bool operator ==(Object other) =>
-      other is GreeterPromptEvent &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'GreeterPromptEvent(${jsonEncode(toJson())})';
-}
-
-/// Greeter mode only: the login in progress ended. ok: the profile's session starts and the greeter exits. Not ok: a wrong PIN, or locked_seconds while the backoff lock lasts (show 'Try again in N seconds'); greetd's session was cancelled, a new greeter.login starts over.
-final class GreeterResultEvent extends SessionEvent {
-  const GreeterResultEvent({
-    required this.id,
-    required this.ok,
-    this.lockedSeconds,
-  });
-
-  /// A profile id, or 'guest'.
-  final String id;
-  final bool ok;
-  final int? lockedSeconds;
-
-  factory GreeterResultEvent.fromJson(Map<String, dynamic> json) =>
-      GreeterResultEvent(
-        id: json['id'] as String,
-        ok: json['ok'] as bool,
-        lockedSeconds: json['locked_seconds'] == null
-            ? null
-            : json['locked_seconds'] as int,
-      );
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'ok': ok,
-    'locked_seconds': ?lockedSeconds,
-  };
-
-  @override
-  String get name => 'greeter_result';
-
-  @override
-  Map<String, dynamic> get params => toJson();
-
-  @override
-  bool operator ==(Object other) =>
-      other is GreeterResultEvent &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'GreeterResultEvent(${jsonEncode(toJson())})';
 }
 
 class InvalidParamsData {
@@ -9416,6 +9742,7 @@ enum PermissionDeniedDataReason {
   seat('seat'),
   polkit('polkit'),
   peer('peer'),
+  profile('profile'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -9750,6 +10077,78 @@ class AppConflictData {
   String toString() => 'AppConflictData(${jsonEncode(toJson())})';
 }
 
+class ProfileLimitData {
+  const ProfileLimitData({required this.max});
+
+  final int max;
+
+  factory ProfileLimitData.fromJson(Map<String, dynamic> json) =>
+      ProfileLimitData(max: json['max'] as int);
+
+  Map<String, dynamic> toJson() => {'max': max};
+
+  @override
+  bool operator ==(Object other) =>
+      other is ProfileLimitData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'ProfileLimitData(${jsonEncode(toJson())})';
+}
+
+enum PinRequiredDataPin {
+  self('self'),
+  admin('admin'),
+  target('target'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const PinRequiredDataPin(this.value);
+  final String value;
+
+  factory PinRequiredDataPin.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+class PinRequiredData {
+  const PinRequiredData({required this.pin, this.retryAfterMs});
+
+  final PinRequiredDataPin pin;
+  final int? retryAfterMs;
+
+  factory PinRequiredData.fromJson(Map<String, dynamic> json) =>
+      PinRequiredData(
+        pin: PinRequiredDataPin.fromJson(json['pin'] as String),
+        retryAfterMs: json['retry_after_ms'] == null
+            ? null
+            : json['retry_after_ms'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'pin': pin.toJson(),
+    'retry_after_ms': ?retryAfterMs,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is PinRequiredData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'PinRequiredData(${jsonEncode(toJson())})';
+}
+
 class TermsRequiredData {
   const TermsRequiredData({required this.id, required this.version});
 
@@ -9830,8 +10229,7 @@ enum UnavailableDataService {
   logind('logind'),
   catalog('catalog'),
   polkit('polkit'),
-  apps('apps'),
-  greeter('greeter'),
+  profiles('profiles'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -9922,78 +10320,6 @@ class PowerInhibitedData {
 
   @override
   String toString() => 'PowerInhibitedData(${jsonEncode(toJson())})';
-}
-
-class ProfileLimitData {
-  const ProfileLimitData({required this.max});
-
-  final int max;
-
-  factory ProfileLimitData.fromJson(Map<String, dynamic> json) =>
-      ProfileLimitData(max: json['max'] as int);
-
-  Map<String, dynamic> toJson() => {'max': max};
-
-  @override
-  bool operator ==(Object other) =>
-      other is ProfileLimitData &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'ProfileLimitData(${jsonEncode(toJson())})';
-}
-
-enum PinRequiredDataPin {
-  self('self'),
-  admin('admin'),
-  target('target'),
-
-  /// A value this client does not know (newer daemon).
-  unknown('unknown');
-
-  const PinRequiredDataPin(this.value);
-  final String value;
-
-  factory PinRequiredDataPin.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
-
-  String toJson() => value;
-}
-
-class PinRequiredData {
-  const PinRequiredData({required this.pin, this.retryAfterMs});
-
-  final PinRequiredDataPin pin;
-  final int? retryAfterMs;
-
-  factory PinRequiredData.fromJson(Map<String, dynamic> json) =>
-      PinRequiredData(
-        pin: PinRequiredDataPin.fromJson(json['pin'] as String),
-        retryAfterMs: json['retry_after_ms'] == null
-            ? null
-            : json['retry_after_ms'] as int,
-      );
-
-  Map<String, dynamic> toJson() => {
-    'pin': pin.toJson(),
-    'retry_after_ms': ?retryAfterMs,
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is PinRequiredData &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'PinRequiredData(${jsonEncode(toJson())})';
 }
 
 /// Typed calls for every method of the session API.
@@ -10204,7 +10530,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's apps.install. Install Store apps (job). Action org.hinteros.system.apps.
   ///
-  /// ids (1 to 8 catalog ids) must be in the running generation's catalog index (/run/current-system/sw/share/hinteros/catalog.json, never the caller's copy) with status available; their depends are added (transitively). Ids already installed are skipped; if nothing is left the result is job_id null. A conflict between a new app and an installed or requested one is app_conflict. Every new app with vendor terms needs accepted_terms[id] equal to the catalog's terms.version, else terms_required (the box records the acceptance: id, version, time, uid and profile, in the audit log and /var/lib/hinteros/terms-accepted.json). revision must be settings.get's (state_conflict otherwise). Free disk space must cover the new apps' sizeMiB plus the usual rebuild margin (insufficient_resources). The job writes state.json's apps from the service's typed state and runs the apply flow.
+  /// ids (1 to 8 catalog ids) must be in the running generation's catalog index (/run/current-system/sw/share/hinteros/catalog.json, never the caller's copy) with status available; their depends are added (transitively). Ids already installed are skipped; if nothing is left the result is job_id null. A conflict between a new app and an installed or requested one is app_conflict. Every new app with vendor terms needs accepted_terms[id] equal to the catalog's terms.version, else terms_required (the box records the acceptance: id, version, time, uid and profile, in the audit log and /var/lib/hinteros/terms-accepted.json). revision must be settings.get's (state_conflict otherwise); 0.4, schema-2 boxes: the app revision from apps.list, and the apps are installed into the caller's own profile (a new generation of its Nix profile, no system rebuild unless a box feature must be turned on first: stage box). Free disk space must cover the new apps' sizeMiB plus the usual rebuild margin (insufficient_resources). The job writes state.json's apps from the service's typed state and runs the apply flow.
   Future<SystemAppsInstallResult> systemAppsInstall(
     SystemAppsInstallParams params,
   ) async => SystemAppsInstallResult.fromJson(
@@ -10218,6 +10544,181 @@ mixin SessionApiMethods {
     SystemAppsRemoveParams params,
   ) async => SystemAppsRemoveResult.fromJson(
     await rpc('system.apps.remove', params.toJson()),
+  );
+
+  /// Relayed to the system service's apps.list. The caller's own apps (0.4, schema-2 boxes): its current app env.
+  ///
+  /// Read-only. The caller is resolved from its uid: a profile (or the guest). revision stands for the current app generation; pass it to apps.install/apps.remove as revision. needs_terms: ids whose vendor terms this profile has not accepted at the catalog's current version (apps that came with the starter set); the launcher shows the terms on first launch and calls apps.accept_terms. A spare account gets an empty list. Schema-1 boxes (not migrated yet): unavailable {service: profiles, reason: schema1}.
+  Future<SystemAppsListResult> systemAppsList([
+    SystemAppsListParams params = const SystemAppsListParams(),
+  ]) async => SystemAppsListResult.fromJson(
+    await rpc('system.apps.list', params.toJson()),
+  );
+
+  /// Relayed to the system service's apps.generations. The caller's app generations (0.4), newest first.
+  ///
+  /// Read-only. Every generation of the caller's Nix profile of apps (the newest 3 plus the current one are kept), with the ids of its env and the system revision it was built against. apps.rollback takes one of them.
+  Future<SystemAppsGenerationsResult> systemAppsGenerations([
+    SystemAppsGenerationsParams params = const SystemAppsGenerationsParams(),
+  ]) async => SystemAppsGenerationsResult.fromJson(
+    await rpc('system.apps.generations', params.toJson()),
+  );
+
+  /// Relayed to the system service's apps.rollback. Switch the caller's apps back to an earlier generation (job, 0.4). Action org.hinteros.system.apps.
+  ///
+  /// generation must be one of apps.generations and not the current one (not_found otherwise). If its env needs box features that are off, the job first runs the box stage (a system rebuild). Job kind apps_rollback.
+  Future<SystemAppsRollbackResult> systemAppsRollback(
+    SystemAppsRollbackParams params,
+  ) async => SystemAppsRollbackResult.fromJson(
+    await rpc('system.apps.rollback', params.toJson()),
+  );
+
+  /// Relayed to the system service's apps.accept_terms. Accept an installed app's vendor terms for the caller's profile (0.4). Action org.hinteros.system.apps.
+  ///
+  /// For apps that reached the profile without an acceptance (the starter set): id must be in the caller's env and have terms, version must be the running catalog's terms.version (invalid_params otherwise). Records {version, accepted_at, by: &lt;user&gt;, profile: &lt;id&gt;} in terms-accepted.json and the audit log; then the id leaves apps.list's needs_terms. Accepting what is already accepted is a no-op.
+  Future<SystemAppsAcceptTermsResult> systemAppsAcceptTerms(
+    SystemAppsAcceptTermsParams params,
+  ) async => SystemAppsAcceptTermsResult.fromJson(
+    await rpc('system.apps.accept_terms', params.toJson()),
+  );
+
+  /// Relayed to the system service's profiles.list. The profiles (0.4). Read-only; starts a usage scan when the data is older than an hour.
+  ///
+  /// Every account of the running state.json that has metadata, with the caller (spares are not listed; first_boot: no admin profile exists). On a schema-1 box, p1 as an implicit profile after the migration created profiles.json.
+  Future<SystemProfilesListResult> systemProfilesList([
+    SystemProfilesListParams params = const SystemProfilesListParams(),
+  ]) async => SystemProfilesListResult.fromJson(
+    await rpc('system.profiles.list', params.toJson()),
+  );
+
+  /// Relayed to the system service's profiles.create. Create a profile (job, a rebuild that adds the account). Action org.hinteros.system.profiles.create; also on greeter.sock.
+  ///
+  /// name 1 to 32 characters (trimmed, no control or format characters; duplicates allowed), color one of ProfileColor (default teal), pin 4 to 8 digits, locked as chosen, revision = settings.get's. At 8 profiles: profile_limit. The id is taken from the counter at once (never reused, even if the job fails). On success the job writes the metadata and the PIN hash, gives the account the starter env, and (from the greeter) a one-time token so the greeter enters it without the PIN. Job kind profiles_create.
+  Future<SystemProfilesCreateResult> systemProfilesCreate(
+    SystemProfilesCreateParams params,
+  ) async => SystemProfilesCreateResult.fromJson(
+    await rpc('system.profiles.create', params.toJson()),
+  );
+
+  /// Relayed to the system service's profiles.setup_admin. First-boot mode: make the caller's spare account the admin profile (0.4). No job, no rebuild, no network.
+  ///
+  /// Only a spare caller, only while no admin profile exists (else permission_denied {reason: profile}). Writes the metadata (admin) and the PIN hash; the account's app profile is set to the starter env right after (a short apps job when the box is idle).
+  Future<SystemProfilesSetupAdminResult> systemProfilesSetupAdmin(
+    SystemProfilesSetupAdminParams params,
+  ) async => SystemProfilesSetupAdminResult.fromJson(
+    await rpc('system.profiles.setup_admin', params.toJson()),
+  );
+
+  /// Relayed to the system service's profiles.rename. Rename a profile (0.4). Own: no PIN; another: the admin PIN.
+  ///
+  /// pin_required {pin: admin} (with retry_after_ms during the backoff lock) when renaming another profile without the right admin PIN.
+  Future<SystemProfilesRenameResult> systemProfilesRename(
+    SystemProfilesRenameParams params,
+  ) async => SystemProfilesRenameResult.fromJson(
+    await rpc('system.profiles.rename', params.toJson()),
+  );
+
+  /// Relayed to the system service's profiles.set_appearance. The caller's colour and the appearance mirrored for the picker (0.4).
+  ///
+  /// text_scale 0.5 to 3.0. The picker uses the most accessible combination of all profiles' values.
+  Future<SystemProfilesSetAppearanceResult> systemProfilesSetAppearance([
+    SystemProfilesSetAppearanceParams params =
+        const SystemProfilesSetAppearanceParams(),
+  ]) async => SystemProfilesSetAppearanceResult.fromJson(
+    await rpc('system.profiles.set_appearance', params.toJson()),
+  );
+
+  /// Relayed to the system service's profiles.set_pin. Change the caller's PIN (0.4). current_pin is required once a PIN is set (a migrated profile sets its first PIN without it).
+  ///
+  /// pin_required {pin: self} for a missing or wrong current_pin (with the backoff).
+  Future<SystemProfilesSetPinResult> systemProfilesSetPin(
+    SystemProfilesSetPinParams params,
+  ) async => SystemProfilesSetPinResult.fromJson(
+    await rpc('system.profiles.set_pin', params.toJson()),
+  );
+
+  /// Relayed to the system service's profiles.set_locked. Whether the caller's profile asks for its PIN to enter (0.4). Own PIN.
+  Future<SystemProfilesSetLockedResult> systemProfilesSetLocked(
+    SystemProfilesSetLockedParams params,
+  ) async => SystemProfilesSetLockedResult.fromJson(
+    await rpc('system.profiles.set_locked', params.toJson()),
+  );
+
+  /// Relayed to the system service's profiles.reset_pin. Set another profile's PIN with the admin PIN (0.4). The admin profile's own: the admin account's password (polkit org.hinteros.system.profiles.recover, interactive) instead.
+  ///
+  /// For the admin profile admin_pin is not used; the service asks polkit for org.hinteros.system.profiles.recover with the session daemon's agent (authentication_required when dismissed). The target's backoff is reset.
+  Future<SystemProfilesResetPinResult> systemProfilesResetPin(
+    SystemProfilesResetPinParams params,
+  ) async => SystemProfilesResetPinResult.fromJson(
+    await rpc('system.profiles.reset_pin', params.toJson()),
+  );
+
+  /// Relayed to the system service's profiles.remove. Remove a profile, its home and its apps (job, a rebuild). Own PIN for yourself, the admin PIN for others; never the admin profile.
+  ///
+  /// confirm_id must equal id. The job kills every process of the account, rebuilds without it, then deletes the home (no symlink is followed, one filesystem), the PIN, the metadata, the app profile links and the registry entry. A failed or cancelled job deletes nothing. Removing your own profile: end the session first (the launcher switches to the picker). invalid_params {field: id, reason: admin} for the admin profile. Job kind profiles_remove.
+  Future<SystemProfilesRemoveResult> systemProfilesRemove(
+    SystemProfilesRemoveParams params,
+  ) async => SystemProfilesRemoveResult.fromJson(
+    await rpc('system.profiles.remove', params.toJson()),
+  );
+
+  /// Relayed to the system service's profiles.switch. Choose the next profile (0.4): writes the switch hint the greeter reads. It selects; it authorises nothing.
+  ///
+  /// id is a profile id or guest. For the caller's own id it also issues a one-time resume token (session.restart: a locked profile comes back without its PIN), valid 60 s. The session daemon then ends the session (session.switch_profile).
+  Future<SystemProfilesSwitchResult> systemProfilesSwitch(
+    SystemProfilesSwitchParams params,
+  ) async => SystemProfilesSwitchResult.fromJson(
+    await rpc('system.profiles.switch', params.toJson()),
+  );
+
+  /// Relayed to the system service's profiles.unlock. The caller's PIN after sleep (0.4): the lock screen of a locked profile.
+  ///
+  /// pin_required {pin: self, retry_after_ms?} when wrong or during the backoff lock.
+  Future<SystemProfilesUnlockResult> systemProfilesUnlock(
+    SystemProfilesUnlockParams params,
+  ) async => SystemProfilesUnlockResult.fromJson(
+    await rpc('system.profiles.unlock', params.toJson()),
+  );
+
+  /// Relayed to the system service's guest.set. Turn the guest account on or off (job, a rebuild). Admin PIN. Action org.hinteros.system.starter.
+  ///
+  /// job_id null when it is already so. Job kind guest_set.
+  Future<SystemGuestSetResult> systemGuestSet(
+    SystemGuestSetParams params,
+  ) async => SystemGuestSetResult.fromJson(
+    await rpc('system.guest.set', params.toJson()),
+  );
+
+  /// Relayed to the system service's display.save_mode. Make a display mode the box's (0.4): stored in runtime.json, published as /run/hinteros/gamescope-modes for every profile's session. Action org.hinteros.system.settings.
+  Future<SystemDisplaySaveModeResult> systemDisplaySaveMode(
+    SystemDisplaySaveModeParams params,
+  ) async => SystemDisplaySaveModeResult.fromJson(
+    await rpc('system.display.save_mode', params.toJson()),
+  );
+
+  /// Relayed to the system service's audio.save_output. Make an audio output the box's (0.4): stored in runtime.json, published as /run/hinteros/audio-output. Action org.hinteros.system.settings.
+  ///
+  /// node is a PipeWire node name.
+  Future<SystemAudioSaveOutputResult> systemAudioSaveOutput(
+    SystemAudioSaveOutputParams params,
+  ) async => SystemAudioSaveOutputResult.fromJson(
+    await rpc('system.audio.save_output', params.toJson()),
+  );
+
+  /// Relayed to the system service's starter_set.get. The starter set: the apps every new profile and guest session starts with (0.4). Read-only.
+  Future<SystemStarterSetGetResult> systemStarterSetGet([
+    SystemStarterSetGetParams params = const SystemStarterSetGetParams(),
+  ]) async => SystemStarterSetGetResult.fromJson(
+    await rpc('system.starter_set.get', params.toJson()),
+  );
+
+  /// Relayed to the system service's starter_set.set. Change the starter set (job). Admin PIN; ids must be apps the admin profile has now. Action org.hinteros.system.starter.
+  ///
+  /// 0 to 16 ids, each in the admin profile's current env, else invalid_params {field: ids, reason: not_in_admin_profile}. The job builds the new starter env (an evaluation only), with the box stage when a feature is off. Only profiles and guest sessions created afterwards get it. Job kind starter_set.
+  Future<SystemStarterSetSetResult> systemStarterSetSet(
+    SystemStarterSetSetParams params,
+  ) async => SystemStarterSetSetResult.fromJson(
+    await rpc('system.starter_set.set', params.toJson()),
   );
 
   /// Relayed to the system service's jobs.get. One job: running or among the last 10 finished. Read-only.
@@ -10447,6 +10948,90 @@ mixin SessionApiMethods {
   Future<AuthCancelResult> authCancel(AuthCancelParams params) async =>
       AuthCancelResult.fromJson(await rpc('auth.cancel', params.toJson()));
 
+  /// Who this session is (0.12). The launcher asks at start: setup_required starts the first-boot wizard; pin_set false shows the unskippable 'Set your PIN' screen; screen_locked shows the lock screen.
+  Future<ProfileCurrentResult> profileCurrent([
+    ProfileCurrentParams params = const ProfileCurrentParams(),
+  ]) async => ProfileCurrentResult.fromJson(
+    await rpc('profile.current', params.toJson()),
+  );
+
+  /// Switch to another profile (0.12): writes the switch hint (system.profiles.switch), then closes every app (SIGTERM, no silent force-close) and Steam (steam -shutdown), and ends this session; the greeter takes over. Answers once the hint is written; progress comes as switch_progress, a stuck app as switch_blocked.
+  ///
+  /// invalid_params {field: id, reason: same} for the own profile. While a switch runs a second one is invalid_params {reason: busy}.
+  Future<SessionSwitchProfileResult> sessionSwitchProfile(
+    SessionSwitchProfileParams params,
+  ) async => SessionSwitchProfileResult.fromJson(
+    await rpc('session.switch_profile', params.toJson()),
+  );
+
+  /// Keep waiting for the blocked app (another switch.wait_s, 10 s).
+  Future<SessionSwitchWaitResult> sessionSwitchWait([
+    SessionSwitchWaitParams params = const SessionSwitchWaitParams(),
+  ]) async => SessionSwitchWaitResult.fromJson(
+    await rpc('session.switch_wait', params.toJson()),
+  );
+
+  /// Force-close the blocked app (SIGKILL of its process group; for Steam, its processes). Unsaved data may be lost.
+  Future<SessionSwitchForceCloseResult> sessionSwitchForceClose(
+    SessionSwitchForceCloseParams params,
+  ) async => SessionSwitchForceCloseResult.fromJson(
+    await rpc('session.switch_force_close', params.toJson()),
+  );
+
+  /// Stop the switch: this profile stays (what already closed is gone). switch_progress {stage: cancelled} follows.
+  Future<SessionSwitchCancelResult> sessionSwitchCancel([
+    SessionSwitchCancelParams params = const SessionSwitchCancelParams(),
+  ]) async => SessionSwitchCancelResult.fromJson(
+    await rpc('session.switch_cancel', params.toJson()),
+  );
+
+  /// Whether the sleep lock is up (0.12).
+  Future<SessionLockStateResult> sessionLockState([
+    SessionLockStateParams params = const SessionLockStateParams(),
+  ]) async => SessionLockStateResult.fromJson(
+    await rpc('session.lock_state', params.toJson()),
+  );
+
+  /// The PIN on the sleep lock screen (relays system.profiles.unlock); lock_state {locked: false} follows.
+  Future<SessionUnlockResult> sessionUnlock(SessionUnlockParams params) async =>
+      SessionUnlockResult.fromJson(
+        await rpc('session.unlock', params.toJson()),
+      );
+
+  /// Guest only: end the guest session now (like a switch, to the picker). The guest's home and apps are wiped at the next boot.
+  Future<SessionEndGuestResult> sessionEndGuest([
+    SessionEndGuestParams params = const SessionEndGuestParams(),
+  ]) async => SessionEndGuestResult.fromJson(
+    await rpc('session.end_guest', params.toJson()),
+  );
+
+  /// The picker's profiles (the service's public view). Greeter mode only (hinteros-session --greeter); only the hinteros-launcher connection may call it (else not_authorized).
+  Future<GreeterListResult> greeterList([
+    GreeterListParams params = const GreeterListParams(),
+  ]) async =>
+      GreeterListResult.fromJson(await rpc('greeter.list', params.toJson()));
+
+  /// Enter a profile (or the guest) through greetd. An unlocked one starts at once (greeter_result {ok: true}); a locked one asks for its PIN (greeter_prompt {kind: pin}). Greeter mode only (hinteros-session --greeter); only the hinteros-launcher connection may call it (else not_authorized).
+  Future<GreeterLoginResult> greeterLogin(GreeterLoginParams params) async =>
+      GreeterLoginResult.fromJson(await rpc('greeter.login', params.toJson()));
+
+  /// Answer the PIN prompt. greeter_result follows: ok, or not ok with locked_seconds during the backoff (the greetd conversation is then over; log in again). Greeter mode only (hinteros-session --greeter); only the hinteros-launcher connection may call it (else not_authorized).
+  Future<GreeterPinResult> greeterPin(GreeterPinParams params) async =>
+      GreeterPinResult.fromJson(await rpc('greeter.pin', params.toJson()));
+
+  /// Back from the PIN pad: cancel the greetd conversation. Greeter mode only (hinteros-session --greeter); only the hinteros-launcher connection may call it (else not_authorized).
+  Future<GreeterCancelResult> greeterCancel([
+    GreeterCancelParams params = const GreeterCancelParams(),
+  ]) async => GreeterCancelResult.fromJson(
+    await rpc('greeter.cancel', params.toJson()),
+  );
+
+  /// Add profile from the picker (system profiles.create over greeter.sock; a rebuild of about a minute). Job events follow; on success call greeter.login {id} (a one-time token: no PIN prompt). Greeter mode only (hinteros-session --greeter); only the hinteros-launcher connection may call it (else not_authorized).
+  Future<GreeterCreateResult> greeterCreate(GreeterCreateParams params) async =>
+      GreeterCreateResult.fromJson(
+        await rpc('greeter.create', params.toJson()),
+      );
+
   /// Restart the TV session: the compositor, the launcher and everything started in it, and the session daemon itself.
   ///
   /// For job_finished {session_restart_required: true} (and system_unavailable {reason: version_mismatch}). The daemon answers first, then asks logind to terminate the user's graphical session on seat0 (a greetd session: greetd's default_session starts it again at once, with the new generation's programs), then asks the user's systemd to restart the session daemon's own unit. Apps the daemon started end with it. Only a session started by greetd is ever terminated (never a desktop session). unavailable {service: logind}: no such session, or logind cannot be reached.
@@ -10463,217 +11048,6 @@ mixin SessionApiMethods {
     StoreListParams params = const StoreListParams(),
   ]) async =>
       StoreListResult.fromJson(await rpc('store.list', params.toJson()));
-
-  /// The profile this session belongs to (the daemon's own user).
-  ///
-  /// setup_required: the account is a spare in first-boot mode (no admin profile exists); the launcher runs its first-boot wizard, which ends with system.profiles.setup_admin. pin_set false: a profile migrated from a single-user box without a PIN yet; the launcher asks for one before Home (system.profiles.set_pin without current_pin). screen_locked: the sleep lock is up right now (lock_state follows every change). The guest has guest true, no PIN and is never locked or admin.
-  Future<ProfileCurrentResult> profileCurrent([
-    ProfileCurrentParams params = const ProfileCurrentParams(),
-  ]) async => ProfileCurrentResult.fromJson(
-    await rpc('profile.current', params.toJson()),
-  );
-
-  /// Switch to another profile (or the guest): close everything running here, then end this session; the greeter takes over.
-  ///
-  /// The daemon calls system.profiles.switch {id} (writes the switch hint), brings the launcher to the front, sends SIGTERM to every running app (switch_progress closing_apps), asks Steam to exit (closing_steam). Nothing is force-closed silently: an app still running after switch.wait_s (10 s; Steam 15 s) produces switch_blocked and waits for session.switch_wait, session.switch_force_close or session.switch_cancel. Then it hides the keyboard, resets InputPlumber and ends its logind session (switch_progress ending). The reply comes when the switch has started, before anything closes. invalid_params {reason: same} for the session's own profile; not_found for an unknown profile; job_busy while a switch is already under way.
-  Future<SessionSwitchProfileResult> sessionSwitchProfile(
-    SessionSwitchProfileParams params,
-  ) async => SessionSwitchProfileResult.fromJson(
-    await rpc('session.switch_profile', params.toJson()),
-  );
-
-  /// The not-responding pop-up's Keep waiting: wait another switch.wait_s for the blocked app (switch_blocked again if it is still running).
-  Future<SessionSwitchWaitResult> sessionSwitchWait([
-    SessionSwitchWaitParams params = const SessionSwitchWaitParams(),
-  ]) async => SessionSwitchWaitResult.fromJson(
-    await rpc('session.switch_wait', params.toJson()),
-  );
-
-  /// The not-responding pop-up's Force close: SIGKILL the app's process group; the switch continues.
-  Future<SessionSwitchForceCloseResult> sessionSwitchForceClose(
-    SessionSwitchForceCloseParams params,
-  ) async => SessionSwitchForceCloseResult.fromJson(
-    await rpc('session.switch_force_close', params.toJson()),
-  );
-
-  /// The not-responding pop-up's Cancel switch: the profile stays (with whatever already closed gone); the hint is withdrawn.
-  Future<SessionSwitchCancelResult> sessionSwitchCancel([
-    SessionSwitchCancelParams params = const SessionSwitchCancelParams(),
-  ]) async => SessionSwitchCancelResult.fromJson(
-    await rpc('session.switch_cancel', params.toJson()),
-  );
-
-  /// The sleep lock screen's PIN: relays system.profiles.unlock {pin} (the profile's own PIN, same backoff). lock_state {locked: false} follows.
-  ///
-  /// A wrong PIN or an active backoff is pin_required {pin: self, retry_after_ms?}. Without a lock up: invalid_params {reason: not_locked}.
-  Future<SessionUnlockResult> sessionUnlock(SessionUnlockParams params) async =>
-      SessionUnlockResult.fromJson(
-        await rpc('session.unlock', params.toJson()),
-      );
-
-  /// Whether the sleep lock is up now (lock_state follows every change).
-  Future<SessionLockStateResult> sessionLockState([
-    SessionLockStateParams params = const SessionLockStateParams(),
-  ]) async => SessionLockStateResult.fromJson(
-    await rpc('session.lock_state', params.toJson()),
-  );
-
-  /// End guest session: guest only. Ends the session like a switch (to the picker) and wipes the guest now (home emptied, app link back to the starter set), as a reboot would.
-  Future<SessionEndGuestResult> sessionEndGuest([
-    SessionEndGuestParams params = const SessionEndGuestParams(),
-  ]) async => SessionEndGuestResult.fromJson(
-    await rpc('session.end_guest', params.toJson()),
-  );
-
-  /// Greeter mode only: the picker's view of the box (/run/hinteros/profiles-public.json).
-  ///
-  /// focus: the profile to focus first (the switch target, else the last used). appearance: the most accessible combination of the profiles' mirrored appearance. job: a profile job the picker should show (a removal that ended this session), else null. Only the hinteros-launcher connection may call greeter.* (not_authorized); a daemon not in greeter mode answers unavailable {service: greeter}.
-  Future<GreeterListResult> greeterList([
-    GreeterListParams params = const GreeterListParams(),
-  ]) async =>
-      GreeterListResult.fromJson(await rpc('greeter.list', params.toJson()));
-
-  /// Greeter mode only: start entering a profile (greetd create_session).
-  ///
-  /// An unlocked profile, the guest or a holder of a one-time token (a just-created profile) starts at once: greeter_result {ok: true}, and the greeter session ends. A locked profile gets greeter_prompt {kind: pin}; answer with greeter.pin. Another login in progress is cancelled first.
-  Future<GreeterLoginResult> greeterLogin(GreeterLoginParams params) async =>
-      GreeterLoginResult.fromJson(await rpc('greeter.login', params.toJson()));
-
-  /// Greeter mode only: the PIN for the greeter_prompt of the login in progress. The PIN goes to greetd and is wiped; greeter_result follows.
-  Future<GreeterPinResult> greeterPin(GreeterPinParams params) async =>
-      GreeterPinResult.fromJson(await rpc('greeter.pin', params.toJson()));
-
-  /// Greeter mode only: give up the login in progress (greetd cancel_session). Nothing in progress is not an error.
-  Future<GreeterCancelResult> greeterCancel([
-    GreeterCancelParams params = const GreeterCancelParams(),
-  ]) async => GreeterCancelResult.fromJson(
-    await rpc('greeter.cancel', params.toJson()),
-  );
-
-  /// Greeter mode only: Add profile from the picker (profiles.create over greeter.sock, a job of about a minute). When the job succeeds, greeter.login {id} enters the new profile without its PIN (one-time token).
-  Future<GreeterCreateResult> greeterCreate(GreeterCreateParams params) async =>
-      GreeterCreateResult.fromJson(
-        await rpc('greeter.create', params.toJson()),
-      );
-
-  /// Relayed to the system service's profiles.list. The profiles of this box, the guest and the limit. Read-only; starts a usage scan when the numbers are older than an hour.
-  Future<SystemProfilesListResult> systemProfilesList([
-    SystemProfilesListParams params = const SystemProfilesListParams(),
-  ]) async => SystemProfilesListResult.fromJson(
-    await rpc('system.profiles.list', params.toJson()),
-  );
-
-  /// Relayed to the system service's profiles.create. Add a profile (job profiles_create: a rebuild that adds the account, about a minute). Action org.hinteros.system.profiles.create.
-  ///
-  /// revision must be settings.get's (state_conflict otherwise). At 8 profiles: profile_limit. On success the profile has its metadata, PIN and lock flag, and its apps are the starter set; profiles_changed follows.
-  Future<SystemProfilesCreateResult> systemProfilesCreate(
-    SystemProfilesCreateParams params,
-  ) async => SystemProfilesCreateResult.fromJson(
-    await rpc('system.profiles.create', params.toJson()),
-  );
-
-  /// Relayed to the system service's profiles.setup_admin. First-boot mode: make the caller's spare account the admin profile (metadata, PIN, apps = the starter set). No job, no rebuild, no network.
-  ///
-  /// Only a spare caller, only while no admin profile exists (permission_denied otherwise).
-  Future<SystemProfilesSetupAdminResult> systemProfilesSetupAdmin(
-    SystemProfilesSetupAdminParams params,
-  ) async => SystemProfilesSetupAdminResult.fromJson(
-    await rpc('system.profiles.setup_admin', params.toJson()),
-  );
-
-  /// Relayed to the system service's profiles.rename. Own profile: no PIN. Another profile: the admin PIN (pin_required {pin: admin} without it or when wrong).
-  Future<SystemProfilesRenameResult> systemProfilesRename(
-    SystemProfilesRenameParams params,
-  ) async => SystemProfilesRenameResult.fromJson(
-    await rpc('system.profiles.rename', params.toJson()),
-  );
-
-  /// Relayed to the system service's profiles.set_appearance. Own profile's colour and the appearance mirrored for the picker.
-  Future<SystemProfilesSetAppearanceResult> systemProfilesSetAppearance([
-    SystemProfilesSetAppearanceParams params =
-        const SystemProfilesSetAppearanceParams(),
-  ]) async => SystemProfilesSetAppearanceResult.fromJson(
-    await rpc('system.profiles.set_appearance', params.toJson()),
-  );
-
-  /// Relayed to the system service's profiles.set_pin. Change the own PIN with the current one (current_pin left out only while no PIN is set: the migration's first PIN).
-  Future<SystemProfilesSetPinResult> systemProfilesSetPin(
-    SystemProfilesSetPinParams params,
-  ) async => SystemProfilesSetPinResult.fromJson(
-    await rpc('system.profiles.set_pin', params.toJson()),
-  );
-
-  /// Relayed to the system service's profiles.set_locked. Own profile's lock flag, with the own PIN.
-  Future<SystemProfilesSetLockedResult> systemProfilesSetLocked(
-    SystemProfilesSetLockedParams params,
-  ) async => SystemProfilesSetLockedResult.fromJson(
-    await rpc('system.profiles.set_locked', params.toJson()),
-  );
-
-  /// Relayed to the system service's profiles.reset_pin. Give another profile a new PIN with the admin PIN; for the admin profile itself no admin_pin, but the admin account's password (polkit org.hinteros.system.profiles.recover, the agent prompt).
-  Future<SystemProfilesResetPinResult> systemProfilesResetPin(
-    SystemProfilesResetPinParams params,
-  ) async => SystemProfilesResetPinResult.fromJson(
-    await rpc('system.profiles.reset_pin', params.toJson()),
-  );
-
-  /// Relayed to the system service's profiles.remove. Remove a profile with everything in it (job profiles_remove). Own PIN for the own profile (the session then ends, as in a switch), the admin PIN for another. Never the admin profile (invalid_params {reason: admin}).
-  Future<SystemProfilesRemoveResult> systemProfilesRemove(
-    SystemProfilesRemoveParams params,
-  ) async => SystemProfilesRemoveResult.fromJson(
-    await rpc('system.profiles.remove', params.toJson()),
-  );
-
-  /// Relayed to the system service's guest.set. Guest on or off (job guest_set, a rebuild), with the admin PIN.
-  Future<SystemGuestSetResult> systemGuestSet(
-    SystemGuestSetParams params,
-  ) async => SystemGuestSetResult.fromJson(
-    await rpc('system.guest.set', params.toJson()),
-  );
-
-  /// Relayed to the system service's apps.list. The caller's own apps (its current app env's manifest). Read-only.
-  ///
-  /// revision stands for the caller's current app generation: pass it as system.apps.install and system.apps.remove's revision. needs_terms: apps that came with the starter set whose vendor terms this profile has not accepted yet (ask on first launch, system.apps.accept_terms). On a box not migrated to per-profile apps: unavailable {service: apps, reason: schema1} (then settings.get's revision and apps apply).
-  Future<SystemAppsListResult> systemAppsList([
-    SystemAppsListParams params = const SystemAppsListParams(),
-  ]) async => SystemAppsListResult.fromJson(
-    await rpc('system.apps.list', params.toJson()),
-  );
-
-  /// Relayed to the system service's apps.generations. The caller's app generations (current plus up to 3 earlier), newest first. Read-only.
-  Future<SystemAppsGenerationsResult> systemAppsGenerations([
-    SystemAppsGenerationsParams params = const SystemAppsGenerationsParams(),
-  ]) async => SystemAppsGenerationsResult.fromJson(
-    await rpc('system.apps.generations', params.toJson()),
-  );
-
-  /// Relayed to the system service's apps.rollback. Put the caller's apps back to an earlier generation (job apps_rollback; the box stage first if it needs a box feature that is off).
-  Future<SystemAppsRollbackResult> systemAppsRollback(
-    SystemAppsRollbackParams params,
-  ) async => SystemAppsRollbackResult.fromJson(
-    await rpc('system.apps.rollback', params.toJson()),
-  );
-
-  /// Relayed to the system service's apps.accept_terms. Accept the vendor terms of an app in needs_terms (first launch of a starter-set app). version must be the running catalog's terms version. Recorded by this profile.
-  Future<SystemAppsAcceptTermsResult> systemAppsAcceptTerms(
-    SystemAppsAcceptTermsParams params,
-  ) async => SystemAppsAcceptTermsResult.fromJson(
-    await rpc('system.apps.accept_terms', params.toJson()),
-  );
-
-  /// Relayed to the system service's starter_set.get. The apps every new profile and guest session starts with. Read-only.
-  Future<SystemStarterSetGetResult> systemStarterSetGet([
-    SystemStarterSetGetParams params = const SystemStarterSetGetParams(),
-  ]) async => SystemStarterSetGetResult.fromJson(
-    await rpc('system.starter_set.get', params.toJson()),
-  );
-
-  /// Relayed to the system service's starter_set.set. Change the starter set (job starter_set) with the admin PIN; ids must be among the admin profile's current apps (invalid_params {reason: not_in_admin_profile}). Affects only profiles and guest sessions created afterwards.
-  Future<SystemStarterSetSetResult> systemStarterSetSet(
-    SystemStarterSetSetParams params,
-  ) async => SystemStarterSetSetResult.fromJson(
-    await rpc('system.starter_set.set', params.toJson()),
-  );
 }
 
 /// A server-pushed notification of the session API.
@@ -10714,9 +11088,9 @@ sealed class SessionEvent {
     'switch_progress' => SwitchProgressEvent.fromJson(params),
     'switch_blocked' => SwitchBlockedEvent.fromJson(params),
     'lock_state' => LockStateEvent.fromJson(params),
-    'profiles_changed' => ProfilesChangedEvent.fromJson(params),
     'greeter_prompt' => GreeterPromptEvent.fromJson(params),
     'greeter_result' => GreeterResultEvent.fromJson(params),
+    'profiles_changed' => ProfilesChangedEvent.fromJson(params),
     _ => UnknownSessionEvent(name, params),
   };
 }

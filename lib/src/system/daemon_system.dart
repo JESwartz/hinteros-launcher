@@ -38,6 +38,8 @@ JobKind _jobKind(api.JobKind k) => switch (k) {
   api.JobKind.profilesRemove => JobKind.profileRemove,
   api.JobKind.guestSet => JobKind.guest,
   api.JobKind.starterSet => JobKind.starterSet,
+  // The v1 -> v2 apps migration (queued by the service itself).
+  api.JobKind.migrateApps => JobKind.rebuild,
   api.JobKind.unknown => JobKind.rebuild,
 };
 
@@ -71,6 +73,23 @@ SecuritySeverity _severity(api.Severity s) => switch (s) {
   api.Severity.critical => SecuritySeverity.critical,
   api.Severity.unknown => SecuritySeverity.unknown,
 };
+
+/// `available.version` if it is a release version (`0.6.1`, `0.7.0-rc.1`);
+/// null for the daemon's short-revision fallback or an older daemon, which
+/// leave the update to be named by its date.
+String? releaseVersion(String? v) =>
+    v != null && _semver.hasMatch(v) && v.length <= 32 ? v : null;
+
+final _semver = RegExp(r'^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$');
+
+/// A daemon-provided line, trimmed to one line of at most 120 characters;
+/// null when empty.
+String? _oneLine(String? s) {
+  if (s == null) return null;
+  final line = s.split(RegExp(r'[\r\n]')).first.trim();
+  if (line.isEmpty) return null;
+  return line.length > 120 ? line.substring(0, 120) : line;
+}
 
 DateTime _unix(int seconds) =>
     DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
@@ -461,11 +480,11 @@ class DaemonUpdates implements UpdatesRepository {
           ? null
           : AvailableUpdate(
               rev: a.rev,
-              // The wire has no release name: updates are named by date.
-              version: _dateVersion(_unix(a.date)),
+              version: releaseVersion(a.version) ?? _dateVersion(_unix(a.date)),
               date: _unix(a.date),
               summary: a.summary,
               severity: a.security == null ? null : _severity(a.security!),
+              securitySummary: _oneLine(a.securitySummary),
               signer: a.signer,
               newApps: a.newApps == null
                   ? null

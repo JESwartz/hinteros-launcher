@@ -655,9 +655,6 @@ class MockGreeter implements GreeterRepository {
   final MockProfileBox box;
   String? focus;
 
-  /// A profile job the picker shows (a removal that ended a session).
-  String? jobId;
-
   /// Profiles that may be entered once without their PIN (just created).
   final Set<String> _tokens = {};
 
@@ -683,7 +680,6 @@ class MockGreeter implements GreeterRepository {
     guest: box.guestEnabled,
     firstBoot: !box.profiles.any((p) => p.admin),
     focus: focus,
-    jobId: jobId,
   );
 
   @override

@@ -161,9 +161,9 @@ Future<void> _prepareProfiles(
   switch ((method, name)) {
     case (_, 'full'):
       fill();
-    case ('session.switch_wait', 'waiting') ||
+    case ('session.switch_wait', _) ||
         ('session.switch_force_close', _) ||
-        ('session.switch_cancel', 'cancelled'):
+        ('session.switch_cancel', _):
       p.blockSwitch('p3', (id: 'youtube', name: 'YouTube'));
     case ('session.unlock', _):
       p.screenLocked = true;
@@ -174,20 +174,26 @@ Future<void> _prepareProfiles(
           title: 'Steam Subscriber Agreement',
           version: '2026-09-10',
           url: 'https://store.steampowered.com/subscriber_agreement/',
+          retrieved: '2026-10-06',
           file: '/run/current-system/sw/share/hinteros/terms/steam-2026-09-10.txt',
         ),
       );
-    case ('session.end_guest', 'ending'):
+    case ('session.end_guest', _):
       p.current = 'guest';
-    case ('greeter.pin', 'answered'):
-      p.promptFor('p3');
-    case ('system.profiles.setup_admin', 'first profile'):
+    case ('greeter.pin', _):
+      p.promptFor('p1');
+    case ('system.profiles.setup_admin', _):
       p
         ..profiles.removeWhere((x) => x.admin)
         ..setupRequired = true;
     case ('system.profiles.set_locked', 'too many tries'):
       p.byId('p1')!.failures = 3;
-    case ('system.apps.list', 'not migrated'):
+    case ('system.profiles.set_pin', 'first PIN after the migration'):
+      p.byId('p1')!.pin = null;
+    case ('system.profiles.unlock', 'locked out'):
+      p.byId('p1')!.lockedUntil =
+          DateTime.now().millisecondsSinceEpoch ~/ 1000 + 4;
+    case ('system.apps.list', 'not migrated yet'):
       p.schema1 = true;
     case ('system.apps.accept_terms', _):
       p.needsTerms.add('steam');

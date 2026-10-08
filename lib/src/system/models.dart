@@ -353,6 +353,7 @@ class AvailableUpdate {
     required this.date,
     required this.summary,
     this.severity,
+    this.securitySummary,
     this.signer = '',
     this.newApps,
     this.removedApps,
@@ -361,13 +362,18 @@ class AvailableUpdate {
   /// 40 hex characters; what `update.apply` takes.
   final String rev;
 
-  /// What to call it on screen.
+  /// What to call it on screen: the release version ("0.6.1", shown as
+  /// "HinterOS 0.6.1"), or the date for a revision without one.
   final String version;
   final DateTime date;
   final String summary;
 
   /// Non-null for a security update.
   final SecuritySeverity? severity;
+
+  /// One line saying what the security fix is about (the newest
+  /// `Security-Summary:` trailer); null if the release has none.
+  final String? securitySummary;
   final String signer;
 
   /// Apps the update makes installable (`update.check`'s `new_apps`); null

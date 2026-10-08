@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/system/mock_system.dart';
 import 'package:hinteros_launcher/src/system/models.dart';
@@ -67,9 +68,43 @@ void main() {
       expect(h.services.mockJobs.started, isEmpty);
       // The reminder banner is there instead.
       expect(
-        find.textContaining('Security update 2026.10.3 is available'),
+        find.textContaining('Security update HinterOS 0.6.2 is available'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('the release version, and the summary under the severity', (
+      t,
+    ) async {
+      setView(t);
+      final h = behind(mockSecurityUpdate());
+      await h.pump(t);
+      const summary = 'A website could take over the browser in a profile.';
+      final sev = find.text('Severity: High');
+      final sum = find.text(summary);
+      final fixes = find.text('HinterOS 0.6.2 fixes a security problem.');
+      expect(sum, findsOneWidget);
+      expect(fixes, findsOneWidget);
+      expect(t.getTopLeft(sum).dy, greaterThan(t.getTopLeft(sev).dy));
+      expect(t.getTopLeft(sum).dy, lessThan(t.getTopLeft(fixes).dy));
+
+      // Later, then the banner leads to Settings > Updates, which shows it too.
+      await t.pump(const Duration(seconds: 5));
+      await press(t, [kEnter]);
+      await press(t, [kUp, kEnter]);
+      expect(
+        find.textContaining('Update available: HinterOS 0.6.2'),
+        findsOneWidget,
+      );
+      expect(find.text(summary), findsOneWidget);
+    });
+
+    testWidgets('without a summary only the severity is stated', (t) async {
+      setView(t);
+      final h = behind(mockSecurityUpdate(securitySummary: null));
+      await h.pump(t);
+      expect(find.text('Severity: High'), findsOneWidget);
+      expect(find.byKey(const ValueKey('security-summary')), findsNothing);
     });
 
     testWidgets('Back after the countdown means Later', (t) async {
@@ -106,7 +141,10 @@ void main() {
       h.mock.pressHome();
       await t.pumpAndSettle();
       expect(find.text('Security update'), findsNothing);
-      expect(find.textContaining('Security update 2026.10.3'), findsOneWidget);
+      expect(
+        find.textContaining('Security update HinterOS 0.6.2'),
+        findsOneWidget,
+      );
     });
   });
 
@@ -117,18 +155,18 @@ void main() {
         setView(t);
         final h = behind(mockOrdinaryUpdate());
         await h.pump(t);
-        expect(find.text('HinterOS 2026.10.2 is available.'), findsOneWidget);
+        expect(find.text('HinterOS 0.6.1 is available.'), findsOneWidget);
         expect(find.text('Security update'), findsNothing);
         expect(focusLabel(), 'home/apps:0', reason: 'does not take focus');
         await press(t, [kUp, kUp, kRight, kDown]); // Games
         expect(find.textContaining('is available'), findsNothing);
         h.mock.pressHome();
         await t.pumpAndSettle();
-        expect(find.text('HinterOS 2026.10.2 is available.'), findsOneWidget);
+        expect(find.text('HinterOS 0.6.1 is available.'), findsOneWidget);
         // Back from another tab too.
         await press(t, [kUp, kUp, kRight, kRight, kDown]); // Apps
         await press(t, [kEscape]);
-        expect(find.text('HinterOS 2026.10.2 is available.'), findsOneWidget);
+        expect(find.text('HinterOS 0.6.1 is available.'), findsOneWidget);
         expect(h.services.mockJobs.started, isEmpty, reason: 'never automatic');
       },
     );

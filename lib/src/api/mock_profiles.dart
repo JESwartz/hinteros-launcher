@@ -140,11 +140,13 @@ class MockProfileSession {
       method == 'system.apps.generations' ||
       method == 'system.apps.rollback' ||
       method == 'system.apps.accept_terms' ||
-      method.startsWith('system.starter_set.');
+      method.startsWith('system.starter_set.') ||
+      method == 'system.display.save_mode' ||
+      method == 'system.audio.save_output';
 
   int get _nowS => _now().millisecondsSinceEpoch ~/ 1000;
 
-  Profile _wire(MockWireProfile p) => Profile(
+  ProfileInfo _wire(MockWireProfile p) => ProfileInfo(
     id: p.id,
     name: p.name,
     color: p.color,
@@ -155,6 +157,7 @@ class MockProfileSession {
     active: p.id == current,
     lastUsedAt: p.id == current ? _nowS : null,
     usage: null,
+    pinSet: p.pin != null,
   );
 
   void _changed() => emit(
@@ -209,7 +212,7 @@ class MockProfileSession {
       throw const ApiException(
         ApiErrorCode.unavailable,
         'this daemon is not in greeter mode',
-        {'service': 'greeter', 'reason': 'not_greeter'},
+        {'service': 'logind', 'reason': 'not_greeter'},
       );
     }
   }
@@ -230,7 +233,7 @@ class MockProfileSession {
       throw const ApiException(
         ApiErrorCode.unavailable,
         'this box still has box-wide apps',
-        {'service': 'apps', 'reason': 'schema1'},
+        {'service': 'profiles', 'reason': 'schema1'},
       );
     }
   }
@@ -256,12 +259,13 @@ class MockProfileSession {
       case 'profile.current':
         return _current().toJson();
       case 'session.switch_profile':
-        return _switchTo(SessionSwitchProfileParams.fromJson(p).id);
+        return _switchTo(SessionSwitchProfileParams.fromJson(p).id as String);
       case 'session.switch_wait':
         if (!_blocked) {
           throw const ApiException(
-            ApiErrorCode.notFound,
-            'no switch is waiting',
+            ApiErrorCode.invalidParams,
+            'no switch is running',
+            {'field': 'switch', 'reason': 'no_switch'},
           );
         }
         log.add('switch_wait');
@@ -283,13 +287,18 @@ class MockProfileSession {
       case 'session.switch_cancel':
         if (!_switching) {
           throw const ApiException(
-            ApiErrorCode.notFound,
-            'no switch is under way',
+            ApiErrorCode.invalidParams,
+            'no switch is running',
+            {'field': 'switch', 'reason': 'no_switch'},
           );
         }
         log.add('switch_cancel');
         _switching = false;
         _blocked = false;
+        emit(
+          'switch_progress',
+          const SwitchProgressEvent(stage: SwitchStage.cancelled).toJson(),
+        );
         return const SessionSwitchCancelResult().toJson();
       case 'session.unlock':
         final pin = SessionUnlockParams.fromJson(p).pin;
@@ -323,7 +332,7 @@ class MockProfileSession {
         return _greeterList().toJson();
       case 'greeter.login':
         _greeterOnly();
-        return _greeterLogin(GreeterLoginParams.fromJson(p).id);
+        return _greeterLogin(GreeterLoginParams.fromJson(p).id as String);
       case 'greeter.pin':
         _greeterOnly();
         return _greeterPin(GreeterPinParams.fromJson(p).pin);
@@ -339,13 +348,24 @@ class MockProfileSession {
         return _create(c.name, c.color, c.pin, c.locked, token: true);
       case 'system.profiles.list':
         return SystemProfilesListResult(
-          profiles: [for (final x in profiles) _wire(x)],
+          profiles: [
+            for (final x in profiles)
+              SystemProfilesListResultProfilesItem.fromJson(_wire(x).toJson()),
+          ],
           guest: SystemProfilesListResultGuest(
             enabled: guestEnabled,
             usage: null,
           ),
           max: max,
           firstBoot: !profiles.any((x) => x.admin),
+          caller: SystemProfilesListResultCaller(
+            id: current == 'guest' ? null : current,
+            user: current == 'guest'
+                ? 'hinteros-guest'
+                : (byId(current)?.user ?? 'hinteros'),
+            guest: current == 'guest',
+            spare: byId(current) == null && current != 'guest',
+          ),
         ).toJson();
       case 'system.profiles.create':
         final c = SystemProfilesCreateParams.fromJson(p);
@@ -475,7 +495,7 @@ class MockProfileSession {
               if (needsTerms.contains(id)) id,
           ],
           box: ids.contains('steam')
-              ? const ['graphics32', 'steam-devices']
+              ? const [BoxFeature.graphics32, BoxFeature.steamDevices]
               : const [],
         ).toJson();
       case 'system.apps.generations':
@@ -483,7 +503,7 @@ class MockProfileSession {
         final earlier = appGenerations.keys.toList()..sort((a, b) => b - a);
         return SystemAppsGenerationsResult(
           generations: [
-            AppGeneration(
+            SystemAppsGenerationsResultGenerationsItem(
               generation: appGeneration,
               date: _nowS,
               ids: [...relay.installedApps]..sort(),
@@ -491,7 +511,7 @@ class MockProfileSession {
               current: true,
             ),
             for (final g in earlier)
-              AppGeneration(
+              SystemAppsGenerationsResultGenerationsItem(
                 generation: g,
                 date: _nowS - (appGeneration - g) * 86400,
                 ids: appGenerations[g]!,
@@ -538,9 +558,9 @@ class MockProfileSession {
         final version = app!.terms!.version;
         if (c.version != version) {
           throw ApiException(
-            ApiErrorCode.termsRequired,
-            "${c.id}'s terms are at version $version",
-            TermsRequiredData(id: c.id, version: version).toJson(),
+            ApiErrorCode.invalidParams,
+            'the current terms version of ${c.id} is $version',
+            {'field': 'version', 'reason': 'not_current'},
           );
         }
         needsTerms.remove(c.id);
@@ -548,6 +568,23 @@ class MockProfileSession {
         log.add('accept_terms:${c.id}');
         onTermsAccepted?.call(c.id);
         return const SystemAppsAcceptTermsResult().toJson();
+      case 'system.profiles.switch':
+        final id = SystemProfilesSwitchParams.fromJson(p).id as String;
+        if (id != 'guest') _profile(id);
+        log.add('switch_hint:$id');
+        return const SystemProfilesSwitchResult().toJson();
+      case 'system.profiles.unlock':
+        final c = SystemProfilesUnlockParams.fromJson(p);
+        _check(_profile(current), c.pin, 'self');
+        log.add('unlock');
+        return const SystemProfilesUnlockResult().toJson();
+      case 'system.display.save_mode':
+        final c = SystemDisplaySaveModeParams.fromJson(p);
+        log.add('save_mode:${c.width}x${c.height}@${c.refresh}');
+        return const SystemDisplaySaveModeResult().toJson();
+      case 'system.audio.save_output':
+        log.add('save_output:${SystemAudioSaveOutputParams.fromJson(p).node}');
+        return const SystemAudioSaveOutputResult().toJson();
       case 'system.starter_set.get':
         return SystemStarterSetGetResult(
           ids: List.of(starter),
@@ -583,8 +620,8 @@ class MockProfileSession {
   ProfileCurrentResult _current() {
     if (current == 'guest') {
       return ProfileCurrentResult(
-        id: 'guest',
-        name: 'Guest',
+        id: null,
+        name: null,
         color: null,
         admin: false,
         locked: false,
@@ -597,7 +634,7 @@ class MockProfileSession {
     final me = byId(current);
     if (setupRequired || me == null) {
       return ProfileCurrentResult(
-        id: current,
+        id: null,
         name: null,
         color: null,
         admin: false,
@@ -653,7 +690,7 @@ class MockProfileSession {
         _changed();
       },
     );
-    return ProfileJobRef(jobId: job, id: id).toJson();
+    return SystemProfilesCreateResult(jobId: job, id: id).toJson();
   }
 
   // ---- the switch
@@ -669,8 +706,9 @@ class MockProfileSession {
     if (id != 'guest') _profile(id);
     if (_switching) {
       throw const ApiException(
-        ApiErrorCode.jobBusy,
-        'a switch is already under way',
+        ApiErrorCode.invalidParams,
+        'a switch is already running',
+        {'field': 'id', 'reason': 'busy'},
       );
     }
     log.add('switch:$id');
@@ -681,8 +719,10 @@ class MockProfileSession {
       emit(
         'switch_progress',
         SwitchProgressEvent(
-          stage: SwitchProgressEventStage.closingApps,
-          app: b == null ? null : NamedApp(id: b.id, name: b.name),
+          stage: SwitchStage.closingApps,
+          app: b == null
+              ? null
+              : SwitchProgressEventApp(id: b.id, name: b.name),
         ).toJson(),
       );
       if (b != null) {
@@ -709,7 +749,7 @@ class MockProfileSession {
     emit(
       'switch_blocked',
       SwitchBlockedEvent(
-        app: NamedApp(id: b.id, name: b.name),
+        app: SwitchBlockedEventApp(id: b.id, name: b.name),
         waitedS: waited,
       ).toJson(),
     );
@@ -718,13 +758,11 @@ class MockProfileSession {
   void _ending() {
     emit(
       'switch_progress',
-      const SwitchProgressEvent(stage: SwitchProgressEventStage.closingSteam)
-          .toJson(),
+      const SwitchProgressEvent(stage: SwitchStage.closingSteam).toJson(),
     );
     emit(
       'switch_progress',
-      const SwitchProgressEvent(stage: SwitchProgressEventStage.ending)
-          .toJson(),
+      const SwitchProgressEvent(stage: SwitchStage.ending).toJson(),
     );
     _switching = false;
   }
@@ -741,7 +779,7 @@ class MockProfileSession {
   GreeterListResult _greeterList() => GreeterListResult(
     profiles: [
       for (final x in profiles)
-        PublicProfile(
+        GreeterListResultProfilesItem(
           id: x.id,
           name: x.name,
           color: x.color,
@@ -753,12 +791,11 @@ class MockProfileSession {
     guest: guestEnabled,
     firstBoot: !profiles.any((x) => x.admin),
     focus: profiles.isEmpty ? null : profiles.first.id,
-    appearance: const Appearance(
+    appearance: const GreeterListResultAppearance(
       textScale: 1.0,
       highContrast: false,
       reduceMotion: false,
     ),
-    job: null,
   );
 
   Map<String, dynamic> _greeterLogin(String id) {
@@ -771,12 +808,12 @@ class MockProfileSession {
       if (_greeterPending != id) return;
       if (x == null || !x.locked || _tokens.remove(id)) {
         _greeterPending = null;
-        emit('greeter_result', GreeterResultEvent(id: id, ok: true).toJson());
+        emit('greeter_result', GreeterResultEvent(ok: true).toJson());
       } else {
         _greeterPrompted = true;
         emit(
           'greeter_prompt',
-          GreeterPromptEvent(id: id, kind: GreeterPromptEventKind.pin).toJson(),
+          GreeterPromptEvent(kind: GreeterPromptEventKind.pin).toJson(),
         );
       }
     });
@@ -804,7 +841,7 @@ class MockProfileSession {
     int? locked;
     var ok = true;
     try {
-      _check(x, pin, 'target');
+      _check(x, pin, 'self');
     } on ApiException catch (e) {
       ok = false;
       final ms = (e.data as Map?)?['retry_after_ms'] as int?;
@@ -814,7 +851,7 @@ class MockProfileSession {
     scheduleMicrotask(
       () => emit(
         'greeter_result',
-        GreeterResultEvent(id: id, ok: ok, lockedSeconds: locked).toJson(),
+        GreeterResultEvent(ok: ok, lockedSeconds: locked).toJson(),
       ),
     );
     return const GreeterPinResult().toJson();

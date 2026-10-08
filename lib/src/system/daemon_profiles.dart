@@ -30,7 +30,7 @@ ProfileUsage? _usage(api.ProfileUsage? u) => u == null
         at: _time(u.at)!,
       );
 
-ProfileInfo _profile(api.Profile p) => ProfileInfo(
+ProfileInfo _profile(api.ProfileInfo p) => ProfileInfo(
   id: p.id,
   name: p.name,
   color: _color(p.color),
@@ -82,9 +82,9 @@ class DaemonProfiles implements ProfilesRepository {
         _switch.add(
           SwitchProgress(
             switch (e.stage) {
-              api.SwitchProgressEventStage.closingSteam =>
-                SwitchStage.closingSteam,
-              api.SwitchProgressEventStage.ending => SwitchStage.ending,
+              api.SwitchStage.closingSteam => SwitchStage.closingSteam,
+              api.SwitchStage.ending => SwitchStage.ending,
+              api.SwitchStage.cancelled => SwitchStage.cancelled,
               _ => SwitchStage.closingApps,
             },
             appId: e.app?.id,
@@ -108,7 +108,8 @@ class DaemonProfiles implements ProfilesRepository {
   Future<CurrentProfile> current() => guardCall(() async {
     final r = await _conn.profileCurrent();
     return CurrentProfile(
-      id: r.id,
+      // The guest and a spare account have no profile id.
+      id: r.id ?? (r.guest ? CurrentProfile.guestId : ''),
       name: r.name,
       color: r.color == null ? null : _color(r.color),
       admin: r.admin,
@@ -124,7 +125,12 @@ class DaemonProfiles implements ProfilesRepository {
   Future<ProfilesState> list() => guardCall(() async {
     final r = await _conn.systemProfilesList();
     return ProfilesState(
-      profiles: [for (final p in r.profiles) _profile(p)],
+      // The same shape as profiles_changed's ProfileInfo (inlined in the
+      // schema, so a separate generated class).
+      profiles: [
+        for (final p in r.profiles)
+          _profile(api.ProfileInfo.fromJson(p.toJson())),
+      ],
       guestEnabled: r.guest.enabled,
       guestUsage: _usage(r.guest.usage),
       max: r.max,
@@ -381,23 +387,22 @@ class DaemonGreeter implements GreeterRepository {
       ],
       guest: r.guest,
       firstBoot: r.firstBoot,
-      focus: r.focus,
+      focus: r.focus as String?,
       appearance: PickerAppearance(
         textScale: r.appearance.textScale.toDouble(),
         highContrast: r.appearance.highContrast,
         reduceMotion: r.appearance.reduceMotion,
       ),
-      jobId: r.job,
     );
   });
 
-  /// The next prompt (a PIN) or result for [id].
-  Future<api.SessionEvent> _nextAnswer(String id) => _answers.stream
+  /// The next prompt (a PIN) or result. The daemon runs one greetd
+  /// conversation at a time, so the events carry no profile id.
+  Future<api.SessionEvent> _nextAnswer() => _answers.stream
       .where(
         (e) => switch (e) {
-          api.GreeterPromptEvent() =>
-            e.id == id && e.kind == api.GreeterPromptEventKind.pin,
-          api.GreeterResultEvent() => e.id == id,
+          api.GreeterPromptEvent() => e.kind == api.GreeterPromptEventKind.pin,
+          api.GreeterResultEvent() => true,
           _ => false,
         },
       )
@@ -416,7 +421,7 @@ class DaemonGreeter implements GreeterRepository {
   @override
   Future<LoginOutcome> login(String id, {String? pin}) => guardCall(() async {
     if (_prompted != id) {
-      final answer = _nextAnswer(id);
+      final answer = _nextAnswer();
       await _conn.greeterLogin(api.GreeterLoginParams(id: id));
       final a = await answer;
       if (a is api.GreeterResultEvent) return _result(a);
@@ -425,7 +430,6 @@ class DaemonGreeter implements GreeterRepository {
     if (pin == null) return const LoginNeedsPin();
     final answer = _answers.stream
         .whereType<api.GreeterResultEvent>()
-        .where((e) => e.id == id)
         .first
         .timeout(answerTimeout);
     await _conn.greeterPin(api.GreeterPinParams(pin: pin));

@@ -14,6 +14,7 @@ AppNeedsTerms steamTerms() => AppNeedsTerms(
   title: 'Steam Subscriber Agreement',
   version: '2026-09-10',
   url: 'https://store.steampowered.com/subscriber_agreement/',
+  retrieved: '2026-10-06',
   file:
       '${Directory.current.path}/test/fixtures/catalog/terms/steam-2026-09-10.txt',
 );

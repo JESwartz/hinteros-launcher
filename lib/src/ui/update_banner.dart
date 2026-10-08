@@ -21,7 +21,7 @@ class UpdateBanner extends StatelessWidget {
   final VoidCallback onOpen;
 
   static String message(AvailableUpdate u) => u.isSecurity
-      ? 'Security update ${u.version} is available '
+      ? 'Security update HinterOS ${u.version} is available '
             '(severity: ${u.severity!.label}).'
       : 'HinterOS ${u.version} is available.';
 
