@@ -167,6 +167,13 @@ class MockDaemon extends DaemonConnection {
   List<Game> _games;
   List<SteamWindow> _attention = const [];
 
+  /// A new app is started but gets the focus only when a test calls
+  /// [finishStart] (Steam on its first start: the window comes much later).
+  bool slowStart = false;
+
+  /// The window of a [slowStart] app appeared: `focus_changed`.
+  void finishStart(String id) => _setFocus(id);
+
   /// A `command` launch of this program fails with app_launch_failed.
   static const failingProgram = 'does-not-exist';
 
@@ -500,7 +507,7 @@ class MockDaemon extends DaemonConnection {
     }
     _running.add(app);
     emitRaw('app_started', AppStartedEvent(app: app).toJson());
-    _setFocus(app.id);
+    if (!slowStart) _setFocus(app.id);
     return app;
   }
 

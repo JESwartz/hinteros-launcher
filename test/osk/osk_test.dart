@@ -106,9 +106,38 @@ void main() {
       await t.sendKeyEvent(LogicalKeyboardKey.enter);
       await t.pumpAndSettle();
       expect(h.backend.calls, ['type:w']);
-      await t.sendKeyEvent(LogicalKeyboardKey.escape);
+      await t.sendKeyEvent(LogicalKeyboardKey.backspace);
       await t.pumpAndSettle();
       expect(h.backend.calls.last, 'action:backspace');
+      await t.sendKeyEvent(LogicalKeyboardKey.escape);
+      await t.pumpAndSettle();
+      expect(h.backend.calls.last, 'hide');
+    });
+
+    testWidgets('a burst of alternating left/right never queues', (t) async {
+      final h = await start(t);
+      await h.nav(t, NavAction.right); // w
+      for (var i = 0; i < 200; i++) {
+        await h.nav(t, NavAction.right, NavPhase.repeat);
+        await h.nav(t, NavAction.left, NavPhase.repeat);
+      }
+      // No press was held: late repeats are dropped, focus stays on w.
+      expect(focusLabel(), 'osk/r1:1');
+      // A real burst: 51 right presses then 50 left presses, no waiting.
+      for (var i = 0; i < 51; i++) {
+        await h.nav(t, NavAction.right);
+        await h.nav(t, NavAction.right, NavPhase.release);
+      }
+      for (var i = 0; i < 50; i++) {
+        await h.nav(t, NavAction.left);
+        await h.nav(t, NavAction.left, NavPhase.release);
+      }
+      final after = focusLabel();
+      expect(after, 'osk/r1:2'); // 1 + 51 - 50
+      // Late repeats after the release move nothing.
+      await h.nav(t, NavAction.left, NavPhase.repeat);
+      await t.pumpAndSettle();
+      expect(focusLabel(), after);
     });
 
     testWidgets('release never acts', (t) async {
@@ -170,19 +199,24 @@ void main() {
       ]);
     });
 
-    testWidgets('back is backspace, also while held; X is space', (t) async {
+    testWidgets('X is backspace, also while held; B closes; Space is a key', (
+      t,
+    ) async {
       final h = await start(t);
       await h.type(t, 'q');
-      await h.nav(t, NavAction.back);
-      await h.nav(t, NavAction.back, NavPhase.repeat);
-      await h.nav(t, NavAction.back, NavPhase.release);
       await h.nav(t, NavAction.secondary);
+      await h.nav(t, NavAction.secondary, NavPhase.repeat);
+      await h.nav(t, NavAction.secondary, NavPhase.release);
+      await h.nav(t, NavAction.back, NavPhase.release);
       expect(h.backend.calls, [
         'type:q',
         'action:backspace',
         'action:backspace',
-        'type: ',
       ]);
+      await h.nav(t, NavAction.back);
+      expect(h.backend.calls.last, 'hide');
+      await h.type(t, 'Space');
+      expect(h.backend.calls.last, 'type: ');
       expect(find.text('Typed text appears here'), findsNothing);
     });
 
@@ -191,7 +225,7 @@ void main() {
       await h.type(t, 'q');
       await h.type(t, 'w');
       expect(_preview('qw'), findsOneWidget);
-      await h.nav(t, NavAction.back);
+      await h.nav(t, NavAction.secondary);
       expect(_preview('q'), findsOneWidget);
     });
 
@@ -302,7 +336,7 @@ void main() {
       final h = await start(t);
       await h.type(t, 'a');
       await h.type(t, 'b');
-      await h.nav(t, NavAction.back);
+      await h.nav(t, NavAction.secondary);
       await t.pump(const Duration(seconds: 2));
       expect(_preview('\u2022'), findsOneWidget);
       h.settings.value = _showTyped;

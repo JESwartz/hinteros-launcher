@@ -74,6 +74,15 @@ class LauncherData extends ChangeNotifier {
   ({String id, String name, String? iconPath})? closeRequest;
   List<RunningApp> running = const [];
 
+  /// An app the launcher has asked to start and that the daemon has not yet
+  /// reported focused (`focus_changed`), exited or failed: the full-screen
+  /// "Starting ..." view shows while this is set.
+  ({String id, String name, String? iconPath})? launching;
+
+  /// Apps that got `focus_changed` since the current launch began (the event
+  /// can arrive before the answer to `apps.launch`).
+  final Set<String> _focusedSince = {};
+
   /// App ids launched this session, newest first (feeds Continue).
   final List<String> _recent = [];
 
@@ -147,7 +156,22 @@ class LauncherData extends ChangeNotifier {
         oskVisible = e.visible;
       case InputNavEvent():
         if (!oskVisible) _nav.add(e);
-      case AppStartedEvent() || AppExitedEvent() || FocusChangedEvent():
+      case FocusChangedEvent():
+        final id = e.app;
+        if (id != null) _focusedSince.add(id);
+        if (id != null && launching?.id == id) _endLaunching();
+        unawaited(refreshRunning());
+      case AppExitedEvent():
+        if (launching?.id == e.id) {
+          final l = launching!;
+          _endLaunching();
+          if (e.reason == ExitReason.crashed ||
+              e.reason == ExitReason.launchTimeout) {
+            _failedToStart(l.name, e.reason, e.exitCode);
+          }
+        }
+        unawaited(refreshRunning());
+      case AppStartedEvent():
         unawaited(refreshRunning());
       case GamesChangedEvent():
         unawaited(_refreshGames());
@@ -251,9 +275,54 @@ class LauncherData extends ChangeNotifier {
     return gameList.where((g) => g.appid == appid).firstOrNull;
   }
 
+  void _beginLaunching(String id, String name, String? iconPath) {
+    _focusedSince.clear();
+    launching = (id: id, name: name, iconPath: iconPath);
+    notifyListeners();
+  }
+
+  void _endLaunching() {
+    if (launching == null) return;
+    launching = null;
+    notifyListeners();
+  }
+
+  /// The launch answer came: follow the id the daemon uses, and finish if it
+  /// already reported that app focused.
+  void _launched(RunningApp app) {
+    final l = launching;
+    if (l == null) return;
+    if (_focusedSince.contains(app.id)) {
+      _endLaunching();
+    } else if (app.id != l.id) {
+      launching = (id: app.id, name: l.name, iconPath: l.iconPath);
+      notifyListeners();
+    }
+  }
+
+  /// B or Home: stop waiting and show Home. The app keeps starting.
+  void cancelLaunching() => _endLaunching();
+
+  void _failedToStart(String name, ExitReason reason, int? code) {
+    final why = reason == ExitReason.launchTimeout
+        ? 'it never showed a window'
+        : 'it stopped right away${code == null ? '' : ' (exit status $code)'}';
+    logFailure("start $name", why);
+    if (!_failures.isClosed) {
+      _failures.add(
+        Failure(
+          title: "Couldn't start $name",
+          body: "HinterOS started $name, but $why.",
+          detail: reason.name,
+        ),
+      );
+    }
+  }
+
   Future<void> launchApp(String id, String name) async {
+    _beginLaunching(id, name, _iconOf(id));
     try {
-      await apps.launch(id);
+      _launched(await apps.launch(id));
       _recent
         ..remove(id)
         ..insert(0, id);
@@ -284,8 +353,9 @@ class LauncherData extends ChangeNotifier {
       _toast(why);
       return;
     }
+    _beginLaunching(g.runningId, g.name, null);
     try {
-      await games.launch(g);
+      _launched(await games.launch(g));
       unawaited(refreshRunning());
     } catch (e) {
       _fail('start', g.name, e);
@@ -352,6 +422,7 @@ class LauncherData extends ChangeNotifier {
   /// [verb] on [name] failed with [e]: logged with the code and message, and
   /// shown as a sentence naming the app.
   void _fail(String verb, String name, Object e) {
+    _endLaunching();
     logFailure("$verb $name", e);
     final code = e is ApiException ? e.code : null;
     final body = switch (code) {

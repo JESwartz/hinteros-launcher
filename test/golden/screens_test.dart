@@ -188,6 +188,34 @@ void main() {
       keys: [up, up, right, down],
     );
   });
+  testWidgets('launching screen', (t) async {
+    final h = Harness();
+    h.mock.slowStart = true;
+    await shot(
+      t,
+      'launching_1080p',
+      h: h,
+      setup: (t, h) async {
+        await h.data.launchApp('jellyfin', 'Jellyfin');
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 400));
+      },
+    );
+  });
+  testWidgets('launching screen, Steam after 10 s, high contrast', (t) async {
+    final h = Harness(settings: const LauncherSettings(highContrast: true));
+    h.mock.slowStart = true;
+    await shot(
+      t,
+      'launching_steam_hint_highcontrast_1080p',
+      h: h,
+      setup: (t, h) async {
+        await h.data.launchApp('steam', 'Steam');
+        await t.pump();
+        await t.pump(const Duration(seconds: 11));
+      },
+    );
+  });
   testWidgets('close confirm', (t) async {
     await shot(
       t,

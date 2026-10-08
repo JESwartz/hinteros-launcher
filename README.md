@@ -266,7 +266,7 @@ flutter run -d linux --dart-entrypoint-args=--installer,--mock,--windowed
 ./result/bin/hinteros-launcher --installer --mock --mock-scenario=refused --windowed
 ```
 
-**Keyboard (and stick).** Everything works from a USB keyboard and from the Xbox controller alone. Keyboard: arrows move, Enter = A (accept), Backspace or Escape = B (back), Tab and Shift+Tab move the focus, X and Y are secondary and context, PageUp/PageDown the bumpers, F1 the View button. While the in-app keyboard is up, it is a text field: letters, digits and space type, Backspace deletes, Enter submits (Done), Escape cancels (and does not go back), the arrows move around the on-screen keys. Controller: the D-pad and the left stick move (the right stick is ignored), A accepts, B goes back, X and Y are secondary and context, the bumpers are the page buttons; in the on-screen keyboard B deletes, X is Space, Menu is Done and View cancels. The Guide button does nothing in the installer. Held directions repeat like the daemon (after 400 ms, then every 120 ms), for the stick and the D-pad alike. `--mock-scenario=` is `ok` (default: no network, Wi-Fi "Living Room" with
+**Keyboard (and stick).** Everything works from a USB keyboard and from the Xbox controller alone. Keyboard: arrows move, Enter = A (accept), Backspace or Escape = B (back), Tab and Shift+Tab move the focus, X and Y are secondary and context, PageUp/PageDown the bumpers, F1 the View button. While the in-app keyboard is up, it is a text field: letters, digits and space type, Backspace deletes, Enter submits (Done), Escape cancels (and does not go back), the arrows move around the on-screen keys. Controller: the D-pad and the left stick move (the right stick is ignored), A accepts, B goes back, X and Y are secondary and context, the bumpers are the page buttons; in the on-screen keyboard B closes it (cancels), X is Backspace, Y is Shift, Space is a key, Menu is Done and View cancels. The Guide button does nothing in the installer. Held directions repeat like the daemon (after 400 ms, then every 120 ms), for the stick and the D-pad alike. `--mock-scenario=` is `ok` (default: no network, Wi-Fi "Living Room" with
 the password `correct horse`, a successful install after about ten seconds), `online` (a cable is
 plugged in), `refused` (`hinteros-install` exits 2 with `disk-in-use`) or `failed` (exit 1 with
 `install-failed`). The fake backend never runs a program. Without `--mock` the real backend
@@ -368,6 +368,8 @@ everything else is transparent. Showing and hiding is the daemon's job (`_NET_WM
 the process stays resident, and on `osk_visibility {visible: true}` it re-reads `launcher.json` (text
 size, contrast, focus marker) and focuses `q`. A 4K screen at devicePixelRatio 1 gets the same
 keyboard scaled by height / 1080. Checked here under Xvfb: depth-32 window, class and atom set;
+
+**Controller (B closes).** A types the focused key (Space is the wide key on the bottom row), **B closes the keyboard** (`osk.hide`; in the installer it cancels the edit like View), **X is Backspace** (repeats while held), **Y is Shift** (or "More" on the symbol pages), L1/R1 switch pages, Menu is Done. The hint line in the preview strip reads "A Type   B Close   X Delete   Y Shift" (hidden at large text sizes). On a physical keyboard Escape closes and Backspace deletes; the key echo is unchanged.
 alpha through a real compositor and gamescope is on the spike's hardware checklist.
 
 Run it on the desktop: `flutter run -d linux -t lib/osk_main.dart --dart-entrypoint-args=--osk,--mock,--windowed`

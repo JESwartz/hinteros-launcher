@@ -115,9 +115,10 @@ class _DesignScale extends StatelessWidget {
 /// become [NavAction]s here, once.
 ///
 /// Controls: D-pad moves between keys (left/right wrap, up/down go to the key
-/// above or below), `accept` types the key, `back` is Backspace (also while
-/// held), `context` is Shift on the letters page and "More" on the symbol
-/// pages, `secondary` is Space, L1/R1 (`page_left`/`page_right`) switch to
+/// above or below), `accept` types the key, `back` (B) closes the
+/// keyboard, `secondary` (X) is Backspace (also while held), `context` (Y) is
+/// Shift on the letters page and "More" on the symbol pages, Space is a key on
+/// the grid, L1/R1 (`page_left`/`page_right`) switch to
 /// letters / symbols.
 class OskScreen extends StatefulWidget {
   const OskScreen({
@@ -218,21 +219,47 @@ class _OskScreenState extends State<OskScreen> {
   }
 
   /// The one action layer: `input_nav` and the dev keys both end up here.
+  /// Actions currently held (pressed and not yet released). A repeat that
+  /// arrives after the release (late events from the daemon) is dropped, so
+  /// nothing plays on after the stick is back at rest.
+  final _held = <NavAction>{};
+
   void _onAction(NavAction action, NavPhase phase) {
-    if (phase == NavPhase.release || phase == NavPhase.unknown) return;
+    if (phase == NavPhase.release) {
+      _held.remove(action);
+      return;
+    }
+    if (phase == NavPhase.unknown) return;
+    if (phase == NavPhase.press) {
+      _held.add(action);
+    } else if (!_held.contains(action)) {
+      return;
+    }
     switch (action) {
+      case NavAction.back when phase == NavPhase.press:
+        _close();
       case NavAction.back:
-        _state.backspace(); // press and repeat
+        break;
+      case NavAction.secondary:
+        _state.backspace(); // X: press and repeat
       case NavAction.context when phase == NavPhase.press:
         _state.context();
-      case NavAction.secondary when phase == NavPhase.press:
-        _state.space();
       case NavAction.pageLeft when phase == NavPhase.press:
         _state.setPage(OskPage.letters);
       case NavAction.pageRight when phase == NavPhase.press:
         _state.setPage(OskPage.symbols);
       default:
         _nav.dispatch(action, phase);
+    }
+  }
+
+  /// B: close the keyboard. The system keyboard asks the daemon to hide it;
+  /// the installer's in-app one cancels the edit, like View.
+  void _close() {
+    if (widget.hardwareKeys) {
+      widget.onEscape?.call();
+    } else {
+      unawaited(widget.backend.hide());
     }
   }
 
@@ -244,9 +271,8 @@ class _OskScreenState extends State<OskScreen> {
     if (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) {
       return NavAction.accept;
     }
-    if (k == LogicalKeyboardKey.escape || k == LogicalKeyboardKey.backspace) {
-      return NavAction.back;
-    }
+    if (k == LogicalKeyboardKey.escape) return NavAction.back; // B: close
+    if (k == LogicalKeyboardKey.backspace) return NavAction.secondary; // X
     if (k == LogicalKeyboardKey.pageUp) return NavAction.pageLeft;
     if (k == LogicalKeyboardKey.pageDown) return NavAction.pageRight;
     if (k == LogicalKeyboardKey.keyY) return NavAction.context;
@@ -499,7 +525,7 @@ class _PreviewStrip extends StatelessWidget {
               ),
               if (scale <= 1.3) ...[
                 const SizedBox(width: HinterTokens.s2),
-                Text('Y Shift   X Space   B Delete', style: t.caption),
+                Text('A Type   B Close   X Delete   Y Shift', style: t.caption),
               ],
             ],
           ),
@@ -609,6 +635,8 @@ class _KeyCap extends StatelessWidget {
       fontWeight: char && !once ? FontWeight.w400 : FontWeight.w700,
     );
     final radius = BorderRadius.circular(HinterTokens.radiusSmall);
+    // Pressed shrinks the key a little (never grows: nothing is drawn outside
+    // the key's bounds, over the transparent ARGB window).
     final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return AnimatedScale(
       scale: pressed ? 0.94 : 1,
@@ -682,7 +710,13 @@ class _KeyCap extends StatelessWidget {
         return DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: radius,
-            color: t.accent.withValues(alpha: caps ? 0 : 0.28),
+            // Opaque: the window is ARGB, so no translucent blends here.
+            color: caps
+                ? t.accent
+                : Color.alphaBlend(
+                    t.accent.withValues(alpha: 0.28),
+                    t.surfaceHigh,
+                  ),
             border: Border.all(color: t.focusRing, width: 3),
           ),
         );

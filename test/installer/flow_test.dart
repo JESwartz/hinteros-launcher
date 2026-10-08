@@ -677,20 +677,41 @@ void main() {
       await h.press(t, NavAction.right); // D
       await h.accept(t);
       expect(h.console(t).keyboard!.text.value, 'asd');
-      await h.press(t, NavAction.back); // B is Backspace
+      await h.press(t, NavAction.secondary); // X is Backspace
       expect(h.console(t).keyboard!.text.value, 'as');
-      await h.press(t, NavAction.secondary); // X is Space
-      expect(h.console(t).keyboard!.text.value, 'as ');
-      // Down to the bottom row, along to Done.
+      // Down to the bottom row; Space is a key there.
       await h.press(t, NavAction.down);
       await h.press(t, NavAction.down);
       expect(h.focus, startsWith('osk/bottom:'));
+      for (var i = 0; i < 12 && h.focus != 'osk/bottom:2'; i++) {
+        await h.press(t, NavAction.right);
+      }
+      await h.accept(t);
+      expect(h.console(t).keyboard!.text.value, 'as ');
+      // Along to Done.
       for (var i = 0; i < 12 && h.focus != 'osk/bottom:5'; i++) {
         await h.press(t, NavAction.right);
       }
       await h.accept(t);
       expect(h.console(t).typing, isFalse);
       expect(h.flow.username, 'as ');
+    });
+
+    testWidgets('B closes the in-app keyboard like View: the edit is dropped', (
+      t,
+    ) async {
+      final h = InstallerHarness();
+      await h.start(t);
+      h.flow.go(InstallerStep.account);
+      await t.pumpAndSettle();
+      await h.choose(t, 'user');
+      await h.accept(t); // q
+      expect(h.console(t).keyboard!.text.value, 'q');
+      await h.press(t, NavAction.back);
+      await t.pumpAndSettle();
+      expect(h.console(t).typing, isFalse);
+      expect(h.flow.username, isNot('q'));
+      expect(h.flow.step, InstallerStep.account);
     });
   });
 }

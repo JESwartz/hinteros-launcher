@@ -23,6 +23,7 @@ import 'games_screen.dart';
 import 'home_screen.dart';
 import 'modal_host.dart';
 import 'overlays.dart';
+import 'launching.dart';
 import 'settings_screen.dart';
 import 'store_flows.dart';
 import 'store_screen.dart';
@@ -200,6 +201,7 @@ class _LauncherShellState extends State<LauncherShell> {
     );
     _subs.add(
       d.homePressed.listen((_) {
+        d.cancelLaunching();
         // A modal (a security notice, a job in progress) is not dismissed by Home.
         if (!_modals.isOpen) _goHome(reset: true);
       }),
@@ -253,6 +255,10 @@ class _LauncherShellState extends State<LauncherShell> {
   void _onData() {
     if (!mounted) return;
     final d = widget.data;
+    if ((d.launching != null) != _launchShown) {
+      _launchShown = d.launching != null;
+      setState(() {});
+    }
     final wantBanner = d.steamAttention.isNotEmpty && d.status is Connected;
     final wantDialog = d.closeRequest != null;
     if (wantBanner == _bannerVisible && wantDialog == _dialogOpen) return;
@@ -282,6 +288,8 @@ class _LauncherShellState extends State<LauncherShell> {
     }
     setState(() {});
   }
+
+  bool _launchShown = false;
 
   bool _didInitialFocus = false;
 
@@ -465,8 +473,17 @@ class _LauncherShellState extends State<LauncherShell> {
   }
 
   /// The one action layer: controller and keyboard both end up here.
-  void _onAction(NavAction action, NavPhase phase) =>
-      _nav.dispatch(action, phase);
+  void _onAction(NavAction action, NavPhase phase) {
+    if (widget.data.launching != null) {
+      // The "Starting ..." view has the screen: B stops waiting, nothing else
+      // moves the (hidden) launcher.
+      if (action == NavAction.back && phase == NavPhase.press) {
+        widget.data.cancelLaunching();
+      }
+      return;
+    }
+    _nav.dispatch(action, phase);
+  }
 
   bool _typingInField() =>
       FocusManager.instance.primaryFocus?.context
@@ -568,6 +585,15 @@ class _LauncherShellState extends State<LauncherShell> {
                     region: _dialog,
                     onCancel: widget.data.cancelClose,
                     onConfirm: () => unawaited(widget.data.confirmClose()),
+                  ),
+                if (widget.data.launching case final l?)
+                  Positioned.fill(
+                    child: LaunchingScreen(
+                      key: ValueKey('launching-${l.id}'),
+                      id: l.id,
+                      name: l.name,
+                      iconPath: l.iconPath,
+                    ),
                   ),
                 if (widget.showFps) const FpsOverlay(),
               ],
