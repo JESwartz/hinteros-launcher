@@ -1,7 +1,7 @@
 {
   "$schema": "./api-doc.schema.json",
   "api": "session",
-  "version": "0.11",
+  "version": "0.12",
   "description": "API of the HinterOS session daemon, served to the launcher (and other clients running as the session user). Responses to system.*, auth.*, store.list and session.restart may arrive out of order relative to other calls on the same connection (match them by id): a relayed call can wait minutes for an admin password. See hinteros-docs/design/api.md for the protocol rules.",
   "transport": {
     "protocol": "jsonrpc-2.0",
@@ -1983,7 +1983,7 @@
     "profile.current": {
       "summary": "The profile this session belongs to (the daemon's own user).",
       "description": "setup_required: the account is a spare in first-boot mode (no admin profile exists); the launcher runs its first-boot wizard, which ends with system.profiles.setup_admin. pin_set false: a profile migrated from a single-user box without a PIN yet; the launcher asks for one before Home (system.profiles.set_pin without current_pin). screen_locked: the sleep lock is up right now (lock_state follows every change). The guest has guest true, no PIN and is never locked or admin.",
-      "since": "0.11",
+      "since": "0.12",
       "params": { "type": "object", "additionalProperties": false, "properties": {} },
       "result": {
         "type": "object",
@@ -2011,7 +2011,7 @@
     "session.switch_profile": {
       "summary": "Switch to another profile (or the guest): close everything running here, then end this session; the greeter takes over.",
       "description": "The daemon calls system.profiles.switch {id} (writes the switch hint), brings the launcher to the front, sends SIGTERM to every running app (switch_progress closing_apps), asks Steam to exit (closing_steam). Nothing is force-closed silently: an app still running after switch.wait_s (10 s; Steam 15 s) produces switch_blocked and waits for session.switch_wait, session.switch_force_close or session.switch_cancel. Then it hides the keyboard, resets InputPlumber and ends its logind session (switch_progress ending). The reply comes when the switch has started, before anything closes. invalid_params {reason: same} for the session's own profile; not_found for an unknown profile; job_busy while a switch is already under way.",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["id"],
@@ -2029,7 +2029,7 @@
     },
     "session.switch_wait": {
       "summary": "The not-responding pop-up's Keep waiting: wait another switch.wait_s for the blocked app (switch_blocked again if it is still running).",
-      "since": "0.11",
+      "since": "0.12",
       "params": { "type": "object", "additionalProperties": false, "properties": {} },
       "result": { "type": "object", "additionalProperties": false, "properties": {} },
       "errors": ["not_found"],
@@ -2040,7 +2040,7 @@
     },
     "session.switch_force_close": {
       "summary": "The not-responding pop-up's Force close: SIGKILL the app's process group; the switch continues.",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["app"],
@@ -2056,7 +2056,7 @@
     },
     "session.switch_cancel": {
       "summary": "The not-responding pop-up's Cancel switch: the profile stays (with whatever already closed gone); the hint is withdrawn.",
-      "since": "0.11",
+      "since": "0.12",
       "params": { "type": "object", "additionalProperties": false, "properties": {} },
       "result": { "type": "object", "additionalProperties": false, "properties": {} },
       "errors": ["not_found"],
@@ -2068,7 +2068,7 @@
     "session.unlock": {
       "summary": "The sleep lock screen's PIN: relays system.profiles.unlock {pin} (the profile's own PIN, same backoff). lock_state {locked: false} follows.",
       "description": "A wrong PIN or an active backoff is pin_required {pin: self, retry_after_ms?}. Without a lock up: invalid_params {reason: not_locked}.",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["pin"],
@@ -2084,7 +2084,7 @@
     },
     "session.end_guest": {
       "summary": "End guest session: guest only. Ends the session like a switch (to the picker) and wipes the guest now (home emptied, app link back to the starter set), as a reboot would.",
-      "since": "0.11",
+      "since": "0.12",
       "params": { "type": "object", "additionalProperties": false, "properties": {} },
       "result": { "type": "object", "additionalProperties": false, "properties": {} },
       "errors": ["system_unavailable"],
@@ -2096,7 +2096,7 @@
     "greeter.list": {
       "summary": "Greeter mode only: the picker's view of the box (/run/hinteros/profiles-public.json).",
       "description": "focus: the profile to focus first (the switch target, else the last used). appearance: the most accessible combination of the profiles' mirrored appearance. job: a profile job the picker should show (a removal that ended this session), else null. Only the hinteros-launcher connection may call greeter.* (not_authorized); a daemon not in greeter mode answers unavailable {service: greeter}.",
-      "since": "0.11",
+      "since": "0.12",
       "params": { "type": "object", "additionalProperties": false, "properties": {} },
       "result": {
         "type": "object",
@@ -2132,7 +2132,7 @@
     "greeter.login": {
       "summary": "Greeter mode only: start entering a profile (greetd create_session).",
       "description": "An unlocked profile, the guest or a holder of a one-time token (a just-created profile) starts at once: greeter_result {ok: true}, and the greeter session ends. A locked profile gets greeter_prompt {kind: pin}; answer with greeter.pin. Another login in progress is cancelled first.",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["id"],
@@ -2148,7 +2148,7 @@
     },
     "greeter.pin": {
       "summary": "Greeter mode only: the PIN for the greeter_prompt of the login in progress. The PIN goes to greetd and is wiped; greeter_result follows.",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["pin"],
@@ -2164,7 +2164,7 @@
     },
     "greeter.cancel": {
       "summary": "Greeter mode only: give up the login in progress (greetd cancel_session). Nothing in progress is not an error.",
-      "since": "0.11",
+      "since": "0.12",
       "params": { "type": "object", "additionalProperties": false, "properties": {} },
       "result": { "type": "object", "additionalProperties": false, "properties": {} },
       "errors": ["unavailable", "not_authorized"],
@@ -2172,7 +2172,7 @@
     },
     "greeter.create": {
       "summary": "Greeter mode only: Add profile from the picker (profiles.create over greeter.sock, a job of about a minute). When the job succeeds, greeter.login {id} enters the new profile without its PIN (one-time token).",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["name", "pin", "locked"],
@@ -2193,7 +2193,7 @@
     },
     "system.profiles.list": {
       "summary": "Relayed to the system service's profiles.list. The profiles of this box, the guest and the limit. Read-only; starts a usage scan when the numbers are older than an hour.",
-      "since": "0.11",
+      "since": "0.12",
       "params": { "type": "object", "additionalProperties": false, "properties": {} },
       "result": {
         "type": "object",
@@ -2235,7 +2235,7 @@
     "system.profiles.create": {
       "summary": "Relayed to the system service's profiles.create. Add a profile (job profiles_create: a rebuild that adds the account, about a minute). Action org.hinteros.system.profiles.create.",
       "description": "revision must be settings.get's (state_conflict otherwise). At 8 profiles: profile_limit. On success the profile has its metadata, PIN and lock flag, and its apps are the starter set; profiles_changed follows.",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["name", "pin", "locked", "revision"],
@@ -2259,7 +2259,7 @@
     "system.profiles.setup_admin": {
       "summary": "Relayed to the system service's profiles.setup_admin. First-boot mode: make the caller's spare account the admin profile (metadata, PIN, apps = the starter set). No job, no rebuild, no network.",
       "description": "Only a spare caller, only while no admin profile exists (permission_denied otherwise).",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["name", "pin", "locked"],
@@ -2286,7 +2286,7 @@
     },
     "system.profiles.rename": {
       "summary": "Relayed to the system service's profiles.rename. Own profile: no PIN. Another profile: the admin PIN (pin_required {pin: admin} without it or when wrong).",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["id", "name"],
@@ -2307,7 +2307,7 @@
     },
     "system.profiles.set_appearance": {
       "summary": "Relayed to the system service's profiles.set_appearance. Own profile's colour and the appearance mirrored for the picker.",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "additionalProperties": false,
@@ -2325,7 +2325,7 @@
     },
     "system.profiles.set_pin": {
       "summary": "Relayed to the system service's profiles.set_pin. Change the own PIN with the current one (current_pin left out only while no PIN is set: the migration's first PIN).",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["pin"],
@@ -2342,7 +2342,7 @@
     },
     "system.profiles.set_locked": {
       "summary": "Relayed to the system service's profiles.set_locked. Own profile's lock flag, with the own PIN.",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["locked", "pin"],
@@ -2359,7 +2359,7 @@
     },
     "system.profiles.reset_pin": {
       "summary": "Relayed to the system service's profiles.reset_pin. Give another profile a new PIN with the admin PIN; for the admin profile itself no admin_pin, but the admin account's password (polkit org.hinteros.system.profiles.recover, the agent prompt).",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["id", "new_pin"],
@@ -2376,7 +2376,7 @@
     },
     "system.profiles.remove": {
       "summary": "Relayed to the system service's profiles.remove. Remove a profile with everything in it (job profiles_remove). Own PIN for the own profile (the session then ends, as in a switch), the admin PIN for another. Never the admin profile (invalid_params {reason: admin}).",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["id", "confirm_id", "pin", "revision"],
@@ -2398,7 +2398,7 @@
     },
     "system.guest.set": {
       "summary": "Relayed to the system service's guest.set. Guest on or off (job guest_set, a rebuild), with the admin PIN.",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["enabled", "admin_pin"],
@@ -2416,7 +2416,7 @@
     "system.apps.list": {
       "summary": "Relayed to the system service's apps.list. The caller's own apps (its current app env's manifest). Read-only.",
       "description": "revision stands for the caller's current app generation: pass it as system.apps.install and system.apps.remove's revision. needs_terms: apps that came with the starter set whose vendor terms this profile has not accepted yet (ask on first launch, system.apps.accept_terms). On a box not migrated to per-profile apps: unavailable {service: apps, reason: schema1} (then settings.get's revision and apps apply).",
-      "since": "0.11",
+      "since": "0.12",
       "params": { "type": "object", "additionalProperties": false, "properties": {} },
       "result": {
         "type": "object",
@@ -2439,7 +2439,7 @@
     },
     "system.apps.generations": {
       "summary": "Relayed to the system service's apps.generations. The caller's app generations (current plus up to 3 earlier), newest first. Read-only.",
-      "since": "0.11",
+      "since": "0.12",
       "params": { "type": "object", "additionalProperties": false, "properties": {} },
       "result": {
         "type": "object",
@@ -2464,7 +2464,7 @@
     },
     "system.apps.rollback": {
       "summary": "Relayed to the system service's apps.rollback. Put the caller's apps back to an earlier generation (job apps_rollback; the box stage first if it needs a box feature that is off).",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["generation"],
@@ -2481,7 +2481,7 @@
     },
     "system.apps.accept_terms": {
       "summary": "Relayed to the system service's apps.accept_terms. Accept the vendor terms of an app in needs_terms (first launch of a starter-set app). version must be the running catalog's terms version. Recorded by this profile.",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["id", "version"],
@@ -2498,7 +2498,7 @@
     },
     "system.starter_set.get": {
       "summary": "Relayed to the system service's starter_set.get. The apps every new profile and guest session starts with. Read-only.",
-      "since": "0.11",
+      "since": "0.12",
       "params": { "type": "object", "additionalProperties": false, "properties": {} },
       "result": {
         "type": "object",
@@ -2515,7 +2515,7 @@
     },
     "system.starter_set.set": {
       "summary": "Relayed to the system service's starter_set.set. Change the starter set (job starter_set) with the admin PIN; ids must be among the admin profile's current apps (invalid_params {reason: not_in_admin_profile}). Affects only profiles and guest sessions created afterwards.",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["ids", "pin"],
@@ -2965,7 +2965,7 @@
     },
     "switch_progress": {
       "summary": "A profile switch (session.switch_profile) moved on: closing_apps (app: the one being closed, when known), closing_steam, ending (the session ends next). The launcher shows the Switching screen.",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["stage"],
@@ -2982,7 +2982,7 @@
     },
     "switch_blocked": {
       "summary": "An app (or Steam, or a game) has not closed waited_s seconds into a switch. The launcher, in front, asks: Keep waiting (session.switch_wait), Force close (session.switch_force_close) or Cancel switch (session.switch_cancel).",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["app", "waited_s"],
@@ -2996,7 +2996,7 @@
     },
     "lock_state": {
       "summary": "The sleep lock of a locked profile: locked true before the box sleeps (the launcher is in front, apps keep running behind it; show the PIN pad on resume), false after session.unlock.",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["locked"],
@@ -3007,7 +3007,7 @@
     },
     "profiles_changed": {
       "summary": "The profiles changed: after a profile job, a rename, a PIN, lock or appearance change. profiles is what system.profiles.list's profiles would say now (also for profile.current's fields).",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["profiles"],
@@ -3027,7 +3027,7 @@
     },
     "greeter_prompt": {
       "summary": "Greeter mode only: greetd asks something for the login in progress. kind pin: show the PIN pad (answer with greeter.pin). info and error carry greetd's message.",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["id", "kind"],
@@ -3042,7 +3042,7 @@
     },
     "greeter_result": {
       "summary": "Greeter mode only: the login in progress ended. ok: the profile's session starts and the greeter exits. Not ok: a wrong PIN, or locked_seconds while the backoff lock lasts (show 'Try again in N seconds'); greetd's session was cancelled, a new greeter.login starts over.",
-      "since": "0.11",
+      "since": "0.12",
       "params": {
         "type": "object",
         "required": ["id", "ok"],
@@ -3371,7 +3371,7 @@
     },
     "profile_limit": {
       "code": 3015,
-      "since": "0.11",
+      "since": "0.12",
       "summary": "profiles.create (greeter.create): the box has the most profiles it can have (the guest does not count).",
       "data": {
         "type": "object",
@@ -3382,7 +3382,7 @@
     },
     "pin_required": {
       "code": 3016,
-      "since": "0.11",
+      "since": "0.12",
       "summary": "A method needs a PIN that is missing or wrong: self (the caller's), admin (the admin profile's) or target (the profile being entered). retry_after_ms while the profile's backoff lock is active (3 free failures, then 1 s doubling up to 5 min).",
       "data": {
         "type": "object",
@@ -3681,7 +3681,7 @@
         "status": { "$ref": "#/$defs/CatalogStatus" },
         "status_reason": { "oneOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }] },
         "state": { "$ref": "#/$defs/StoreState" },
-        "missing_services": { "description": "0.11: services (box-wide, admin profile only) this app needs that are not enabled on this box. Absent or empty: none. While any is missing the app cannot be installed: say which service, and that the admin profile can install it in the Server section.", "type": "array", "items": { "$ref": "#/$defs/NamedApp" } }
+        "missing_services": { "description": "0.12: services (box-wide, admin profile only) this app needs that are not enabled on this box. Absent or empty: none. While any is missing the app cannot be installed: say which service, and that the admin profile can install it in the Server section.", "type": "array", "items": { "$ref": "#/$defs/NamedApp" } }
       }
     },
 
@@ -3769,7 +3769,7 @@
         "booted": {
           "type": "boolean"
         },
-        "profiles": { "description": "0.11: the accounts in that generation's state.json (null: unknown, e.g. no config snapshot). The rollback screen names the profiles a rollback would remove and those that would come back with an empty home.", "oneOf": [{ "type": "array", "items": { "$ref": "#/$defs/GenerationProfile" } }, { "type": "null" }] }
+        "profiles": { "description": "0.12: the accounts in that generation's state.json (null: unknown, e.g. no config snapshot). The rollback screen names the profiles a rollback would remove and those that would come back with an empty home.", "oneOf": [{ "type": "array", "items": { "$ref": "#/$defs/GenerationProfile" } }, { "type": "null" }] }
       }
     },
     "AvailableUpdate": {

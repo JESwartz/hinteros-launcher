@@ -251,7 +251,7 @@ abstract class StoreRepository {
   /// when another installed app needs it.
   Future<JobHandle> remove(String id, {bool deleteData = false});
 
-  // Per profile (session API 0.11): every profile has its own apps.
+  // Per profile (session API 0.12): every profile has its own apps.
 
   /// Starter-set apps of this profile whose vendor terms it has not
   /// accepted yet (`apps.list`'s `needs_terms`): their first launch shows

@@ -406,7 +406,7 @@ class Generation {
   final bool current;
   final bool booted;
 
-  /// The accounts in that generation (0.11), with their names when the box
+  /// The accounts in that generation (0.12), with their names when the box
   /// still knows them; null when unknown.
   final List<({String id, String? name})>? profiles;
 }
@@ -844,7 +844,7 @@ class StoreApp {
   final List<String> conflicts;
 
   /// Services (box-wide, admin profile only) this app needs that are not
-  /// enabled on this box (0.11). While any is missing it cannot be installed.
+  /// enabled on this box (0.12). While any is missing it cannot be installed.
   final List<({String id, String name})> missingServices;
 
   bool get hasTerms => terms != null;

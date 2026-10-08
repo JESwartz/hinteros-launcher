@@ -3,7 +3,7 @@
 /// ([ProfilesRepository]: the current profile, the box's profiles, switching,
 /// the sleep lock, the starter set) and the greeter side ([GreeterRepository]:
 /// the picker before any profile's session runs). Implementations:
-/// `daemon_profiles.dart` (session API 0.11) and `mock_profiles.dart`.
+/// `daemon_profiles.dart` (session API 0.12) and `mock_profiles.dart`.
 library;
 
 import 'package:flutter/foundation.dart';

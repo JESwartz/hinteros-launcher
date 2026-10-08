@@ -1,4 +1,4 @@
-/// The profiles side of [MockDaemon] (session API 0.11): `profile.current`,
+/// The profiles side of [MockDaemon] (session API 0.12): `profile.current`,
 /// the switch (`session.switch_*`, `switch_progress`, `switch_blocked`), the
 /// sleep lock (`session.unlock`, `lock_state`), `session.end_guest`, the
 /// greeter-mode methods (`greeter.*`, `greeter_prompt`, `greeter_result`) and

@@ -131,7 +131,7 @@ Future<void> _prepareSystem(
   }
 }
 
-/// Puts the mock's profiles (0.11) into the situation an example describes:
+/// Puts the mock's profiles (0.12) into the situation an example describes:
 /// a box with 8 profiles, a switch that waits for an app, the sleep lock,
 /// the guest's session, first-boot mode, the greeter.
 Future<void> _prepareProfiles(

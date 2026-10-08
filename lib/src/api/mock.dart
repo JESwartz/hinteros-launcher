@@ -157,7 +157,7 @@ class MockDaemon extends DaemonConnection {
     );
   }
 
-  /// Profiles (session API 0.11): the current profile, the switch, the
+  /// Profiles (session API 0.12): the current profile, the switch, the
   /// sleep lock, the greeter mode and the relayed `system.profiles.*`,
   /// `system.guest.set`, per-profile `system.apps.*` and the starter set.
   late final MockProfileSession profiles;

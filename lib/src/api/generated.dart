@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.11).
+// Source: schema/session-api.json (session API 0.12).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.11';
+const apiVersion = '0.12';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -1292,7 +1292,7 @@ class StoreApp {
   final String? statusReason;
   final StoreState state;
 
-  /// 0.11: services (box-wide, admin profile only) this app needs that are not enabled on this box. Absent or empty: none. While any is missing the app cannot be installed: say which service, and that the admin profile can install it in the Server section.
+  /// 0.12: services (box-wide, admin profile only) this app needs that are not enabled on this box. Absent or empty: none. While any is missing the app cannot be installed: say which service, and that the admin profile can install it in the Server section.
   final List<NamedApp>? missingServices;
 
   factory StoreApp.fromJson(Map<String, dynamic> json) => StoreApp(
@@ -1505,7 +1505,7 @@ class Generation {
   final bool current;
   final bool booted;
 
-  /// 0.11: the accounts in that generation's state.json (null: unknown, e.g. no config snapshot). The rollback screen names the profiles a rollback would remove and those that would come back with an empty home.
+  /// 0.12: the accounts in that generation's state.json (null: unknown, e.g. no config snapshot). The rollback screen names the profiles a rollback would remove and those that would come back with an empty home.
   final List<GenerationProfile>? profiles;
 
   factory Generation.fromJson(Map<String, dynamic> json) => Generation(
