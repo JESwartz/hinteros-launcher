@@ -33,6 +33,7 @@ class GreeterApp extends StatefulWidget {
     this.pad,
     this.hideCursor = true,
     this.now,
+    this.onEntered,
   });
 
   final GreeterRepository greeter;
@@ -45,6 +46,11 @@ class GreeterApp extends StatefulWidget {
   final Stream<PadEvent>? pad;
   final bool hideCursor;
   final DateTime Function()? now;
+
+  /// A profile's session starts (greetd accepted the login): the picker
+  /// quits, so greetd starts it at once (it would SIGTERM the greeter after
+  /// 5 s otherwise).
+  final VoidCallback? onEntered;
 
   @override
   State<GreeterApp> createState() => _GreeterAppState();
@@ -81,6 +87,7 @@ class _GreeterAppState extends State<GreeterApp> {
         system: widget.system,
         onAppearance: _appearance,
         now: widget.now,
+        onEntered: widget.onEntered,
       ),
     ),
   );
@@ -95,6 +102,7 @@ class GreeterScreen extends StatefulWidget {
     this.system,
     this.onAppearance,
     this.now,
+    this.onEntered,
   });
 
   final ConsoleController console;
@@ -103,6 +111,7 @@ class GreeterScreen extends StatefulWidget {
   final SystemRepository? system;
   final void Function(PickerAppearance)? onAppearance;
   final DateTime Function()? now;
+  final VoidCallback? onEntered;
 
   @override
   State<GreeterScreen> createState() => _GreeterScreenState();
@@ -167,6 +176,7 @@ class _GreeterScreenState extends State<GreeterScreen> {
       _entering = name;
       _message = null;
     });
+    widget.onEntered?.call();
   }
 
   Future<void> _choose(_Entry e) async {

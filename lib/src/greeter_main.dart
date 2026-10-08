@@ -4,7 +4,7 @@
 library;
 
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, exit;
 
 import 'package:flutter/material.dart';
 
@@ -56,6 +56,8 @@ Future<void> runGreeter(List<String> args) async {
       system: DaemonSystem(conn, jobs),
       pad: padFromDaemon(conn),
       hideCursor: hideCursor,
+      // "Opening Sam..." shows for a moment, then the greeter session ends.
+      onEntered: () => Timer(const Duration(milliseconds: 500), () => exit(0)),
     ),
   );
 }
