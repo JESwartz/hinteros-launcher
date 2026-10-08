@@ -471,8 +471,11 @@ void main() {
       setView(t);
       final h = harness();
       await toRestartOffer(t, h);
-      await press(t, [kEnter]);
+      await t.sendKeyEvent(kEnter);
+      await t.pump();
+      await t.pump();
       expect(h.mock.sessionRestarts, 1);
+      expect(find.text('Restarting the session…'), findsOneWidget);
     });
 
     testWidgets('a desktop session says it cannot be restarted from here', (

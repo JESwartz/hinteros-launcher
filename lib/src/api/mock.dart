@@ -718,6 +718,11 @@ class MockDaemon extends DaemonConnection {
   List<SteamWindow> get attention => List.unmodifiable(_attention);
 
   /// The Home button, on demand: the launcher comes to the front, then the event.
+  /// The connection drops (the session daemon went away, as it does when its
+  /// session ends).
+  void simulateDisconnect([String reason = 'connection closed']) =>
+      _setStatus(Unreachable(reason));
+
   void pressHome() {
     _setFocus(null);
     _setOsk(false);

@@ -7,6 +7,7 @@ import 'package:hinteros_launcher/src/system/mock_system.dart';
 import 'package:hinteros_launcher/src/ui/profiles/profile_loading.dart';
 
 import '../profiles/loading_test.dart' show appWith, public;
+import '../profiles/session_ending_test.dart' show removeOwnProfile;
 import '../profiles/session_test.dart'
     show frames, harness, keys, openChip, typePin;
 import '../profiles/store_profile_test.dart' show termsHarness;
@@ -182,5 +183,13 @@ void moreGoldens() {
     );
     await t.pump(const Duration(milliseconds: 300));
     await shot(t, 'startup_loading');
+  });
+
+  testWidgets('removing your own profile: the session ends', (t) async {
+    final h = await removeOwnProfile(t);
+    // The service has gone with the session: still only this page.
+    h.mock.simulateDisconnect();
+    await t.pump(const Duration(milliseconds: 300));
+    await shot(t, 'removing_own');
   });
 }

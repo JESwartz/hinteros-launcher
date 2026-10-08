@@ -74,21 +74,33 @@ class LoadingIdentity {
 }
 
 /// The page: the profile's avatar, "Loading Sam…", a spinner (a still ring
-/// with reduce motion).
+/// with reduce motion). Also the page of a session that is ending
+/// ("Removing Sam…", with [detail] under it).
 class ProfileLoadingPage extends StatelessWidget {
-  const ProfileLoadingPage({super.key, required this.identity});
+  const ProfileLoadingPage({
+    super.key,
+    required this.identity,
+    this.title,
+    this.detail,
+  });
 
   final LoadingIdentity identity;
+
+  /// Instead of "Loading Sam…".
+  final String? title;
+
+  /// A line under the title.
+  final String? detail;
 
   @override
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
     final name = identity.name;
-    final title = name == null ? 'Loading…' : 'Loading $name…';
+    final title = this.title ?? (name == null ? 'Loading…' : 'Loading $name…');
     return Semantics(
       container: true,
       liveRegion: true,
-      label: title,
+      label: detail == null ? title : '$title $detail',
       child: ColoredBox(
         key: const ValueKey('profile-loading'),
         color: t.background,
@@ -112,6 +124,15 @@ class ProfileLoadingPage extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (detail != null) ...[
+                  const SizedBox(height: HinterTokens.s1),
+                  Text(
+                    detail!,
+                    key: const ValueKey('profile-loading-detail'),
+                    style: t.bodyDim,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
                 const SizedBox(height: HinterTokens.s4),
                 SizedBox.square(
                   dimension: 56,

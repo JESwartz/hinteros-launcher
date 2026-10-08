@@ -8,6 +8,7 @@ import '../../system/repositories.dart';
 import '../../theme/hinter_theme.dart';
 import '../dialogs.dart';
 import '../modal_host.dart';
+import '../session_ending.dart';
 import '../widgets.dart';
 import 'common.dart';
 
@@ -492,7 +493,12 @@ class PowerSection extends StatelessWidget {
         final p = Pane(env.region);
         Future<void> run(PowerAction a) async {
           try {
-            await sys.power(a);
+            if (a == PowerAction.sleep) {
+              await sys.power(a);
+            } else {
+              // The session ends with the box: no connection error.
+              await endSessionWith(context, powerEnding(a), () => sys.power(a));
+            }
           } on SystemException catch (e) {
             if (context.mounted) {
               await showMessage(

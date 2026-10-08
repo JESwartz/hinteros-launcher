@@ -12,6 +12,7 @@ import 'dialogs.dart';
 import 'focus_frame.dart';
 import 'modal_host.dart';
 import 'nav_focusable.dart';
+import 'session_ending.dart';
 import 'widgets.dart';
 
 /// A full-screen page: opaque, with the overscan-safe margin, a title and
@@ -160,7 +161,14 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
 
   Future<void> _restart() async {
     try {
-      await widget.services.system.restartSession();
+      await endSessionWith(
+        context,
+        const SessionEnding(
+          title: 'Restarting the session…',
+          detail: "You'll be back in a moment.",
+        ),
+        widget.services.system.restartSession,
+      );
     } on SystemException catch (e) {
       if (mounted) {
         setState(

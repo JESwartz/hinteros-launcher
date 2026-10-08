@@ -133,8 +133,13 @@ void main() {
       expect(find.text('Restart?'), findsOneWidget);
       await press(t, [kEnter]); // Cancel is focused first
       expect(h.services.mockSystem.log, ['power:sleep']);
-      await press(t, [kEnter, kRight, kEnter]);
+      await press(t, [kEnter, kRight]);
+      // The session ends with the box: the ending page (it never settles).
+      await t.sendKeyEvent(kEnter);
+      await t.pump();
+      await t.pump();
       expect(h.services.mockSystem.log.last, 'power:restart');
+      expect(find.text('Restarting…'), findsOneWidget);
     });
 
     testWidgets('About shows the version and identity', (t) async {
@@ -375,8 +380,11 @@ void main() {
       h.services.mockJobs.finish(h.services.mockJobs.started.single.jobId);
       await t.pumpAndSettle();
       expect(find.text('Restart session'), findsOneWidget);
-      await press(t, [kEnter]);
+      await t.sendKeyEvent(kEnter);
+      await t.pump();
+      await t.pump();
       expect(h.services.mockSystem.log, ['session:restart']);
+      expect(find.text('Restarting the session…'), findsOneWidget);
       expect(h.services.mockUpdates.status.currentVersion, '0.6.1');
     });
 

@@ -32,6 +32,7 @@ import 'store_flows.dart';
 import 'store_screen.dart';
 import 'update_banner.dart';
 import 'pages.dart';
+import 'session_ending.dart';
 import 'tab_bar.dart';
 
 enum Section {
@@ -126,12 +127,22 @@ class _LauncherShellState extends State<LauncherShell> {
   /// A context under the modal scope (for pages the session raises itself).
   BuildContext? _scopeContext;
 
+  /// The session is ending on purpose (see [SessionEndingController]).
+  late final _ending = SessionEndingController(
+    connected: () => widget.data.status is Connected,
+  );
+
+  /// The ending page is up: no input, no errors, nothing else shows.
+  bool get _endingShown =>
+      _ending.showsPage(connected: widget.data.status is Connected);
+
   /// The current profile, first-boot mode, the lock screen, switching.
   late final ProfileSession _profile = ProfileSession(
     services: widget.services,
     modals: _modals,
     context: () => _scopeContext ?? context,
     running: () => widget.data.running,
+    ending: _ending,
   );
 
   late final List<Section> _sections = [
@@ -222,32 +233,38 @@ class _LauncherShellState extends State<LauncherShell> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _checkLoading());
     }
     _profile.addListener(_onProfile);
+    _ending.addListener(_onEnding);
     widget.settings.addListener(_mirrorAppearance);
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => unawaited(_profile.start()),
     );
     _subs.add(
       d.connection.statusChanges.listen((s) {
-        if (s is Connected && _profile.current == null) {
+        if (s is! Connected) {
+          // Ending on purpose: the service went with the session.
+          _ending.connectionLost();
+        } else if (_profile.current == null && _ending.ending == null) {
           unawaited(_profile.start());
         }
       }),
     );
     _subs.add(d.messages.listen(_toast));
     _subs.add(
-      d.failures.listen(
-        (f) => unawaited(
+      d.failures.listen((f) {
+        if (_ending.ending != null) return;
+        unawaited(
           showFailureOn(
             _modals,
             title: f.title,
             body: f.body,
             detail: f.detail,
           ),
-        ),
-      ),
+        );
+      }),
     );
     _subs.add(
       d.homePressed.listen((_) {
+        if (_endingShown) return;
         d.cancelLaunching();
         // A modal (a security notice, a job in progress) is not dismissed by Home.
         if (!_modals.isOpen) _goHome(reset: true);
@@ -397,6 +414,14 @@ class _LauncherShellState extends State<LauncherShell> {
     _nav.focusRegion(_modals.topRegion ?? _home);
   }
 
+  void _onEnding() {
+    if (!mounted) return;
+    if (_ending.ending != null) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    }
+    setState(() {});
+  }
+
   /// The profile is known (or changed): the chip joins the tab row.
   void _onProfile() {
     if (!mounted) return;
@@ -468,8 +493,10 @@ class _LauncherShellState extends State<LauncherShell> {
   @override
   void dispose() {
     _profile.removeListener(_onProfile);
+    _ending.removeListener(_onEnding);
     widget.settings.removeListener(_mirrorAppearance);
     _profile.dispose();
+    _ending.dispose();
     _reminders.removeListener(_onReminders);
     _authPrompts.dispose();
     _reminders.dispose();
@@ -645,6 +672,8 @@ class _LauncherShellState extends State<LauncherShell> {
 
   /// The one action layer: controller and keyboard both end up here.
   void _onAction(NavAction action, NavPhase phase) {
+    // The session is ending: there is no way back.
+    if (_endingShown) return;
     if (widget.data.launching != null) {
       // The "Starting ..." view has the screen: B stops waiting, nothing else
       // moves the (hidden) launcher.
@@ -674,7 +703,7 @@ class _LauncherShellState extends State<LauncherShell> {
   }
 
   void _toast(String message) {
-    if (!mounted) return;
+    if (!mounted || _ending.ending != null) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
@@ -720,66 +749,14 @@ class _LauncherShellState extends State<LauncherShell> {
         onKeyEvent: _onKey,
         child: Scaffold(
           backgroundColor: t.background,
-          body: ModalHost(
-            controller: _modals,
+          body: SessionEndingScope(
+            controller: _ending,
             child: Stack(
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TopBar(
-                      region: _tabs,
-                      labels: [for (final s in _sections) s.label],
-                      selected: _sections.indexOf(_section),
-                      onFocusTab: (i) => _setSection(_sections[i]),
-                      time: _time,
-                      profile: _profile.current,
-                      onProfile: () => unawaited(_profileMenu()),
-                    ),
-                    if (_updateBannerVisible && _reminders.update != null)
-                      UpdateBanner(
-                        update: _reminders.update!,
-                        region: _updateBanner,
-                        onOpen: _openUpdates,
-                      ),
-                    if (_bannerVisible)
-                      SteamBanner(
-                        windows: widget.data.steamAttention,
-                        region: _banner,
-                        onOpen: () => unawaited(widget.data.focusSteam()),
-                      ),
-                    Expanded(child: _content()),
-                  ],
-                ),
-                if (_dialogOpen && widget.data.closeRequest != null)
-                  CloseConfirm(
-                    id: widget.data.closeRequest!.id,
-                    name: widget.data.closeRequest!.name,
-                    iconPath: widget.data.closeRequest!.iconPath,
-                    region: _dialog,
-                    onCancel: widget.data.cancelClose,
-                    onConfirm: () => unawaited(widget.data.confirmClose()),
-                  ),
-                if (widget.data.launching case final l?)
-                  Positioned.fill(
-                    child: LaunchingScreen(
-                      key: ValueKey('launching-${l.id}'),
-                      id: l.id,
-                      name: l.name,
-                      iconPath: l.iconPath,
-                    ),
-                  ),
-                if (_loading || _hideConnection)
-                  Positioned.fill(
-                    child: ProfileLoadingPage(identity: _loadingIdentity()),
-                  ),
-                if (widget.showFps) const FpsOverlay(),
-                Builder(
-                  builder: (c) {
-                    _scopeContext = c;
-                    return const SizedBox.shrink();
-                  },
-                ),
+                Positioned.fill(child: _host()),
+                // Over everything, modals included.
+                if (_ending.ending case final e? when _endingShown)
+                  Positioned.fill(child: SessionEndingPage(ending: e)),
               ],
             ),
           ),
@@ -787,4 +764,68 @@ class _LauncherShellState extends State<LauncherShell> {
       ),
     );
   }
+
+  Widget _host() => ModalHost(
+    controller: _modals,
+    child: Stack(
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TopBar(
+              region: _tabs,
+              labels: [for (final s in _sections) s.label],
+              selected: _sections.indexOf(_section),
+              onFocusTab: (i) => _setSection(_sections[i]),
+              time: _time,
+              profile: _profile.current,
+              onProfile: () => unawaited(_profileMenu()),
+            ),
+            if (_updateBannerVisible && _reminders.update != null)
+              UpdateBanner(
+                update: _reminders.update!,
+                region: _updateBanner,
+                onOpen: _openUpdates,
+              ),
+            if (_bannerVisible)
+              SteamBanner(
+                windows: widget.data.steamAttention,
+                region: _banner,
+                onOpen: () => unawaited(widget.data.focusSteam()),
+              ),
+            Expanded(child: _content()),
+          ],
+        ),
+        if (_dialogOpen && widget.data.closeRequest != null)
+          CloseConfirm(
+            id: widget.data.closeRequest!.id,
+            name: widget.data.closeRequest!.name,
+            iconPath: widget.data.closeRequest!.iconPath,
+            region: _dialog,
+            onCancel: widget.data.cancelClose,
+            onConfirm: () => unawaited(widget.data.confirmClose()),
+          ),
+        if (widget.data.launching case final l?)
+          Positioned.fill(
+            child: LaunchingScreen(
+              key: ValueKey('launching-${l.id}'),
+              id: l.id,
+              name: l.name,
+              iconPath: l.iconPath,
+            ),
+          ),
+        if (_loading || _hideConnection)
+          Positioned.fill(
+            child: ProfileLoadingPage(identity: _loadingIdentity()),
+          ),
+        if (widget.showFps) const FpsOverlay(),
+        Builder(
+          builder: (c) {
+            _scopeContext = c;
+            return const SizedBox.shrink();
+          },
+        ),
+      ],
+    ),
+  );
 }

@@ -429,6 +429,7 @@ Future<bool> showProfileJob(
   required JobHandle job,
   required String what,
   String title = 'Getting things ready',
+  ValueChanged<JobSnapshot>? onFinished,
 }) async {
   final r = await ModalScope.of(context).show<bool>(
     (context, modal) => ProfileJobPage(
@@ -437,6 +438,7 @@ Future<bool> showProfileJob(
       job: job,
       title: title,
       what: what,
+      onFinished: onFinished,
     ),
   );
   return r ?? false;
@@ -450,6 +452,7 @@ class ProfileJobPage extends StatefulWidget {
     required this.job,
     required this.what,
     this.title = 'Getting things ready',
+    this.onFinished,
   });
 
   final ModalHandle<bool> modal;
@@ -459,6 +462,9 @@ class ProfileJobPage extends StatefulWidget {
   /// "Creating Sam's profile... (about a minute)".
   final String what;
   final String title;
+
+  /// The job finished (`job_finished`, not a lost connection).
+  final ValueChanged<JobSnapshot>? onFinished;
 
   @override
   State<ProfileJobPage> createState() => _ProfileJobPageState();
@@ -481,6 +487,7 @@ class _ProfileJobPageState extends State<ProfileJobPage> {
           (s) {
             if (!mounted) return;
             setState(() => _snap = s);
+            if (s.finished) widget.onFinished?.call(s);
           },
           onError: (Object e) {
             if (!mounted) return;

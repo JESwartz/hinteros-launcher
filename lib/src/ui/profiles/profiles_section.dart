@@ -16,9 +16,11 @@ import '../../theme/hinter_theme.dart';
 import '../dialogs.dart';
 import '../modal_host.dart';
 import '../pages.dart' show FullPage, showJobProgress;
+import '../session_ending.dart';
 import '../system/common.dart';
 import '../widgets.dart';
 import 'profile_form.dart';
+import 'profile_loading.dart';
 import 'profile_ui.dart';
 import 'session_profile.dart';
 
@@ -290,6 +292,14 @@ class _ProfilesSectionState extends State<ProfilesSection> {
     );
     if (ok == null || !mounted) return;
     JobHandle? job;
+    // Your own profile: once the job runs, this session ends with it (the
+    // service goes away too), so the Removing page takes over for good.
+    final endings = own ? SessionEndingScope.maybeOf(context) : null;
+    final ending = SessionEnding(
+      title: 'Removing ${p.name}…',
+      detail: "You'll be taken to the profile picker.",
+      identity: LoadingIdentity(name: p.name, color: p.color),
+    );
     // The PIN, then Delete held for 3 seconds (letting go early starts over).
     await showPinEntry(
       context,
@@ -305,6 +315,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
       check: (pin) async {
         try {
           job = await _p.remove(p.id, pin);
+          endings?.begin(ending);
           return const PinAccepted();
         } catch (e) {
           return PinAttempt.fromError(e);
@@ -319,6 +330,10 @@ class _ProfilesSectionState extends State<ProfilesSection> {
       job: j,
       title: 'Removing the profile',
       what: "Removing ${p.name}'s profile",
+      // It failed while the service still answers: the error shows.
+      onFinished: (s) {
+        if (!s.ok) endings?.abandon(ending);
+      },
     );
   }
 

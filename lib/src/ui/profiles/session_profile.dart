@@ -16,10 +16,12 @@ import '../../theme/hinter_theme.dart';
 import '../dialogs.dart';
 import '../modal_host.dart';
 import '../pages.dart' show FullPage;
+import '../session_ending.dart';
 import '../widgets.dart';
 import 'first_boot_page.dart';
 import 'picker_view.dart';
 import 'profile_form.dart';
+import 'profile_loading.dart';
 import 'profile_ui.dart';
 
 /// The session's text entry for profile names: the dialog with the
@@ -43,6 +45,7 @@ class ProfileSession extends ChangeNotifier {
     required this.modals,
     required this.context,
     required this.running,
+    this.ending,
   });
 
   final SystemServices services;
@@ -53,6 +56,11 @@ class ProfileSession extends ChangeNotifier {
 
   /// What runs in this profile now (for "Switching closes ...").
   final List<RunningApp> Function() running;
+
+  /// The shell's "session ending" state: set once a switch has begun or
+  /// the guest session ends, so the service going away with the session
+  /// shows no connection error.
+  final SessionEndingController? ending;
 
   ProfilesRepository get profiles => services.profiles;
 
@@ -399,12 +407,22 @@ class ProfileSession extends ChangeNotifier {
         }
       }
       _lock?.close();
-      await modals.show<void>(
-        (context, modal) => SwitchingPage(
-          modal: modal,
-          profiles: profiles,
-          targetName: name,
-          fromName: current?.displayName ?? 'this profile',
+      // The switch has begun: this session ends with it (unless cancelled).
+      await _whileEnding(
+        SessionEnding(
+          title: 'Switching to $name…',
+          identity: id == CurrentProfile.guestId
+              ? LoadingIdentity.guestIdentity
+              : LoadingIdentity(name: name, color: avatar?.color),
+          cover: false,
+        ),
+        () => modals.show<void>(
+          (context, modal) => SwitchingPage(
+            modal: modal,
+            profiles: profiles,
+            targetName: name,
+            fromName: current?.displayName ?? 'this profile',
+          ),
         ),
       );
     } finally {
@@ -417,18 +435,45 @@ class ProfileSession extends ChangeNotifier {
     if (_switching) return;
     _switching = true;
     unawaited(
-      modals
-          .show<void>(
-            (context, modal) => SwitchingPage(
-              modal: modal,
-              profiles: profiles,
-              targetName: null,
-              fromName: current?.displayName ?? 'this profile',
-              first: e,
-            ),
-          )
-          .whenComplete(() => _switching = false),
+      _whileEnding(
+        SessionEnding(
+          title: 'Switching profile…',
+          identity: _identity(),
+          cover: false,
+        ),
+        () => modals.show<void>(
+          (context, modal) => SwitchingPage(
+            modal: modal,
+            profiles: profiles,
+            targetName: null,
+            fromName: current?.displayName ?? 'this profile',
+            first: e,
+          ),
+        ),
+      ).whenComplete(() => _switching = false),
     );
+  }
+
+  /// The current profile, for the ending page.
+  LoadingIdentity _identity() {
+    final c = current;
+    if (c == null) return const LoadingIdentity();
+    if (c.guest) return LoadingIdentity.guestIdentity;
+    return LoadingIdentity(name: c.name, color: c.color);
+  }
+
+  /// [page] (the Switching page) with the session ending: it closes only
+  /// when the switch was cancelled, and then the session goes on.
+  Future<void> _whileEnding(
+    SessionEnding e,
+    Future<void> Function() page,
+  ) async {
+    ending?.begin(e);
+    try {
+      await page();
+    } finally {
+      ending?.abandon(e);
+    }
   }
 
   /// End guest session: confirm, then the session ends.
@@ -454,15 +499,26 @@ class ProfileSession extends ChangeNotifier {
     }
     if (!context.mounted) return;
     _switching = true;
-    await modals.show<void>(
-      (context, modal) => SwitchingPage(
-        modal: modal,
-        profiles: profiles,
-        targetName: null,
-        fromName: 'Guest',
-      ),
-    );
-    _switching = false;
+    try {
+      await _whileEnding(
+        const SessionEnding(
+          title: 'Ending the guest session…',
+          detail: "You'll be taken to the profile picker.",
+          identity: LoadingIdentity.guestIdentity,
+          cover: false,
+        ),
+        () => modals.show<void>(
+          (context, modal) => SwitchingPage(
+            modal: modal,
+            profiles: profiles,
+            targetName: null,
+            fromName: 'Guest',
+          ),
+        ),
+      );
+    } finally {
+      _switching = false;
+    }
   }
 
   @override
@@ -603,7 +659,11 @@ class _SessionPickerPageState extends State<SessionPickerPage> {
     final s = widget.system;
     if (s == null) return;
     try {
-      await s.power(a);
+      if (a == PowerAction.sleep) {
+        await s.power(a);
+      } else {
+        await endSessionWith(context, powerEnding(a), () => s.power(a));
+      }
     } on SystemException catch (e) {
       if (mounted) setState(() => _message = e.message);
     }
