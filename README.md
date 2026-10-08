@@ -86,6 +86,39 @@ flutter run -d linux --dart-entrypoint-args=--mock
 ./result/bin/hinteros-launcher --mock --windowed
 ```
 
+### Session API 0.12: profiles (M7)
+
+Design: `hinteros-docs/design/profiles.md` and `apps.md`. The schema's profile parts are the
+launcher's proposal until the daemon's M7 schema is vendored (see `m7/DECISIONS.md`).
+
+- **Picker** (`--greeter`, `lib/src/greeter_main.dart`, `lib/src/ui/profiles/greeter_screen.dart`):
+  the greeter session's launcher, against the greeter-mode daemon (`greeter.*`). Profile tiles,
+  Guest, Add profile (name with the launcher's own keyboard, colour, PIN twice, "Lock this
+  profile", then "Getting things ready" for the create job), Power. A locked profile opens the
+  PIN pad: D-pad and A, B deletes (B on an empty pad goes back), digits and Enter on a keyboard,
+  no auto-submit, "That PIN didn't match." and the backoff countdown.
+- **In a profile's session** (`lib/src/ui/profiles/session_profile.dart`): `profile.current`
+  decides first-boot mode (`setup_required`: the wizard ends with "Create your profile",
+  `system.profiles.setup_admin`), the one-time "Set your PIN" (`pin_set` false) and the sleep
+  lock screen (`screen_locked`, `lock_state`, `session.unlock`). The profile chip (last item of
+  the tab row) opens Switch profile / Profile settings (End guest session for the guest).
+  Switching shows what closes, then the Switching page (`switch_progress`) and the
+  not-responding pop-up (`switch_blocked`: Keep waiting, Force close, Cancel switch).
+- **Settings -> Profiles** (`profiles_section.dart`): profiles with storage, Add profile, Rename,
+  Colour, Change PIN, Lock this profile, App history (per-profile app rollback), Remove (two
+  confirmations, "Hold A for 3 seconds", the PIN); the admin profile also edits the starter apps
+  and turns the guest on or off. Actions on another profile ask for the admin PIN on the same
+  pad.
+- **Apps per profile**: the Store installs and removes "for this profile"; an app that needs a
+  service the box does not run says so in red with Install disabled; the first launch of a
+  starter-set app with vendor terms (`apps.list`'s `needs_terms`) shows them first
+  (`system.apps.accept_terms`). The system rollback names the profiles the target generation
+  would drop or bring back empty.
+- **Mock**: `MockSystemServices` has `mockProfiles` (James p1, admin, PIN 2468; Sam p3, locked,
+  PIN 1357; the guest) with the service's PIN rules and backoff; `--mock-profile=p3|guest|first-boot`
+  picks whose session `--mock` runs. `MockDaemon.profiles` serves the wire methods for the
+  contract test and the `Daemon*` repositories.
+
 ### Session API 0.9: Store icons, reloaded app list, readable failures
 
 - **Store icons.** `store.list`'s `icon.path` (the daemon resolves catalog icons itself, installed or not, and sends `store_changed` when one arrives) is what Store cards and the detail page draw, with the same tile as app icons and the letter as fallback; `apps.list` icons stay the fallback for installed apps. The mock: `MockDaemon.system.setStoreIcon(id, path)`.

@@ -110,6 +110,24 @@ SystemException systemExceptionFrom(Object e) {
               : 'There is not enough free memory for this.',
           data: data,
         );
+      case api.ApiErrorCode.pinRequired:
+        return SystemException(
+          SystemErrorKind.pinRequired,
+          data['retry_after_ms'] != null
+              ? 'Too many tries with that PIN.'
+              : switch (data['pin']) {
+                  'admin' => "This needs the admin profile's PIN.",
+                  _ => "That PIN didn't match.",
+                },
+          data: data,
+        );
+      case api.ApiErrorCode.profileLimit:
+        return SystemException(
+          SystemErrorKind.profileLimit,
+          'This box has as many profiles as it can have '
+          '(${data['max'] ?? 8}).',
+          data: data,
+        );
       case api.ApiErrorCode.jobBusy:
         return SystemException(
           SystemErrorKind.jobBusy,
@@ -191,6 +209,8 @@ String runtimeServiceName(String service) => switch (service) {
   'display' => 'Display control',
   'logind' => 'Power control',
   'catalog' => 'The Store',
+  'apps' => 'Apps per profile',
+  'greeter' => 'The profile picker',
   'polkit' => 'The admin password check',
   _ => 'This',
 };
