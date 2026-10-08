@@ -32,8 +32,20 @@ class NetworkState {
   /// The Wi-Fi network the box is connected to, if any.
   final String? wifiSsid;
 
-  /// The internet can be reached (as far as NetworkManager can tell).
+  /// The internet was reached: the last probe of the cache server worked.
+  /// Never taken from NetworkManager's cached connectivity.
   final bool online;
+
+  /// A cable or Wi-Fi connection is up (whether or not it reaches anywhere).
+  bool get linkUp => wiredConnected || wifiSsid != null;
+
+  /// The same link state with another probe result.
+  NetworkState withOnline(bool online) => NetworkState(
+    wiredConnected: wiredConnected,
+    wifiAvailable: wifiAvailable,
+    wifiSsid: wifiSsid,
+    online: online,
+  );
 }
 
 class WifiAp {
@@ -110,8 +122,17 @@ class DiskInfo {
 }
 
 abstract class InstallerBackend {
-  /// Wired status, Wi-Fi presence, connectivity.
-  Future<NetworkState> network();
+  /// Wired status, Wi-Fi presence and a fresh reachability probe. [force]
+  /// also makes NetworkManager re-evaluate its connectivity. Never cached.
+  Future<NetworkState> network({bool force = false});
+
+  /// Only the device states, read fresh and quickly: [NetworkState.online]
+  /// is false because nothing was probed.
+  Future<NetworkState> networkLink();
+
+  /// One event whenever NetworkManager reports a change (`nmcli monitor`).
+  /// The monitor runs while the stream has a listener.
+  Stream<void> watchNetwork();
 
   /// Visible Wi-Fi networks, strongest first, one per name.
   Future<List<WifiAp>> scanWifi();

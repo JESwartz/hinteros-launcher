@@ -20,7 +20,11 @@ class ProcessInstallerBackend implements InstallerBackend {
   ProcessInstallerBackend({
     this.installBinary = 'hinteros-install',
     this.catalogPath = catalogIndexPath,
+    this.reachable = _probeCache,
   });
+
+  /// Whether the internet is reachable: a real HTTPS request, 5 s at most.
+  final Future<bool> Function() reachable;
 
   final String installBinary;
   final String catalogPath;
@@ -49,27 +53,67 @@ class ProcessInstallerBackend implements InstallerBackend {
     return r.stdout as String;
   }
 
+  static const _deviceArgs = ['-t', '-f', 'TYPE,STATE,CONNECTION', 'device'];
+
   @override
-  Future<NetworkState> network() async {
-    final status = await _stdout('nmcli', [
-      '-t',
-      '-f',
-      'TYPE,STATE,CONNECTION',
-      'device',
-      'status',
-    ]);
-    var connectivity = 'unknown';
-    try {
-      connectivity = await _stdout('nmcli', [
-        '-t',
-        '-g',
-        'CONNECTIVITY',
-        'general',
-      ]);
-    } on InstallerException {
-      // Keep "unknown".
-    }
-    return parseNetwork(status, connectivity);
+  Future<NetworkState> networkLink() async =>
+      parseNetwork(await _stdout('nmcli', _deviceArgs));
+
+  @override
+  Future<NetworkState> network({bool force = false}) async {
+    // Read fresh every time; nothing is remembered between calls.
+    final link = await networkLink();
+    if (!link.linkUp) return link;
+    // NetworkManager's own CONNECTIVITY is only re-evaluated every few
+    // minutes and may be stale or "unknown", so it is not read at all. A
+    // forced check just brings it up to date for the rest of the system; the
+    // probe decides.
+    final check = force
+        ? _stdout(
+            'nmcli',
+            ['networking', 'connectivity', 'check'],
+            timeout: const Duration(seconds: 6),
+          ).then<void>((_) {}, onError: (_) {})
+        : Future<void>.value();
+    final reached = await reachable();
+    await check;
+    return link.withOnline(reached);
+  }
+
+  @override
+  Stream<void> watchNetwork() {
+    Process? p;
+    var closed = false;
+    late final StreamController<void> c;
+    c = StreamController<void>(
+      onListen: () async {
+        try {
+          p = await Process.start('nmcli', ['monitor']);
+        } on ProcessException {
+          await c.close();
+          return;
+        }
+        if (closed) {
+          p!.kill();
+          return;
+        }
+        unawaited(p!.stderr.drain<void>());
+        p!.stdout
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())
+            .listen(
+              (_) => c.add(null),
+              onDone: () {
+                if (!closed) c.close();
+              },
+            );
+      },
+      onCancel: () {
+        closed = true;
+        p?.kill();
+      },
+    );
+    return c.stream;
   }
 
   @override
@@ -192,5 +236,22 @@ class ProcessInstallerBackend implements InstallerBackend {
   @override
   Future<void> reboot() async {
     await Process.run('systemctl', ['reboot']);
+  }
+}
+
+/// GET https://cache.nixos.org/nix-cache-info; true on a 2xx answer.
+Future<bool> _probeCache() async {
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+  try {
+    final req = await client
+        .getUrl(Uri.parse('https://cache.nixos.org/nix-cache-info'))
+        .timeout(const Duration(seconds: 5));
+    final res = await req.close().timeout(const Duration(seconds: 5));
+    await res.drain<void>().timeout(const Duration(seconds: 5));
+    return res.statusCode >= 200 && res.statusCode < 300;
+  } catch (_) {
+    return false;
+  } finally {
+    client.close(force: true);
   }
 }

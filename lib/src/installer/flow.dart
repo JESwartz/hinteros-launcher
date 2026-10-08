@@ -63,6 +63,7 @@ class InstallerFlow extends ChangeNotifier {
   void go(InstallerStep s) {
     if (s == _step) return;
     _step = s;
+    _syncWatch();
     notifyListeners();
   }
 
@@ -101,12 +102,62 @@ class InstallerFlow extends ChangeNotifier {
 
   bool get online => net?.online ?? false;
 
-  Future<void> refreshNetwork() async {
-    if (checking) return;
-    checking = true;
-    notifyListeners();
+  // Steps that show the network state follow it live.
+  bool get _watching =>
+      _step == InstallerStep.network || _step == InstallerStep.apps;
+
+  StreamSubscription<void>? _netSub;
+  Timer? _netDebounce;
+  bool _refreshAgain = false;
+
+  void _syncWatch() {
+    if (_watching) {
+      _netSub ??= backend.watchNetwork().listen(
+        _onNetworkEvent,
+        onError: (_) {},
+      );
+    } else {
+      _netSub?.cancel();
+      _netSub = null;
+      _netDebounce?.cancel();
+      _netDebounce = null;
+    }
+  }
+
+  Future<void> _onNetworkEvent(void _) async {
+    // Losing the link means offline right now, without waiting for a probe.
     try {
-      net = await backend.network().timeout(checkTimeout);
+      final link = await backend.networkLink().timeout(checkTimeout);
+      if (!link.linkUp && _netSub != null) {
+        net = link;
+        apps?.dropDownloads();
+        notifyListeners();
+      }
+    } catch (_) {}
+    _netDebounce?.cancel();
+    _netDebounce = Timer(const Duration(milliseconds: 500), () {
+      if (_netSub != null) refreshNetwork(quiet: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _netSub?.cancel();
+    _netDebounce?.cancel();
+    super.dispose();
+  }
+
+  /// Reads the network afresh. [force] also makes NetworkManager check its
+  /// connectivity again ("Check again"). [quiet]: no spinner (live updates).
+  Future<void> refreshNetwork({bool force = false, bool quiet = false}) async {
+    if (checking) {
+      _refreshAgain = true;
+      return;
+    }
+    checking = true;
+    if (!quiet) notifyListeners();
+    try {
+      net = await backend.network(force: force).timeout(checkTimeout);
       networkMessage = null;
     } on InstallerException catch (e) {
       net = const NetworkState();
@@ -118,6 +169,10 @@ class InstallerFlow extends ChangeNotifier {
           'Choose "Check again" to try once more.';
     }
     checking = false;
+    if (_refreshAgain) {
+      _refreshAgain = false;
+      unawaited(refreshNetwork(quiet: true));
+    }
     // Apps that need a download cannot stay ticked offline.
     if (!online) apps?.dropDownloads();
     notifyListeners();

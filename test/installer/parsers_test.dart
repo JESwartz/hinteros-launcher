@@ -108,32 +108,40 @@ void main() {
     test('network state', () {
       final n = parseNetwork(
         'ethernet:connected:Wired connection 1\nwifi:disconnected:\nloopback:unmanaged:\n',
-        'full\n',
+        reachable: true,
       );
       expect(n.wiredConnected, isTrue);
       expect(n.wifiAvailable, isTrue);
       expect(n.wifiSsid, isNull);
       expect(n.online, isTrue);
 
-      final w = parseNetwork(r'wifi:connected:Home\: 5G', 'portal');
+      final w = parseNetwork(r'wifi:connected:Home\: 5G', reachable: false);
       expect(w.wifiSsid, 'Home: 5G');
-      expect(w.online, isFalse, reason: 'a captive portal is not online');
+      expect(w.online, isFalse, reason: 'probe failed');
 
       final ext = parseNetwork(
         'ethernet:connected (externally):Wired\nwifi:connecting (getting IP configuration):Home\n',
-        'full',
+        reachable: true,
       );
       expect(ext.wiredConnected, isTrue);
       expect(ext.wifiSsid, isNull, reason: 'still connecting');
 
-      final none = parseNetwork('wifi:unavailable:\n', 'none');
+      final none = parseNetwork('wifi:unavailable:\n', reachable: false);
       expect(none.online, isFalse);
       expect(none.wifiAvailable, isTrue);
 
-      // Connectivity checking off: a connection counts.
-      expect(parseNetwork('ethernet:connected:x', 'unknown').online, isTrue);
-      expect(parseNetwork('ethernet:unavailable:', 'unknown').online, isFalse);
-      expect(parseNetwork('', '').online, isFalse);
+      // Online only with a link and a working probe.
+      expect(
+        parseNetwork('ethernet:connected:x', reachable: true).online,
+        isTrue,
+      );
+      expect(parseNetwork('ethernet:connected:x').online, isFalse);
+      expect(
+        parseNetwork('ethernet:unavailable:', reachable: true).online,
+        isFalse,
+        reason: 'no link, no online',
+      );
+      expect(parseNetwork('', reachable: true).online, isFalse);
     });
   });
 }

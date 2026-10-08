@@ -168,7 +168,9 @@ class NetworkStep extends StatelessWidget {
             StatusLine(
               net.online
                   ? 'This computer is online.'
-                  : 'This computer is not online.',
+                  : (net.linkUp
+                        ? "Connected, but can't reach the internet."
+                        : 'This computer is not online.'),
               ok: net.online,
             ),
             gap: HinterTokens.s1,
@@ -242,12 +244,16 @@ class NetworkStep extends StatelessWidget {
         p.buttons('actions', [
           if (net != null && net.wifiAvailable)
             btn('Search again', () async {
-              await f.refreshNetwork();
+              await f.refreshNetwork(force: true);
               await f.scanWifi();
               env.console.refocus();
             }, enabled: !f.scanning && !f.connecting && !f.checking)
           else
-            btn('Check again', f.refreshNetwork, enabled: !f.checking),
+            btn(
+              'Check again',
+              () => f.refreshNetwork(force: true),
+              enabled: !f.checking,
+            ),
           btn(
             f.online ? 'Continue' : 'Continue without internet',
             f.next,

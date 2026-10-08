@@ -193,11 +193,44 @@ class FakeInstallerBackend implements InstallerBackend {
 
   bool get rebooted => calls.contains('reboot');
 
+  /// Whether the probe of the cache server works (false: link up but no
+  /// internet).
+  bool reachable = true;
+
+  final _monitor = StreamController<void>.broadcast();
+
+  /// What `nmcli monitor` printing a line looks like.
+  void emitNetworkEvent() => _monitor.add(null);
+
   @override
-  Future<NetworkState> network() async {
+  Future<NetworkState> network({bool force = false}) async {
     calls.add('network');
+    if (force && state.linkUp) calls.add('connectivity check');
     await networkHold;
-    return state;
+    return state.withOnline(state.linkUp && state.online && reachable);
+  }
+
+  @override
+  Future<NetworkState> networkLink() async {
+    calls.add('networkLink');
+    return state.withOnline(false);
+  }
+
+  @override
+  Stream<void> watchNetwork() {
+    late final StreamController<void> c;
+    StreamSubscription<void>? sub;
+    c = StreamController<void>(
+      onListen: () {
+        calls.add('monitor:start');
+        sub = _monitor.stream.listen(c.add);
+      },
+      onCancel: () {
+        calls.add('monitor:stop');
+        return sub?.cancel();
+      },
+    );
+    return c.stream;
   }
 
   @override

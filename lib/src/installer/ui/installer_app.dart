@@ -88,7 +88,7 @@ class _InstallerScreenState extends State<InstallerScreen> {
   void _entered(InstallerStep s) {
     switch (s) {
       case InstallerStep.network:
-        _flow.refreshNetwork().then((_) => _flow.scanWifi());
+        _flow.refreshNetwork(force: true).then((_) => _flow.scanWifi());
       case InstallerStep.disk:
         _flow.loadDisks();
       case InstallerStep.apps:

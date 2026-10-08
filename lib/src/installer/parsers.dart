@@ -140,9 +140,10 @@ List<WifiAp> parseWifiList(String out) {
   return byName.values.toList()..sort((a, b) => b.signal.compareTo(a.signal));
 }
 
-/// `nmcli -t -f TYPE,STATE,CONNECTION device status` plus the
-/// `nmcli -t -g CONNECTIVITY general` answer.
-NetworkState parseNetwork(String deviceStatus, String connectivity) {
+/// `nmcli -t -f TYPE,STATE,CONNECTION device`. [reachable] is the result of
+/// the HTTPS probe, the only thing that counts as "online": a device that is
+/// not connected is never online, whatever was probed or cached before.
+NetworkState parseNetwork(String deviceStatus, {bool reachable = false}) {
   var wired = false;
   var wifi = false;
   String? ssid;
@@ -157,15 +158,11 @@ NetworkState parseNetwork(String deviceStatus, String connectivity) {
       if (connected && f[2].isNotEmpty) ssid = f[2];
     }
   }
-  final c = connectivity.trim();
-  // Connectivity checking may be off on the ISO ("unknown"): a connection is
-  // then taken as online. The backend checks the cache itself anyway.
-  final online = c == 'full' || (c == 'unknown' && (wired || ssid != null));
   return NetworkState(
     wiredConnected: wired,
     wifiAvailable: wifi,
     wifiSsid: ssid,
-    online: online,
+    online: reachable && (wired || ssid != null),
   );
 }
 
