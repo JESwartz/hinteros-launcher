@@ -570,9 +570,11 @@ void main() {
       expect(find.text('Installing HinterOS'), findsWidgets);
       expect(
         t.widget<Text>(find.byKey(const ValueKey('percent'))).data,
-        '${h.flow.percent}%',
+        '${h.flow.stepPercent}%',
       );
       expect(h.flow.progressStage, 'install');
+      expect(find.textContaining('Step 5 of 7'), findsOneWidget);
+      expect(find.textContaining('Step 5 of 7'), findsOneWidget);
       expect(find.textContaining('general drivers'), findsOneWidget);
       await h.back(t);
       expect(

@@ -20,7 +20,9 @@ class FakeScript {
     String message, [
     InstallLevel level = InstallLevel.info,
     String? code,
+    int? step,
   ]) => InstallEvent(
+    stepPercent: step,
     stage: stage,
     percent: percent,
     level: level,
@@ -54,8 +56,22 @@ class FakeScript {
     _e('config', 30, 'Device configuration written to /etc/hinteros'),
     _e('install', 32, 'Copying flake inputs to the new system'),
     _e('install', 36, 'Building and installing the system'),
-    _e('install', 57, 'Installing: 57 of 100 steps'),
-    _e('install', 90, 'System installed, boot loader written'),
+    _e(
+      'install',
+      57,
+      'Installing: 57 of 100 steps',
+      InstallLevel.info,
+      null,
+      62,
+    ),
+    _e(
+      'install',
+      90,
+      'System installed, boot loader written',
+      InstallLevel.info,
+      null,
+      100,
+    ),
     _e('snapshot', 92, 'Checking the config snapshot'),
     _e('snapshot', 95, '/etc/hinteros matches the installed generation'),
     _e('finalize', 97, 'Flushing to disk'),
@@ -68,14 +84,20 @@ class FakeScript {
     List<String> apps, {
     List<String> failing = const [],
   }) {
-    InstallEvent sys(String stage, int pct, String m) => InstallEvent(
-      stage: stage,
-      percent: pct,
-      level: InstallLevel.info,
-      message: m,
-    );
-    InstallEvent app(int pct, String m, String id, [String? code]) =>
+    final n = apps.length;
+    InstallEvent sys(String stage, int pct, String m, [int? step]) =>
         InstallEvent(
+          stepPercent: step,
+          stage: stage,
+          percent: pct,
+          level: InstallLevel.info,
+          message: m,
+        );
+    InstallEvent app(int pct, String m, String id, int index, [String? code]) =>
+        InstallEvent(
+          appIndex: index,
+          appTotal: n,
+          stepPercent: code == null ? 40 : 100,
           stage: 'install',
           percent: pct,
           level: code == null ? InstallLevel.info : InstallLevel.warn,
@@ -84,22 +106,22 @@ class FakeScript {
           phase: InstallSection.apps,
           app: id,
         );
-    final n = apps.length;
     return FakeScript([
       sys('validate', 0, 'Checking the plan'),
       sys('validate', 8, 'Plan accepted'),
       sys('partition', 20, 'Disk is partitioned and mounted'),
       sys('config', 30, 'Device configuration written'),
-      sys('install', 57, 'Installing the system'),
+      sys('install', 57, 'Installing the system', 62),
       sys('snapshot', 90, 'Checking the config snapshot'),
       sys('finalize', 97, 'System installed'),
       for (var i = 0; i < n; i++) ...[
-        app(97 + 3 * i ~/ n, 'Installing ${apps[i]}', apps[i]),
+        app(97 + 3 * i ~/ n, 'Installing ${apps[i]}', apps[i], i + 1),
         if (failing.contains(apps[i]))
           app(
             97 + 3 * (i + 1) ~/ n,
             '${apps[i]} could not be installed',
             apps[i],
+            i + 1,
             'app-failed',
           ),
       ],
@@ -158,6 +180,10 @@ class FakeInstallerBackend implements InstallerBackend {
   /// When set, `network()` / `scanWifi()` wait for these before answering
   /// (a slow check, for tests).
   Future<void>? networkHold;
+
+  /// States `network()` answers with first, one per call (a cable being
+  /// plugged in: nothing, connecting, connected); then [state] again.
+  final networkQueue = <NetworkState>[];
   Future<void>? scanHold;
   final List<WifiAp> _wifi;
   final List<DiskInfo> _disks;
@@ -207,6 +233,7 @@ class FakeInstallerBackend implements InstallerBackend {
     calls.add('network');
     if (force && state.linkUp) calls.add('connectivity check');
     await networkHold;
+    if (networkQueue.isNotEmpty) state = networkQueue.removeAt(0);
     return state.withOnline(state.linkUp && state.online && reachable);
   }
 

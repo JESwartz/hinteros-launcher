@@ -50,10 +50,27 @@ class InstallerFlow extends ChangeNotifier {
   InstallerFlow(
     this.backend, {
     this.checkTimeout = const Duration(seconds: 10),
+    this.pollInterval = const Duration(seconds: 1),
+    this.connectTimeout = const Duration(seconds: 30),
+    this.plugGrace = const Duration(seconds: 5),
+    this.probeRetries = 3,
   });
 
   /// How long a network check or Wi-Fi scan may take before it is given up.
   final Duration checkTimeout;
+
+  /// While a connection is coming up: how often the network is looked at
+  /// again, and how long to wait for it before saying "not connected".
+  final Duration pollInterval;
+  final Duration connectTimeout;
+
+  /// After "Check again" with nothing connected: how long to watch for a
+  /// just-plugged cable to start connecting.
+  final Duration plugGrace;
+
+  /// Extra tries of the internet probe when the link is up but the probe
+  /// fails (DNS and the route can lag a moment behind "connected").
+  final int probeRetries;
 
   final InstallerBackend backend;
 
@@ -109,6 +126,11 @@ class InstallerFlow extends ChangeNotifier {
   StreamSubscription<void>? _netSub;
   Timer? _netDebounce;
   bool _refreshAgain = false;
+  bool _refreshAgainForce = false;
+  bool _disposed = false;
+
+  /// A check is waiting for a connection that is still coming up.
+  bool waitingForLink = false;
 
   void _syncWatch() {
     if (_watching) {
@@ -142,6 +164,9 @@ class InstallerFlow extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _pollTimer?.cancel();
+    _pollWake?.complete();
     _netSub?.cancel();
     _netDebounce?.cancel();
     super.dispose();
@@ -149,15 +174,22 @@ class InstallerFlow extends ChangeNotifier {
 
   /// Reads the network afresh. [force] also makes NetworkManager check its
   /// connectivity again ("Check again"). [quiet]: no spinner (live updates).
-  Future<void> refreshNetwork({bool force = false, bool quiet = false}) async {
+  /// [plugWait]: the person asked ("Check again"), so a cable that was only
+  /// just plugged in gets [plugGrace] to start connecting.
+  Future<void> refreshNetwork({
+    bool force = false,
+    bool quiet = false,
+    bool plugWait = false,
+  }) async {
     if (checking) {
       _refreshAgain = true;
+      _refreshAgainForce |= force;
       return;
     }
     checking = true;
     if (!quiet) notifyListeners();
     try {
-      net = await backend.network(force: force).timeout(checkTimeout);
+      net = await _settledNetwork(force: force, plugWait: plugWait);
       networkMessage = null;
     } on InstallerException catch (e) {
       net = const NetworkState();
@@ -169,13 +201,61 @@ class InstallerFlow extends ChangeNotifier {
           'Choose "Check again" to try once more.';
     }
     checking = false;
+    waitingForLink = false;
     if (_refreshAgain) {
+      final again = _refreshAgainForce;
       _refreshAgain = false;
-      unawaited(refreshNetwork(quiet: true));
+      _refreshAgainForce = false;
+      unawaited(refreshNetwork(force: again, quiet: true));
     }
     // Apps that need a download cannot stay ticked offline.
     if (!online) apps?.dropDownloads();
     notifyListeners();
+  }
+
+  Timer? _pollTimer;
+  Completer<void>? _pollWake;
+
+  /// A pause that [dispose] cuts short.
+  Future<void> _pause(Duration d) {
+    final c = _pollWake = Completer<void>();
+    _pollTimer = Timer(d, () {
+      if (!c.isCompleted) c.complete();
+    });
+    return c.future;
+  }
+
+  /// Looks at the network until it has settled: online, or nothing is coming
+  /// up any more. A connection NetworkManager is bringing up is waited for
+  /// (up to [connectTimeout]); after "Check again" a cable that was just
+  /// plugged in gets [plugGrace] to start connecting; and when the link is up
+  /// but the probe fails, the probe is tried [probeRetries] more times.
+  Future<NetworkState> _settledNetwork({
+    required bool force,
+    required bool plugWait,
+  }) async {
+    // Counted in poll intervals, not read from the clock (tests fake time).
+    var elapsed = Duration.zero;
+    var probes = 0;
+    var forceNow = force;
+    while (true) {
+      final s = await backend.network(force: forceNow).timeout(checkTimeout);
+      forceNow = false;
+      if (s.online || _disposed) return s;
+      final wait = s.linkUp
+          ? probes++ < probeRetries
+          : (s.connecting
+                ? elapsed < connectTimeout
+                : ((plugWait || s.cableWaiting) && elapsed < plugGrace));
+      if (!wait) return s;
+      // Show "Connecting..." instead of a verdict while it goes on.
+      net = s;
+      waitingForLink = !s.linkUp;
+      notifyListeners();
+      await _pause(pollInterval);
+      elapsed += pollInterval;
+      if (_disposed) return s;
+    }
   }
 
   Future<void> scanWifi() async {
@@ -385,7 +465,7 @@ class InstallerFlow extends ChangeNotifier {
       ),
   ];
 
-  List<({String id, String name})> _planApps = const [];
+  List<({String id, String name, bool onIso})> _planApps = const [];
   final _appStates = <String, AppInstallState>{};
 
   /// Progress of the apps stage (0..100): apps finished or failed of those
@@ -401,21 +481,42 @@ class InstallerFlow extends ChangeNotifier {
     return (finished * 100 / _planApps.length).round();
   }
 
-  /// "Installing default apps [1/3]: Firefox" while the apps stage runs.
-  String? get appsLine {
-    if (section != InstallSection.apps || _planApps.isEmpty) return null;
-    var i = _planApps.indexWhere(
-      (a) => _appStates[a.id] == AppInstallState.installing,
-    );
-    if (i < 0) {
-      i = _planApps.indexWhere((a) {
-        final s = _appStates[a.id];
-        return s != AppInstallState.done && s != AppInstallState.failed;
-      });
+  /// Progress of the stage or app being worked on, on its own (0..100); null
+  /// when the backend cannot measure it (an indeterminate bar).
+  int? stepPercent;
+  String _stepKey = '';
+
+  /// The app the apps stage is working on now; null before the first one and
+  /// while the finished apps are being activated.
+  String? _currentAppId;
+  int? _currentAppIndex;
+  int? _currentAppTotal;
+  bool _appsBegun = false;
+
+  void _noteStep(InstallEvent e) {
+    final key = '${e.phase.name}/${e.stage}/${e.app ?? ''}';
+    if (key != _stepKey) {
+      _stepKey = key;
+      stepPercent = null;
     }
-    if (i < 0) i = _planApps.length - 1;
-    return 'Installing default apps [${i + 1}/${_planApps.length}]: '
-        '${_planApps[i].name}';
+    if (e.stepPercent != null) stepPercent = e.stepPercent;
+  }
+
+  /// "Downloading Steam · 2 of 3" while an app is being installed (apps that
+  /// come with the installer are "Installing"); other words between apps.
+  String? get appsLine {
+    if (section != InstallSection.apps) return null;
+    final id = _currentAppId;
+    if (id != null) {
+      final total = _currentAppTotal ?? _planApps.length;
+      final plan = _planApps.indexWhere((a) => a.id == id);
+      final index = _currentAppIndex ?? (plan < 0 ? 1 : plan + 1);
+      final onIso = plan < 0 || _planApps[plan].onIso;
+      return '${onIso ? 'Installing' : 'Downloading'} ${_appName(id)}'
+          '${total > 1 ? ' · $index of $total' : ''}';
+    }
+    if (_planApps.isEmpty) return null;
+    return _appsBegun ? 'Finishing up the apps' : 'Getting the apps ready';
   }
 
   /// Names of the apps that could not be installed.
@@ -435,6 +536,14 @@ class InstallerFlow extends ChangeNotifier {
     if (e.phase != InstallSection.apps) return;
     section = InstallSection.apps;
     final id = e.app;
+    if (id != null) {
+      _currentAppId = id;
+      _currentAppIndex = e.appIndex;
+      _currentAppTotal = e.appTotal;
+      _appsBegun = true;
+    } else if (e.stage != 'done') {
+      _currentAppId = null;
+    }
     if (id != null) {
       if (e.code == 'app-failed') {
         _fail(id);
@@ -480,12 +589,22 @@ class InstallerFlow extends ChangeNotifier {
     section = InstallSection.system;
     _failedIds.clear();
     _appStates.clear();
-    _planApps = [for (final a in apps!.selectedApps) (id: a.id, name: a.name)];
+    _planApps = [
+      for (final a in apps!.selectedApps)
+        (id: a.id, name: a.name, onIso: a.onIso),
+    ];
+    stepPercent = null;
+    _stepKey = '';
+    _currentAppId = null;
+    _currentAppIndex = null;
+    _currentAppTotal = null;
+    _appsBegun = false;
     phase = InstallPhase.validating;
     notifyListeners();
 
     void onEvent(InstallEvent e) {
       _noteApps(e);
+      _noteStep(e);
       progressStage = e.stage;
       percent = e.percent;
       progressMessage = e.message;

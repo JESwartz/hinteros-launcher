@@ -141,7 +141,18 @@ class NetworkStep extends StatelessWidget {
             style: t.bodyDim,
           ),
         );
-        if (f.checking) {
+        final linkComing =
+            f.waitingForLink || (net != null && !net.linkUp && net.connecting);
+        if (linkComing) {
+          p.add(const StatusLine('Network: Connecting…', busy: true));
+          p.add(
+            const StatusLine(
+              'This computer: Waiting for the connection…',
+              busy: true,
+            ),
+            gap: HinterTokens.s1,
+          );
+        } else if (f.checking) {
           p.add(const StatusLine('Network cable: Checking…', busy: true));
           p.add(
             const StatusLine('This computer: Checking…', busy: true),
@@ -244,14 +255,15 @@ class NetworkStep extends StatelessWidget {
         p.buttons('actions', [
           if (net != null && net.wifiAvailable)
             btn('Search again', () async {
-              await f.refreshNetwork(force: true);
-              await f.scanWifi();
+              final scan = f.scanWifi();
+              await f.refreshNetwork(force: true, plugWait: true);
+              await scan;
               env.console.refocus();
             }, enabled: !f.scanning && !f.connecting && !f.checking)
           else
             btn(
-              'Check again',
-              () => f.refreshNetwork(force: true),
+              linkComing && f.checking ? 'Connecting…' : 'Check again',
+              () => f.refreshNetwork(force: true, plugWait: true),
               enabled: !f.checking,
             ),
           btn(

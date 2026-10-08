@@ -146,6 +146,8 @@ List<WifiAp> parseWifiList(String out) {
 NetworkState parseNetwork(String deviceStatus, {bool reachable = false}) {
   var wired = false;
   var wifi = false;
+  var connecting = false;
+  var cableWaiting = false;
   String? ssid;
   for (final line in const LineSplitter().convert(deviceStatus)) {
     final f = splitTerse(line);
@@ -153,6 +155,10 @@ NetworkState parseNetwork(String deviceStatus, {bool reachable = false}) {
     // "connected" or "connected (externally)"; "connecting (...)" is not yet.
     final connected = f[1].startsWith('connected');
     if (f[0] == 'ethernet' && connected) wired = true;
+    if (f[0] != 'loopback' && f[1].startsWith('connecting')) connecting = true;
+    // A cable gives "disconnected" until NetworkManager activates it, and
+    // "unavailable" without a cable.
+    if (f[0] == 'ethernet' && f[1] == 'disconnected') cableWaiting = true;
     if (f[0] == 'wifi') {
       wifi = true;
       if (connected && f[2].isNotEmpty) ssid = f[2];
@@ -163,6 +169,8 @@ NetworkState parseNetwork(String deviceStatus, {bool reachable = false}) {
     wifiAvailable: wifi,
     wifiSsid: ssid,
     online: reachable && (wired || ssid != null),
+    connecting: connecting,
+    cableWaiting: cableWaiting,
   );
 }
 

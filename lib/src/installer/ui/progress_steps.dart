@@ -54,12 +54,25 @@ class InstallStepView extends StatelessWidget {
     env.region.setRows(const []);
     final inApps = f.section == InstallSection.apps;
     final current = installStages.indexOf(f.progressStage);
+    // One bar for the step being worked on (a stage, or one app), not for the
+    // whole chain: the steps run at very different speeds. Without a
+    // measurable fraction the bar is indeterminate.
+    final String caption;
+    if (inApps) {
+      caption = f.appsLine ?? 'Installing the apps';
+    } else if (current >= 0) {
+      caption =
+          'Step ${current + 1} of ${installStages.length} · '
+          '${stageLabel(installStages[current])}';
+    } else {
+      caption = stageLabel(f.progressStage);
+    }
     p.add(
-      _sectionHeader(
+      _stepHeader(
         t,
-        'Installing HinterOS',
-        inApps ? f.appsPercent : f.systemPercent,
-        'percent',
+        caption,
+        f.stepPercent,
+        inApps ? const ValueKey('apps-line') : const ValueKey('step-line'),
       ),
     );
     if (!inApps) {
@@ -91,21 +104,9 @@ class InstallStepView extends StatelessWidget {
         ),
         gap: HinterTokens.s2,
       );
-      if (f.progressMessage.isNotEmpty) {
-        p.add(Text(f.progressMessage, style: t.caption), gap: HinterTokens.s1);
-      }
     }
-    if (inApps) {
-      final line = f.appsLine;
-      if (line != null) {
-        p.add(
-          Text(line, key: const ValueKey('apps-line'), style: t.body),
-          gap: HinterTokens.s2,
-        );
-      }
-      if (f.progressMessage.isNotEmpty) {
-        p.add(Text(f.progressMessage, style: t.caption), gap: HinterTokens.s1);
-      }
+    if (f.progressMessage.isNotEmpty) {
+      p.add(Text(f.progressMessage, style: t.caption), gap: HinterTokens.s1);
     }
     for (final w in f.warnings) {
       if (w.code == 'app-failed') continue; // listed on the Done screen
@@ -116,33 +117,43 @@ class InstallStepView extends StatelessWidget {
     }
   }
 
-  Widget _sectionHeader(
-    HinterTokens t,
-    String title,
-    int percent,
-    String key,
-  ) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(title, style: t.title),
-      const SizedBox(height: HinterTokens.s1),
-      Row(
+  /// What is being done now and its own bar; [percent] null = unmeasurable.
+  Widget _stepHeader(HinterTokens t, String caption, int? percent, Key key) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: HBar(fraction: percent / 100, height: 28)),
-          const SizedBox(width: HinterTokens.s3),
-          SizedBox(
-            width: 120,
-            child: Text(
-              '$percent%',
-              key: ValueKey(key),
-              textAlign: TextAlign.right,
-              style: t.title,
-            ),
+          Text('Installing HinterOS', style: t.title),
+          const SizedBox(height: HinterTokens.s1),
+          Text(caption, key: key, style: t.label),
+          const SizedBox(height: HinterTokens.s1),
+          Row(
+            children: [
+              Expanded(
+                child: HBar(
+                  fraction: percent == null ? null : percent / 100,
+                  height: 28,
+                ),
+              ),
+              const SizedBox(width: HinterTokens.s3),
+              SizedBox(
+                width: 120,
+                child: percent == null
+                    ? Text(
+                        'working',
+                        textAlign: TextAlign.right,
+                        style: t.caption,
+                      )
+                    : Text(
+                        '$percent%',
+                        key: const ValueKey('percent'),
+                        textAlign: TextAlign.right,
+                        style: t.title,
+                      ),
+              ),
+            ],
           ),
         ],
-      ),
-    ],
-  );
+      );
 
   void _failure(BuildContext context, InstallerFlow f, Pane p) {
     final t = HinterTheme.of(context);

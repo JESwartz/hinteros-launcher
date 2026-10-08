@@ -25,6 +25,29 @@ void main() {
       expect(e.code, isNull);
     });
 
+    test('per-step and per-app progress', () {
+      final e = parseProgressLine(
+        '{"phase":"apps","stage":"apps","percent":80,"level":"info",'
+        '"message":"m","step_percent":42,"app":"steam",'
+        '"app_index":2,"app_total":3}',
+      )!;
+      expect(e.stepPercent, 42);
+      expect(e.app, 'steam');
+      expect(e.appIndex, 2);
+      expect(e.appTotal, 3);
+      final old = parseProgressLine(
+        '{"stage":"install","percent":57,"level":"info","message":"m"}',
+      )!;
+      expect(old.stepPercent, isNull, reason: 'unmeasurable: indeterminate');
+      expect(old.appIndex, isNull);
+      final odd = parseProgressLine(
+        '{"stage":"install","percent":5,"level":"info","message":"m",'
+        '"step_percent":140,"app_index":0}',
+      )!;
+      expect(odd.stepPercent, 100);
+      expect(odd.appIndex, isNull);
+    });
+
     test('an error line has a code', () {
       final e = parseProgressLine(
         '{"stage":"validate","percent":0,"level":"error","message":"x","code":"disk-too-small"}',

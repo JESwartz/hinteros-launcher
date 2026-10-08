@@ -1,5 +1,7 @@
 /// What `hinteros-install` prints on stdout: one JSON object per line,
-/// `{stage, percent, level, message, code?}`; and what its exit status means
+/// `{stage, percent, level, message, code?}` plus, all optional: `phase`
+/// (`system`|`apps`), `step_percent` (0..100 of the current stage or app
+/// alone; absent = unmeasurable), `app`, `app_index`, `app_total`; and what its exit status means
 /// (0 done, 2 refused before anything was touched, 1 failed part-way).
 library;
 
@@ -24,6 +26,9 @@ class InstallEvent {
     this.code,
     this.phase = InstallSection.system,
     this.app,
+    this.appIndex,
+    this.appTotal,
+    this.stepPercent,
     this.failedApps = const [],
   });
 
@@ -41,6 +46,14 @@ class InstallEvent {
 
   /// The app an apps-phase line is about, when it names one.
   final String? app;
+
+  /// With [app]: its 1-based position and how many apps there are.
+  final int? appIndex;
+  final int? appTotal;
+
+  /// How far the current stage (or, with [app], that app) is, 0..100, on its
+  /// own; null when that cannot be measured (an indeterminate bar).
+  final int? stepPercent;
 
   /// On the final `done` line: the apps that could not be installed.
   final List<String> failedApps;
@@ -78,9 +91,16 @@ InstallEvent? parseProgressLine(String line) {
   final code = j['code'];
   final app = j['app'];
   final failed = j['failed_apps'];
+  int? whole(Object? v) => v is num ? v.round() : null;
+  final sp = whole(j['step_percent']);
+  final ai = whole(j['app_index']);
+  final at = whole(j['app_total']);
   return InstallEvent(
     phase: j['phase'] == 'apps' ? InstallSection.apps : InstallSection.system,
     app: app is String && app.isNotEmpty ? app : null,
+    appIndex: ai != null && ai > 0 ? ai : null,
+    appTotal: at != null && at > 0 ? at : null,
+    stepPercent: sp?.clamp(0, 100),
     failedApps: failed is List ? failed.whereType<String>().toList() : const [],
     stage: stage,
     percent: percent,

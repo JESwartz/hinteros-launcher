@@ -21,6 +21,8 @@ class NetworkState {
     this.wifiAvailable = false,
     this.wifiSsid,
     this.online = false,
+    this.connecting = false,
+    this.cableWaiting = false,
   });
 
   /// A cable is plugged in and connected.
@@ -36,6 +38,20 @@ class NetworkState {
   /// Never taken from NetworkManager's cached connectivity.
   final bool online;
 
+  /// NetworkManager is bringing a connection up right now (it reports
+  /// "connecting (getting IP configuration)" and the like): the link and the
+  /// internet are not there yet, but they are on their way.
+  final bool connecting;
+
+  /// A cable is plugged in (the wired device is "disconnected" rather than
+  /// "unavailable") but NetworkManager has not started a connection yet. A
+  /// fresh plug shows this for a few seconds; with no connection profile it
+  /// stays, so it is only waited for briefly.
+  final bool cableWaiting;
+
+  /// A connection is expected soon, though not up yet.
+  bool get pending => !linkUp && (connecting || cableWaiting);
+
   /// A cable or Wi-Fi connection is up (whether or not it reaches anywhere).
   bool get linkUp => wiredConnected || wifiSsid != null;
 
@@ -45,6 +61,8 @@ class NetworkState {
     wifiAvailable: wifiAvailable,
     wifiSsid: wifiSsid,
     online: online,
+    connecting: connecting,
+    cableWaiting: cableWaiting,
   );
 }
 

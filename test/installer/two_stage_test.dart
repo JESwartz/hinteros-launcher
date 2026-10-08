@@ -105,9 +105,10 @@ void main() {
       await t.pump();
       expect(find.text('Installing apps'), findsNothing);
       expect(find.text('Installing HinterOS'), findsWidgets);
-      expect(find.textContaining("Installing default apps ["), findsOneWidget);
+      expect(find.textContaining(' · 1 of 2'), findsOneWidget);
       expect(find.byKey(const ValueKey('apps-percent')), findsNothing);
-      expect(h.flow.appsLine, startsWith('Installing default apps [1/2]: '));
+      expect(h.flow.appsLine, contains(' · 1 of 2'));
+      expect(h.flow.stepPercent, 40, reason: 'this app\'s own bar');
       expect(
         h.flow.appProgress.map((a) => a.state),
         contains(AppInstallState.installing),
