@@ -24,9 +24,15 @@ abstract class OskBackend {
   /// the OSK is visible.
   Stream<InputNavEvent> get nav;
 
-  /// `osk_visibility {visible}`. The OSK process stays resident; the daemon
-  /// shows and hides its window.
+  /// `osk_visibility {visible}`, only when it changes. The OSK process stays
+  /// resident; the daemon shows and hides its window.
   Stream<bool> get visibility;
+
+  /// `osk_visibility {password}` (API 0.10): whether the keyboard is up for a
+  /// password field. Sent with every `osk_visibility`, also when only the
+  /// field changed (false while hidden). The preview is masked only for
+  /// passwords.
+  Stream<bool> get passwordField;
 
   /// `keys.type {text}`: characters (the daemon picks uinput or the
   /// gamescope input method per character). Returns the characters it could
@@ -51,6 +57,7 @@ abstract class OskBackend {
 class MockOskBackend implements OskBackend {
   final _nav = StreamController<InputNavEvent>.broadcast();
   final _visibility = StreamController<bool>.broadcast();
+  final _password = StreamController<bool>.broadcast();
 
   /// Every call in order, as `type:<text>`, `action:<wire>`,
   /// `key:<key>[+mod...]` and `hide`.
@@ -81,14 +88,23 @@ class MockOskBackend implements OskBackend {
   void emitNav(NavAction action, [NavPhase phase = NavPhase.press]) =>
       _nav.add(InputNavEvent(action: action, phase: phase));
 
-  /// As if the daemon sent `osk_visibility`.
-  void setVisible(bool visible) => _visibility.add(visible);
+  /// As if the daemon sent `osk_visibility` (`password` for a password field).
+  void setVisible(bool visible, {bool password = false}) {
+    _visibility.add(visible);
+    _password.add(visible && password);
+  }
+
+  /// As if the daemon said another kind of field got focus (still visible).
+  void setPasswordField(bool password) => _password.add(password);
 
   @override
   Stream<InputNavEvent> get nav => _nav.stream;
 
   @override
   Stream<bool> get visibility => _visibility.stream;
+
+  @override
+  Stream<bool> get passwordField => _password.stream;
 
   @override
   Future<List<String>> type(String text) async {
@@ -111,12 +127,14 @@ class MockOskBackend implements OskBackend {
   Future<void> hide() async {
     _record('hide');
     _visibility.add(false);
+    _password.add(false);
   }
 
   @override
   Future<void> dispose() async {
     await _nav.close();
     await _visibility.close();
+    await _password.close();
   }
 }
 
@@ -142,10 +160,24 @@ class DaemonOskBackend implements OskBackend {
   Stream<InputNavEvent> get nav =>
       connection.events.where((e) => e is InputNavEvent).cast();
 
+  Stream<OskVisibilityEvent> get _oskEvents =>
+      connection.events.where((e) => e is OskVisibilityEvent).cast();
+
   @override
-  Stream<bool> get visibility => connection.events
-      .where((e) => e is OskVisibilityEvent)
-      .map((e) => (e as OskVisibilityEvent).visible);
+  Stream<bool> get visibility {
+    // The daemon sends osk_visibility again (still visible) when the field
+    // kind changes: only changes count here.
+    bool? last;
+    return _oskEvents.map((e) => e.visible).where((v) {
+      final changed = v != last;
+      last = v;
+      return changed;
+    });
+  }
+
+  @override
+  Stream<bool> get passwordField =>
+      _oskEvents.map((e) => e.visible && (e.password ?? false));
 
   @override
   Future<List<String>> type(String text) async =>

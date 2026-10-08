@@ -41,7 +41,7 @@ the home screen says so and the client keeps retrying with backoff.
 | `tool/gen_api.dart` | Generator: schema to `lib/src/api/generated.dart` (models, typed method stubs, sealed event class, error codes) |
 | `lib/src/api/generated.dart` | Generated, committed. Do not edit |
 | `lib/src/api/client.dart` | `DaemonClient`: handshake, request correlation, events, subscribe, reconnect |
-| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.9 methods and events: the relayed `system.*` API, the runtime settings, the admin password prompt, `session.restart` and the Store) |
+| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.10 methods and events: the relayed `system.*` API, the runtime settings, the admin password prompt, `session.restart` and the Store) |
 | `lib/src/osk/` | The on-screen keyboard: `OskBackend` (+ mock), layouts, state, UI |
 | `tool/gen_mock_art.dart` | Draws the placeholder cover art in `test/fixtures/art/` (committed; no network, no third-party pictures) |
 | `tool/gen_mock_icons.dart` | Draws the generic placeholder app icons in `test/fixtures/icons/` (plain shapes, PNG and one SVG; no logos, no network) |
@@ -232,7 +232,7 @@ params/result schemas that are a `$ref` (the relayed `system.*` results; `displa
   the daemon repo (`crates/hinteros-system/tests/common`), which cannot be used from Dart; those
   paths (`ssh.set` to `authentication_required`, jobs and their events) are covered against the
   mock daemon's relay, whose answers the contract test checks against the schema.
-  `runtime_integration_test.dart`: the launcher and the on-screen keyboard say hello at 0.9; with `--no-runtime` every Wi-Fi, Bluetooth, audio, display and power method answers `unavailable` naming its service (`networkmanager`, `bluez`, `audio`, `display`, `logind`) while ping and `apps.list` work, and the real repositories say "<service> isn't available on this box". **Not covered:** `--runtime-bus` with fake NetworkManager, BlueZ, logind, PipeWire and gamescope. The daemon's fakes are Rust test helpers inside its own integration tests (`crates/hinteros-session/tests/runtime_*`), not programs, so nothing from Dart can start them; those paths (wrong password, pairing with a passkey, keep and revert, `power_inhibited`) run against the mock daemon, whose answers the contract test checks against every schema example. The other integration tests start the daemon with `--no-runtime`, so they never reach the host's system bus.
+  `runtime_integration_test.dart`: the launcher and the on-screen keyboard say hello at 0.10; with `--no-runtime` every Wi-Fi, Bluetooth, audio, display and power method answers `unavailable` naming its service (`networkmanager`, `bluez`, `audio`, `display`, `logind`) while ping and `apps.list` work, and the real repositories say "<service> isn't available on this box". **Not covered:** `--runtime-bus` with fake NetworkManager, BlueZ, logind, PipeWire and gamescope. The daemon's fakes are Rust test helpers inside its own integration tests (`crates/hinteros-session/tests/runtime_*`), not programs, so nothing from Dart can start them; those paths (wrong password, pairing with a passkey, keep and revert, `power_inhibited`) run against the mock daemon, whose answers the contract test checks against every schema example. The other integration tests start the daemon with `--no-runtime`, so they never reach the host's system bus.
   0.8 (`system_relay_integration_test.dart`): with a real `hinteros-system` and the real session daemon both reading the fixture catalog (`--catalog-index test/fixtures/catalog/catalog.json`, the real index format) `store.list` returns the index merged with state.json's installed apps (by name, Steam `installed`, the rest `available`, terms with the absolute path of a text that exists), and the real `DaemonStore` reads it with the terms text; without the index it is `unavailable {service: catalog}`, without the system service `system_unavailable`. `auth.respond` and `auth.cancel` with no pending request are `not_found` (the repository: cancel is quiet, respond is `notFound`), a client that is not the launcher gets `not_authorized`, and `session.restart` with logind pointed at a bus that does not exist is `unavailable {service: logind}` (**never run it against a real bus**: a greetd session would end). **Not covered:** everything that needs real polkit and PAM (the prompt end to end with a password, `system.apps.install` / `remove` on a real service, `session.restart` ending a greetd session): the daemon repo's VM tests `polkit-agent`, `store-install` and `session-restart`. The daemons are started with `--no-auth-agent`, so they never register with this machine's polkit.
   It is a separate check and is skipped by plain `flutter test` unless `HINTEROS_SESSION_BIN`
   points at the binary (and `HINTEROS_SYSTEM_BIN` at `hinteros-system`) (and `HINTEROS_STEAM_FIXTURE` at `crates/hinteros-session/tests/fixtures/steam-home`
@@ -387,7 +387,7 @@ client `hinteros-launcher`, not; it also drops any `input_nav` that arrives whil
 says the keyboard is up). `osk_visibility {visible: false}` resets the keyboard (letters, shift
 off, empty preview). Errors show in the strip for a few seconds: 2004 `keyboard_unavailable` as
 "No keyboard available", and characters that `keys.type` reports as `untypeable` ("Cannot type:
-é"; with the preview masked only their number, as the characters may be secret). Anywhere else the
+é"; with the preview masked (a password field) only their number). Anywhere else the
 keyboard is summoned by the daemon (hold Guide and press Y). The launcher's own text fields call
 `osk.show` themselves, see "Text entry".
 
@@ -401,16 +401,18 @@ keyboard is summoned by the daemon (hold Guide and press Y). The launcher's own 
 | context (Y) | Shift: one-shot, again for caps lock, again off. On the symbol pages: switches between symbols 1 and 2 |
 | secondary (X) | Space |
 | L1 / R1 | Letters / symbols page |
-| the Done key | `osk.hide`; the keyboard also resets (letters, shift off, empty preview) |
+| the Done key | `osk.hide` at once (not behind keys still waiting for an answer; a failure shows in the strip and on stderr); the keyboard also resets (letters, shift off, empty preview) |
 
 Shift was chosen for `context` rather than the page toggle because it is needed mid-word, while a
 page change is one key away and has L1/R1. Pages: letters (digits row, `'` and `.`), symbols 1,
 symbols 2 (`[ ] { }` and the backtick); together they cover every printable ASCII character. The
 strip above the keys is a preview of what was typed since opening (Backspace removes). **It is
-masked by default** (a password must not appear on the TV): dots, with the newest character readable
-for about a second, like a phone password field. Settings > "Show typed text on the on-screen
-keyboard" (default off) shows it in plain text; the keyboard reads `launcher.json` again every time
-it opens. The preview is cleared on hide. Characters go out with `keys.type` (the daemon picks uinput or the
+masked only for a password field** (`osk_visibility.password`, session API 0.10; a password must not
+appear on the TV): dots, with the newest character readable for about a second, like a phone
+password field. Any other field, or none reported (the Guide+Y chord), shows plain text. When the
+field kind changes while the keyboard is up, the preview starts afresh, so a password never shows
+unmasked. Settings > "Show typed passwords on the on-screen keyboard" (default off) shows passwords in
+plain text too; the keyboard reads `launcher.json` again every time it opens. The preview is cleared on hide. Characters go out with `keys.type` (the daemon picks uinput or the
 gamescope input method), Space included; the keyboard has no text field of its own.
 
 ## UI
@@ -442,7 +444,8 @@ UI. Focus on a tab selects its section (like console UIs); Down enters the secti
   overlap at any text size (the initial gives way when there is no room).
 - **Settings:** list left, options of the highlighted entry right (list-detail). Local settings:
   text size (100/120/140/160%), high contrast, focus marker (ring/glow/bar), reduce motion.
-  "Show typed text on the on-screen keyboard" (privacy; off = the keyboard's preview shows dots).
+  "Show typed passwords on the on-screen keyboard" (privacy; off = in password fields the keyboard's
+  preview shows dots).
   Below them the system sections (see "System screens"): Network, Bluetooth, Display, Audio, Power,
   Remote access, Updates, About.
 - **Store:** see "Store". A top-level tab after Apps (see the placement note there).
@@ -618,7 +621,7 @@ through their stages by themselves.
 The UI reads through `AppsRepository` (apps, running, launch, close, Steam attention and focus) and
 `GamesRepository` (`games.list`, launch by Steam URL) in `lib/src/data/`, combined in
 `LauncherData`, which owns all daemon traffic and re-queries on connect and on events (the daemon
-does not replay them). The client speaks session API 0.9 (during 0.x the minor must match); the on-screen keyboard's connection too.
+does not replay them). The client speaks session API 0.10 (during 0.x the minor must match); the on-screen keyboard's connection too.
 
 ### Fonts
 

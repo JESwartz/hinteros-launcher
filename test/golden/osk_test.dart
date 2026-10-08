@@ -55,7 +55,7 @@ void main() {
       setup: (t, h) async {
         await h.type(t, 'h');
         await h.type(t, 'i');
-        await t.pump(const Duration(seconds: 2)); // the reveal is over: dots
+        await t.pump(const Duration(seconds: 2)); // not a password: plain
         await h.nav(t, NavAction.pageRight);
         await h.moveTo(t, '@');
       },
@@ -67,6 +67,9 @@ void main() {
       t,
       'osk_masked_1080p',
       setup: (t, h) async {
+        // A password field (osk_visibility.password).
+        h.backend.setVisible(true, password: true);
+        await t.pumpAndSettle();
         for (final c in 'hunter2'.split('')) {
           await h.type(t, c);
         }

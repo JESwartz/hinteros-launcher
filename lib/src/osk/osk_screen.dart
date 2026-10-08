@@ -125,6 +125,7 @@ class OskScreen extends StatefulWidget {
     super.key,
     required this.backend,
     this.showTyped = false,
+    this.password = false,
     this.initialText = '',
     this.hardwareKeys = false,
     this.onEscape,
@@ -138,9 +139,13 @@ class OskScreen extends StatefulWidget {
   /// Backspace). Empty for the daemon-backed keyboard.
   final String initialText;
 
-  /// The "Show typed text on the on-screen keyboard" setting; off masks the
-  /// preview strip.
+  /// The "Show typed passwords on the on-screen keyboard" setting: on, a
+  /// password field's preview is not masked either.
   final bool showTyped;
+
+  /// The field is a password (masked preview). The daemon-backed keyboard
+  /// learns it from `osk_visibility` instead ([OskBackend.passwordField]).
+  final bool password;
 
   /// A physical keyboard types into the field (the installer, where the
   /// keyboard is in this process): printable keys are text, Backspace
@@ -165,6 +170,7 @@ class OskScreen extends StatefulWidget {
 class _OskScreenState extends State<OskScreen> {
   late final OskState _state = OskState(widget.backend)
     ..showTyped = widget.showTyped
+    ..password = widget.password
     ..seed(widget.initialText);
   final _nav = NavController();
   final _region = NavRegion('osk', rememberPerRow: false, wrapHorizontal: true);
@@ -183,6 +189,7 @@ class _OskScreenState extends State<OskScreen> {
   void didUpdateWidget(OskScreen old) {
     super.didUpdateWidget(old);
     _state.showTyped = widget.showTyped;
+    if (widget.password != old.password) _state.password = widget.password;
   }
 
   @override
@@ -482,8 +489,8 @@ class _PreviewStrip extends StatelessWidget {
     final scale = MediaQuery.textScalerOf(context).scale(1);
     final error = state.error;
     final notice = state.notice;
-    // Masked unless the setting is on (it may be a password). The tail only,
-    // so the newest character is always visible.
+    // Masked for a password (unless the setting is on). The tail only, so the
+    // newest character is always visible.
     final typed = state.preview;
     final shown = typed.length > 60
         ? '…${typed.substring(typed.length - 60)}'

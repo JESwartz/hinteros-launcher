@@ -11,7 +11,8 @@ const oskMaskChar = '•';
 
 /// What the keyboard is showing and what pressing a key does. All output goes
 /// through the [OskBackend], in order; the OSK never has a text field of its
-/// own, [typed] is only a preview (masked unless [showTyped]).
+/// own, [typed] is only a preview (masked for a [password] field unless
+/// [showTyped]).
 class OskState extends ChangeNotifier {
   OskState(
     this.backend, {
@@ -21,6 +22,7 @@ class OskState extends ChangeNotifier {
     _visibility = backend.visibility.listen((visible) {
       if (!visible) reset();
     });
+    _passwordSub = backend.passwordField.listen((p) => password = p);
   }
 
   final OskBackend backend;
@@ -32,6 +34,7 @@ class OskState extends ChangeNotifier {
   final Duration noticeFor;
 
   late final StreamSubscription<bool> _visibility;
+  late final StreamSubscription<bool> _passwordSub;
 
   OskPage _page = OskPage.letters;
   ShiftState _shift = ShiftState.off;
@@ -39,6 +42,7 @@ class OskState extends ChangeNotifier {
   String? _error;
   String? _notice;
   bool _showTyped = false;
+  bool _password = false;
   bool _reveal = false;
   Timer? _revealTimer;
   Timer? _noticeTimer;
@@ -48,7 +52,7 @@ class OskState extends ChangeNotifier {
   ShiftState get shift => _shift;
 
   /// What was typed since the keyboard last opened (backspace takes characters
-  /// off). Never put this on screen without checking [showTyped]: it may be a
+  /// off). Never put this on screen without checking [masked]: it may be a
   /// password.
   String get typed => _typed;
 
@@ -60,9 +64,8 @@ class OskState extends ChangeNotifier {
   /// type). Goes away by itself.
   String? get notice => _notice;
 
-  /// Whether the preview shows the typed text (the setting "Show typed text
-  /// on the on-screen keyboard"). Off: dots, apart from the newest character
-  /// for [revealFor].
+  /// Whether the preview shows a password's text too (the setting "Show typed
+  /// passwords on the on-screen keyboard").
   bool get showTyped => _showTyped;
   set showTyped(bool v) {
     if (v == _showTyped) return;
@@ -70,9 +73,26 @@ class OskState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// What the preview strip shows.
+  /// Whether the field being typed into is a password (the daemon says so in
+  /// `osk_visibility`; the installer knows its own fields). Unknown counts as
+  /// not a password. A change of field starts the preview afresh, so what was
+  /// typed into a password never shows unmasked.
+  bool get password => _password;
+  set password(bool v) {
+    if (v == _password) return;
+    _password = v;
+    _typed = '';
+    _reveal = false;
+    notifyListeners();
+  }
+
+  /// Whether the preview is dots: a password field, unless [showTyped].
+  bool get masked => _password && !_showTyped;
+
+  /// What the preview strip shows: the typed text, or for a password (see
+  /// [masked]) dots, apart from the newest character for [revealFor].
   String get preview {
-    if (_showTyped) return _typed;
+    if (!masked) return _typed;
     final chars = _typed.runes.map(String.fromCharCode).toList();
     return [
       for (var i = 0; i < chars.length; i++)
@@ -122,7 +142,22 @@ class OskState extends ChangeNotifier {
   void _send(Future<void> Function() call) {
     _queue = _queue.then((_) => call()).then((_) {
       if (_error != null) _flash();
-    }, onError: (Object e) => _flash(error: _describe(e)));
+    }, onError: _failed);
+  }
+
+  void _failed(Object e) {
+    debugPrint('hinteros-osk: ${_describe(e)}');
+    _flash(error: _describe(e));
+  }
+
+  /// Done: hide the keyboard now, not behind keys still waiting for the
+  /// daemon's answer (they are typed in order by the daemon either way). A
+  /// failure shows in the strip and in the log.
+  void hide() {
+    backend.hide().catchError((Object e) {
+      debugPrint('hinteros-osk: hiding the keyboard failed: ${_describe(e)}');
+      _flash(error: _describe(e));
+    });
   }
 
   /// Completes when every key pressed so far has been sent.
@@ -148,7 +183,7 @@ class OskState extends ChangeNotifier {
       case KeyKind.tab:
         _send(() => backend.action(OskAction.tab));
       case KeyKind.done:
-        _send(backend.hide);
+        hide();
     }
   }
 
@@ -156,14 +191,14 @@ class OskState extends ChangeNotifier {
     _queue = _queue.then((_) => backend.type(s)).then((untypeable) {
       if (_error != null) _flash();
       if (untypeable.isNotEmpty) {
-        // The characters stay secret unless the preview is switched on.
+        // The characters of a password stay secret.
         _flash(
-          notice: _showTyped
+          notice: !masked
               ? 'Cannot type: ${untypeable.join(' ')}'
               : '${untypeable.length} character(s) cannot be typed',
         );
       }
-    }, onError: (Object e) => _flash(error: _describe(e)));
+    }, onError: _failed);
     _typed += s;
     _reveal = true;
     _revealTimer?.cancel();
@@ -221,6 +256,7 @@ class OskState extends ChangeNotifier {
   @override
   void dispose() {
     _visibility.cancel();
+    _passwordSub.cancel();
     _revealTimer?.cancel();
     _noticeTimer?.cancel();
     super.dispose();

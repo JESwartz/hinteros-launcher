@@ -1,7 +1,7 @@
 {
   "$schema": "./api-doc.schema.json",
   "api": "session",
-  "version": "0.9",
+  "version": "0.10",
   "description": "API of the HinterOS session daemon, served to the launcher (and other clients running as the session user). Responses to system.*, auth.*, store.list and session.restart may arrive out of order relative to other calls on the same connection (match them by id): a relayed call can wait minutes for an admin password. See hinteros-docs/design/api.md for the protocol rules.",
   "transport": {
     "protocol": "jsonrpc-2.0",
@@ -37,16 +37,16 @@
       "examples": [
         {
           "name": "accepted",
-          "params": { "api_version": "0.9", "client": { "name": "hinteros-launcher", "version": "0.1.0" } },
-          "result": { "api_version": "0.9", "server": { "name": "hinteros-session", "version": "0.1.0" } }
+          "params": { "api_version": "0.10", "client": { "name": "hinteros-launcher", "version": "0.1.0" } },
+          "result": { "api_version": "0.10", "server": { "name": "hinteros-session", "version": "0.1.0" } }
         },
         {
           "name": "major mismatch",
           "params": { "api_version": "1.0", "client": { "name": "hinteros-launcher", "version": "2.0.0" } },
           "error": {
             "code": 1002,
-            "message": "API version mismatch: client 1.0, server 0.9",
-            "data": { "client_api_version": "1.0", "server_api_version": "0.9" }
+            "message": "API version mismatch: client 1.0, server 0.10",
+            "data": { "client_api_version": "1.0", "server_api_version": "0.10" }
           }
         }
       ]
@@ -403,7 +403,7 @@
     },
     "osk.show": {
       "summary": "Show the on-screen keyboard over whatever has focus.",
-      "description": "The on-screen keyboard is a separate client (hinteros-osk) whose window the daemon shows as a gamescope overlay; it never takes focus, so typed keys reach the focused app. While it is visible, InputPlumber is in intercept mode ALL and input_nav goes only to the connection whose hello client name is 'hinteros-osk' (not to the launcher). osk_visibility follows if the visibility changed. Showing it again does nothing. The user can also summon it with the controller (Guide + Y by default).",
+      "description": "The on-screen keyboard is a separate client (hinteros-osk) whose window the daemon shows as a gamescope overlay; it never takes focus, so typed keys reach the focused app. While it is visible, InputPlumber is in intercept mode ALL and input_nav goes only to the connection whose hello client name is 'hinteros-osk' (not to the launcher). osk_visibility follows if the visibility changed. Showing it again does nothing. The user can also summon it with the controller (Guide + Y by default, or A on a focused text field in a keyboard-profile Firefox app), and B hides it whatever has focus (the keyboard client never receives back while visible).",
       "since": "0.4",
       "params": {
         "type": "object",
@@ -415,7 +415,8 @@
         "required": ["visible"],
         "additionalProperties": false,
         "properties": {
-          "visible": { "description": "Whether the on-screen keyboard is now visible.", "type": "boolean" }
+          "visible": { "description": "Whether the on-screen keyboard is now visible.", "type": "boolean" },
+          "password": { "description": "(0.10) The keyboard is up for a password field (see osk_visibility). Absent when false.", "type": "boolean" }
         }
       },
       "errors": ["osk_unavailable"],
@@ -438,7 +439,8 @@
         "required": ["visible"],
         "additionalProperties": false,
         "properties": {
-          "visible": { "description": "Whether the on-screen keyboard is now visible.", "type": "boolean" }
+          "visible": { "description": "Whether the on-screen keyboard is now visible.", "type": "boolean" },
+          "password": { "description": "(0.10) The keyboard is up for a password field (see osk_visibility). Absent when false.", "type": "boolean" }
         }
       },
       "errors": [],
@@ -2047,7 +2049,7 @@
     },
     "input_nav": {
       "summary": "A controller navigation intent, sent to the launcher while it has focus, or only to the on-screen keyboard while it is visible.",
-      "description": "Directions repeat while held (phase 'repeat', key repeat done by the daemon); other actions only press and release. Recipients (0.4): while the on-screen keyboard is visible, only connections whose hello client name is 'hinteros-osk'; otherwise, while the launcher has focus, every other subscribed connection. Apps get the pad itself (InputPlumber PASS) or, with a keyboard input profile, key presses from the daemon; no input_nav is sent then. The launcher should map arrow keys, Enter and Escape to the same intents so it works without a controller. Clients must ignore unknown actions.",
+      "description": "Directions repeat while held (phase 'repeat', key repeat done by the daemon; one repeating direction at a time, a new direction or a release ends it at once, events are sent immediately and never queued); other actions only press and release. While the on-screen keyboard is visible, back is not sent: B hides the keyboard. Recipients (0.4): while the on-screen keyboard is visible, only connections whose hello client name is 'hinteros-osk'; otherwise, while the launcher has focus, every other subscribed connection. Apps get the pad itself (InputPlumber PASS) or, with a keyboard input profile, key presses from the daemon; no input_nav is sent then. The launcher should map arrow keys, Enter and Escape to the same intents so it works without a controller. Clients must ignore unknown actions.",
       "since": "0.2",
       "params": {
         "type": "object",
@@ -2104,18 +2106,21 @@
       ]
     },
     "osk_visibility": {
-      "summary": "The on-screen keyboard was shown or hidden (osk.show/osk.hide, the controller chord, Home, or a focus change).",
+      "summary": "The on-screen keyboard was shown or hidden (osk.show/osk.hide, the controller chord, A on a focused text field, B while it is visible, Home, or a focus change).",
+      "description": "(0.10) password is true while the keyboard is up for a password field (reported by the Firefox extension or Firefox itself in a keyboard-profile app); the keyboard should mask what it shows of the typed text then, and show it plainly otherwise (also when nothing reported a field, e.g. the keyboard was opened with the controller chord). While visible, the event is sent again (visible true) when another field of the other kind gets focus; a field losing focus changes nothing.",
       "since": "0.4",
       "params": {
         "type": "object",
         "required": ["visible"],
         "additionalProperties": false,
         "properties": {
-          "visible": { "type": "boolean" }
+          "visible": { "type": "boolean" },
+          "password": { "description": "The keyboard is up for a password field. Absent when false.", "type": "boolean" }
         }
       },
       "examples": [
         { "name": "shown", "params": { "visible": true } },
+        { "name": "shown for a password field", "params": { "visible": true, "password": true } },
         { "name": "hidden", "params": { "visible": false } }
       ]
     },

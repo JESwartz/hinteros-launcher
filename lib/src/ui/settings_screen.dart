@@ -48,9 +48,9 @@ const _items = [
   ),
   _Setting(
     'osk_text',
-    'Show typed text on the on-screen keyboard',
-    'Off: the keyboard shows dots instead of what you type (so passwords stay off the TV), apart from the newest character for a moment. The keyboard opens by itself in text fields; anywhere else, hold Guide and press Y.',
-    'Typed text on keyboard',
+    'Show typed passwords on the on-screen keyboard',
+    'Off: in password fields the keyboard shows dots instead of what you type (so passwords stay off the TV), apart from the newest character for a moment. Other text always shows as typed. A on a text field opens the keyboard; anywhere else, hold Guide and press Y.',
+    'Typed passwords on keyboard',
   ),
   _Setting(
     'net',

@@ -312,11 +312,39 @@ void main() {
     });
   });
 
-  group('privacy: the preview is masked', () {
+  group("privacy: a password field's preview is masked", () {
+    Future<OskHarness> startPassword(WidgetTester t, {OskHarness? h}) async {
+      final harness = await start(t, h: h);
+      harness.backend.setVisible(true, password: true);
+      await t.pumpAndSettle();
+      return harness;
+    }
+
+    testWidgets('any other field (or none reported) shows the text', (t) async {
+      final h = await start(t);
+      await h.type(t, 'h');
+      await h.type(t, 'i');
+      await t.pump(const Duration(seconds: 2));
+      expect(_preview('hi'), findsOneWidget);
+      // A password field gets focus while the keyboard is up: the preview
+      // starts afresh and is masked; back on a text field it starts afresh again,
+      // so the password never shows.
+      h.backend.setPasswordField(true);
+      await t.pumpAndSettle();
+      expect(find.text('Typed text appears here'), findsOneWidget);
+      await h.type(t, 'o');
+      await t.pump(const Duration(seconds: 2));
+      expect(_preview('•'), findsOneWidget);
+      h.backend.setPasswordField(false);
+      await t.pumpAndSettle();
+      expect(find.text('Typed text appears here'), findsOneWidget);
+      expect(_preview('o'), findsNothing);
+    });
+
     testWidgets('dots, the newest character readable for about a second', (
       t,
     ) async {
-      final h = await start(t);
+      final h = await startPassword(t);
       await h.type(t, 'h');
       await h.type(t, 'u');
       await h.type(t, 'n');
@@ -333,7 +361,7 @@ void main() {
     testWidgets('backspace removes a dot; the setting shows the text', (
       t,
     ) async {
-      final h = await start(t);
+      final h = await startPassword(t);
       await h.type(t, 'a');
       await h.type(t, 'b');
       await h.nav(t, NavAction.secondary);
@@ -347,7 +375,7 @@ void main() {
     testWidgets('untypeable characters and keyboard_unavailable show briefly', (
       t,
     ) async {
-      final h = await start(t);
+      final h = await startPassword(t);
       h.backend.untypeable = {'q'};
       await h.type(t, 'q');
       await t.pump(const Duration(milliseconds: 100));
@@ -370,7 +398,7 @@ void main() {
     testWidgets('with the setting on, untypeable characters are named', (
       t,
     ) async {
-      final h = await start(t, h: OskHarness(settings: _showTyped));
+      final h = await startPassword(t, h: OskHarness(settings: _showTyped));
       h.backend.untypeable = {'q'};
       await h.type(t, 'q');
       await t.pump(const Duration(milliseconds: 100));

@@ -130,8 +130,8 @@ icon = "$iconFixture"
       final c = client = DaemonClient(socketPath: sock);
       await c.subscribeTo([EventName.homePressed]);
       final connected = await c.waitConnected();
-      expect(connected.apiVersion, '0.9');
-      expect(apiVersion, '0.9');
+      expect(connected.apiVersion, '0.10');
+      expect(apiVersion, '0.10');
       expect(connected.server.name, 'hinteros-session');
 
       expect((await c.ping(const PingParams(nonce: 'hi'))).nonce, 'hi');
@@ -356,7 +356,7 @@ icon = "$iconFixture"
         await launcher.subscribeTo([EventName.oskVisibility]);
         await launcher.waitConnected();
         final oskHello = await osk.connection.waitConnected();
-        expect(oskHello.apiVersion, '0.9');
+        expect(oskHello.apiVersion, '0.10');
         expect(
           (osk.connection as DaemonClient).clientInfo.name,
           'hinteros-osk',

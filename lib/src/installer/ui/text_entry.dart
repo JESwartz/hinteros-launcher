@@ -42,6 +42,10 @@ class InProcessKeyboard implements OskBackend {
   @override
   Stream<bool> get visibility => _visibility.stream;
 
+  /// The installer says whether its field is secret ([OskScreen.password]).
+  @override
+  Stream<bool> get passwordField => const Stream.empty();
+
   @override
   Future<List<String>> type(String s) async {
     if (text.value.runes.length + s.runes.length <= maxLength) {
@@ -147,7 +151,7 @@ class TextEntryScreen extends StatelessWidget {
         ),
         OskScreen(
           backend: keyboard,
-          showTyped: !secret,
+          password: secret,
           initialText: keyboard.text.value,
           hardwareKeys: true,
           onEscape: keyboard.onCancel,

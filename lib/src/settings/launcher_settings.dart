@@ -41,9 +41,10 @@ class LauncherSettings {
   final FocusStyle focusStyle;
   final bool reduceMotion;
 
-  /// Show what was typed in the on-screen keyboard's preview strip. Off
-  /// (the default) masks it with dots, so passwords do not appear on the TV;
-  /// only the latest character shows briefly.
+  /// Show what was typed into a password field in the on-screen keyboard's
+  /// preview strip. Off (the default) masks it with dots, so passwords do not
+  /// appear on the TV; only the latest character shows briefly. Other fields
+  /// always show what was typed.
   final bool showTypedOnOsk;
 
   LauncherSettings copyWith({

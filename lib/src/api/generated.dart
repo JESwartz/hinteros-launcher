@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.9).
+// Source: schema/session-api.json (session API 0.10).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.9';
+const apiVersion = '0.10';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -2912,15 +2912,20 @@ class OskShowParams {
 }
 
 class OskShowResult {
-  const OskShowResult({required this.visible});
+  const OskShowResult({required this.visible, this.password});
 
   /// Whether the on-screen keyboard is now visible.
   final bool visible;
 
-  factory OskShowResult.fromJson(Map<String, dynamic> json) =>
-      OskShowResult(visible: json['visible'] as bool);
+  /// (0.10) The keyboard is up for a password field (see osk_visibility). Absent when false.
+  final bool? password;
 
-  Map<String, dynamic> toJson() => {'visible': visible};
+  factory OskShowResult.fromJson(Map<String, dynamic> json) => OskShowResult(
+    visible: json['visible'] as bool,
+    password: json['password'] == null ? null : json['password'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {'visible': visible, 'password': ?password};
 
   @override
   bool operator ==(Object other) =>
@@ -2954,15 +2959,20 @@ class OskHideParams {
 }
 
 class OskHideResult {
-  const OskHideResult({required this.visible});
+  const OskHideResult({required this.visible, this.password});
 
   /// Whether the on-screen keyboard is now visible.
   final bool visible;
 
-  factory OskHideResult.fromJson(Map<String, dynamic> json) =>
-      OskHideResult(visible: json['visible'] as bool);
+  /// (0.10) The keyboard is up for a password field (see osk_visibility). Absent when false.
+  final bool? password;
 
-  Map<String, dynamic> toJson() => {'visible': visible};
+  factory OskHideResult.fromJson(Map<String, dynamic> json) => OskHideResult(
+    visible: json['visible'] as bool,
+    password: json['password'] == null ? null : json['password'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {'visible': visible, 'password': ?password};
 
   @override
   bool operator ==(Object other) =>
@@ -6265,16 +6275,22 @@ final class SteamAttentionEvent extends SessionEvent {
   String toString() => 'SteamAttentionEvent(${jsonEncode(toJson())})';
 }
 
-/// The on-screen keyboard was shown or hidden (osk.show/osk.hide, the controller chord, Home, or a focus change).
+/// The on-screen keyboard was shown or hidden (osk.show/osk.hide, the controller chord, A on a focused text field, B while it is visible, Home, or a focus change).
 final class OskVisibilityEvent extends SessionEvent {
-  const OskVisibilityEvent({required this.visible});
+  const OskVisibilityEvent({required this.visible, this.password});
 
   final bool visible;
 
-  factory OskVisibilityEvent.fromJson(Map<String, dynamic> json) =>
-      OskVisibilityEvent(visible: json['visible'] as bool);
+  /// The keyboard is up for a password field. Absent when false.
+  final bool? password;
 
-  Map<String, dynamic> toJson() => {'visible': visible};
+  factory OskVisibilityEvent.fromJson(Map<String, dynamic> json) =>
+      OskVisibilityEvent(
+        visible: json['visible'] as bool,
+        password: json['password'] == null ? null : json['password'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {'visible': visible, 'password': ?password};
 
   @override
   String get name => 'osk_visibility';
@@ -7526,7 +7542,7 @@ mixin SessionApiMethods {
 
   /// Show the on-screen keyboard over whatever has focus.
   ///
-  /// The on-screen keyboard is a separate client (hinteros-osk) whose window the daemon shows as a gamescope overlay; it never takes focus, so typed keys reach the focused app. While it is visible, InputPlumber is in intercept mode ALL and input_nav goes only to the connection whose hello client name is 'hinteros-osk' (not to the launcher). osk_visibility follows if the visibility changed. Showing it again does nothing. The user can also summon it with the controller (Guide + Y by default).
+  /// The on-screen keyboard is a separate client (hinteros-osk) whose window the daemon shows as a gamescope overlay; it never takes focus, so typed keys reach the focused app. While it is visible, InputPlumber is in intercept mode ALL and input_nav goes only to the connection whose hello client name is 'hinteros-osk' (not to the launcher). osk_visibility follows if the visibility changed. Showing it again does nothing. The user can also summon it with the controller (Guide + Y by default, or A on a focused text field in a keyboard-profile Firefox app), and B hides it whatever has focus (the keyboard client never receives back while visible).
   Future<OskShowResult> oskShow([
     OskShowParams params = const OskShowParams(),
   ]) async => OskShowResult.fromJson(await rpc('osk.show', params.toJson()));
