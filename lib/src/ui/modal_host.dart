@@ -95,10 +95,14 @@ class ModalController extends ChangeNotifier {
     if (!_stack.remove(e) || e.completer.isCompleted) return;
     e.completer.complete(result);
     notifyListeners();
-    final next = _stack.isEmpty ? null : _stack.last.region;
-    final back = next ?? e.previous;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (back != null && back.hasItems) nav.focusRegion(back);
+      // Decided now, not at close time: the caller may have opened the next
+      // page (a progress page after a form) in between.
+      final next = _stack.isEmpty ? null : _stack.last.region;
+      final back = next ?? e.previous;
+      if (back != null) {
+        if (back.hasItems || next != null) nav.focusRegion(back);
+      }
       // The nodes are no longer in the tree after this frame.
       e.region.dispose();
     });

@@ -3,6 +3,7 @@ import 'dart:io' show Directory, Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'src/greeter_main.dart';
 import 'osk_main.dart';
 import 'src/installer/installer_main.dart';
 import 'src/api/api.dart';
@@ -33,6 +34,8 @@ Future<void> main(List<String> args) async {
   if (args.contains('--osk')) return runOsk(args);
   // The installer (ISO) and the first-boot wizard are modes of the same
   // binary too: controller-only, no session daemon needed for the installer.
+  // The profile picker of the greeter session (M7).
+  if (wantsGreeter(args)) return runGreeter(args);
   if (wantsInstaller(args) || wantsFirstBoot(args)) {
     return runInstallerMode(args);
   }
