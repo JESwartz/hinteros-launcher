@@ -72,6 +72,13 @@ enum SystemErrorKind {
   /// -32602
   invalidParams,
 
+  /// 3016: a PIN is missing or wrong. `data`: `pin` (`self`, `admin` or
+  /// `target`), `retry_after_ms` while the backoff lock lasts.
+  pinRequired,
+
+  /// 3015: the box has the most profiles it can have. `data['max']`.
+  profileLimit,
+
   /// The requested state already holds (a method answered `job_id: null`).
   nothingToDo,
 
@@ -102,7 +109,12 @@ enum JobKind {
   base('Switching software base'),
   ssh('Changing remote access'),
   install('Installing'),
-  remove('Removing');
+  remove('Removing'),
+  appsRollback('Rolling back apps'),
+  profileCreate('Creating the profile'),
+  profileRemove('Removing the profile'),
+  guest('Changing the guest'),
+  starterSet('Saving the starter apps');
 
   const JobKind(this.title);
   final String title;
@@ -128,7 +140,19 @@ enum JobKind {
       JobStage.activating,
       JobStage.finishing,
     ],
-    rebuild || hardwareRedetect || ssh || remove => const [
+    appsRollback || starterSet => const [
+      JobStage.preparing,
+      JobStage.evaluating,
+      JobStage.activating,
+      JobStage.finishing,
+    ],
+    rebuild ||
+    hardwareRedetect ||
+    ssh ||
+    remove ||
+    profileCreate ||
+    profileRemove ||
+    guest => const [
       JobStage.preparing,
       JobStage.building,
       JobStage.activating,
@@ -371,6 +395,7 @@ class Generation {
     this.rev,
     this.current = false,
     this.booted = false,
+    this.profiles,
   });
 
   final int generation;
@@ -380,6 +405,10 @@ class Generation {
   final String? rev;
   final bool current;
   final bool booted;
+
+  /// The accounts in that generation (0.11), with their names when the box
+  /// still knows them; null when unknown.
+  final List<({String id, String? name})>? profiles;
 }
 
 // ---------------------------------------------------------------- system
@@ -764,6 +793,7 @@ class StoreApp {
     this.state = StoreState.available,
     this.statusReason,
     this.conflicts = const [],
+    this.missingServices = const [],
   });
 
   final String id;
@@ -812,6 +842,10 @@ class StoreApp {
 
   /// Ids of apps that cannot be installed together with this one.
   final List<String> conflicts;
+
+  /// Services (box-wide, admin profile only) this app needs that are not
+  /// enabled on this box (0.11). While any is missing it cannot be installed.
+  final List<({String id, String name})> missingServices;
 
   bool get hasTerms => terms != null;
 

@@ -12,6 +12,7 @@ import '../api/api.dart' as api;
 import '../log.dart';
 import 'daemon_auth.dart';
 import 'daemon_errors.dart';
+import 'daemon_profiles.dart';
 import 'daemon_runtime.dart';
 import 'daemon_store.dart';
 import 'models.dart';
@@ -32,6 +33,11 @@ JobKind _jobKind(api.JobKind k) => switch (k) {
   api.JobKind.rollback => JobKind.rollback,
   api.JobKind.channel => JobKind.channel,
   api.JobKind.base => JobKind.base,
+  api.JobKind.appsRollback => JobKind.appsRollback,
+  api.JobKind.profilesCreate => JobKind.profileCreate,
+  api.JobKind.profilesRemove => JobKind.profileRemove,
+  api.JobKind.guestSet => JobKind.guest,
+  api.JobKind.starterSet => JobKind.starterSet,
   api.JobKind.unknown => JobKind.rebuild,
 };
 
@@ -498,6 +504,9 @@ class DaemonUpdates implements UpdatesRepository {
           rev: g.rev,
           current: g.current,
           booted: g.booted,
+          profiles: g.profiles == null
+              ? null
+              : [for (final p in g.profiles!) (id: p.id, name: p.name)],
         ),
     ];
   });
@@ -679,5 +688,6 @@ SystemServices daemonSystemServices(api.DaemonConnection connection) {
     displayAudio: DaemonDisplayAudio(connection),
     store: DaemonStore(connection, jobs),
     auth: DaemonAuth(connection),
+    profiles: DaemonProfiles(connection, jobs),
   );
 }

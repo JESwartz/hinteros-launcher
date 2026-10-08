@@ -124,9 +124,68 @@ Future<void> _prepareSystem(
     case ('store.list', 'no catalog'):
       s.catalogMissing = true;
   }
+  await _prepareProfiles(mock, method, ex);
   // Jobs the call itself starts get the example's id.
   if (method != 'system.rebuild' || name == 'started') {
     s.jobIdQueue.add(exampleJob);
+  }
+}
+
+/// Puts the mock's profiles (0.11) into the situation an example describes:
+/// a box with 8 profiles, a switch that waits for an app, the sleep lock,
+/// the guest's session, first-boot mode, the greeter.
+Future<void> _prepareProfiles(
+  MockDaemon mock,
+  String method,
+  Map<String, dynamic> ex,
+) async {
+  final p = mock.profiles;
+  final name = ex['name'] as String;
+  final err = ex['error'] as Map<String, dynamic>?;
+  void fill() {
+    while (p.profiles.length < 8) {
+      p.profiles.add(
+        MockWireProfile(
+          id: 'p${p.next++}',
+          name: 'Extra',
+          color: ProfileColor.blue,
+          pin: '0000',
+        ),
+      );
+    }
+  }
+
+  if (method.startsWith('greeter.') && name != 'not the greeter') {
+    p.greeterMode = true;
+  }
+  switch ((method, name)) {
+    case (_, 'full'):
+      fill();
+    case ('session.switch_wait', 'waiting') ||
+        ('session.switch_force_close', _) ||
+        ('session.switch_cancel', 'cancelled'):
+      p.blockSwitch('p3', (id: 'youtube', name: 'YouTube'));
+    case ('session.unlock', _):
+      p.screenLocked = true;
+    case ('session.end_guest', 'ending'):
+      p.current = 'guest';
+    case ('greeter.pin', 'answered'):
+      p.promptFor('p3');
+    case ('system.profiles.setup_admin', 'first profile'):
+      p
+        ..profiles.removeWhere((x) => x.admin)
+        ..setupRequired = true;
+    case ('system.profiles.set_locked', 'too many tries'):
+      p.byId('p1')!.failures = 3;
+    case ('system.apps.list', 'not migrated'):
+      p.schema1 = true;
+    case ('system.apps.accept_terms', _):
+      p.needsTerms.add('steam');
+    case ('system.starter_set.set', _):
+      mock.system.installedApps.addAll(['firefox', 'jellyfin', 'youtube']);
+  }
+  if (err?['code'] == ApiErrorCode.systemUnavailable) {
+    mock.system.unavailable = SystemUnavailableDataReason.down;
   }
 }
 
@@ -309,6 +368,10 @@ void main() {
             await _prepareSystem(mock, method, ex);
           }
           if (MockAuthAgent.handles(method)) await _prepareAuth(mock, ex);
+          if (MockProfileSession.handles(method) &&
+              !method.startsWith('system.')) {
+            await _prepareProfiles(mock, method, ex);
+          }
           if (method == 'session.restart' && ex.containsKey('error')) {
             mock.sessionRestartAvailable = false;
           }

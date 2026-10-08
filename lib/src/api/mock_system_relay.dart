@@ -721,6 +721,11 @@ class MockSystemRelay {
     jobId: _start(kind, onSuccess: onSuccess, apps: apps),
   ).toJson();
 
+  /// Starts a job of [kind] (one at a time: `job_busy`), for the other
+  /// mocks whose methods run jobs (profiles, guest, starter set).
+  String startJob(JobKind kind, {void Function()? onSuccess}) =>
+      _start(kind, onSuccess: onSuccess);
+
   String _start(
     JobKind kind, {
     void Function()? onSuccess,

@@ -11,8 +11,11 @@ import 'dart:io';
 
 import '../api/mock_store.dart' show mockCatalogDir;
 import 'catalog.dart';
+import 'mock_profiles.dart';
 import 'models.dart';
 import 'repositories.dart';
+
+export 'mock_profiles.dart';
 
 String _hex(int n, int len) => n.toRadixString(16).padLeft(len, '0');
 
@@ -937,6 +940,22 @@ class MockDisplayAudio implements DisplayAudioRepository {
 
 // ---------------------------------------------------------------- store
 
+/// A mock-only app that needs a service the box does not run (the Store
+/// shows why it cannot be installed).
+const mockServiceApp = StoreApp(
+  id: 'music-sync',
+  name: 'Music library',
+  summary: 'Your home server\'s music on the TV.',
+  description:
+      'Plays the music on your Jellyfin server. Needs the Jellyfin server on '
+      'this box.',
+  category: StoreCategory.music,
+  sizeMiB: 80,
+  installer: false,
+  icon: StoreIcon(desktopId: 'music-sync'),
+  missingServices: [(id: 'jellyfin-server', name: 'Jellyfin server')],
+);
+
 /// The mock Store's catalog: the fixture in the real index format, read by
 /// the same parser as the real one, plus three mock-only entries (RetroArch
 /// and its cores, a video player) that exercise dependencies and the Store
@@ -986,7 +1005,9 @@ class MockStore implements StoreRepository {
     Set<String>? installed,
     this.iconDir,
     this.moreAfterUpdate = true,
-  }) : _catalog = catalog ?? mockCatalog(),
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now,
+       _catalog = catalog ?? mockCatalog(),
        _installed = {
          ...(installed ??
              const {
@@ -1000,9 +1021,28 @@ class MockStore implements StoreRepository {
        };
 
   final MockJobs jobs;
+  final DateTime Function() _now;
   final List<StoreApp> _catalog;
   final Set<String> _installed;
   final _busy = <String, StoreState>{};
+  final Set<String> _needsTerms = {};
+
+  /// Earlier app generations of this profile (newest first), below the
+  /// current one, which is what [installed] holds.
+  List<AppGeneration> earlierGenerations = [
+    AppGeneration(
+      generation: 2,
+      date: DateTime(2026, 10, 3, 18),
+      ids: const ['crunchyroll', 'firefox', 'jellyfin', 'steam', 'youtube'],
+    ),
+    AppGeneration(
+      generation: 1,
+      date: DateTime(2026, 9, 28, 12),
+      ids: const ['firefox', 'youtube'],
+      systemRev: '0f3c5a9e2b7d4c1a8e6f9b0d2c4e6a8b1d3f5a7c',
+    ),
+  ];
+  int _generation = 3;
 
   /// Where the generic placeholder icons are (`<id>.png`); null: none.
   final String? iconDir;
@@ -1057,8 +1097,86 @@ class MockStore implements StoreRepository {
         icon: a.icon,
         removeDataWarning: a.removeDataWarning,
         state: stateOf(a.id),
+        missingServices: a.missingServices,
       ),
   ];
+
+  @override
+  Set<String> get needsTerms => Set.unmodifiable(_needsTerms);
+
+  /// Apps this profile got with the starter set without accepting their
+  /// terms yet.
+  void setNeedsTerms(Iterable<String> ids) {
+    _needsTerms
+      ..clear()
+      ..addAll(ids);
+    _changes.add(null);
+  }
+
+  @override
+  Future<void> acceptTerms(String id, String version) async {
+    _maybeFail();
+    if (!_needsTerms.contains(id)) {
+      throw SystemException(
+        SystemErrorKind.notFound,
+        '$id has no terms waiting to be accepted.',
+      );
+    }
+    final t = _app(id).terms;
+    if (t != null && t.version != version) {
+      throw SystemException(
+        SystemErrorKind.termsRequired,
+        'The terms of $id have to be accepted first.',
+        data: {'id': id, 'version': t.version},
+      );
+    }
+    log.add('accept_terms:$id=$version');
+    acceptances.add('$id=$version');
+    _needsTerms.remove(id);
+    _changes.add(null);
+  }
+
+  @override
+  Future<List<AppGeneration>> appGenerations() async => [
+    AppGeneration(
+      generation: _generation,
+      date: _now(),
+      ids: [..._installed]..sort(),
+      current: true,
+    ),
+    ...earlierGenerations,
+  ];
+
+  @override
+  Future<JobHandle> rollbackApps(int generation) async {
+    _maybeFail();
+    final g = earlierGenerations
+        .where((g) => g.generation == generation)
+        .firstOrNull;
+    if (g == null) {
+      throw SystemException(
+        SystemErrorKind.notFound,
+        'Generation $generation is not there.',
+      );
+    }
+    log.add('rollback_apps:$generation');
+    return jobs.start(
+      JobKind.appsRollback,
+      onSuccess: () {
+        final before = AppGeneration(
+          generation: _generation,
+          date: _now(),
+          ids: [..._installed]..sort(),
+        );
+        earlierGenerations = [before, ...earlierGenerations].take(3).toList();
+        _generation++;
+        _installed
+          ..clear()
+          ..addAll(g.ids);
+      },
+      onFinish: () => _changes.add(null),
+    );
+  }
 
   void setInstalled(Iterable<String> ids) {
     _installed
@@ -1114,6 +1232,14 @@ class MockStore implements StoreRepository {
     }
 
     add(a);
+    if (a.missingServices.isNotEmpty) {
+      throw SystemException(
+        SystemErrorKind.invalidParams,
+        '${a.name} needs ${a.missingServices.map((s) => s.name).join(', ')}, '
+        'which this box does not run.',
+        data: const {'field': 'ids', 'reason': 'needs_service'},
+      );
+    }
     for (final w in want) {
       final t = w.terms;
       if (t != null && acceptedTerms[w.id] != t.version) {
@@ -1148,6 +1274,7 @@ class MockStore implements StoreRepository {
     _app(id);
     _maybeFail();
     log.add('remove:$id:$deleteData');
+    _needsTerms.remove(id);
     _busy[id] = StoreState.removing;
     _changes.add(null);
     return jobs.start(
@@ -1174,6 +1301,7 @@ class MockSystemServices extends SystemServices {
     required this.mockDisplayAudio,
     required this.mockStore,
     required this.mockAuth,
+    required this.mockProfiles,
   }) : super(
          jobs: mockJobs,
          system: mockSystem,
@@ -1183,6 +1311,7 @@ class MockSystemServices extends SystemServices {
          displayAudio: mockDisplayAudio,
          store: mockStore,
          auth: mockAuth,
+         profiles: mockProfiles,
        );
 
   /// [autoRunJobs]: jobs step through their stages by themselves (`--mock`);
@@ -1192,10 +1321,20 @@ class MockSystemServices extends SystemServices {
     String? iconDir,
     UpdateStatus? status,
     DateTime Function()? now,
+    MockProfileBox? profileBox,
+    String currentProfile = 'p1',
+    bool setupRequired = false,
+    List<StoreApp> extraApps = const [],
   }) {
     final jobs = MockJobs(autoRun: autoRunJobs);
     final updates = MockUpdates(jobs, status: status, now: now);
     final auth = MockAuth();
+    final store = MockStore(
+      jobs,
+      iconDir: iconDir,
+      now: now,
+      catalog: extraApps.isEmpty ? null : [...mockCatalog(), ...extraApps],
+    );
     return MockSystemServices._(
       mockJobs: jobs,
       mockUpdates: updates,
@@ -1204,7 +1343,14 @@ class MockSystemServices extends SystemServices {
       mockNetwork: MockNetwork(),
       mockBluetooth: MockBluetooth(),
       mockDisplayAudio: MockDisplayAudio(),
-      mockStore: MockStore(jobs, iconDir: iconDir),
+      mockStore: store,
+      mockProfiles: MockProfiles(
+        jobs,
+        box: profileBox ?? MockProfileBox(now: now),
+        currentId: currentProfile,
+        setupRequired: setupRequired,
+        adminApps: () => store.installed,
+      ),
     );
   }
 
@@ -1216,6 +1362,10 @@ class MockSystemServices extends SystemServices {
   final MockDisplayAudio mockDisplayAudio;
   final MockStore mockStore;
   final MockAuth mockAuth;
+  final MockProfiles mockProfiles;
 
-  void dispose() => mockJobs.dispose();
+  void dispose() {
+    mockJobs.dispose();
+    mockProfiles.dispose();
+  }
 }

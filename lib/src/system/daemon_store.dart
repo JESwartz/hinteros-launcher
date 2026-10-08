@@ -69,6 +69,7 @@ class DaemonStore implements StoreRepository {
   List<StoreApp> _apps = const [];
   bool _loaded = false;
   bool _more = false;
+  Set<String> _needsTerms = const {};
 
   /// Listings requested and applied: replies can overtake each other, and
   /// only the newest request's answer is kept.
@@ -92,6 +93,8 @@ class DaemonStore implements StoreRepository {
   Stream<void> get changes => _changes.stream;
   @override
   bool get moreAfterUpdate => _more;
+  @override
+  Set<String> get needsTerms => _needsTerms;
 
   /// A refresh nobody waits for (an event, a reconnect): a failure is just
   /// the listing staying as it was.
@@ -106,9 +109,20 @@ class DaemonStore implements StoreRepository {
     _applied = seq;
     _apps = [for (final a in r.apps) ?_app(a)];
     _more = r.moreAfterUpdate;
+    _needsTerms = await _profileNeedsTerms();
     _loaded = true;
     _icons = null;
     _changes.add(null);
+  }
+
+  /// `apps.list`'s `needs_terms` (empty on a box that still has box-wide
+  /// apps, or when the call fails: the app then just launches).
+  Future<Set<String>> _profileNeedsTerms() async {
+    try {
+      return {...(await _conn.systemAppsList()).needsTerms};
+    } catch (_) {
+      return const {};
+    }
   }
 
   @override
@@ -166,6 +180,10 @@ class DaemonStore implements StoreRepository {
       removeDataWarning: removeDataWarningFor(a.dataPaths),
       state: state,
       statusReason: a.statusReason,
+      missingServices: [
+        for (final s in a.missingServices ?? const <api.NamedApp>[])
+          (id: s.id, name: s.name),
+      ],
     );
   }
 
@@ -196,7 +214,7 @@ class DaemonStore implements StoreRepository {
   /// refreshed.
   Future<T> _withRevision<T>(Future<T> Function(String revision) call) async {
     for (var attempt = 0; ; attempt++) {
-      final revision = (await _conn.systemSettingsGet()).revision;
+      final revision = await _revision();
       try {
         return await call(revision);
       } on api.ApiException catch (e) {
@@ -208,6 +226,55 @@ class DaemonStore implements StoreRepository {
       }
     }
   }
+
+  /// The profile's own revision (`apps.list`, per-profile apps), else, on a
+  /// box that still has box-wide apps, `settings.get`'s.
+  Future<String> _revision() async {
+    try {
+      return (await _conn.systemAppsList()).revision;
+    } on api.ApiException catch (e) {
+      final data = e.data is Map ? e.data! as Map : const {};
+      final schema1 =
+          e.code == api.ApiErrorCode.unavailable && data['service'] == 'apps';
+      if (!schema1 && e.code != api.ApiErrorCode.methodNotFound) rethrow;
+      return (await _conn.systemSettingsGet()).revision;
+    }
+  }
+
+  @override
+  Future<void> acceptTerms(String id, String version) async {
+    await guardCall(
+      () => _conn.systemAppsAcceptTerms(
+        api.SystemAppsAcceptTermsParams(id: id, version: version),
+      ),
+    );
+    _needsTerms = {..._needsTerms}..remove(id);
+    _changes.add(null);
+  }
+
+  @override
+  Future<List<AppGeneration>> appGenerations() => guardCall(() async {
+    final r = await _conn.systemAppsGenerations();
+    return [
+      for (final g in r.generations)
+        AppGeneration(
+          generation: g.generation,
+          date: DateTime.fromMillisecondsSinceEpoch(g.date * 1000),
+          ids: g.ids,
+          systemRev: g.systemRev,
+          current: g.current,
+        ),
+    ];
+  });
+
+  @override
+  Future<JobHandle> rollbackApps(int generation) => _jobs.start(
+    JobKind.appsRollback,
+    () async => (await _conn.systemAppsRollback(
+      api.SystemAppsRollbackParams(generation: generation),
+    )).jobId,
+    nothingToDo: 'Your apps already are like that.',
+  );
 
   @override
   Future<JobHandle> install(

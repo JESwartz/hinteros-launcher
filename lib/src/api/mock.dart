@@ -5,6 +5,7 @@ import 'daemon.dart';
 import 'errors.dart';
 import 'generated.dart';
 import 'mock_auth.dart';
+import 'mock_profiles.dart';
 import 'mock_runtime.dart';
 import 'mock_system_relay.dart';
 import 'version.dart';
@@ -148,7 +149,18 @@ class MockDaemon extends DaemonConnection {
       },
     );
     runtime = MockRuntime(emit: (name, params) => emitRaw(name, params));
+    profiles = MockProfileSession(
+      emit: (name, params) => emitRaw(name, params),
+      relay: system,
+      isLauncher: () => clientName == 'hinteros-launcher',
+      now: now,
+    );
   }
+
+  /// Profiles (session API 0.11): the current profile, the switch, the
+  /// sleep lock, the greeter mode and the relayed `system.profiles.*`,
+  /// `system.guest.set`, per-profile `system.apps.*` and the starter set.
+  late final MockProfileSession profiles;
 
   /// The polkit authentication agent (session API 0.8): the admin password
   /// prompt of relayed calls, `auth.respond` and `auth.cancel`.
@@ -303,6 +315,9 @@ class MockDaemon extends DaemonConnection {
       );
     }
     if (MockAuthAgent.handles(method)) return auth.call(method, params);
+    if (MockProfileSession.handles(method)) {
+      return profiles.call(method, params);
+    }
     if (MockSystemRelay.handles(method)) return system.call(method, params);
     if (MockRuntime.handles(method)) return runtime.call(method, params);
     switch (method) {

@@ -9,6 +9,9 @@
 library;
 
 import 'models.dart';
+import 'profiles.dart';
+
+export 'profiles.dart';
 
 /// Jobs (`jobs.get`, `job_started` / `job_progress` / `job_finished`).
 abstract class JobsRepository {
@@ -247,6 +250,24 @@ abstract class StoreRepository {
   /// deletes the app's files in every profile. [SystemErrorKind.appConflict]
   /// when another installed app needs it.
   Future<JobHandle> remove(String id, {bool deleteData = false});
+
+  // Per profile (session API 0.11): every profile has its own apps.
+
+  /// Starter-set apps of this profile whose vendor terms it has not
+  /// accepted yet (`apps.list`'s `needs_terms`): their first launch shows
+  /// the terms. Follows [changes].
+  Set<String> get needsTerms;
+
+  /// `apps.accept_terms {id, version}`: the profile accepted the terms of
+  /// an app it got with the starter set.
+  Future<void> acceptTerms(String id, String version);
+
+  /// `apps.generations`: this profile's app generations, newest first.
+  /// [SystemErrorKind.unavailable] on a box that still has box-wide apps.
+  Future<List<AppGeneration>> appGenerations();
+
+  /// `apps.rollback {generation}`: this profile's apps as they were then.
+  Future<JobHandle> rollbackApps(int generation);
 }
 
 /// Everything the system UI needs, passed down as one object.
@@ -260,6 +281,7 @@ class SystemServices {
     required this.displayAudio,
     required this.store,
     required this.auth,
+    required this.profiles,
   });
 
   final JobsRepository jobs;
@@ -270,4 +292,8 @@ class SystemServices {
   final DisplayAudioRepository displayAudio;
   final StoreRepository store;
   final AuthRepository auth;
+
+  /// Profiles (M7): the current profile, switching, the sleep lock,
+  /// Settings -> Profiles.
+  final ProfilesRepository profiles;
 }

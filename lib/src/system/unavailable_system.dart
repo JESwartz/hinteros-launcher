@@ -157,6 +157,78 @@ class _UnavailableStore implements StoreRepository {
   @override
   Future<JobHandle> remove(String id, {bool deleteData = false}) =>
       Future.error(_gone);
+  @override
+  Set<String> get needsTerms => const {};
+  @override
+  Future<void> acceptTerms(String id, String version) => Future.error(_gone);
+  @override
+  Future<List<AppGeneration>> appGenerations() => Future.error(_gone);
+  @override
+  Future<JobHandle> rollbackApps(int generation) => Future.error(_gone);
+}
+
+/// Profiles on a box (or daemon) without them: every call fails.
+class UnavailableProfiles implements ProfilesRepository {
+  const UnavailableProfiles();
+
+  @override
+  Future<CurrentProfile> current() => Future.error(_gone);
+  @override
+  Future<ProfilesState> list() => Future.error(_gone);
+  @override
+  Stream<List<ProfileInfo>> get changes => const Stream.empty();
+  @override
+  Stream<bool> get lockChanges => const Stream.empty();
+  @override
+  Stream<SwitchEvent> get switchEvents => const Stream.empty();
+  @override
+  Future<ProfileJob> create({
+    required String name,
+    required ProfileColor color,
+    required String pin,
+    required bool locked,
+  }) => Future.error(_gone);
+  @override
+  Future<void> setupAdmin({
+    required String name,
+    required ProfileColor color,
+    required String pin,
+    required bool locked,
+  }) => Future.error(_gone);
+  @override
+  Future<void> rename(String id, String name, {String? adminPin}) =>
+      Future.error(_gone);
+  @override
+  Future<void> setColor(ProfileColor color) => Future.error(_gone);
+  @override
+  Future<void> setPin(String pin, {String? currentPin}) => Future.error(_gone);
+  @override
+  Future<void> setLocked(bool locked, String pin) => Future.error(_gone);
+  @override
+  Future<void> resetPin(String id, String newPin, {required String adminPin}) =>
+      Future.error(_gone);
+  @override
+  Future<JobHandle> remove(String id, String pin) => Future.error(_gone);
+  @override
+  Future<JobHandle?> setGuest(bool enabled, String adminPin) =>
+      Future.error(_gone);
+  @override
+  Future<StarterSet> starterSet() => Future.error(_gone);
+  @override
+  Future<JobHandle?> setStarterSet(List<String> ids, String adminPin) =>
+      Future.error(_gone);
+  @override
+  Future<void> switchTo(String id) => Future.error(_gone);
+  @override
+  Future<void> keepWaiting() => Future.error(_gone);
+  @override
+  Future<void> forceClose(String appId) => Future.error(_gone);
+  @override
+  Future<void> cancelSwitch() => Future.error(_gone);
+  @override
+  Future<void> unlock(String pin) => Future.error(_gone);
+  @override
+  Future<void> endGuest() => Future.error(_gone);
 }
 
 class _UnavailableAuth implements AuthRepository {
@@ -181,4 +253,5 @@ SystemServices unavailableSystemServices() => SystemServices(
   displayAudio: _UnavailableDisplayAudio(),
   store: _UnavailableStore(),
   auth: _UnavailableAuth(),
+  profiles: const UnavailableProfiles(),
 );
