@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hinteros_launcher/src/api/api.dart' show Connecting;
 import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
 import 'package:hinteros_launcher/src/system/mock_system.dart';
+import 'package:hinteros_launcher/src/ui/profiles/profile_loading.dart';
 
+import '../profiles/loading_test.dart' show appWith, public;
 import '../profiles/session_test.dart' show frames, harness, keys, openChip;
 import '../profiles/store_profile_test.dart' show termsHarness;
 import '../support/harness.dart';
@@ -38,7 +41,7 @@ void main() {
     h.services.mockProfiles.blockingApp = (id: 'youtube', name: 'YouTube');
     await h.pump(t);
     await openChip(t);
-    await keys(t, [kEnter, kEnter]);
+    await keys(t, [kEnter, kRight, kEnter]);
     await frames(t, 10);
     await shot(t, 'not_responding');
   });
@@ -154,5 +157,15 @@ void moreGoldens() {
     }
     await keys(t, [kEnter]);
     await shot(t, 'rollback_profiles');
+  });
+
+  testWidgets('first frame: loading the profile', (t) async {
+    setView(t);
+    final h = Harness(mock: StuckConnection(const Connecting()));
+    await t.pumpWidget(
+      appWith(h, LoadingIdentity.fromPublicJson(public, 'hinteros')),
+    );
+    await t.pump(const Duration(milliseconds: 300));
+    await shot(t, 'startup_loading');
   });
 }

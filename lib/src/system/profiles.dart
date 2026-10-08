@@ -476,6 +476,7 @@ class PickerView {
     this.guest = true,
     this.firstBoot = false,
     this.focus,
+    this.switchTo,
     this.appearance = const PickerAppearance(),
   });
 
@@ -485,6 +486,10 @@ class PickerView {
 
   /// The profile to focus first: a switch's target, else the last used.
   final String? focus;
+
+  /// A switch from a profile's session to this one is pending (greeter.list
+  /// `switch_to`): the picker goes straight to it (its PIN pad).
+  final String? switchTo;
   final PickerAppearance appearance;
 
   PickerProfile? byId(String id) =>

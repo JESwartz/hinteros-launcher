@@ -96,14 +96,32 @@ launcher's proposal until the daemon's M7 schema is vendored (see `m7/DECISIONS.
   Guest, Add profile (name with the launcher's own keyboard, colour, PIN twice, "Lock this
   profile", then "Getting things ready" for the create job), Power. A locked profile opens the
   PIN pad: D-pad and A, B deletes (B on an empty pad goes back), digits and Enter on a keyboard,
-  no auto-submit, "That PIN didn't match." and the backoff countdown.
+  no auto-submit, "That PIN didn't match." and the backoff countdown. After a login greetd
+  accepted, "Loading Sam…" (`profile_loading.dart`: avatar, name, spinner) until the picker
+  exits; the console shows the same words on the VT (`hinteros-system pin splash`) and the
+  session's launcher shows the page again on its first frames (name from
+  `/run/hinteros/profiles-public.json` by `$USER`) until Home has its data (at most 15 s).
+  `greeter.list.switch_to` (a pending switch whose fast path did not apply, e.g. a locked
+  target): the picker goes straight to that profile's PIN pad, never showing the bare tiles
+  first; B there shows the tiles. The tiles and their page (`picker_view.dart`) are shared with
+  the in-session picker.
 - **In a profile's session** (`lib/src/ui/profiles/session_profile.dart`): `profile.current`
   decides first-boot mode (`setup_required`: the wizard ends with "Create your profile",
   `system.profiles.setup_admin`), the one-time "Set your PIN" (`pin_set` false) and the sleep
   lock screen (`screen_locked`, `lock_state`, `session.unlock`). The profile chip (last item of
   the tab row) opens Switch profile / Profile settings (End guest session for the guest).
-  Switching shows what closes, then the Switching page (`switch_progress`) and the
-  not-responding pop-up (`switch_blocked`: Keep waiting, Force close, Cancel switch).
+  Switch profile (chip, lock screen, Settings) opens the boot picker's screen over the session:
+  the open profile is marked "Open" and focused, choosing it (or B) goes back to where you were
+  (nothing is called); another profile or Guest goes straight to the Switching page
+  (`switch_progress`) and the not-responding pop-up (`switch_blocked`: Keep waiting, Force
+  close, Cancel switch), with one question only while a Steam game runs; Add profile creates one
+  ("Getting things ready") and switches to it. The target's PIN is asked by the picker on the
+  other side.
+- **Forgotten PIN**: every page that asks for an existing PIN (picker, lock screen, own-PIN
+  checks, admin-PIN prompts) says "Forgot your PIN?": the person who set up the box removes it
+  from a terminal (`sudo hinteros-system reset-pin <name>`), and the profile chooses a new one
+  ("Set your PIN") at its next start. There is no in-UI recovery of the admin profile's PIN;
+  another profile's PIN can still be reset with the admin PIN.
 - **Settings -> Profiles** (`profiles_section.dart`): profiles with storage, Add profile, Rename,
   Colour, Change PIN, Lock this profile, App history (per-profile app rollback), Remove (two
   confirmations, "Hold A for 3 seconds", the PIN); the admin profile also edits the starter apps
@@ -688,6 +706,11 @@ contrast). Tests load the bundled font explicitly (`flutter_test_config.dart`, n
 Ahem), use a fixed clock, the in-process mock, the committed placeholder art
 (`test/fixtures/art/`, decoded into the image cache before the first frame) and settle animations.
 The comparator allows 0.05% differing pixels.
+`test/golden/greeter_test.dart` covers the picker (`greeter_*`: tiles, PIN pad with the "Forgot your
+PIN?" hint, Add profile, `greeter_loading` after a login) and `test/golden/profiles_test.dart` the
+profile screens in a session (`profiles_*`: the chip menu, `profiles_switch_picker` with the open
+profile marked, not responding, the lock screen, Settings -> Profiles, `profiles_startup_loading`
+for the first frames).
 
 ```
 nix run .#update-goldens   # renders them in the Nix sandbox (same environment as the check), copies them in

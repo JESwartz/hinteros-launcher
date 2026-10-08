@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hinteros_launcher/src/api/api.dart' show AppsLaunchParams;
 import 'package:hinteros_launcher/src/system/mock_system.dart';
 
 import '../support/harness.dart';
@@ -83,17 +84,15 @@ void main() {
     await t.pumpAndSettle();
     await openChip(t);
     await keys(t, [enter]); // Switch profile
-    expect(find.text('Switch profile'), findsWidgets);
-    expect(find.text('Sam'), findsOneWidget);
-    expect(find.text('Guest'), findsOneWidget);
-    await keys(t, [enter]); // Sam
-    expect(
-      find.textContaining(
-        "Switching closes everything running in James's profile: YouTube.",
-      ),
-      findsOneWidget,
-    );
-    await keys(t, [right, enter], settle: false); // Switch
+    // The boot picker's screen, James marked open and focused.
+    expect(find.text('Who is watching?'), findsOneWidget);
+    for (final n in ['James', 'Sam', 'Guest', 'Add profile', 'Power']) {
+      expect(find.text(n), findsOneWidget, reason: n);
+    }
+    expect(find.byKey(const ValueKey('current-badge')), findsOneWidget);
+    expect(focusLabel(), endsWith('/tiles:0'));
+    // Sam: no question (YouTube is not a game), straight to Switching.
+    await keys(t, [right, enter], settle: false);
     expect(h.services.mockProfiles.log, contains('switch:p3'));
     expect(find.text('Switching to Sam'), findsOneWidget);
     await frames(t, 20);
@@ -109,7 +108,7 @@ void main() {
     h.services.mockProfiles.blockingApp = (id: 'youtube', name: 'YouTube');
     await h.pump(t);
     await openChip(t);
-    await keys(t, [enter, enter]); // Switch profile, Sam (nothing runs)
+    await keys(t, [enter, right, enter]); // Switch profile, Sam
     await frames(t, 10);
     expect(find.text("YouTube isn't responding (10 s)."), findsOneWidget);
     expect(
@@ -132,7 +131,7 @@ void main() {
     h.services.mockProfiles.blockingApp = (id: 'youtube', name: 'YouTube');
     await h.pump(t);
     await openChip(t);
-    await keys(t, [enter, enter]);
+    await keys(t, [enter, right, enter]);
     await frames(t, 10);
     await keys(t, [right, right, enter], settle: false);
     await frames(t, 10);
@@ -155,6 +154,12 @@ void main() {
     await keys(t, [escape]);
     expect(
       find.text('This profile is locked. Type its PIN to go on.'),
+      findsOneWidget,
+    );
+    // How a forgotten PIN is removed (root, in a terminal).
+    expect(find.text('Forgot your PIN?'), findsOneWidget);
+    expect(
+      find.textContaining('sudo hinteros-system reset-pin Sam'),
       findsOneWidget,
     );
     await typePin(t, '2468');
@@ -208,6 +213,8 @@ void main() {
     final h = harness(box: box);
     await h.pump(t);
     expect(find.text('Set your PIN'), findsOneWidget);
+    // A new PIN is chosen here: no "Forgot your PIN?".
+    expect(find.text('Forgot your PIN?'), findsNothing);
     await keys(t, [escape]);
     expect(find.text('Set your PIN'), findsOneWidget, reason: 'unskippable');
     await typePin(t, '1234');
@@ -230,6 +237,70 @@ void main() {
     await frames(t, 20);
     expect(h.services.mockProfiles.log, contains('end_guest'));
     expect(find.text('Leaving Guest'), findsOneWidget);
+  });
+
+  testWidgets('Switch profile: the open profile (or B) goes back to it, '
+      'nothing is called', (t) async {
+    setView(t);
+    final h = harness();
+    await h.pump(t);
+    await h.launch(t, 'youtube');
+    h.mock.pressHome();
+    await t.pumpAndSettle();
+    await openChip(t);
+    await keys(t, [enter]); // Switch profile
+    expect(find.text('Who is watching?'), findsOneWidget);
+    await keys(t, [enter]); // James, the open one
+    expect(find.text('Who is watching?'), findsNothing);
+    expect(find.textContaining('Switching'), findsNothing);
+    expect(
+      h.services.mockProfiles.log.where((l) => l.startsWith('switch')),
+      isEmpty,
+    );
+    expect(h.mock.running.map((a) => a.id), contains('youtube'));
+    // B: the same (the focus is back on the chip).
+    expect(focusLabel(), 'tabs/tabs:5');
+    await keys(t, [enter, enter, right]);
+    await keys(t, [escape]);
+    expect(find.text('Who is watching?'), findsNothing);
+    expect(
+      h.services.mockProfiles.log.where((l) => l.startsWith('switch')),
+      isEmpty,
+    );
+  });
+
+  testWidgets('a running game is the one question before a switch', (t) async {
+    setView(t);
+    final h = harness();
+    await h.pump(t);
+    await h.mock.appsLaunch(
+      const AppsLaunchParams(url: 'steam://rungameid/504230'),
+    );
+    await t.pumpAndSettle();
+    h.mock.pressHome();
+    await t.pumpAndSettle();
+    await openChip(t);
+    await keys(t, [enter, right, enter]); // Switch profile, Sam
+    expect(find.text('Celeste is still running'), findsOneWidget);
+    expect(h.services.mockProfiles.log, isNot(contains('switch:p3')));
+    await keys(t, [right, enter], settle: false); // Close it and switch
+    await frames(t);
+    expect(h.services.mockProfiles.log, contains('switch:p3'));
+    expect(find.text('Switching to Sam'), findsOneWidget);
+    await frames(t, 20);
+  });
+
+  testWidgets('Guest from the in-session picker switches to the guest', (
+    t,
+  ) async {
+    setView(t);
+    final h = harness();
+    await h.pump(t);
+    await openChip(t);
+    await keys(t, [enter, right, right, enter], settle: false);
+    await frames(t);
+    expect(h.services.mockProfiles.log, contains('switch:guest'));
+    await frames(t, 20);
   });
 }
 

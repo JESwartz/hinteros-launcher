@@ -8,6 +8,7 @@ import 'osk_main.dart';
 import 'src/installer/installer_main.dart';
 import 'src/api/api.dart';
 import 'src/app.dart';
+import 'src/ui/profiles/profile_loading.dart';
 import 'src/settings/launcher_settings.dart';
 import 'src/system/daemon_system.dart';
 import 'src/system/home_relaunch.dart';
@@ -85,6 +86,11 @@ Future<void> main(List<String> args) async {
         : daemonSystemServices(connection),
     showFps: showFps,
     showServer: _flag(args, '--server', 'HINTEROS_SERVER'),
+    // "Loading Sam…" until Home has its data, continuing the picker's and
+    // the console's loading screen (the name from the service's public view).
+    startup: mock
+        ? null
+        : LoadingIdentity.fromPublicView(Platform.environment['USER']),
   );
   if (connection is MockDaemon) {
     app = _DevKeys(mock: connection, iconDir: iconDir, child: app);

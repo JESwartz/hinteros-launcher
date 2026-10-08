@@ -388,6 +388,7 @@ class DaemonGreeter implements GreeterRepository {
       guest: r.guest,
       firstBoot: r.firstBoot,
       focus: r.focus as String?,
+      switchTo: r.switchTo as String?,
       appearance: PickerAppearance(
         textScale: r.appearance.textScale.toDouble(),
         highContrast: r.appearance.highContrast,

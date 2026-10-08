@@ -7,6 +7,7 @@ import 'data/launcher_data.dart';
 import 'system/repositories.dart';
 import 'settings/launcher_settings.dart';
 import 'theme/hinter_theme.dart';
+import 'ui/profiles/profile_loading.dart';
 import 'ui/shell.dart';
 
 /// The layout is designed for 1920x1080 logical pixels. A 4K screen under
@@ -23,6 +24,7 @@ class LauncherApp extends StatelessWidget {
     this.now,
     this.showFps = false,
     this.showServer = false,
+    this.startup,
   });
 
   final LauncherData data;
@@ -31,6 +33,9 @@ class LauncherApp extends StatelessWidget {
   final DateTime Function()? now;
   final bool showFps;
   final bool showServer;
+
+  /// See [LauncherShell.startup].
+  final LoadingIdentity? startup;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +65,7 @@ class LauncherApp extends StatelessWidget {
             now: now,
             showFps: showFps,
             showServer: showServer,
+            startup: startup,
           ),
         );
       },

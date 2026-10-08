@@ -19,6 +19,7 @@ import '../nav_focusable.dart';
 import '../pages.dart' show FullPage;
 import '../widgets.dart';
 import 'first_boot_page.dart';
+import 'picker_view.dart';
 import 'profile_form.dart';
 import 'profile_ui.dart';
 
@@ -207,6 +208,7 @@ class ProfileSession extends ChangeNotifier {
         modal: modal,
         title: c?.displayName ?? 'Locked',
         body: 'This profile is locked. Type its PIN to go on.',
+        forgotPinFor: c?.displayName,
         canLeave: false,
         avatar: ProfileAvatar(
           initial: c?.initial ?? '?',
@@ -240,7 +242,10 @@ class ProfileSession extends ChangeNotifier {
 
   // ---- switching
 
-  /// The in-session picker, the confirmations, then the Switching page.
+  /// Switch profile: the same picker as at boot, over the session. The
+  /// current profile stays open (choosing it, or B, goes back to it); another
+  /// profile or Guest goes straight to the Switching page (one confirmation
+  /// only while a game runs); Add profile creates one and switches to it.
   Future<void> switchProfile(BuildContext context) async {
     final ProfilesState state;
     try {
@@ -257,38 +262,47 @@ class ProfileSession extends ChangeNotifier {
     }
     if (!context.mounted) return;
     final me = current;
-    final target = await ModalScope.of(context).show<_Target>(
-      (context, modal) =>
-          _SwitchPicker(modal: modal, state: state, currentId: me?.id),
+    final tile = await ModalScope.of(context).show<PickerTile>(
+      (context, modal) => SessionPickerPage(
+        modal: modal,
+        state: state,
+        current: me,
+        system: services.system,
+      ),
     );
-    if (target == null || !context.mounted) return;
-    final apps = running();
-    if (apps.isNotEmpty) {
-      final names = apps.map((a) => a.name).join(', ');
-      final ok = await showConfirm(
+    if (tile == null || tile.current || !context.mounted) return;
+    if (tile.kind == PickerTileKind.add) {
+      final made = await createProfileFlow(
         context,
-        title: 'Switch to ${target.name}?',
-        body:
-            'Switching closes everything running in '
-            "${me?.displayName ?? 'this profile'}'s profile: $names.",
-        confirmLabel: 'Switch',
+        services,
+        taken: [for (final p in state.profiles) p.name],
       );
-      if (ok == null || !context.mounted) return;
-      final games = apps.where((a) => a.source == AppSource.steam).toList();
-      if (games.isNotEmpty) {
-        final sure = await showConfirm(
-          context,
-          title: '${games.first.name} is still running',
-          body:
-              'A game is running. Progress that is not saved is lost when '
-              'it closes. Switch anyway?',
-          confirmLabel: 'Close it and switch',
-          danger: true,
-        );
-        if (sure == null || !context.mounted) return;
-      }
+      if (made == null || !context.mounted) return;
+      if (!await _confirmGame(context)) return;
+      if (!context.mounted) return;
+      await startSwitch(context, made.id, made.name);
+      return;
     }
-    await startSwitch(context, target.id, target.name);
+    if (!await _confirmGame(context)) return;
+    if (!context.mounted) return;
+    await startSwitch(context, tile.id!, tile.name);
+  }
+
+  /// A running game loses what it has not saved: the one question before a
+  /// switch. True: go on.
+  Future<bool> _confirmGame(BuildContext context) async {
+    final games = running().where((a) => a.source == AppSource.steam).toList();
+    if (games.isEmpty) return true;
+    final sure = await showConfirm(
+      context,
+      title: '${games.first.name} is still running',
+      body:
+          'A game is running. Progress that is not saved is lost when '
+          'it closes. Switch anyway?',
+      confirmLabel: 'Close it and switch',
+      danger: true,
+    );
+    return sure != null;
   }
 
   /// `session.switch_profile`, then the Switching page until the session
@@ -380,88 +394,136 @@ class ProfileSession extends ChangeNotifier {
   }
 }
 
-class _Target {
-  const _Target(this.id, this.name);
-  final String id;
-  final String name;
+/// A new profile from Settings or the in-session picker: the form, the
+/// create job ("Getting things ready"). Null: given up or it failed (said).
+Future<({String id, String name})?> createProfileFlow(
+  BuildContext context,
+  SystemServices services, {
+  required List<String> taken,
+}) async {
+  final form = await showProfileForm(
+    context,
+    editText: sessionEditText(context),
+    taken: taken,
+  );
+  if (form == null || !context.mounted) return null;
+  final ProfileJob job;
+  try {
+    job = await services.profiles.create(
+      name: form.name,
+      color: form.color,
+      pin: form.pin,
+      locked: form.locked,
+    );
+  } catch (e) {
+    if (context.mounted) {
+      await showMessage(
+        context,
+        title: "Couldn't add the profile",
+        body: e is SystemException && e.kind == SystemErrorKind.profileLimit
+            ? 'This box has as many profiles as it can have.'
+            : (e is SystemException ? e.message : '$e'),
+      );
+    }
+    return null;
+  }
+  if (!context.mounted) return null;
+  final ok = await showProfileJob(
+    context,
+    jobs: services.jobs,
+    job: job.job,
+    what: "Creating ${form.name}'s profile... (about a minute)",
+  );
+  return ok ? (id: job.id, name: form.name) : null;
 }
 
-/// The picker inside a session: every other profile, and Guest.
-class _SwitchPicker extends StatelessWidget {
-  const _SwitchPicker({
+/// The picker inside a session: the boot picker's screen with the current
+/// profile marked "Open" and focused. Closes with the chosen tile (the
+/// current one: back to the session), or null on B.
+class SessionPickerPage extends StatefulWidget {
+  const SessionPickerPage({
+    super.key,
     required this.modal,
     required this.state,
-    required this.currentId,
+    required this.current,
+    this.system,
   });
 
-  final ModalHandle<_Target> modal;
+  final ModalHandle<PickerTile> modal;
   final ProfilesState state;
-  final String? currentId;
+  final CurrentProfile? current;
+
+  /// Power (sleep, restart, shut down); null: no Power row.
+  final SystemRepository? system;
+
+  @override
+  State<SessionPickerPage> createState() => _SessionPickerPageState();
+}
+
+class _SessionPickerPageState extends State<SessionPickerPage> {
+  String? _message;
+  bool _focused = false;
+
+  bool get _guestSession => widget.current?.guest ?? false;
+
+  List<PickerTile> _tiles() {
+    final me = widget.current?.id;
+    return pickerTiles(
+      profiles: [
+        for (final p in widget.state.profiles)
+          PickerTile.profile(
+            id: p.id,
+            name: p.name,
+            initial: p.initial,
+            color: p.color,
+            locked: p.locked,
+            admin: p.admin,
+            current: !_guestSession && p.id == me,
+          ),
+      ],
+      guest: widget.state.guestEnabled || _guestSession,
+      guestCurrent: _guestSession,
+      max: widget.state.max,
+    );
+  }
+
+  Future<void> _power(PowerAction a) async {
+    final s = widget.system;
+    if (s == null) return;
+    try {
+      await s.power(a);
+    } on SystemException catch (e) {
+      if (mounted) setState(() => _message = e.message);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final others = [
-      for (final p in state.profiles)
-        if (p.id != currentId) p,
-    ];
-    final guest = state.guestEnabled && currentId != CurrentProfile.guestId;
-    final n = others.length + (guest ? 1 : 0);
-    modal.region.setRows([if (n > 0) NavRow('tiles', n)]);
-    final t = HinterTheme.of(context);
-    return FullPage(
-      title: 'Switch profile',
-      subtitle: 'B goes back.',
-      child: n == 0
-          ? Text(
-              'There is no other profile yet. Add one in Settings, Profiles.',
-              style: t.body,
-            )
-          : SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              clipBehavior: Clip.none,
-              padding: const EdgeInsets.symmetric(vertical: HinterTokens.s3),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (var i = 0; i < others.length; i++) ...[
-                    if (i > 0) const SizedBox(width: HinterTokens.s4),
-                    NavFocusable(
-                      region: modal.region,
-                      rowKey: 'tiles',
-                      col: i,
-                      onSelect: () =>
-                          modal.close(_Target(others[i].id, others[i].name)),
-                      builder: (_, f) => ProfileTile(
-                        name: others[i].name,
-                        initial: others[i].initial,
-                        color: others[i].color,
-                        locked: others[i].locked,
-                        admin: others[i].admin,
-                        focused: f,
-                      ),
-                    ),
-                  ],
-                  if (guest) ...[
-                    if (others.isNotEmpty)
-                      const SizedBox(width: HinterTokens.s4),
-                    NavFocusable(
-                      region: modal.region,
-                      rowKey: 'tiles',
-                      col: others.length,
-                      onSelect: () => modal.close(
-                        const _Target(CurrentProfile.guestId, 'Guest'),
-                      ),
-                      builder: (_, f) => ProfileTile(
-                        name: 'Guest',
-                        initial: 'G',
-                        guest: true,
-                        focused: f,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
+    final region = widget.modal.region;
+    final tiles = _tiles();
+    if (!_focused) {
+      _focused = true;
+      final i = tiles.indexWhere((t) => t.current);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) region.model.goTo(0, i < 0 ? 0 : i);
+      });
+    }
+    return ProfilePickerView(
+      region: region,
+      tiles: tiles,
+      onSelect: widget.modal.close,
+      subtitle:
+          'Choose your profile. Move with the D-pad, A chooses; '
+          'B goes back.',
+      power: [
+        if (widget.system != null) ...[
+          PowerAction.sleep,
+          PowerAction.restart,
+          PowerAction.shutdown,
+        ],
+      ],
+      onPower: (a) => unawaited(_power(a)),
+      message: _message,
     );
   }
 }

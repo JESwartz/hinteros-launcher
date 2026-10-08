@@ -87,6 +87,9 @@ class MockProfileSession {
   /// This daemon runs the greeter (`greeter.*` work, nothing else needs to).
   bool greeterMode = false;
 
+  /// greeter.list `switch_to`: a pending switch to this profile.
+  String? switchTo;
+
   /// The sleep lock is up.
   bool screenLocked = false;
 
@@ -791,6 +794,7 @@ class MockProfileSession {
     guest: guestEnabled,
     firstBoot: !profiles.any((x) => x.admin),
     focus: profiles.isEmpty ? null : profiles.first.id,
+    switchTo: switchTo,
     appearance: const GreeterListResultAppearance(
       textScale: 1.0,
       highContrast: false,

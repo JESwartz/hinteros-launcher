@@ -182,6 +182,11 @@ Future<void> _prepareProfiles(
       p.current = 'guest';
     case ('greeter.pin', _):
       p.promptFor('p1');
+    case ('greeter.list', 'a pending switch to a locked profile'):
+      p
+        ..profiles.removeWhere((x) => x.id != 'p1')
+        ..byId('p1')!.locked = true
+        ..switchTo = 'p1';
     case ('system.profiles.setup_admin', _):
       p
         ..profiles.removeWhere((x) => x.admin)

@@ -82,4 +82,12 @@ void main() {
     await p.press(NavAction.accept, settle: false);
     await shot(t, 'getting_ready');
   });
+
+  testWidgets('loading the chosen profile', (t) async {
+    final p = Picker(t);
+    await p.pump();
+    await p.press(NavAction.accept, settle: false);
+    await t.pump(const Duration(milliseconds: 300));
+    await shot(t, 'loading');
+  });
 }

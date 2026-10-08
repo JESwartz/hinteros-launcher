@@ -648,12 +648,19 @@ class MockProfiles implements ProfilesRepository {
 
 /// The greeter side: the picker of the same fake box.
 class MockGreeter implements GreeterRepository {
-  MockGreeter(this.jobs, {MockProfileBox? box, this.focus = 'p1'})
-    : box = box ?? MockProfileBox();
+  MockGreeter(
+    this.jobs, {
+    MockProfileBox? box,
+    this.focus = 'p1',
+    this.switchTo,
+  }) : box = box ?? MockProfileBox();
 
   final MockJobs jobs;
   final MockProfileBox box;
   String? focus;
+
+  /// A pending switch (greeter.list `switch_to`).
+  String? switchTo;
 
   /// Profiles that may be entered once without their PIN (just created).
   final Set<String> _tokens = {};
@@ -680,6 +687,7 @@ class MockGreeter implements GreeterRepository {
     guest: box.guestEnabled,
     firstBoot: !box.profiles.any((p) => p.admin),
     focus: focus,
+    switchTo: switchTo,
   );
 
   @override

@@ -20,6 +20,7 @@ import 'auth_prompt.dart';
 import 'common.dart';
 import 'dialogs.dart' show Choice, showChoice, showFailureOn;
 import 'profiles/first_launch_terms.dart';
+import 'profiles/profile_loading.dart';
 import 'profiles/session_profile.dart';
 import 'games_screen.dart';
 import 'home_screen.dart';
@@ -72,11 +73,17 @@ class LauncherShell extends StatefulWidget {
     this.now,
     this.showFps = false,
     this.showServer = false,
+    this.startup,
   });
 
   final LauncherData data;
   final SettingsController settings;
   final SystemServices services;
+
+  /// Who this session is, as known before the daemon answers: the shell
+  /// shows "Loading Sam…" over Home until Home has its data (the same
+  /// page the picker and the console showed). Null: no loading page.
+  final LoadingIdentity? startup;
 
   /// Clock source; null means the real clock, ticking. A fixed function is
   /// for tests and goldens (no timer).
@@ -204,6 +211,11 @@ class _LauncherShellState extends State<LauncherShell> {
     };
     d.start();
     d.addListener(_onData);
+    if (_loading) {
+      d.addListener(_checkLoading);
+      _loadingCap = Timer(_loadingMax, _endLoading);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkLoading());
+    }
     _profile.addListener(_onProfile);
     widget.settings.addListener(_mirrorAppearance);
     WidgetsBinding.instance.addPostFrameCallback(
@@ -321,6 +333,39 @@ class _LauncherShellState extends State<LauncherShell> {
 
   bool _launchShown = false;
 
+  /// The loading page is up (see [LauncherShell.startup]).
+  late bool _loading = widget.startup != null;
+  Timer? _loadingCap;
+
+  /// How long the loading page waits for Home's data at most.
+  static const _loadingMax = Duration(seconds: 15);
+
+  void _checkLoading() {
+    if (!_loading || !mounted) return;
+    final d = widget.data;
+    final s = d.status;
+    final ready =
+        (s is Connected && (d.appList != null || d.appsError != null)) ||
+        s is VersionMismatch;
+    if (ready) _endLoading();
+  }
+
+  void _endLoading() {
+    _loadingCap?.cancel();
+    if (!_loading || !mounted) return;
+    setState(() => _loading = false);
+  }
+
+  LoadingIdentity _loadingIdentity() {
+    final c = _profile.current;
+    if (c == null) return widget.startup ?? const LoadingIdentity();
+    if (c.guest) return LoadingIdentity.guestIdentity;
+    return LoadingIdentity(
+      name: c.name ?? widget.startup?.name,
+      color: c.color,
+    );
+  }
+
   bool _didInitialFocus = false;
 
   void _initialFocus() {
@@ -408,6 +453,8 @@ class _LauncherShellState extends State<LauncherShell> {
     _authPrompts.dispose();
     _reminders.dispose();
     widget.data.removeListener(_onData);
+    widget.data.removeListener(_checkLoading);
+    _loadingCap?.cancel();
     _clock?.cancel();
     for (final s in _subs) {
       s.cancel();
@@ -699,6 +746,10 @@ class _LauncherShellState extends State<LauncherShell> {
                       name: l.name,
                       iconPath: l.iconPath,
                     ),
+                  ),
+                if (_loading)
+                  Positioned.fill(
+                    child: ProfileLoadingPage(identity: _loadingIdentity()),
                   ),
                 if (widget.showFps) const FpsOverlay(),
                 Builder(

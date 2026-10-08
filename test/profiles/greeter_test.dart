@@ -90,7 +90,8 @@ void main() {
     expect(focusLabel(), 'content/tiles:0');
     await p.press(NavAction.accept, settle: false);
     expect(p.greeter.entered, 'p1');
-    expect(find.text('Hello, James'), findsOneWidget);
+    expect(find.text('Loading James…'), findsOneWidget);
+    expect(find.text('Who is watching?'), findsNothing);
   });
 
   testWidgets('a locked profile asks for its PIN; wrong PINs back off', (
@@ -220,5 +221,59 @@ void main() {
     expect(robin.name, 'Robin');
     expect(robin.locked, isTrue);
     expect(robin.pin, '2580');
+  });
+
+  testWidgets('the PIN pad says how a forgotten PIN is removed', (t) async {
+    final p = Picker(t);
+    await p.pump();
+    await p.press(NavAction.right);
+    await p.press(NavAction.accept);
+    expect(find.text('Forgot your PIN?'), findsOneWidget);
+    expect(
+      find.textContaining('sudo hinteros-system reset-pin Sam'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a pending switch to a locked profile goes straight to its PIN '
+      'pad, never the bare tiles', (t) async {
+    final p = Picker(t);
+    p.greeter.switchTo = 'p3';
+    p.greeter.focus = 'p3';
+    setView(t);
+    addTearDown(p.pad.close);
+    await t.pumpWidget(
+      GreeterApp(
+        greeter: p.greeter,
+        jobs: p.services.mockJobs,
+        system: p.services.mockSystem,
+        pad: p.pad.stream,
+        now: p.clock.now,
+      ),
+    );
+    // Every frame on the way: no tiles.
+    for (var i = 0; i < 10; i++) {
+      await t.pump(const Duration(milliseconds: 20));
+      if (find.text("Type Sam's PIN.").evaluate().isNotEmpty) break;
+      expect(find.text('Who is watching?'), findsNothing);
+    }
+    await t.pumpAndSettle();
+    expect(find.text("Type Sam's PIN."), findsOneWidget);
+    expect(p.greeter.log.first, 'login:p3');
+    await p.typePin('1357', settle: false);
+    expect(p.greeter.entered, 'p3');
+    expect(find.text('Loading Sam…'), findsOneWidget);
+  });
+
+  testWidgets("backing out of the pending switch's PIN pad shows the tiles", (
+    t,
+  ) async {
+    final p = Picker(t);
+    p.greeter.switchTo = 'p3';
+    await p.pump();
+    expect(find.text("Type Sam's PIN."), findsOneWidget);
+    await p.press(NavAction.back);
+    expect(find.text('Who is watching?'), findsOneWidget);
+    expect(p.greeter.log, contains('cancel'));
   });
 }

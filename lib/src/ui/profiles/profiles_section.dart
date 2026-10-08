@@ -89,39 +89,12 @@ class _ProfilesSectionState extends State<ProfilesSection> {
   // ---- actions
 
   Future<void> _add(ProfilesState s, Future<void> Function() reload) async {
-    final form = await showProfileForm(
+    await createProfileFlow(
       context,
-      editText: sessionEditText(context),
+      _s,
       taken: [for (final p in s.profiles) p.name],
     );
-    if (form == null || !mounted) return;
-    final ProfileJob job;
-    try {
-      job = await _p.create(
-        name: form.name,
-        color: form.color,
-        pin: form.pin,
-        locked: form.locked,
-      );
-    } catch (e) {
-      if (mounted) {
-        await _message(
-          "Couldn't add the profile",
-          e is SystemException && e.kind == SystemErrorKind.profileLimit
-              ? 'This box has as many profiles as it can have.'
-              : (e is SystemException ? e.message : '$e'),
-        );
-      }
-      return;
-    }
-    if (!mounted) return;
-    await showProfileJob(
-      context,
-      jobs: _s.jobs,
-      job: job.job,
-      what: "Creating ${form.name}'s profile... (about a minute)",
-    );
-    await reload();
+    if (mounted) await reload();
   }
 
   Future<void> _actions(
@@ -140,7 +113,9 @@ class _ProfilesSectionState extends State<ProfilesSection> {
         const Choice('Rename', 'rename'),
         if (own) const Choice('Colour', 'color'),
         if (own) const Choice('Change PIN', 'pin'),
-        if (!own) const Choice('Give it a new PIN', 'reset'),
+        // Not the admin profile: a forgotten admin PIN is removed from a
+        // terminal as root (`sudo hinteros-system reset-pin`), never here.
+        if (!own && !p.admin) const Choice('Give it a new PIN', 'reset'),
         if (own)
           Choice(
             p.locked ? 'Stop asking for the PIN' : 'Lock this profile',
@@ -157,7 +132,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
       case 'color':
         await _color(p);
       case 'pin':
-        await _changePin();
+        await _changePin(p.name);
       case 'reset':
         await _resetPin(p);
       case 'lock':
@@ -231,11 +206,12 @@ class _ProfilesSectionState extends State<ProfilesSection> {
     return again;
   }
 
-  Future<void> _changePin() async {
+  Future<void> _changePin(String myName) async {
     final current = await showPinEntry(
       context,
       title: 'Change PIN',
       body: 'First your current PIN.',
+      forgotPinFor: myName,
       submitLabel: 'Next',
       check: (_) async => const PinAccepted(),
     );
@@ -275,6 +251,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
     await showPinEntry(
       context,
       title: p.locked ? 'Stop asking for the PIN' : 'Lock this profile',
+      forgotPinFor: p.name,
       body: p.locked
           ? 'Your profile will open without the PIN. Type your PIN to '
                 'confirm.'
@@ -320,6 +297,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
       body: own
           ? 'Type your PIN to remove your profile.'
           : "Type the admin profile's PIN to remove ${p.name}.",
+      forgotPinFor: own ? p.name : forgotPinAdmin,
       check: (pin) async {
         try {
           job = await _p.remove(p.id, pin);

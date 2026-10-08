@@ -8187,6 +8187,7 @@ class GreeterListResult {
     required this.guest,
     required this.firstBoot,
     required this.focus,
+    this.switchTo,
     required this.appearance,
   });
 
@@ -8194,6 +8195,9 @@ class GreeterListResult {
   final bool guest;
   final bool firstBoot;
   final Object? focus;
+
+  /// A switch from a profile's session to this profile is pending (an unexpired hint whose fast path did not apply, e.g. a locked target): the picker goes straight to it (its PIN pad) instead of showing the tiles first. Absent or null: none.
+  final Object? switchTo;
   final GreeterListResultAppearance appearance;
 
   factory GreeterListResult.fromJson(Map<String, dynamic> json) =>
@@ -8208,6 +8212,7 @@ class GreeterListResult {
         guest: json['guest'] as bool,
         firstBoot: json['first_boot'] as bool,
         focus: json['focus'] == null ? null : json['focus'],
+        switchTo: json['switch_to'] == null ? null : json['switch_to'],
         appearance: GreeterListResultAppearance.fromJson(
           (json['appearance'] as Map).cast<String, dynamic>(),
         ),
@@ -8218,6 +8223,7 @@ class GreeterListResult {
     'guest': guest,
     'first_boot': firstBoot,
     'focus': focus,
+    'switch_to': ?switchTo,
     'appearance': appearance.toJson(),
   };
 

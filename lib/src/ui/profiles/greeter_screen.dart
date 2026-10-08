@@ -16,10 +16,11 @@ import '../../settings/launcher_settings.dart';
 import '../../system/models.dart';
 import '../../system/repositories.dart';
 import '../../theme/hinter_theme.dart';
-import '../nav_focusable.dart';
 import '../pages.dart' show FullPage;
 import '../widgets.dart';
+import 'picker_view.dart';
 import 'profile_form.dart';
+import 'profile_loading.dart';
 import 'profile_ui.dart';
 
 /// The picker as an app: the picker's appearance (the most accessible of the
@@ -122,9 +123,14 @@ class _GreeterScreenState extends State<GreeterScreen> {
   Object? _error;
 
   /// Set once a profile's session is starting: the picker is done.
-  String? _entering;
+  LoadingIdentity? _entering;
   bool _focusedFirst = false;
   String? _message;
+
+  /// greeter.list's `switch_to`, taken once: the picker goes straight to that
+  /// profile (its PIN pad) instead of showing the tiles first.
+  bool _switchTaken = false;
+  bool _goingStraight = false;
 
   ConsoleController get _c => widget.console;
   DateTime _now() => (widget.now ?? DateTime.now)();
@@ -140,11 +146,18 @@ class _GreeterScreenState extends State<GreeterScreen> {
     try {
       final v = await widget.greeter.load();
       if (!mounted) return;
+      final straight = _straightTo(v);
       setState(() {
         _view = v;
         _error = null;
+        _goingStraight = straight != null;
       });
       widget.onAppearance?.call(v.appearance);
+      if (straight != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_straight(straight));
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e);
@@ -156,6 +169,24 @@ class _GreeterScreenState extends State<GreeterScreen> {
     }
   }
 
+  /// The pending switch's target tile, the first time the list has one.
+  PickerTile? _straightTo(PickerView v) {
+    if (_switchTaken) return null;
+    final id = v.switchTo;
+    if (id == null) return null;
+    _switchTaken = true;
+    if (id == CurrentProfile.guestId) {
+      return v.guest ? const PickerTile.guest() : null;
+    }
+    final p = v.byId(id);
+    return p == null ? null : _profileTile(p);
+  }
+
+  Future<void> _straight(PickerTile tile) async {
+    await _choose(tile);
+    if (mounted && _entering == null) setState(() => _goingStraight = false);
+  }
+
   Timer? _retry;
 
   @override
@@ -164,33 +195,49 @@ class _GreeterScreenState extends State<GreeterScreen> {
     super.dispose();
   }
 
-  /// The tiles in order: the profiles, Guest, Add profile.
-  List<_Entry> _entries(PickerView v) => [
-    for (final p in v.profiles) _Entry.profile(p),
-    if (v.guest) const _Entry.guest(),
-    if (v.profiles.length < 8) const _Entry.add(),
-  ];
+  PickerTile _profileTile(PickerProfile p) {
+    final until = p.lockedUntil;
+    return PickerTile.profile(
+      id: p.id,
+      name: p.name,
+      initial: p.initial,
+      color: p.color,
+      locked: p.locked,
+      admin: p.admin,
+      note: until != null && until.isAfter(_now())
+          ? retryText(until.difference(_now()))
+          : null,
+    );
+  }
 
-  void _started(String id, String name) {
+  /// The tiles in order: the profiles, Guest, Add profile.
+  List<PickerTile> _tiles(PickerView v) => pickerTiles(
+    profiles: [for (final p in v.profiles) _profileTile(p)],
+    guest: v.guest,
+  );
+
+  void _started(PickerTile tile) {
     setState(() {
-      _entering = name;
+      _entering = tile.kind == PickerTileKind.guest
+          ? LoadingIdentity.guestIdentity
+          : LoadingIdentity(name: tile.name, color: tile.color);
       _message = null;
     });
     widget.onEntered?.call();
   }
 
-  Future<void> _choose(_Entry e) async {
+  Future<void> _choose(PickerTile e) async {
     switch (e.kind) {
-      case _Kind.add:
+      case PickerTileKind.add:
         await _add();
-      case _Kind.guest:
-        await _enter(CurrentProfile.guestId, 'Guest');
-      case _Kind.profile:
-        await _enter(e.profile!.id, e.profile!.name, profile: e.profile);
+      case PickerTileKind.guest:
+      case PickerTileKind.profile:
+        await _enter(e);
     }
   }
 
-  Future<void> _enter(String id, String name, {PickerProfile? profile}) async {
+  Future<void> _enter(PickerTile tile) async {
+    final id = tile.id!;
     LoginOutcome r;
     try {
       r = await widget.greeter.login(id);
@@ -200,34 +247,37 @@ class _GreeterScreenState extends State<GreeterScreen> {
     }
     if (!mounted) return;
     if (r is LoginStarted) {
-      _started(id, name);
+      _started(tile);
       return;
     }
+    final profile = _view?.byId(id);
     if (r is LoginRefused) {
       // Still locked out from earlier tries.
-      await _askPin(id, name, profile, lockedUntil: r.retryAt);
+      await _askPin(tile, profile, lockedUntil: r.retryAt);
       return;
     }
-    await _askPin(id, name, profile, lockedUntil: profile?.lockedUntil);
+    await _askPin(tile, profile, lockedUntil: profile?.lockedUntil);
   }
 
   Future<void> _askPin(
-    String id,
-    String name,
+    PickerTile tile,
     PickerProfile? profile, {
     DateTime? lockedUntil,
   }) async {
+    final id = tile.id!;
+    final name = tile.name;
     final pin = await showPinEntry(
       context,
       title: name,
       body: "Type $name's PIN.",
       now: widget.now,
+      forgotPinFor: name,
       lockedUntil: lockedUntil != null && lockedUntil.isAfter(_now())
           ? lockedUntil
           : null,
       avatar: ProfileAvatar(
-        initial: profile?.initial ?? '?',
-        color: profile?.color,
+        initial: profile?.initial ?? tile.initial ?? '?',
+        color: profile?.color ?? tile.color,
         locked: true,
         size: 200,
       ),
@@ -248,10 +298,11 @@ class _GreeterScreenState extends State<GreeterScreen> {
     if (!mounted) return;
     if (pin == null) {
       unawaited(widget.greeter.cancel().catchError((_) {}));
+      if (_goingStraight) setState(() => _goingStraight = false);
       _c.refocus();
       return;
     }
-    _started(id, name);
+    _started(tile);
   }
 
   Future<void> _add() async {
@@ -299,7 +350,17 @@ class _GreeterScreenState extends State<GreeterScreen> {
       return;
     }
     // A one-time token lets the creator straight in.
-    await _enter(job.id, form.name);
+    await _enter(
+      PickerTile.profile(
+        id: job.id,
+        name: form.name,
+        initial: form.name.isEmpty
+            ? '?'
+            : String.fromCharCode(form.name.runes.first).toUpperCase(),
+        color: form.color,
+        locked: form.locked,
+      ),
+    );
   }
 
   Future<void> _power(PowerAction a) async {
@@ -314,18 +375,11 @@ class _GreeterScreenState extends State<GreeterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final t = HinterTheme.of(context);
     final region = _c.content;
     final entering = _entering;
     if (entering != null) {
       region.setRows(const []);
-      return FullPage(
-        title: entering == 'Guest' ? 'Guest' : 'Hello, $entering',
-        child: const Align(
-          alignment: Alignment.topLeft,
-          child: StatusLine('Opening...', busy: true),
-        ),
-      );
+      return ProfileLoadingPage(identity: entering);
     }
     final v = _view;
     if (v == null) {
@@ -361,119 +415,42 @@ class _GreeterScreenState extends State<GreeterScreen> {
         ),
       );
     }
-    final entries = _entries(v);
-    final power = [
-      if (widget.system != null) ...[
-        PowerAction.sleep,
-        PowerAction.restart,
-        PowerAction.shutdown,
-      ],
-    ];
-    region.setRows([
-      NavRow('tiles', entries.length),
-      if (power.isNotEmpty) NavRow('power', power.length),
-    ]);
+    if (_goingStraight) {
+      // On the way to the switch target's PIN pad: never the bare tiles
+      // (a still background: the pad opens over it at once).
+      region.setRows(const []);
+      return ColoredBox(
+        color: HinterTheme.of(context).background,
+        child: const SizedBox.expand(),
+      );
+    }
+    final tiles = _tiles(v);
     if (!_focusedFirst) {
       _focusedFirst = true;
-      final i = entries.indexWhere(
-        (e) =>
-            e.profile?.id == v.focus ||
-            (e.kind == _Kind.guest && v.focus == CurrentProfile.guestId),
-      );
-      region.model.goTo(0, i < 0 ? 0 : i);
-      WidgetsBinding.instance.addPostFrameCallback((_) => _c.refocus());
+      final i = tiles.indexWhere((e) => e.id != null && e.id == v.focus);
+      // Rows first (the view sets them), then the focus.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        region.model.goTo(0, i < 0 ? 0 : i);
+        _c.refocus();
+      });
     }
-    return FullPage(
+    return ProfilePickerView(
+      region: region,
+      tiles: tiles,
+      onSelect: (t) => unawaited(_choose(t)),
       title: v.firstBoot ? 'Welcome' : 'Who is watching?',
       subtitle: v.firstBoot
           ? 'This box is getting ready for its first profile.'
           : 'Choose your profile. Move with the D-pad, A chooses.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: HinterTokens.s4),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.none,
-            padding: const EdgeInsets.symmetric(vertical: HinterTokens.s3),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < entries.length; i++) ...[
-                  if (i > 0) const SizedBox(width: HinterTokens.s4),
-                  NavFocusable(
-                    region: region,
-                    rowKey: 'tiles',
-                    col: i,
-                    onSelect: () => unawaited(_choose(entries[i])),
-                    builder: (_, f) => _tile(entries[i], f),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (_message != null) ...[
-            const SizedBox(height: HinterTokens.s2),
-            StatusLine(_message!, error: true),
-          ],
-          const Spacer(),
-          if (power.isNotEmpty)
-            Row(
-              children: [
-                Text('Power', style: t.bodyDim),
-                const SizedBox(width: HinterTokens.s3),
-                DialogButtonsRow(
-                  region: region,
-                  rowKey: 'power',
-                  buttons: [
-                    for (final a in power)
-                      btn(a.label, () => unawaited(_power(a))),
-                  ],
-                ),
-              ],
-            ),
+      power: [
+        if (widget.system != null) ...[
+          PowerAction.sleep,
+          PowerAction.restart,
+          PowerAction.shutdown,
         ],
-      ),
+      ],
+      onPower: (a) => unawaited(_power(a)),
+      message: _message,
     );
   }
-
-  Widget _tile(_Entry e, bool focused) {
-    switch (e.kind) {
-      case _Kind.guest:
-        return ProfileTile(
-          name: 'Guest',
-          initial: 'G',
-          guest: true,
-          focused: focused,
-          note: 'Cleared at restart',
-        );
-      case _Kind.add:
-        return ProfileTile(name: 'Add profile', add: true, focused: focused);
-      case _Kind.profile:
-        final p = e.profile!;
-        final until = p.lockedUntil;
-        return ProfileTile(
-          name: p.name,
-          initial: p.initial,
-          color: p.color,
-          locked: p.locked,
-          admin: p.admin,
-          focused: focused,
-          note: until != null && until.isAfter(_now())
-              ? retryText(until.difference(_now()))
-              : null,
-        );
-    }
-  }
-}
-
-enum _Kind { profile, guest, add }
-
-class _Entry {
-  const _Entry.profile(PickerProfile this.profile) : kind = _Kind.profile;
-  const _Entry.guest() : kind = _Kind.guest, profile = null;
-  const _Entry.add() : kind = _Kind.add, profile = null;
-
-  final _Kind kind;
-  final PickerProfile? profile;
 }

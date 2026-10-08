@@ -135,6 +135,25 @@ class AdminBadge extends StatelessWidget {
   }
 }
 
+/// "Open": the profile whose session is running (the in-session picker).
+class CurrentBadge extends StatelessWidget {
+  const CurrentBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HinterTheme.of(context);
+    return Container(
+      key: const ValueKey('current-badge'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      decoration: BoxDecoration(
+        color: t.accent,
+        borderRadius: BorderRadius.circular(HinterTokens.radiusPill),
+      ),
+      child: Text('Open', style: t.caption.copyWith(color: t.onAccent)),
+    );
+  }
+}
+
 /// A picker tile: a big avatar with the name under it (and a lock and the
 /// admin badge where they apply). Also Guest and Add profile.
 class ProfileTile extends StatelessWidget {
@@ -149,6 +168,7 @@ class ProfileTile extends StatelessWidget {
     this.guest = false,
     this.add = false,
     this.note,
+    this.current = false,
   });
 
   final String name;
@@ -164,6 +184,10 @@ class ProfileTile extends StatelessWidget {
 
   /// A line under the name ("Try again in 30 s").
   final String? note;
+
+  /// The profile whose session is open (the in-session picker): an "Open"
+  /// badge; choosing it goes back to it.
+  final bool current;
 
   @override
   Widget build(BuildContext context) {
@@ -204,6 +228,10 @@ class ProfileTile extends StatelessWidget {
             if (admin) ...[
               const SizedBox(height: HinterTokens.s1),
               const AdminBadge(),
+            ],
+            if (current) ...[
+              const SizedBox(height: HinterTokens.s1),
+              const CurrentBadge(),
             ],
             if (note != null) ...[
               const SizedBox(height: HinterTokens.s1),
@@ -536,8 +564,10 @@ Future<String?> showPinEntry(
   DateTime Function()? now,
   List<({String label, VoidCallback onSelect})> extraActions = const [],
   bool canLeave = true,
+  String? forgotPinFor,
 }) => ModalScope.of(context).show<String>(
   (context, modal) => PinEntryPage(
+    forgotPinFor: forgotPinFor,
     modal: modal,
     title: title,
     body: body,
@@ -566,6 +596,7 @@ class PinEntryPage extends StatefulWidget {
     this.now,
     this.canLeave = true,
     this.extraActions = const [],
+    this.forgotPinFor,
   });
 
   final ModalHandle<String> modal;
@@ -583,6 +614,11 @@ class PinEntryPage extends StatefulWidget {
 
   /// Buttons under the pad ("Switch profile" on the lock screen).
   final List<({String label, VoidCallback onSelect})> extraActions;
+
+  /// Asking for an existing PIN: whose ([forgotPinAdmin] for the admin
+  /// profile's). Shows how a forgotten one is removed. Null: a new PIN is
+  /// being chosen (no hint).
+  final String? forgotPinFor;
 
   @override
   State<PinEntryPage> createState() => _PinEntryPageState();
@@ -702,6 +738,10 @@ class _PinEntryPageState extends State<PinEntryPage> {
                   const SizedBox(height: HinterTokens.s2),
                   Text(pinDisclaimer, style: t.caption),
                 ],
+                if (widget.forgotPinFor case final who?) ...[
+                  const SizedBox(height: HinterTokens.s3),
+                  ForgotPinHint(who: who),
+                ],
               ],
             ),
           ),
@@ -794,6 +834,7 @@ Future<bool> withAdminPin(
     context,
     title: title,
     body: body ?? 'This needs the admin profile\'s PIN.',
+    forgotPinFor: forgotPinAdmin,
     check: (pin) async {
       try {
         await action(pin);
@@ -804,4 +845,46 @@ Future<bool> withAdminPin(
     },
   );
   return pin != null;
+}
+
+// ---------------------------------------------------------------- forgotten PIN
+
+/// [PinEntryPage.forgotPinFor] when the admin profile's PIN is asked and its
+/// name is not at hand.
+const forgotPinAdmin = '';
+
+/// The reset command for [name] (quoted when it has spaces); the admin
+/// placeholder for [forgotPinAdmin].
+String resetPinCommand(String name) {
+  final arg = name.isEmpty
+      ? '<admin profile name>'
+      : (name.contains(RegExp(r'\s')) ? '"$name"' : name);
+  return 'sudo hinteros-system reset-pin $arg';
+}
+
+/// "Forgot your PIN?": only the person who set up the box can remove a PIN,
+/// from a terminal as root (owner decision); the profile then chooses a new
+/// one at its next start. Nothing else about the box is shown.
+class ForgotPinHint extends StatelessWidget {
+  const ForgotPinHint({super.key, required this.who});
+
+  /// The profile's name, or [forgotPinAdmin].
+  final String who;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HinterTheme.of(context);
+    return Column(
+      key: const ValueKey('forgot-pin'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Forgot your PIN?', style: t.caption.copyWith(color: t.text)),
+        Text(
+          'The person who set up this box can remove it from a terminal: '
+          '${resetPinCommand(who)}. You then choose a new one.',
+          style: t.caption,
+        ),
+      ],
+    );
+  }
 }
