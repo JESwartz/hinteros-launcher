@@ -35,6 +35,16 @@ rules in `hinteros-docs/design/api.md`). The socket is `$HINTEROS_SESSION_SOCKET
 `$XDG_RUNTIME_DIR/hinteros/session.sock`. If the daemon is missing or speaks another API version,
 the home screen says so and the client keeps retrying with backoff.
 
+**After a system switch** (`lib/src/system/home_relaunch.dart`): gamescope runs the launcher
+through the session's home loop (hinteros `nixos/modules/session.nix`), which sets
+`HINTEROS_HOME_LINK` (`/run/current-system/hinteros-console/home`, the current system's
+launcher), `HINTEROS_HOME_EXE` (the resolved launcher it started) and `HINTEROS_HOME_RELAUNCH`
+(75). When
+the link now points to a different launcher and the daemon refuses this one's API version, or
+the daemon connection comes back after a drop (the switch restarted the daemon), the launcher
+exits with 75 and the loop starts the new one in the same gamescope session. With the same
+launcher installed, or without those variables (`--mock`, development), it stays and retries.
+
 | Path | What |
 |---|---|
 | `schema/session-api.json` | Vendored copy of the daemon's schema (source of truth lives in `hinteros-daemon`) |

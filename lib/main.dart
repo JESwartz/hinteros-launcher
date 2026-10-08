@@ -9,6 +9,7 @@ import 'src/api/api.dart';
 import 'src/app.dart';
 import 'src/settings/launcher_settings.dart';
 import 'src/system/daemon_system.dart';
+import 'src/system/home_relaunch.dart';
 import 'src/system/mock_system.dart';
 
 export 'src/app.dart' show LauncherApp;
@@ -46,6 +47,14 @@ Future<void> main(List<String> args) async {
               : mockAppsWithIcons(iconDir, without: {'youtube', 'plex'}),
         )
       : DaemonClient(socketPath: defaultSocketPath());
+  // After a system switch replaced the daemon: hand over to the new launcher
+  // (only under the session's home loop).
+  if (!mock) {
+    HomeRelaunch.fromEnvironment().watch(
+      connection.status,
+      connection.statusChanges,
+    );
+  }
   final settings = await SettingsController.load(FileSettingsStorage.xdg());
   final data = buildData(connection);
   Widget app = LauncherApp(
