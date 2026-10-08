@@ -60,6 +60,7 @@ Future<void> openChip(WidgetTester t) async {
 }
 
 void main() {
+  appearanceTests();
   testWidgets('the chip opens Switch profile and Profile settings', (t) async {
     setView(t);
     final h = harness();
@@ -229,5 +230,29 @@ void main() {
     await frames(t, 20);
     expect(h.services.mockProfiles.log, contains('end_guest'));
     expect(find.text('Leaving Guest'), findsOneWidget);
+  });
+}
+
+void appearanceTests() {
+  testWidgets('the picker gets the profile\'s text size and contrast', (
+    t,
+  ) async {
+    setView(t);
+    final h = harness();
+    await h.pump(t);
+    expect(h.services.mockProfiles.appearance, (
+      textScale: 1.0,
+      highContrast: false,
+      reduceMotion: false,
+    ));
+    h.settings.update(
+      h.settings.value.copyWith(textScale: 1.4, highContrast: true),
+    );
+    await t.pumpAndSettle();
+    expect(h.services.mockProfiles.appearance, (
+      textScale: 1.4,
+      highContrast: true,
+      reduceMotion: false,
+    ));
   });
 }

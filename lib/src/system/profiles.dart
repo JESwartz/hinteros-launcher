@@ -371,6 +371,14 @@ abstract class ProfilesRepository {
   /// `profiles.set_appearance {color}` (own profile).
   Future<void> setColor(ProfileColor color);
 
+  /// `profiles.set_appearance {text_scale, high_contrast, reduce_motion}`:
+  /// the three launcher settings the picker mirrors (own profile).
+  Future<void> mirrorAppearance({
+    required double textScale,
+    required bool highContrast,
+    required bool reduceMotion,
+  });
+
   /// `profiles.set_pin`; [currentPin] null only while no PIN is set.
   Future<void> setPin(String pin, {String? currentPin});
 

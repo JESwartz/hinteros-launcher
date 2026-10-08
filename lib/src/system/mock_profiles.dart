@@ -365,6 +365,22 @@ class MockProfiles implements ProfilesRepository {
     _changed();
   }
 
+  /// The appearance the picker mirrors, as last sent.
+  ({double textScale, bool highContrast, bool reduceMotion})? appearance;
+
+  @override
+  Future<void> mirrorAppearance({
+    required double textScale,
+    required bool highContrast,
+    required bool reduceMotion,
+  }) async {
+    appearance = (
+      textScale: textScale,
+      highContrast: highContrast,
+      reduceMotion: reduceMotion,
+    );
+  }
+
   @override
   Future<void> setPin(String pin, {String? currentPin}) async {
     _maybeFail();

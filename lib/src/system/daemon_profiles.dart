@@ -204,6 +204,21 @@ class DaemonProfiles implements ProfilesRepository {
   );
 
   @override
+  Future<void> mirrorAppearance({
+    required double textScale,
+    required bool highContrast,
+    required bool reduceMotion,
+  }) => guardCall(
+    () => _conn.systemProfilesSetAppearance(
+      api.SystemProfilesSetAppearanceParams(
+        textScale: textScale,
+        highContrast: highContrast,
+        reduceMotion: reduceMotion,
+      ),
+    ),
+  );
+
+  @override
   Future<void> setPin(String pin, {String? currentPin}) => guardCall(
     () => _conn.systemProfilesSetPin(
       api.SystemProfilesSetPinParams(pin: pin, currentPin: currentPin),

@@ -203,6 +203,12 @@ class UnavailableProfiles implements ProfilesRepository {
   @override
   Future<void> setPin(String pin, {String? currentPin}) => Future.error(_gone);
   @override
+  Future<void> mirrorAppearance({
+    required double textScale,
+    required bool highContrast,
+    required bool reduceMotion,
+  }) => Future.error(_gone);
+  @override
   Future<void> setLocked(bool locked, String pin) => Future.error(_gone);
   @override
   Future<void> resetPin(String id, String newPin, {required String adminPin}) =>

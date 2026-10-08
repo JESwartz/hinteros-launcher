@@ -205,6 +205,7 @@ class _LauncherShellState extends State<LauncherShell> {
     d.start();
     d.addListener(_onData);
     _profile.addListener(_onProfile);
+    widget.settings.addListener(_mirrorAppearance);
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => unawaited(_profile.start()),
     );
@@ -333,11 +334,34 @@ class _LauncherShellState extends State<LauncherShell> {
   /// The profile is known (or changed): the chip joins the tab row.
   void _onProfile() {
     if (!mounted) return;
+    _mirrorAppearance();
     final n = _sections.length + (_profile.current == null ? 0 : 1);
     if (_tabs.model.rows.firstOrNull?.length != n) {
       _tabs.setRows([NavRow('tabs', n)]);
     }
     setState(() {});
+  }
+
+  (double, bool, bool)? _mirrored;
+
+  /// The picker uses the most accessible of the profiles' text size, high
+  /// contrast and reduced motion: tell the service this profile's.
+  void _mirrorAppearance() {
+    final c = _profile.current;
+    if (c == null || c.guest || c.setupRequired) return;
+    final s = widget.settings.value;
+    final now = (s.textScale, s.highContrast, s.reduceMotion);
+    if (now == _mirrored) return;
+    _mirrored = now;
+    unawaited(
+      widget.services.profiles
+          .mirrorAppearance(
+            textScale: s.textScale,
+            highContrast: s.highContrast,
+            reduceMotion: s.reduceMotion,
+          )
+          .catchError((_) {}),
+    );
   }
 
   /// A on the profile chip.
@@ -378,6 +402,7 @@ class _LauncherShellState extends State<LauncherShell> {
   @override
   void dispose() {
     _profile.removeListener(_onProfile);
+    widget.settings.removeListener(_mirrorAppearance);
     _profile.dispose();
     _reminders.removeListener(_onReminders);
     _authPrompts.dispose();
