@@ -1,9 +1,13 @@
 /// First-boot mode inside the session (profiles.md "First-boot mode"): when
 /// `profile.current` says `setup_required` (no admin profile exists; this
 /// session runs on the spare account), the launcher opens this wizard over
-/// Home: controllers, network, display, then "Create your profile" (the
-/// admin profile, `profiles.setup_admin`: no rebuild, no network), and ends
-/// on Home in the new profile.
+/// Home: controllers, network, display, then the profile form for the admin
+/// profile (`profiles.setup_admin`: no rebuild, no network), and ends on Home
+/// in the new profile.
+///
+/// Every step between Welcome and All set is a choice: a step with nothing to
+/// choose is skipped (a display whose mode can't be set, or that has only one
+/// mode), and the profile step is the form itself, not a page about it.
 library;
 
 import 'dart:async';
@@ -17,6 +21,7 @@ import '../../theme/hinter_theme.dart';
 import '../dialogs.dart';
 import '../modal_host.dart';
 import '../pages.dart' show FullPage;
+import '../system/hardware_sections.dart' show KeepDisplayDialog;
 import '../widgets.dart';
 import 'profile_form.dart';
 import 'session_profile.dart' show sessionEditText;
@@ -53,12 +58,17 @@ class FirstBootPage extends StatefulWidget {
 
 class _FirstBootPageState extends State<FirstBootPage> {
   FirstBootStep _step = FirstBootStep.welcome;
+
+  /// The way the wizard is moving, so a step with nothing to choose is
+  /// skipped in the same direction.
+  bool _forward = true;
   String? _message;
   NetworkStatus? _net;
   List<WifiNetwork> _wifi = const [];
   List<BtDevice> _devices = const [];
   StreamSubscription<List<BtDevice>>? _bt;
   DisplayInfo? _display;
+  bool _formOpen = false;
   String? _createdName;
 
   SystemServices get _s => widget.services;
@@ -74,7 +84,7 @@ class _FirstBootPageState extends State<FirstBootPage> {
           _createdName != null) {
         return true;
       }
-      _go(FirstBootStep.values[_step.index - 1]);
+      _back();
       return true;
     };
   }
@@ -94,9 +104,19 @@ class _FirstBootPageState extends State<FirstBootPage> {
     }
   }
 
-  void _go(FirstBootStep s) {
+  void _back() {
+    if (_step == FirstBootStep.welcome) return;
+    _go(FirstBootStep.values[_step.index - 1], forward: false);
+  }
+
+  /// Leaves a step that turned out to have nothing to choose.
+  void _skip() =>
+      _forward ? _go(FirstBootStep.values[_step.index + 1]) : _back();
+
+  void _go(FirstBootStep s, {bool forward = true}) {
     setState(() {
       _step = s;
+      _forward = forward;
       _message = null;
     });
     _region.reset();
@@ -107,6 +127,9 @@ class _FirstBootPageState extends State<FirstBootPage> {
         unawaited(_loadControllers());
       case FirstBootStep.display:
         unawaited(_loadDisplay());
+      case FirstBootStep.profile:
+        // Straight into the form: B there comes back a step.
+        if (forward) unawaited(_createProfile());
       default:
         break;
     }
@@ -158,16 +181,52 @@ class _FirstBootPageState extends State<FirstBootPage> {
 
   Future<void> _loadDisplay() async {
     final d = await _try(_s.displayAudio.displayModes);
-    if (mounted) setState(() => _display = d);
+    if (!mounted || _step != FirstBootStep.display) return;
+    // Nothing to choose: a display that can't be set, or has one mode.
+    if (d == null || !d.canSet || d.modes.length < 2) {
+      _skip();
+      return;
+    }
+    setState(() => _display = d);
+  }
+
+  /// `display.set_mode`, then the keep-or-go-back countdown, as in Settings.
+  Future<void> _setMode(DisplayMode m) async {
+    if (m.current) return;
+    final da = _s.displayAudio;
+    try {
+      await da.setDisplayMode(m);
+    } on SystemException catch (e) {
+      if (mounted) setState(() => _message = e.message);
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _message = null);
+    final keep = await ModalScope.of(context)
+        .show<bool>((c, modal) => KeepDisplayDialog(modal: modal, mode: m));
+    await _try(keep == true ? da.keepDisplayMode : da.revertDisplayMode);
+    final d = await _try(da.displayModes);
+    if (mounted && d != null) setState(() => _display = d);
   }
 
   Future<void> _createProfile() async {
-    final form = await showProfileForm(
-      context,
-      admin: true,
-      editText: sessionEditText(context),
-    );
-    if (form == null || !mounted) return;
+    if (_formOpen) return;
+    _formOpen = true;
+    final ProfileFormResult? form;
+    try {
+      form = await showProfileForm(
+        context,
+        admin: true,
+        editText: sessionEditText(context),
+      );
+    } finally {
+      _formOpen = false;
+    }
+    if (!mounted || _step != FirstBootStep.profile) return;
+    if (form == null) {
+      _back();
+      return;
+    }
     try {
       await _s.profiles.setupAdmin(
         name: form.name,
@@ -176,6 +235,7 @@ class _FirstBootPageState extends State<FirstBootPage> {
         locked: form.locked,
       );
     } on SystemException catch (e) {
+      // Stays on this step with the reason and Try again.
       if (mounted) setState(() => _message = e.message);
       return;
     }
@@ -205,16 +265,22 @@ class _FirstBootPageState extends State<FirstBootPage> {
       case FirstBootStep.welcome:
         p.add(
           Text(
-            "Let's set up this box. It takes a minute. Move with the D-pad, "
-            'A chooses, B goes back.',
+            "This is setup: let's get this box ready for you. It takes a few "
+            'minutes. Ready to begin?',
             style: t.title,
+          ),
+        );
+        p.add(
+          Text(
+            'Move with the D-pad, A chooses, B goes back.',
+            style: t.bodyDim,
           ),
         );
       case FirstBootStep.controllers:
         p.add(
           Text(
-            'Put a controller in pairing mode. It appears below and pairs '
-            'when you choose it. You can also do this later in Settings.',
+            'Put a controller in pairing mode. It appears below; choose it to '
+            'pair.',
             style: t.bodyDim,
           ),
         );
@@ -266,32 +332,36 @@ class _FirstBootPageState extends State<FirstBootPage> {
           );
         }
       case FirstBootStep.display:
-        final m = _display?.modes.where((m) => m.current).firstOrNull;
+        final d = _display;
         p.add(
           Text(
-            m == null
+            d == null
                 ? 'Checking the display...'
-                : 'The picture is ${m.width} by ${m.height} at '
-                      '${m.refreshHz.round()} Hz. Can you read this '
-                      'comfortably?',
-            style: t.title,
-          ),
-        );
-        p.add(
-          Text(
-            'If not, you can change it later in Settings.',
+                : 'Choose a resolution if the picture is too small, too '
+                      'big or not sharp.',
             style: t.bodyDim,
           ),
         );
+        final modes = d?.modes ?? const <DisplayMode>[];
+        for (var i = 0; i < modes.length; i++) {
+          final m = modes[i];
+          p.item(
+            'm$i',
+            onSelect: () => unawaited(_setMode(m)),
+            builder: (f) => SettingRow(
+              title: m.label,
+              focused: f,
+              subtitle: [
+                m.name,
+                if (m.preferred) 'recommended by your TV',
+              ].join(', '),
+              trailing: Text(m.current ? 'Current' : '', style: t.bodyDim),
+            ),
+          );
+        }
       case FirstBootStep.profile:
-        p.add(
-          Text(
-            'Now your profile: a name, a colour and a PIN. This is the admin '
-            "profile. Its PIN is needed to manage other profiles and this "
-            'box.',
-            style: t.title,
-          ),
-        );
+        // The form is open over this; only a failed setup shows here.
+        break;
       case FirstBootStep.done:
         p.add(
           Text(
@@ -301,19 +371,20 @@ class _FirstBootPageState extends State<FirstBootPage> {
           ),
         );
     }
-    p.buttons('actions', [
-      btn(
-        switch (_step) {
-          FirstBootStep.welcome => 'Start',
-          FirstBootStep.display => 'Looks good',
-          FirstBootStep.profile => 'Create my profile',
-          FirstBootStep.done => 'Go to Home',
-          _ => 'Continue',
-        },
-        _next,
-        primary: true,
-      ),
-    ], gap: HinterTokens.s4);
+    if (_step != FirstBootStep.profile || _message != null) {
+      p.buttons('actions', [
+        btn(
+          switch (_step) {
+            FirstBootStep.welcome => 'Start',
+            FirstBootStep.profile => 'Try again',
+            FirstBootStep.done => 'Go to Home',
+            _ => 'Continue',
+          },
+          _next,
+          primary: true,
+        ),
+      ], gap: HinterTokens.s4);
+    }
     return FullPage(
       title: _step.title,
       subtitle:

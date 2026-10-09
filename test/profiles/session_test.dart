@@ -211,8 +211,9 @@ void main() {
     expect(find.text('Welcome'), findsOneWidget);
     await keys(t, [enter]); // Start
     expect(find.text('Controllers'), findsOneWidget);
-    // Continue through controllers, network and display.
-    for (final title in ['Internet', 'Display', 'Create your profile']) {
+    // Continue through controllers, network and display; the last Continue
+    // opens the profile form itself.
+    for (final title in ['Internet', 'Display', 'Step 1 of 5']) {
       for (var i = 0; i < 20 && find.text(title).evaluate().isEmpty; i++) {
         await keys(t, [down]);
         if (focusLabel()?.endsWith('/actions:0') ?? false) {
@@ -221,8 +222,20 @@ void main() {
       }
       expect(find.text(title), findsWidgets, reason: title);
     }
-    expect(find.textContaining('This is the admin profile'), findsWidgets);
-    await keys(t, [enter]); // Create my profile: the form
+    // B in the form comes back to Display; Continue opens it again.
+    await keys(t, [escape]);
+    expect(find.text('Step 1 of 5'), findsNothing);
+    expect(find.text('Display'), findsOneWidget);
+    for (
+      var i = 0;
+      i < 20 && find.text('Step 1 of 5').evaluate().isEmpty;
+      i++
+    ) {
+      await keys(t, [down]);
+      if (focusLabel()?.endsWith('/actions:0') ?? false) {
+        await keys(t, [enter]);
+      }
+    }
     expect(find.text('Step 1 of 5'), findsOneWidget);
     await keys(t, [enter]); // the name field: the text dialog
     await t.enterText(find.byType(EditableText), 'James');

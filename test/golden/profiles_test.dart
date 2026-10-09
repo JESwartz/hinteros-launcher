@@ -112,7 +112,7 @@ void main() {
     await keys(t, [kEnter]);
     for (
       var i = 0;
-      i < 30 && find.text('Create your profile').evaluate().isEmpty;
+      i < 30 && find.text('Step 1 of 5').evaluate().isEmpty;
       i++
     ) {
       await keys(t, [kDown]);
@@ -120,7 +120,6 @@ void main() {
         await keys(t, [kEnter]);
       }
     }
-    await keys(t, [kEnter]);
     await shot(t, 'first_boot_name');
   });
 
