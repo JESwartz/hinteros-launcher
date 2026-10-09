@@ -97,6 +97,11 @@ class _GreeterAppState extends State<GreeterApp> {
 /// How often the picker reads greeter.list again while it is up.
 const greeterRefreshEvery = Duration(seconds: 3);
 
+/// How long after the picker starts a failed greeter.list keeps "Starting..."
+/// (the greeter daemon starts with it) before the error shows, as the
+/// launcher's own start does.
+const greeterStartupGrace = Duration(seconds: 20);
+
 class GreeterScreen extends StatefulWidget {
   const GreeterScreen({
     super.key,
@@ -143,10 +148,14 @@ class _GreeterScreenState extends State<GreeterScreen> {
   /// before the removal job is done): greeter.list again every few seconds.
   Timer? _refresh;
 
+  /// When the picker started (see [greeterStartupGrace]).
+  late final DateTime _openedAt;
+
   @override
   void initState() {
     super.initState();
     _c.onBack = () => true;
+    _openedAt = _now();
     unawaited(_load());
     _refresh = Timer.periodic(greeterRefreshEvery, (_) => unawaited(_reload()));
   }
@@ -187,12 +196,20 @@ class _GreeterScreenState extends State<GreeterScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e);
-      // The daemon may still be starting: try again by itself.
+      // At boot the picker starts as the greeter daemon does: its connection
+      // is usually not up for the first request. Keep "Starting..." and ask
+      // again soon; only a failure that outlasts the start shows.
+      final starting = _now().difference(_openedAt) < greeterStartupGrace;
+      if (!starting) setState(() => _error = e);
       _retry?.cancel();
-      _retry = Timer(const Duration(seconds: 3), () {
-        if (mounted && _view == null) unawaited(_load());
-      });
+      _retry = Timer(
+        starting
+            ? const Duration(milliseconds: 500)
+            : const Duration(seconds: 3),
+        () {
+          if (mounted && _view == null) unawaited(_load());
+        },
+      );
     }
   }
 

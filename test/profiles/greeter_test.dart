@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show SizedBox;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart';
 import 'package:hinteros_launcher/src/installer/gamepad.dart';
@@ -80,6 +81,50 @@ class Picker {
 
 void main() {
   refreshTests();
+  testWidgets('at boot the picker waits for its daemon: Starting..., never '
+      '"not connected"; a failure that outlasts the start shows', (t) async {
+    final p = Picker(t);
+    p.greeter.failLoads = 3;
+    setView(t);
+    await t.pumpWidget(
+      GreeterApp(
+        greeter: p.greeter,
+        jobs: p.services.mockJobs,
+        system: p.services.mockSystem,
+        now: p.clock.now,
+      ),
+    );
+    for (var i = 0; i < 3; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+      expect(find.textContaining('not connected'), findsNothing);
+      expect(find.text('Try again'), findsNothing);
+      expect(find.text('Starting...'), findsOneWidget);
+      await t.pump(const Duration(milliseconds: 500));
+    }
+    await t.pump(const Duration(milliseconds: 600));
+    expect(find.text('Starting...'), findsNothing);
+    expect(find.text('Guest'), findsOneWidget);
+
+    // Long after the start: the failure shows, with Try again.
+    final late = Picker(t);
+    late.greeter.failLoads = 1;
+    late.clock.t = late.clock.t.add(greeterStartupGrace);
+    await t.pumpWidget(const SizedBox());
+    var calls = 0;
+    await t.pumpWidget(
+      GreeterApp(
+        greeter: late.greeter,
+        jobs: late.services.mockJobs,
+        system: late.services.mockSystem,
+        now: () => calls++ == 0 ? p.clock.now() : late.clock.now(),
+      ),
+    );
+    await t.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('not connected'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+    await t.pump(const Duration(seconds: 4));
+  });
+
   testWidgets('the picker lists the profiles, Guest and Add profile; '
       'an unlocked profile opens at once', (t) async {
     final p = Picker(t);

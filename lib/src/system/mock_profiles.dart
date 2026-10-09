@@ -682,8 +682,22 @@ class MockGreeter implements GreeterRepository {
   /// What happened (`login:p3`, `pin:p3:wrong`, `create:p4`...). Never a PIN.
   final List<String> log = [];
 
+  /// The next this many loads fail as if the daemon were not connected yet.
+  int failLoads = 0;
+
   @override
-  Future<PickerView> load() async => PickerView(
+  Future<PickerView> load() async {
+    if (failLoads > 0) {
+      failLoads--;
+      throw const SystemException(
+        SystemErrorKind.unavailable,
+        'The launcher is not connected to HinterOS.',
+      );
+    }
+    return _view();
+  }
+
+  PickerView _view() => PickerView(
     profiles: [
       for (final p in box.profiles)
         PickerProfile(
