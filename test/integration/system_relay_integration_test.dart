@@ -405,7 +405,7 @@ void main() {
       await c.waitConnected();
       final s = daemonSystemServices(c);
       final info = await s.system.info();
-      expect(info.version, '0.1.0-test');
+      expect(info.version, '0.1.0-test stable');
       expect(info.dev, isTrue);
       expect(info.channel, UpdateChannel.stable);
       expect(info.base, NixBase.unstable);
