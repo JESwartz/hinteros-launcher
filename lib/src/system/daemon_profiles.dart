@@ -40,6 +40,7 @@ ProfileInfo _profile(api.ProfileInfo p) => ProfileInfo(
   active: p.active,
   lastUsedAt: _time(p.lastUsedAt),
   usage: _usage(p.usage),
+  pinSet: p.pinSet,
 );
 
 /// The session side over the session daemon.

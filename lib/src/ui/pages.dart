@@ -266,12 +266,21 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
                 ok: true,
               ),
             ],
+            if (s.finished && s.ok && _readded(s)) ...[
+              const SizedBox(height: HinterTokens.s1),
+              Text('The parts your apps need are on again.', style: t.body),
+            ],
             if (s.finished && !s.ok) ...[
               if (s.error != null) StatusLine(s.error!.message, error: true),
               const SizedBox(height: HinterTokens.s2),
               Text(
                 s.cancelled
                     ? 'Nothing changed.'
+                    // The rollback itself stays when only its box stage
+                    // failed (0.13).
+                    : s.kind == JobKind.rollback &&
+                          s.error?.stage == JobStage.box
+                    ? 'The rollback is done. Some apps may not work.'
                     : 'Nothing changed. Try again.',
                 style: t.body,
               ),
@@ -316,11 +325,21 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
     );
   }
 
+  /// A rollback that turned box features back on (`features_readded`).
+  static bool _readded(JobSnapshot s) =>
+      s.kind == JobKind.rollback &&
+      (s.result?['features_readded'] as List?)?.isNotEmpty == true;
+
   static List<JobStage> _stagesOf(JobSnapshot s) {
     final base = s.kind.stages;
     final extra = [s.stage, ?s.error?.stage].where((x) => !base.contains(x));
     if (extra.isEmpty) return base;
-    return [...base, ...extra.toSet()]..sort((a, b) => a.index - b.index);
+    // A rollback's box stage comes last, after the switch and the apps.
+    double order(JobStage x) => s.kind == JobKind.rollback && x == JobStage.box
+        ? JobStage.apps.index + 0.5
+        : x.index.toDouble();
+    return [...base, ...extra.toSet()]
+      ..sort((a, b) => order(a).compareTo(order(b)));
   }
 
   static _MarkState _stateOf(

@@ -38,6 +38,7 @@ JobKind _jobKind(api.JobKind k) => switch (k) {
   api.JobKind.profilesRemove => JobKind.profileRemove,
   api.JobKind.guestSet => JobKind.guest,
   api.JobKind.starterSet => JobKind.starterSet,
+  api.JobKind.guestEnd => JobKind.guestEnd,
   // The v1 -> v2 apps migration (queued by the service itself).
   api.JobKind.migrateApps => JobKind.rebuild,
   api.JobKind.unknown => JobKind.rebuild,
@@ -589,22 +590,28 @@ class DaemonUpdates implements UpdatesRepository {
           profiles: g.profiles == null
               ? null
               : [for (final p in g.profiles!) (id: p.id, name: p.name)],
+          readdsFeatures: [
+            for (final f in g.readdsFeatures ?? const <api.BoxFeature>[])
+              f.toJson(),
+          ],
         ),
     ];
   });
 
   @override
-  Future<JobHandle> rollback({int? generation}) => _jobs.start(
-    JobKind.rollback,
-    () async => (await _conn.systemRollback(
-      api.SystemRollbackParams(generation: generation),
-    )).jobId,
-  );
+  Future<JobHandle> rollback({int? generation, String? adminPin}) =>
+      _jobs.start(
+        JobKind.rollback,
+        () async => (await _conn.systemRollback(
+          api.SystemRollbackParams(generation: generation, adminPin: adminPin),
+        )).jobId,
+      );
 
   @override
   Future<JobHandle> setChannel(
     UpdateChannel channel, {
     bool acknowledgeDowngrade = false,
+    String? adminPin,
   }) => _jobs.start(
     JobKind.channel,
     () async => (await _conn.systemChannelSet(
@@ -613,6 +620,7 @@ class DaemonUpdates implements UpdatesRepository {
             ? api.Channel.stable
             : api.Channel.beta,
         acknowledgeDowngrade: acknowledgeDowngrade ? true : null,
+        adminPin: adminPin,
       ),
     )).jobId,
     nothingToDo: 'This box already uses that channel.',
@@ -622,12 +630,14 @@ class DaemonUpdates implements UpdatesRepository {
   Future<JobHandle> setBase(
     NixBase base, {
     bool acknowledgeDowngrade = false,
+    String? adminPin,
   }) => _jobs.start(
     JobKind.base,
     () async => (await _conn.systemBaseSet(
       api.SystemBaseSetParams(
         base: base == NixBase.stable ? api.Base.stable : api.Base.unstable,
         acknowledgeDowngrade: acknowledgeDowngrade ? true : null,
+        adminPin: adminPin,
       ),
     )).jobId,
     nothingToDo: 'This box already uses that software base.',
@@ -676,6 +686,14 @@ class DaemonSystem implements SystemRepository {
         (await _conn.systemSshSet(api.SystemSshSetParams(enabled: enable)))
             .jobId,
     nothingToDo: enable ? 'SSH is already on.' : 'SSH is already off.',
+  );
+
+  @override
+  Future<JobHandle> redetectHardware({String? adminPin}) => _jobs.start(
+    JobKind.hardwareRedetect,
+    () async => (await _conn.systemHardwareRedetect(
+      api.SystemHardwareRedetectParams(adminPin: adminPin),
+    )).jobId,
   );
 
   /// `settings.get`, then `settings.set` with the `revision` it returned; one

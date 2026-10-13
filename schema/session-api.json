@@ -1,7 +1,7 @@
 {
   "$schema": "./api-doc.schema.json",
   "api": "session",
-  "version": "0.12",
+  "version": "0.13",
   "description": "API of the HinterOS session daemon, served to the launcher (and other clients running as the session user). Responses to system.*, auth.*, store.list and session.restart may arrive out of order relative to other calls on the same connection (match them by id): a relayed call can wait minutes for an admin password. See hinteros-docs/design/api.md for the protocol rules.",
   "transport": {
     "protocol": "jsonrpc-2.0",
@@ -37,16 +37,16 @@
       "examples": [
         {
           "name": "accepted",
-          "params": { "api_version": "0.12", "client": { "name": "hinteros-launcher", "version": "0.1.0" } },
-          "result": { "api_version": "0.12", "server": { "name": "hinteros-session", "version": "0.1.0" } }
+          "params": { "api_version": "0.13", "client": { "name": "hinteros-launcher", "version": "0.1.0" } },
+          "result": { "api_version": "0.13", "server": { "name": "hinteros-session", "version": "0.1.0" } }
         },
         {
           "name": "major mismatch",
           "params": { "api_version": "1.0", "client": { "name": "hinteros-launcher", "version": "2.0.0" } },
           "error": {
             "code": 1002,
-            "message": "API version mismatch: client 1.0, server 0.12",
-            "data": { "client_api_version": "1.0", "server_api_version": "0.12" }
+            "message": "API version mismatch: client 1.0, server 0.13",
+            "data": { "client_api_version": "1.0", "server_api_version": "0.13" }
           }
         }
       ]
@@ -964,45 +964,14 @@
     },
     "system.hardware.redetect": {
       "summary": "Relayed to the system service's hardware.redetect. Regenerate facter.json with nixos-facter and apply it (job). Action org.hinteros.system.rebuild.",
-      "since": "0.6",
-      "params": {
-        "type": "object",
-        "additionalProperties": false
-      },
-      "result": {
-        "$ref": "#/$defs/JobRef",
-        "type": "object"
-      },
-      "errors": [
-        "system_unavailable",
-        "permission_denied",
-        "authentication_required",
-        "rate_limited",
-        "job_busy",
-        "insufficient_resources"
-      ],
-      "examples": [
-        {
-          "name": "started",
-          "params": {},
-          "result": {
-            "job_id": "3f9a0c2b7e4d1a65"
-          }
-        }
-      ],
-      "relay": true
-    },
-    "system.rollback": {
-      "summary": "Relayed to the system service's rollback. Switch to an earlier generation (default: the one before the current), then restore /etc/hinteros from its snapshot (job). Action org.hinteros.system.rollback.",
+      "description": "On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root.",
       "since": "0.6",
       "params": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "generation": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 4294967295
+          "admin_pin": {
+            "$ref": "#/$defs/Pin"
           }
         }
       },
@@ -1017,14 +986,85 @@
         "rate_limited",
         "job_busy",
         "insufficient_resources",
-        "not_found"
+        "pin_required"
+      ],
+      "examples": [
+        {
+          "name": "started",
+          "params": {
+            "admin_pin": "2468"
+          },
+          "result": {
+            "job_id": "3f9a0c2b7e4d1a65"
+          }
+        },
+        {
+          "name": "no admin PIN",
+          "params": {},
+          "error": {
+            "code": 3016,
+            "message": "a PIN is needed",
+            "data": {
+              "pin": "admin"
+            }
+          }
+        }
+      ],
+      "relay": true
+    },
+    "system.rollback": {
+      "summary": "Relayed to the system service's rollback. Switch to an earlier generation (default: the one before the current), then restore /etc/hinteros from its snapshot (job). Action org.hinteros.system.rollback.",
+      "description": "On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root. After the switch and the apps stage (schema 2), box features that the owners' current app envs need and the restored generation lacks are turned back on in a box stage: the apply flow on the restored configuration with requirements = what the envs need (a second, mostly cached build; a new generation). The result then lists them in features_readded; generations.list names them beforehand per generation (readds_features). If that build fails the job fails at stage box (the rollback itself stays).",
+      "since": "0.6",
+      "params": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "generation": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4294967295
+          },
+          "admin_pin": {
+            "$ref": "#/$defs/Pin"
+          }
+        }
+      },
+      "result": {
+        "$ref": "#/$defs/JobRef",
+        "type": "object"
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited",
+        "job_busy",
+        "insufficient_resources",
+        "not_found",
+        "pin_required"
       ],
       "examples": [
         {
           "name": "previous",
-          "params": {},
+          "params": {
+            "admin_pin": "2468"
+          },
           "result": {
             "job_id": "3f9a0c2b7e4d1a65"
+          }
+        },
+        {
+          "name": "wrong admin PIN",
+          "params": {
+            "admin_pin": "1111"
+          },
+          "error": {
+            "code": 3016,
+            "message": "that PIN didn't match",
+            "data": {
+              "pin": "admin"
+            }
           }
         },
         {
@@ -1178,7 +1218,7 @@
     },
     "system.channel.set": {
       "summary": "Relayed to the system service's channel.set. Follow another channel (job). Action org.hinteros.system.channel.",
-      "description": "The URL comes from the running generation's channel table, never from params. The target tip must be signed by an allowed signer. Moving from beta to stable, or to a tip that does not descend from the locked revision, needs acknowledge_downgrade: true (else needs_acknowledgement: at once for beta to stable, in job_finished.error for a non-fast-forward tip). Returns job_id null if the channel is already the current one.",
+      "description": "The URL comes from the running generation's channel table, never from params. The target tip must be signed by an allowed signer. Moving from beta to stable, or to a tip that does not descend from the locked revision, needs acknowledge_downgrade: true (else needs_acknowledgement: at once for beta to stable, in job_finished.error for a non-fast-forward tip). Returns job_id null if the channel is already the current one. On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root.",
       "since": "0.6",
       "params": {
         "type": "object",
@@ -1192,6 +1232,9 @@
           },
           "acknowledge_downgrade": {
             "type": "boolean"
+          },
+          "admin_pin": {
+            "$ref": "#/$defs/Pin"
           }
         }
       },
@@ -1206,13 +1249,15 @@
         "rate_limited",
         "job_busy",
         "insufficient_resources",
-        "needs_acknowledgement"
+        "needs_acknowledgement",
+        "pin_required"
       ],
       "examples": [
         {
           "name": "to beta",
           "params": {
-            "channel": "beta"
+            "channel": "beta",
+            "admin_pin": "2468"
           },
           "result": {
             "job_id": "3f9a0c2b7e4d1a65"
@@ -1233,6 +1278,7 @@
     },
     "system.base.set": {
       "summary": "Relayed to the system service's base.set. Switch the nixpkgs base (job). Action org.hinteros.system.channel. unstable to stable needs acknowledge_downgrade: true.",
+      "description": "On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root. The PIN is checked before anything else, also when the base is already the requested one.",
       "since": "0.6",
       "params": {
         "type": "object",
@@ -1246,6 +1292,9 @@
           },
           "acknowledge_downgrade": {
             "type": "boolean"
+          },
+          "admin_pin": {
+            "$ref": "#/$defs/Pin"
           }
         }
       },
@@ -1260,14 +1309,16 @@
         "rate_limited",
         "job_busy",
         "insufficient_resources",
-        "needs_acknowledgement"
+        "needs_acknowledgement",
+        "pin_required"
       ],
       "examples": [
         {
           "name": "to stable, acknowledged",
           "params": {
             "base": "stable",
-            "acknowledge_downgrade": true
+            "acknowledge_downgrade": true,
+            "admin_pin": "2468"
           },
           "result": {
             "job_id": "3f9a0c2b7e4d1a65"
@@ -2798,6 +2849,49 @@
       ],
       "relay": true
     },
+    "system.guest.end": {
+      "summary": "Relayed to the system service's guest.end. End guest session (0.5): end the guest's session and wipe the guest now (job). Only the guest itself. Action org.hinteros.system.profiles.",
+      "description": "Only a caller that is the guest account (hinteros-guest, while the guest is on) may call it; anyone else gets permission_denied {reason: profile}. The service checks the account first: the name hinteros-guest, the expected guest uid (20000 on a box), no other account with that uid, a home that is an absolute path ending in /hinteros-guest; otherwise internal_error and nothing is touched. The job (kind guest_end) hides the guest from the picker (profiles-public.json guest.enabled false; PAM refuses the guest) while it runs, ends the guest's session itself (logind TerminateUser, its user slice, then SIGKILL for anything left of the uid; it fails at stage preparing if processes remain, before anything is deleted), then deletes everything the guest uid owns in its home (the home directory itself stays), in /tmp, /var/tmp and /dev/shm (top-level entries owned by the uid; no symlink is followed, no other filesystem entered, nothing owned by another uid touched), the guest's app env link (then given the starter env again), its terms acceptances (by hinteros-guest), its usage entry and a switch hint that targets it. The boot-time wipe stays. The caller's own session ends while the job runs: call it last.",
+      "since": "0.13",
+      "params": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "result": {
+        "$ref": "#/$defs/JobRef",
+        "type": "object"
+      },
+      "errors": [
+        "system_unavailable",
+        "permission_denied",
+        "authentication_required",
+        "rate_limited",
+        "job_busy",
+        "unavailable"
+      ],
+      "examples": [
+        {
+          "name": "started",
+          "params": {},
+          "result": {
+            "job_id": "3f9a0c2b7e4d1a65"
+          }
+        },
+        {
+          "name": "not the guest",
+          "params": {},
+          "error": {
+            "code": 3002,
+            "message": "only the guest can end the guest session",
+            "data": {
+              "action": "org.hinteros.system.profiles",
+              "reason": "profile"
+            }
+          }
+        }
+      ],
+      "relay": true
+    },
     "network.status": {
       "summary": "Wired and Wi-Fi state, the SSID joined and the IP address.",
       "description": "Runtime settings (NetworkManager over D-Bus, as the session user). The same object comes with every network_changed event.",
@@ -3545,7 +3639,8 @@
       ]
     },
     "session.end_guest": {
-      "summary": "Guest only: end the guest session now (like a switch, to the picker). The guest's home and apps are wiped at the next boot.",
+      "summary": "Guest only: end the guest session now (like a switch, to the picker) and wipe the guest now.",
+      "description": "Answers {} at once; switch_progress events follow as on a switch (closing_apps, closing_steam, ending; switch_wait, switch_force_close and switch_cancel work the same). Once every app is closed the daemon calls system.guest.end (0.13): that job ends this session itself and wipes the guest's home, app env (back to the starter set), terms acceptances and usage; the boot-time wipe stays. While another job runs the daemon retries for 15 s; if the wipe cannot start it ends the session anyway and the guest is wiped at the next boot.",
       "since": "0.12",
       "params": {
         "type": "object",
@@ -5181,7 +5276,8 @@
         "migrate_apps",
         "profiles_create",
         "profiles_remove",
-        "guest_set"
+        "guest_set",
+        "guest_end"
       ]
     },
     "ProfileId": { "description": "A profile id.", "type": "string", "pattern": "^p[1-9][0-9]{0,2}$" },
@@ -5377,6 +5473,12 @@
           "description": "The accounts in that generation's state.json with their current names (null: no longer a profile); absent if its state.json cannot be read (since 0.4). The rollback screen lists the profiles a rollback would drop or bring back empty.",
           "type": "array",
           "items": { "$ref": "#/$defs/GenerationProfile" }
+        },
+        "readds_features": {
+          "description": "0.5: box features a rollback to this generation would turn back on: the profiles' apps need them and its state.json lacks them (the rollback job re-adds them in a box stage; the rollback screen says so). Absent when there are none or it is unknown (schema 1, unreadable state.json).",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/BoxFeature" }
         }
       }
     },
@@ -5533,6 +5635,12 @@
               "reason": { "type": "string", "maxLength": 300 }
             }
           }
+        },
+        "features_readded": {
+          "description": "0.5 (rollback jobs): box features turned back on after the rollback, because the profiles' apps need them and the restored generation lacked them. Absent when there were none.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/BoxFeature" }
         }
       }
     },

@@ -127,6 +127,28 @@ class MockProfileBox {
     throw _pinRequired(kind, null);
   }
 
+  /// No profiles or PINs yet (before the migration): the box-wide actions
+  /// need no PIN.
+  bool schema1 = false;
+
+  /// The admin PIN of the box-wide actions (rollback, channel, base,
+  /// hardware; session API 0.13): none on a schema-1 box or while the admin
+  /// profile has no PIN; `pin_required {pin: admin}` when it is missing or
+  /// wrong, or when there is no admin profile.
+  void checkBoxAdmin(String? pin) {
+    if (schema1) return;
+    final a = profiles.where((p) => p.admin).firstOrNull;
+    if (a == null) {
+      throw const SystemException(
+        SystemErrorKind.pinRequired,
+        'There is no admin profile.',
+        data: {'pin': 'admin'},
+      );
+    }
+    if (a.pin == null) return;
+    checkPin(a, pin, PinKind.admin);
+  }
+
   static SystemException _pinRequired(PinKind kind, Duration? wait) =>
       SystemException(
         SystemErrorKind.pinRequired,
@@ -147,6 +169,7 @@ class MockProfileBox {
     active: p.id == activeId,
     lastUsedAt: p.lastUsedAt,
     usage: p.usage,
+    pinSet: p.pin != null,
   );
 }
 

@@ -121,12 +121,16 @@ class ProfileInfo {
     this.active = false,
     this.lastUsedAt,
     this.usage,
+    this.pinSet = true,
   });
 
   final String id;
   final String name;
   final ProfileColor color;
   final bool admin;
+
+  /// Has a PIN (`pin_set`; false: migrated without one, asks for nothing).
+  final bool pinSet;
 
   /// Asks for its PIN to enter (picker, after sleep).
   final bool locked;
@@ -161,6 +165,7 @@ class ProfileInfo {
     active: active ?? this.active,
     lastUsedAt: lastUsedAt ?? this.lastUsedAt,
     usage: usage ?? this.usage,
+    pinSet: pinSet,
   );
 }
 

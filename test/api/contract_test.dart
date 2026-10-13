@@ -75,6 +75,20 @@ Future<void> _prepareSystem(
     await mock.rpc('system.rebuild', {});
   }
 
+  // 0.13: the box-wide actions need the admin PIN. An example without one
+  // that is not about the PIN describes a box that needs none (an admin
+  // profile without a PIN yet).
+  const pinned = {
+    'system.rollback',
+    'system.channel.set',
+    'system.base.set',
+    'system.hardware.redetect',
+  };
+  if (pinned.contains(method) &&
+      !(ex['params'] as Map).containsKey('admin_pin') &&
+      err?['code'] != ApiErrorCode.pinRequired) {
+    mock.profiles.admin.pin = null;
+  }
   switch ((method, name)) {
     case ('system.ssh.set', 'turn on'):
       s.adminAuthorized = true;
@@ -178,7 +192,7 @@ Future<void> _prepareProfiles(
           file: '/run/current-system/sw/share/hinteros/terms/steam-2026-09-10.txt',
         ),
       );
-    case ('session.end_guest', _):
+    case ('session.end_guest', _) || ('system.guest.end', 'started'):
       p.current = 'guest';
     case ('greeter.pin', _):
       p.promptFor('p1');

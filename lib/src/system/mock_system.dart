@@ -28,6 +28,9 @@ class _Job {
   final changes = StreamController<JobSnapshot>.broadcast(sync: true);
   void Function()? onSuccess;
   void Function()? onFinish;
+
+  /// `job_finished.result` when it finishes well.
+  Map<String, dynamic>? result;
   Timer? timer;
 }
 
@@ -72,6 +75,7 @@ class MockJobs implements JobsRepository {
     JobKind kind, {
     void Function()? onSuccess,
     void Function()? onFinish,
+    Map<String, dynamic>? result,
   }) {
     final r = running;
     if (r != null) {
@@ -84,7 +88,8 @@ class MockJobs implements JobsRepository {
     final id = _hex(++_n * 7919 + 0xabc0de, 16);
     final job = _Job(JobSnapshot(jobId: id, kind: kind))
       ..onSuccess = onSuccess
-      ..onFinish = onFinish;
+      ..onFinish = onFinish
+      ..result = result;
     _jobs[id] = job;
     final h = JobHandle(id, kind);
     started.add(h);
@@ -164,6 +169,7 @@ class MockJobs implements JobsRepository {
       ok: ok,
       cancelled: cancelled,
       error: error,
+      result: ok ? j.result : null,
       sessionRestartRequired:
           sessionRestartRequired ??
           (ok &&
@@ -229,6 +235,7 @@ class MockUpdates implements UpdatesRepository {
     this.channel = UpdateChannel.beta,
     this.base = NixBase.unstable,
     DateTime Function()? now,
+    this.box,
   }) : _now = now ?? DateTime.now,
        _status = status ?? mockUpToDate() {
     _generations = [
@@ -247,11 +254,20 @@ class MockUpdates implements UpdatesRepository {
             10 => const [(id: 'p1', name: 'James')],
             _ => null,
           },
+          // Steam came after 10: a rollback to it turns 32-bit graphics
+          // back on (0.13).
+          readdsFeatures: g == 10
+              ? const ['graphics32', 'steam-devices']
+              : const [],
         ),
     ];
   }
 
   final MockJobs jobs;
+
+  /// The profiles whose admin PIN the box-wide actions need (rollback,
+  /// channel, base, hardware). Null: none needed.
+  MockProfileBox? box;
   final DateTime Function() _now;
   UpdateChannel channel;
   NixBase base;
@@ -338,7 +354,8 @@ class MockUpdates implements UpdatesRepository {
   Future<List<Generation>> generations() async => _generations;
 
   @override
-  Future<JobHandle> rollback({int? generation}) async {
+  Future<JobHandle> rollback({int? generation, String? adminPin}) async {
+    box?.checkBoxAdmin(adminPin);
     final cur = _generations.firstWhere((g) => g.current);
     final target = generation == null
         ? _generations.firstWhere(
@@ -354,6 +371,9 @@ class MockUpdates implements UpdatesRepository {
     }
     return jobs.start(
       JobKind.rollback,
+      result: target.readdsFeatures.isEmpty
+          ? null
+          : {'features_readded': target.readdsFeatures},
       onSuccess: () {
         _generations = [
           for (final g in _generations)
@@ -381,7 +401,9 @@ class MockUpdates implements UpdatesRepository {
   Future<JobHandle> setChannel(
     UpdateChannel c, {
     bool acknowledgeDowngrade = false,
+    String? adminPin,
   }) async {
+    box?.checkBoxAdmin(adminPin);
     if (c == UpdateChannel.stable &&
         channel == UpdateChannel.beta &&
         !acknowledgeDowngrade) {
@@ -397,7 +419,9 @@ class MockUpdates implements UpdatesRepository {
   Future<JobHandle> setBase(
     NixBase b, {
     bool acknowledgeDowngrade = false,
+    String? adminPin,
   }) async {
+    box?.checkBoxAdmin(adminPin);
     if (b == NixBase.stable &&
         base == NixBase.unstable &&
         !acknowledgeDowngrade) {
@@ -406,7 +430,7 @@ class MockUpdates implements UpdatesRepository {
         'Switching to the stable base downgrades software.',
       );
     }
-    return jobs.start(JobKind.channel, onSuccess: () => base = b);
+    return jobs.start(JobKind.base, onSuccess: () => base = b);
   }
 }
 
@@ -507,6 +531,13 @@ class MockSystem implements SystemRepository {
 
   @override
   Future<JobHandle?> applySettings() async => null;
+
+  @override
+  Future<JobHandle> redetectHardware({String? adminPin}) async {
+    updates.box?.checkBoxAdmin(adminPin);
+    log.add('hardware:redetect');
+    return jobs.start(JobKind.hardwareRedetect);
+  }
 
   @override
   Future<JobHandle> setSsh(bool enable) async {
@@ -1343,7 +1374,8 @@ class MockSystemServices extends SystemServices {
     List<StoreApp> extraApps = const [],
   }) {
     final jobs = MockJobs(autoRun: autoRunJobs);
-    final updates = MockUpdates(jobs, status: status, now: now);
+    final box = profileBox ?? MockProfileBox(now: now);
+    final updates = MockUpdates(jobs, status: status, now: now, box: box);
     final auth = MockAuth();
     final store = MockStore(
       jobs,
@@ -1362,7 +1394,7 @@ class MockSystemServices extends SystemServices {
       mockStore: store,
       mockProfiles: MockProfiles(
         jobs,
-        box: profileBox ?? MockProfileBox(now: now),
+        box: box,
         currentId: currentProfile,
         setupRequired: setupRequired,
         adminApps: () => store.installed,

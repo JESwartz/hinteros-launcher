@@ -419,6 +419,8 @@ void main() {
       await press(t, [kEnter]);
       expect(find.text('Roll back to the previous version?'), findsOneWidget);
       await press(t, [kRight, kEnter]);
+      expect(find.text("Type the admin profile's PIN."), findsOneWidget);
+      await enterPin(t, '2468');
       expect(h.services.mockJobs.started.single.kind, JobKind.rollback);
     });
 
@@ -429,6 +431,7 @@ void main() {
       await enterSettingsEntry(t, 'updates');
       await press(t, [kDown, kEnter]); // channel
       await press(t, [kDown, kEnter]); // Stable
+      await enterPin(t, '2468');
       expect(find.text('Switch to Stable?'), findsOneWidget);
       expect(h.services.mockJobs.started, isEmpty);
       await press(t, [kRight, kEnter]);

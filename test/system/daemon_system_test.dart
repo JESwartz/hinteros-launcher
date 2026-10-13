@@ -7,6 +7,9 @@ import 'package:hinteros_launcher/src/system/daemon_system.dart';
 import 'package:hinteros_launcher/src/system/models.dart';
 import 'package:hinteros_launcher/src/system/repositories.dart';
 
+/// The mock box's admin PIN (James).
+const _pin = '2468';
+
 const _rev = '9a8b7c6d5e4f30211a2b3c4d5e6f708192a3b4c5';
 
 api.AvailableUpdate _update({
@@ -45,6 +48,19 @@ class _DropsOnRestart extends api.MockDaemon {
   ) async {
     if (method == 'session.restart') {
       throw const api.DaemonUnavailableException('connection closed');
+    }
+    return super.rpc(method, params);
+  }
+}
+
+/// Remembers the admin_pin of every relayed system call.
+class _Recording extends api.MockDaemon {
+  final sent = <String, Object?>{};
+
+  @override
+  Future<Map<String, dynamic>> rpc(String method, Map<String, dynamic> params) {
+    if (method.startsWith('system.') && method != 'system.jobs.get') {
+      sent[method] = params['admin_pin'];
     }
     return super.rpc(method, params);
   }
@@ -249,7 +265,7 @@ void main() {
   group('jobs', () {
     test('events drive the snapshots through to the end', () async {
       final (mock, s) = await _setup();
-      final h = await s.updates.rollback();
+      final h = await s.updates.rollback(adminPin: _pin);
       expect(h.kind, JobKind.rollback);
       final all = s.jobs.watch(h.jobId).toList();
       await pumpEventQueue();
@@ -341,7 +357,7 @@ void main() {
       expect(last.cancelled, isTrue);
       expect(last.failed, isFalse);
 
-      final b = await s.updates.rollback();
+      final b = await s.updates.rollback(adminPin: _pin);
       mock.system.progressJob(b.jobId, api.Stage.activating);
       expect(
         (await _fails(s.jobs.cancel(b.jobId))).kind,
@@ -351,8 +367,8 @@ void main() {
 
     test('one mutating job at a time', () async {
       final (_, s) = await _setup();
-      await s.updates.rollback();
-      final e = await _fails(s.updates.rollback());
+      await s.updates.rollback(adminPin: _pin);
+      final e = await _fails(s.updates.rollback(adminPin: _pin));
       expect(e.kind, SystemErrorKind.jobBusy);
       expect(e.data['job_id'], isA<String>());
     });
@@ -544,25 +560,29 @@ void main() {
     test('a downgrade needs the acknowledgement, then goes through', () async {
       final (mock, s) = await _setup();
       mock.system.channel = api.Channel.beta;
-      final e = await _fails(s.updates.setChannel(UpdateChannel.stable));
+      final e = await _fails(
+        s.updates.setChannel(UpdateChannel.stable, adminPin: _pin),
+      );
       expect(e.kind, SystemErrorKind.needsAcknowledgement);
       final h = await s.updates.setChannel(
         UpdateChannel.stable,
         acknowledgeDowngrade: true,
+        adminPin: _pin,
       );
       expect(h.kind, JobKind.channel);
       mock.system.finishJob(h.jobId);
       expect((await s.system.info()).channel, UpdateChannel.stable);
 
-      final b = await _fails(s.updates.setBase(NixBase.stable));
+      final b = await _fails(s.updates.setBase(NixBase.stable, adminPin: _pin));
       expect(b.kind, SystemErrorKind.needsAcknowledgement);
       final hb = await s.updates.setBase(
         NixBase.stable,
         acknowledgeDowngrade: true,
+        adminPin: _pin,
       );
       expect(hb.kind, JobKind.base);
       expect(
-        (await _fails(s.updates.rollback())).kind,
+        (await _fails(s.updates.rollback(adminPin: _pin))).kind,
         SystemErrorKind.jobBusy,
       );
     });
@@ -570,7 +590,9 @@ void main() {
     test('same channel: nothing to do', () async {
       final (_, s) = await _setup();
       expect(
-        (await _fails(s.updates.setChannel(UpdateChannel.stable))).kind,
+        (await _fails(
+          s.updates.setChannel(UpdateChannel.stable, adminPin: _pin),
+        )).kind,
         SystemErrorKind.nothingToDo,
       );
     });
@@ -578,7 +600,7 @@ void main() {
     test('rollback to an unknown generation is not_found', () async {
       final (_, s) = await _setup();
       expect(
-        (await _fails(s.updates.rollback(generation: 7))).kind,
+        (await _fails(s.updates.rollback(generation: 7, adminPin: _pin))).kind,
         SystemErrorKind.notFound,
       );
     });
@@ -591,7 +613,7 @@ void main() {
         {'retry_after_ms': 4000},
       );
       expect(
-        (await _fails(s.updates.rollback())).kind,
+        (await _fails(s.updates.rollback(adminPin: _pin))).kind,
         SystemErrorKind.rateLimited,
       );
       mock.system.failNext = const api.ApiException(
@@ -599,7 +621,7 @@ void main() {
         'not enough memory',
         {'kind': 'memory', 'needed_bytes': 2147483648, 'available_bytes': 1},
       );
-      final e = await _fails(s.updates.rollback());
+      final e = await _fails(s.updates.rollback(adminPin: _pin));
       expect(e.kind, SystemErrorKind.insufficientResources);
       expect(e.message, contains('memory'));
     });
@@ -640,6 +662,104 @@ void main() {
         (await _fails(s.system.restartSession())).kind,
         SystemErrorKind.unavailable,
       );
+    });
+  });
+
+  group('admin PIN of the box-wide actions (session API 0.13)', () {
+    test('rollback, channel, base and hardware send admin_pin', () async {
+      final mock = _Recording();
+      await mock.waitConnected();
+      addTearDown(mock.close);
+      final s = daemonSystemServices(mock);
+      final sent = mock.sent;
+      final r = await s.updates.rollback(adminPin: _pin);
+      mock.system.finishJob(r.jobId);
+      final c = await s.updates.setChannel(UpdateChannel.beta, adminPin: _pin);
+      mock.system.finishJob(c.jobId);
+      final b = await s.updates.setBase(
+        NixBase.stable,
+        acknowledgeDowngrade: true,
+        adminPin: _pin,
+      );
+      mock.system.finishJob(b.jobId);
+      final h = await s.system.redetectHardware(adminPin: _pin);
+      expect(h.kind, JobKind.hardwareRedetect);
+      await pumpEventQueue();
+      for (final m in [
+        'system.rollback',
+        'system.channel.set',
+        'system.base.set',
+        'system.hardware.redetect',
+      ]) {
+        expect(sent[m], _pin, reason: m);
+      }
+    });
+
+    test('missing or wrong: pin_required for the admin PIN', () async {
+      final (_, s) = await _setup();
+      for (final f in <Future<Object?> Function()>[
+        () => s.updates.rollback(),
+        () => s.updates.rollback(adminPin: '1111'),
+        () => s.updates.setChannel(UpdateChannel.beta),
+        () => s.updates.setBase(NixBase.stable, adminPin: '0000'),
+        () => s.system.redetectHardware(),
+      ]) {
+        final e = await _fails(f());
+        expect(e.kind, SystemErrorKind.pinRequired);
+        expect(PinRefusal.of(e)!.kind, PinKind.admin);
+        // No backoff for the admin PIN.
+        expect(PinRefusal.of(e)!.retryAt, isNull);
+      }
+    });
+
+    test(
+      'none needed on a schema-1 box or for an admin without a PIN',
+      () async {
+        final (mock, s) = await _setup();
+        mock.profiles.schema1 = true;
+        final r = await s.updates.rollback();
+        mock.system.finishJob(r.jobId);
+        mock.profiles
+          ..schema1 = false
+          ..admin.pin = null;
+        expect(
+          (await s.system.redetectHardware()).kind,
+          JobKind.hardwareRedetect,
+        );
+      },
+    );
+
+    test('no admin profile: pin_required even with a PIN', () async {
+      final (mock, s) = await _setup();
+      mock.profiles.profiles.removeWhere((p) => p.admin);
+      final e = await _fails(s.updates.rollback(adminPin: _pin));
+      expect(e.kind, SystemErrorKind.pinRequired);
+    });
+  });
+
+  group('rollback re-adds box features (0.13)', () {
+    test('readds_features, then features_readded in the result', () async {
+      final (mock, s) = await _setup();
+      final g = mock.system.generations;
+      mock.system.generations = [
+        g[0],
+        api.Generation(
+          generation: g[1].generation,
+          date: g[1].date,
+          rev: g[1].rev,
+          current: false,
+          booted: g[1].booted,
+          readdsFeatures: const [api.BoxFeature.graphics32],
+        ),
+        g[2],
+      ];
+      final gens = await s.updates.generations();
+      expect(gens[1].readdsFeatures, ['graphics32']);
+      expect(gens[0].readdsFeatures, isEmpty);
+      final h = await s.updates.rollback(adminPin: _pin);
+      mock.system.finishJob(h.jobId);
+      final done = await s.jobs.watch(h.jobId).last;
+      expect(done.result?['features_readded'], ['graphics32']);
     });
   });
 }

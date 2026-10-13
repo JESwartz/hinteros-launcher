@@ -60,6 +60,10 @@ abstract class SystemRepository {
   /// (retried once when it went stale). Null when there was nothing to
   /// change.
   Future<JobHandle?> applySettings();
+
+  /// `hardware.redetect {admin_pin?}`: detects the hardware again and
+  /// applies it (a job). The admin PIN as for [UpdatesRepository.rollback].
+  Future<JobHandle> redetectHardware({String? adminPin});
 }
 
 /// The admin password prompt: the session daemon is polkit's authentication
@@ -98,18 +102,28 @@ abstract class UpdatesRepository {
   /// `generations.list`, newest first.
   Future<List<Generation>> generations();
 
-  /// `rollback {generation?}`; null: the previous generation.
-  Future<JobHandle> rollback({int? generation});
+  // The box-wide actions (rollback, channel, base, hardware) take the admin
+  // profile's PIN (session API 0.13): missing or wrong gives
+  // [SystemErrorKind.pinRequired] with `pin: admin`. None is needed on a
+  // schema-1 box or while the admin profile has no PIN.
+
+  /// `rollback {generation?, admin_pin?}`; null: the previous generation.
+  Future<JobHandle> rollback({int? generation, String? adminPin});
 
   /// `channel.set`. A switch that is a downgrade throws
   /// [SystemErrorKind.needsAcknowledgement] unless [acknowledgeDowngrade].
   Future<JobHandle> setChannel(
     UpdateChannel channel, {
     bool acknowledgeDowngrade = false,
+    String? adminPin,
   });
 
   /// `base.set`; unstable -> stable needs [acknowledgeDowngrade].
-  Future<JobHandle> setBase(NixBase base, {bool acknowledgeDowngrade = false});
+  Future<JobHandle> setBase(
+    NixBase base, {
+    bool acknowledgeDowngrade = false,
+    String? adminPin,
+  });
 }
 
 /// Wi-Fi through NetworkManager (`network.status`, `wifi.*`). System-wide

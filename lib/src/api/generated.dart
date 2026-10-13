@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.12).
+// Source: schema/session-api.json (session API 0.13).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.12';
+const apiVersion = '0.13';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -66,6 +66,7 @@ const apiMethodNames = <String>[
   'system.jobs.get',
   'system.jobs.list',
   'system.jobs.cancel',
+  'system.guest.end',
   'network.status',
   'wifi.scan',
   'wifi.list',
@@ -1039,6 +1040,7 @@ enum JobKind {
   profilesCreate('profiles_create'),
   profilesRemove('profiles_remove'),
   guestSet('guest_set'),
+  guestEnd('guest_end'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -1696,6 +1698,7 @@ class Generation {
     required this.current,
     required this.booted,
     this.profiles,
+    this.readdsFeatures,
   });
 
   final int generation;
@@ -1710,6 +1713,9 @@ class Generation {
 
   /// The accounts in that generation's state.json with their current names (null: no longer a profile); absent if its state.json cannot be read (since 0.4). The rollback screen lists the profiles a rollback would drop or bring back empty.
   final List<GenerationProfile>? profiles;
+
+  /// 0.5: box features a rollback to this generation would turn back on: the profiles' apps need them and its state.json lacks them (the rollback job re-adds them in a box stage; the rollback screen says so). Absent when there are none or it is unknown (schema 1, unreadable state.json).
+  final List<BoxFeature>? readdsFeatures;
 
   factory Generation.fromJson(Map<String, dynamic> json) => Generation(
     generation: json['generation'] as int,
@@ -1726,6 +1732,11 @@ class Generation {
                 ),
               )
               .toList(),
+    readdsFeatures: json['readds_features'] == null
+        ? null
+        : (json['readds_features'] as List)
+              .map((x) => BoxFeature.fromJson(x as String))
+              .toList(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -1735,6 +1746,8 @@ class Generation {
     'current': current,
     'booted': booted,
     if (profiles != null) 'profiles': profiles!.map((x) => x.toJson()).toList(),
+    if (readdsFeatures != null)
+      'readds_features': readdsFeatures!.map((x) => x.toJson()).toList(),
   };
 
   @override
@@ -1940,6 +1953,7 @@ class AppliedResult {
     required this.generation,
     required this.rev,
     this.appsNotUpdated,
+    this.featuresReadded,
   });
 
   final int? generation;
@@ -1947,6 +1961,9 @@ class AppliedResult {
 
   /// 0.4: app envs the final apps stage could not rebuild; each keeps its previous generation, which still works. Absent when there were none.
   final List<AppliedResultAppsNotUpdatedItem>? appsNotUpdated;
+
+  /// 0.5 (rollback jobs): box features turned back on after the rollback, because the profiles' apps need them and the restored generation lacked them. Absent when there were none.
+  final List<BoxFeature>? featuresReadded;
 
   factory AppliedResult.fromJson(Map<String, dynamic> json) => AppliedResult(
     generation: json['generation'] == null ? null : json['generation'] as int,
@@ -1960,6 +1977,11 @@ class AppliedResult {
                 ),
               )
               .toList(),
+    featuresReadded: json['features_readded'] == null
+        ? null
+        : (json['features_readded'] as List)
+              .map((x) => BoxFeature.fromJson(x as String))
+              .toList(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -1967,6 +1989,8 @@ class AppliedResult {
     'rev': rev,
     if (appsNotUpdated != null)
       'apps_not_updated': appsNotUpdated!.map((x) => x.toJson()).toList(),
+    if (featuresReadded != null)
+      'features_readded': featuresReadded!.map((x) => x.toJson()).toList(),
   };
 
   @override
@@ -4028,12 +4052,19 @@ class SystemRebuildResult {
 }
 
 class SystemHardwareRedetectParams {
-  const SystemHardwareRedetectParams();
+  const SystemHardwareRedetectParams({this.adminPin});
+
+  /// 4 to 8 digits. Never logged.
+  final String? adminPin;
 
   factory SystemHardwareRedetectParams.fromJson(Map<String, dynamic> json) =>
-      SystemHardwareRedetectParams();
+      SystemHardwareRedetectParams(
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
+      );
 
-  Map<String, dynamic> toJson() => {};
+  Map<String, dynamic> toJson() => {'admin_pin': ?adminPin};
 
   @override
   bool operator ==(Object other) =>
@@ -4073,18 +4104,24 @@ class SystemHardwareRedetectResult {
 }
 
 class SystemRollbackParams {
-  const SystemRollbackParams({this.generation});
+  const SystemRollbackParams({this.generation, this.adminPin});
 
   final int? generation;
 
-  factory SystemRollbackParams.fromJson(Map<String, dynamic> json) =>
-      SystemRollbackParams(
-        generation: json['generation'] == null
-            ? null
-            : json['generation'] as int,
-      );
+  /// 4 to 8 digits. Never logged.
+  final String? adminPin;
 
-  Map<String, dynamic> toJson() => {'generation': ?generation};
+  factory SystemRollbackParams.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemRollbackParams(
+    generation: json['generation'] == null ? null : json['generation'] as int,
+    adminPin: json['admin_pin'] == null ? null : json['admin_pin'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'generation': ?generation,
+    'admin_pin': ?adminPin,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -4228,10 +4265,14 @@ class SystemChannelSetParams {
   const SystemChannelSetParams({
     required this.channel,
     this.acknowledgeDowngrade,
+    this.adminPin,
   });
 
   final Channel channel;
   final bool? acknowledgeDowngrade;
+
+  /// 4 to 8 digits. Never logged.
+  final String? adminPin;
 
   factory SystemChannelSetParams.fromJson(Map<String, dynamic> json) =>
       SystemChannelSetParams(
@@ -4239,11 +4280,15 @@ class SystemChannelSetParams {
         acknowledgeDowngrade: json['acknowledge_downgrade'] == null
             ? null
             : json['acknowledge_downgrade'] as bool,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
       );
 
   Map<String, dynamic> toJson() => {
     'channel': channel.toJson(),
     'acknowledge_downgrade': ?acknowledgeDowngrade,
+    'admin_pin': ?adminPin,
   };
 
   @override
@@ -4284,10 +4329,17 @@ class SystemChannelSetResult {
 }
 
 class SystemBaseSetParams {
-  const SystemBaseSetParams({required this.base, this.acknowledgeDowngrade});
+  const SystemBaseSetParams({
+    required this.base,
+    this.acknowledgeDowngrade,
+    this.adminPin,
+  });
 
   final Base base;
   final bool? acknowledgeDowngrade;
+
+  /// 4 to 8 digits. Never logged.
+  final String? adminPin;
 
   factory SystemBaseSetParams.fromJson(Map<String, dynamic> json) =>
       SystemBaseSetParams(
@@ -4295,11 +4347,15 @@ class SystemBaseSetParams {
         acknowledgeDowngrade: json['acknowledge_downgrade'] == null
             ? null
             : json['acknowledge_downgrade'] as bool,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
       );
 
   Map<String, dynamic> toJson() => {
     'base': base.toJson(),
     'acknowledge_downgrade': ?acknowledgeDowngrade,
+    'admin_pin': ?adminPin,
   };
 
   @override
@@ -6014,6 +6070,51 @@ class SystemJobsCancelResult {
 
   @override
   String toString() => 'SystemJobsCancelResult(${jsonEncode(toJson())})';
+}
+
+class SystemGuestEndParams {
+  const SystemGuestEndParams();
+
+  factory SystemGuestEndParams.fromJson(Map<String, dynamic> json) =>
+      SystemGuestEndParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemGuestEndParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemGuestEndParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemGuestEndResult {
+  const SystemGuestEndResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemGuestEndResult.fromJson(Map<String, dynamic> json) =>
+      SystemGuestEndResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemGuestEndResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemGuestEndResult(${jsonEncode(toJson())})';
 }
 
 class NetworkStatusParams {
@@ -10545,6 +10646,8 @@ mixin SessionApiMethods {
   );
 
   /// Relayed to the system service's hardware.redetect. Regenerate facter.json with nixos-facter and apply it (job). Action org.hinteros.system.rebuild.
+  ///
+  /// On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root.
   Future<SystemHardwareRedetectResult> systemHardwareRedetect([
     SystemHardwareRedetectParams params = const SystemHardwareRedetectParams(),
   ]) async => SystemHardwareRedetectResult.fromJson(
@@ -10552,6 +10655,8 @@ mixin SessionApiMethods {
   );
 
   /// Relayed to the system service's rollback. Switch to an earlier generation (default: the one before the current), then restore /etc/hinteros from its snapshot (job). Action org.hinteros.system.rollback.
+  ///
+  /// On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root. After the switch and the apps stage (schema 2), box features that the owners' current app envs need and the restored generation lacks are turned back on in a box stage: the apply flow on the restored configuration with requirements = what the envs need (a second, mostly cached build; a new generation). The result then lists them in features_readded; generations.list names them beforehand per generation (readds_features). If that build fails the job fails at stage box (the rollback itself stays).
   Future<SystemRollbackResult> systemRollback([
     SystemRollbackParams params = const SystemRollbackParams(),
   ]) async => SystemRollbackResult.fromJson(
@@ -10578,7 +10683,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's channel.set. Follow another channel (job). Action org.hinteros.system.channel.
   ///
-  /// The URL comes from the running generation's channel table, never from params. The target tip must be signed by an allowed signer. Moving from beta to stable, or to a tip that does not descend from the locked revision, needs acknowledge_downgrade: true (else needs_acknowledgement: at once for beta to stable, in job_finished.error for a non-fast-forward tip). Returns job_id null if the channel is already the current one.
+  /// The URL comes from the running generation's channel table, never from params. The target tip must be signed by an allowed signer. Moving from beta to stable, or to a tip that does not descend from the locked revision, needs acknowledge_downgrade: true (else needs_acknowledgement: at once for beta to stable, in job_finished.error for a non-fast-forward tip). Returns job_id null if the channel is already the current one. On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root.
   Future<SystemChannelSetResult> systemChannelSet(
     SystemChannelSetParams params,
   ) async => SystemChannelSetResult.fromJson(
@@ -10586,6 +10691,8 @@ mixin SessionApiMethods {
   );
 
   /// Relayed to the system service's base.set. Switch the nixpkgs base (job). Action org.hinteros.system.channel. unstable to stable needs acknowledge_downgrade: true.
+  ///
+  /// On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root. The PIN is checked before anything else, also when the base is already the requested one.
   Future<SystemBaseSetResult> systemBaseSet(SystemBaseSetParams params) async =>
       SystemBaseSetResult.fromJson(
         await rpc('system.base.set', params.toJson()),
@@ -10812,6 +10919,15 @@ mixin SessionApiMethods {
     SystemJobsCancelParams params,
   ) async => SystemJobsCancelResult.fromJson(
     await rpc('system.jobs.cancel', params.toJson()),
+  );
+
+  /// Relayed to the system service's guest.end. End guest session (0.5): end the guest's session and wipe the guest now (job). Only the guest itself. Action org.hinteros.system.profiles.
+  ///
+  /// Only a caller that is the guest account (hinteros-guest, while the guest is on) may call it; anyone else gets permission_denied {reason: profile}. The service checks the account first: the name hinteros-guest, the expected guest uid (20000 on a box), no other account with that uid, a home that is an absolute path ending in /hinteros-guest; otherwise internal_error and nothing is touched. The job (kind guest_end) hides the guest from the picker (profiles-public.json guest.enabled false; PAM refuses the guest) while it runs, ends the guest's session itself (logind TerminateUser, its user slice, then SIGKILL for anything left of the uid; it fails at stage preparing if processes remain, before anything is deleted), then deletes everything the guest uid owns in its home (the home directory itself stays), in /tmp, /var/tmp and /dev/shm (top-level entries owned by the uid; no symlink is followed, no other filesystem entered, nothing owned by another uid touched), the guest's app env link (then given the starter env again), its terms acceptances (by hinteros-guest), its usage entry and a switch hint that targets it. The boot-time wipe stays. The caller's own session ends while the job runs: call it last.
+  Future<SystemGuestEndResult> systemGuestEnd([
+    SystemGuestEndParams params = const SystemGuestEndParams(),
+  ]) async => SystemGuestEndResult.fromJson(
+    await rpc('system.guest.end', params.toJson()),
   );
 
   /// Wired and Wi-Fi state, the SSID joined and the IP address.
@@ -11071,7 +11187,9 @@ mixin SessionApiMethods {
         await rpc('session.unlock', params.toJson()),
       );
 
-  /// Guest only: end the guest session now (like a switch, to the picker). The guest's home and apps are wiped at the next boot.
+  /// Guest only: end the guest session now (like a switch, to the picker) and wipe the guest now.
+  ///
+  /// Answers {} at once; switch_progress events follow as on a switch (closing_apps, closing_steam, ending; switch_wait, switch_force_close and switch_cancel work the same). Once every app is closed the daemon calls system.guest.end (0.13): that job ends this session itself and wipes the guest's home, app env (back to the starter set), terms acceptances and usage; the boot-time wipe stays. While another job runs the daemon retries for 15 s; if the wipe cannot start it ends the session anyway and the guest is wiped at the next boot.
   Future<SessionEndGuestResult> sessionEndGuest([
     SessionEndGuestParams params = const SessionEndGuestParams(),
   ]) async => SessionEndGuestResult.fromJson(

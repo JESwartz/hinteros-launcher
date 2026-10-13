@@ -86,6 +86,27 @@ flutter run -d linux --dart-entrypoint-args=--mock
 ./result/bin/hinteros-launcher --mock --windowed
 ```
 
+### Session API 0.13: admin PIN for box-wide actions, guest wipe
+
+- **Admin PIN** (`lib/src/ui/profiles/profile_ui.dart` `withBoxAdminPin`, `runAdminJob` in
+  `lib/src/ui/system/common.dart`): rollback, channel change and software base change send
+  `admin_pin` (system API 0.5). The launcher asks first on the same admin-PIN pad as the other
+  admin actions when `profiles.list` shows an admin profile with a PIN; a wrong PIN
+  (`pin_required {pin: admin}`) stays on the pad, Back on the empty pad does nothing. With no PIN
+  on the admin profile, or when `profiles.list` fails, the call goes without one, and a
+  `pin_required {pin: admin}` answer still opens the pad; with no admin profile (first boot) the
+  service's message is shown. A downgrade's second call (`acknowledge_downgrade`) reuses the PIN.
+  `hardware.redetect` takes it too (`SystemRepository.redetectHardware`); no screen calls it yet.
+- **Rollback**: a generation with `readds_features` says on the confirmation that the box turns
+  the parts the apps need on again; the job page shows the `box` stage after the switch and,
+  from `features_readded`, that they are on again. A failed box stage says the rollback is done.
+- **End guest session** removes everything the guest did now (`session.end_guest` asks for
+  `system.guest.end`, job kind `guest_end`), not at the next restart.
+- **Mock**: the box-wide actions check the admin PIN (`MockProfileBox.checkBoxAdmin`,
+  `MockProfileSession.checkBoxAdminPin`; `schema1` or an admin without a PIN needs none),
+  `system.guest.end` (guest only), and `generations.list`'s generation 10 re-adds
+  `graphics32`/`steam-devices`.
+
 ### Session API 0.12: profiles (M7)
 
 Design: `hinteros-docs/design/profiles.md` and `apps.md`. The schema's profile parts are the

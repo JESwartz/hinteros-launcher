@@ -34,6 +34,8 @@ class _UnavailableSystem implements SystemRepository {
   Future<JobHandle?> applySettings() => Future.error(_gone);
   @override
   Future<JobHandle> setSsh(bool enable) => Future.error(_gone);
+  @override
+  Future<JobHandle> redetectHardware({String? adminPin}) => Future.error(_gone);
 }
 
 class _UnavailableUpdates implements UpdatesRepository {
@@ -49,16 +51,19 @@ class _UnavailableUpdates implements UpdatesRepository {
   @override
   Future<List<Generation>> generations() => Future.error(_gone);
   @override
-  Future<JobHandle> rollback({int? generation}) => Future.error(_gone);
+  Future<JobHandle> rollback({int? generation, String? adminPin}) =>
+      Future.error(_gone);
   @override
   Future<JobHandle> setChannel(
     UpdateChannel channel, {
     bool acknowledgeDowngrade = false,
+    String? adminPin,
   }) => Future.error(_gone);
   @override
   Future<JobHandle> setBase(
     NixBase base, {
     bool acknowledgeDowngrade = false,
+    String? adminPin,
   }) => Future.error(_gone);
 }
 

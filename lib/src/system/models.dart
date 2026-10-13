@@ -114,7 +114,8 @@ enum JobKind {
   profileCreate('Creating the profile'),
   profileRemove('Removing the profile'),
   guest('Changing the guest'),
-  starterSet('Saving the starter apps');
+  starterSet('Saving the starter apps'),
+  guestEnd('Ending the guest session');
 
   const JobKind(this.title);
   final String title;
@@ -149,6 +150,7 @@ enum JobKind {
       JobStage.activating,
       JobStage.finishing,
     ],
+    guestEnd => const [JobStage.preparing, JobStage.finishing],
     appsRollback || starterSet => const [
       JobStage.preparing,
       JobStage.evaluating,
@@ -416,6 +418,7 @@ class Generation {
     this.current = false,
     this.booted = false,
     this.profiles,
+    this.readdsFeatures = const [],
   });
 
   final int generation;
@@ -429,6 +432,10 @@ class Generation {
   /// The accounts in that generation (0.12), with their names when the box
   /// still knows them; null when unknown.
   final List<({String id, String? name})>? profiles;
+
+  /// Box features a rollback to it turns back on (0.13, `readds_features`:
+  /// the profiles' apps need them, that generation lacks them).
+  final List<String> readdsFeatures;
 }
 
 // ---------------------------------------------------------------- system

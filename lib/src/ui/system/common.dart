@@ -8,6 +8,7 @@ import '../../system/models.dart';
 import '../../system/repositories.dart';
 import '../dialogs.dart';
 import '../pages.dart';
+import '../profiles/profile_ui.dart' show withBoxAdminPin;
 import '../widgets.dart';
 
 /// A readable line for whatever went wrong.
@@ -150,5 +151,33 @@ Future<bool> runJob(
   }
   if (!context.mounted) return false;
   final r = await showJobProgress(context, services, h, subtitle: subtitle);
+  return r?.ok ?? false;
+}
+
+/// [runJob] for a box-wide action that takes the admin profile's PIN
+/// (rollback, channel, base, hardware; [withBoxAdminPin]). Back on the pad:
+/// nothing runs, false.
+Future<bool> runAdminJob(
+  BuildContext context,
+  SystemServices services, {
+  required String title,
+  required Future<JobHandle> Function(String? adminPin) start,
+}) async {
+  final JobHandle? h;
+  try {
+    h = await withBoxAdminPin(
+      context,
+      services.profiles,
+      title: title,
+      action: start,
+    );
+  } on SystemException catch (e) {
+    if (context.mounted) {
+      await showMessage(context, title: "That didn't work", body: e.message);
+    }
+    return false;
+  }
+  if (h == null || !context.mounted) return false;
+  final r = await showJobProgress(context, services, h);
   return r?.ok ?? false;
 }

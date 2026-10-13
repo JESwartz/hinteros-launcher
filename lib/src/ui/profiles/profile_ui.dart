@@ -971,6 +971,65 @@ Future<bool> withAdminPin(
   return pin != null;
 }
 
+/// A box-wide action (rollback, channel, base, hardware; session API 0.13)
+/// with the admin profile's PIN, on the same pad as [withAdminPin]. The pad
+/// comes first when the admin profile has a PIN; without one (a migrated
+/// admin profile, a box before profiles: `profiles.list` fails) or without
+/// an admin profile (first boot: the call says why) the action runs with no
+/// PIN, and a `pin_required {pin: admin}` answer then still opens the pad.
+/// A wrong PIN stays on the pad; anything else the action throws closes it
+/// and is thrown from here. Resolves with the action's result, or null when
+/// Back left the pad (nothing ran).
+Future<T?> withBoxAdminPin<T extends Object>(
+  BuildContext context,
+  ProfilesRepository profiles, {
+  required String title,
+  required Future<T> Function(String? pin) action,
+}) async {
+  ProfileInfo? admin;
+  var known = false;
+  try {
+    admin = (await profiles.list()).admin;
+    known = true;
+  } on SystemException {
+    // A box before profiles (or no connection): try without a PIN.
+  }
+  if (!known || admin == null || !admin.pinSet) {
+    try {
+      return await action(null);
+    } on SystemException catch (e) {
+      final r = PinRefusal.of(e);
+      // No admin profile (first boot): no PIN can help.
+      if (r == null || r.kind != PinKind.admin || (known && admin == null)) {
+        rethrow;
+      }
+    }
+  }
+  if (!context.mounted) return null;
+  T? result;
+  Object? failure;
+  StackTrace? trace;
+  final pin = await showPinEntry(
+    context,
+    title: title,
+    body: "Type the admin profile's PIN.",
+    forgotPinFor: forgotPinAdmin,
+    check: (pin) async {
+      try {
+        result = await action(pin);
+      } catch (e, st) {
+        if (PinRefusal.of(e) != null) return PinAttempt.fromError(e);
+        failure = e;
+        trace = st;
+      }
+      return const PinAccepted();
+    },
+  );
+  if (pin == null) return null;
+  if (failure != null) Error.throwWithStackTrace(failure!, trace!);
+  return result;
+}
+
 // ---------------------------------------------------------------- forgotten PIN
 
 /// [PinEntryPage.forgotPinFor] when the admin profile's PIN is asked and its

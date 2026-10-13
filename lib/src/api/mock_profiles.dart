@@ -139,6 +139,7 @@ class MockProfileSession {
       method.startsWith('greeter.') ||
       method.startsWith('system.profiles.') ||
       method == 'system.guest.set' ||
+      method == 'system.guest.end' ||
       method == 'system.apps.list' ||
       method == 'system.apps.generations' ||
       method == 'system.apps.rollback' ||
@@ -207,6 +208,31 @@ class MockProfileSession {
       throw _pinRequired(which, s * 1000);
     }
     throw _pinRequired(which);
+  }
+
+  /// The admin PIN of the box-wide actions (system API 0.5: `rollback`,
+  /// `channel.set`, `base.set`, `hardware.redetect`): none on a schema-1 box
+  /// or for an admin profile without a PIN yet; `pin_required {pin: admin}`
+  /// when it is missing or wrong, or when there is no admin profile.
+  void checkBoxAdminPin(String? pin) {
+    if (pin != null && !RegExp(r'^[0-9]{4,8}$').hasMatch(pin)) {
+      throw const ApiException(
+        ApiErrorCode.invalidParams,
+        'admin_pin must be 4 to 8 digits',
+        {'field': 'admin_pin', 'reason': 'bad_format'},
+      );
+    }
+    if (schema1) return;
+    final a = profiles.where((x) => x.admin).firstOrNull;
+    if (a == null) {
+      throw ApiException(
+        ApiErrorCode.pinRequired,
+        'there is no admin profile',
+        PinRequiredData(pin: PinRequiredDataPin.admin).toJson(),
+      );
+    }
+    if (a.pin == null) return;
+    _check(a, pin, 'admin');
   }
 
   /// A locked target other than this session's profile: its PIN first.
@@ -343,6 +369,13 @@ class MockProfileSession {
         log.add('end_guest');
         _switching = true;
         _ending();
+        // 0.13: then the daemon calls system.guest.end, whose job ends
+        // this session and wipes the guest now.
+        try {
+          relay.startJob(JobKind.guestEnd);
+        } on ApiException {
+          // The real daemon ends its own session then (wiped at boot).
+        }
         return const SessionEndGuestResult().toJson();
       case 'greeter.list':
         _greeterOnly();
@@ -487,6 +520,23 @@ class MockProfileSession {
             },
           ),
         ).toJson();
+      case 'system.guest.end':
+        if (schema1) {
+          throw const ApiException(
+            ApiErrorCode.unavailable,
+            'there are no profiles before the migration',
+            {'service': 'profiles', 'reason': 'schema1'},
+          );
+        }
+        if (current != 'guest') {
+          throw const ApiException(
+            ApiErrorCode.permissionDenied,
+            'only the guest can end the guest session',
+            {'action': 'org.hinteros.system.profiles', 'reason': 'profile'},
+          );
+        }
+        log.add('guest_end');
+        return JobRef(jobId: relay.startJob(JobKind.guestEnd)).toJson();
       case 'system.guest.set':
         final c = SystemGuestSetParams.fromJson(p);
         _check(admin, c.adminPin, 'admin');

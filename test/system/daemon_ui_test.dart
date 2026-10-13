@@ -215,6 +215,8 @@ void main() {
         await enterSettingsEntry(t, 'updates');
         await press(t, [kDown, kEnter]); // channel
         await press(t, [kDown, kEnter]); // Stable
+        expect(find.text("Type the admin profile's PIN."), findsOneWidget);
+        await enterPin(t, '2468');
         expect(find.text('Switch to Stable?'), findsOneWidget);
         expect(h.mock.system.runningJobId, isNull);
         await press(t, [kRight, kEnter]); // Switch anyway

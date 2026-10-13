@@ -63,6 +63,9 @@ class _Job {
 
   /// The catalog ids an apps job installs or removes.
   List<String> apps = const [];
+
+  /// A rollback that turns box features back on (`features_readded`).
+  List<BoxFeature>? featuresReadded;
 }
 
 class MockSystemRelay {
@@ -170,6 +173,12 @@ class MockSystemRelay {
 
   /// The next mutating call fails with this (rate limit, memory, ...).
   ApiException? failNext;
+
+  /// The admin PIN check of the box-wide actions (`rollback`, `channel.set`,
+  /// `base.set`, `hardware.redetect`; system API 0.5): throws `pin_required`
+  /// or `invalid_params`. Null: no PIN needed (a schema-1 box). [MockDaemon]
+  /// sets it to its profiles' check.
+  void Function(String? adminPin)? checkAdminPin;
 
   /// Ids the next jobs get (then random-looking ones).
   final List<String> jobIdQueue = [];
@@ -335,13 +344,16 @@ class MockSystemRelay {
         _mutating('rebuild');
         return _started(JobKind.rebuild);
       case 'system.hardware.redetect':
-        _closed(p, const []);
+        _closed(p, const ['admin_pin']);
         _mutating('hardware.redetect');
+        checkAdminPin?.call(SystemHardwareRedetectParams.fromJson(p).adminPin);
         return _started(JobKind.hardwareRedetect);
       case 'system.rollback':
-        _closed(p, const ['generation']);
-        final want = SystemRollbackParams.fromJson(p).generation;
+        _closed(p, const ['generation', 'admin_pin']);
+        final rp = SystemRollbackParams.fromJson(p);
+        final want = rp.generation;
         _mutating('rollback');
+        checkAdminPin?.call(rp.adminPin);
         final cur = generations.firstWhere((g) => g.current);
         final target = want == null
             ? generations
@@ -356,7 +368,7 @@ class MockSystemRelay {
                 : 'generation $want is not on disk',
           );
         }
-        return _started(
+        final id = _start(
           JobKind.rollback,
           onSuccess: () {
             generation = target.generation;
@@ -373,6 +385,8 @@ class MockSystemRelay {
             ];
           },
         );
+        _jobs[id]!.featuresReadded = target.readdsFeatures;
+        return JobRef(jobId: id).toJson();
       case 'system.update.check':
         _closed(p, const []);
         _mutating('update.check');
@@ -432,12 +446,13 @@ class MockSystemRelay {
           },
         );
       case 'system.channel.set':
-        _closed(p, const ['channel', 'acknowledge_downgrade']);
+        _closed(p, const ['channel', 'acknowledge_downgrade', 'admin_pin']);
         final c = SystemChannelSetParams.fromJson(p);
         if (c.channel == Channel.unknown) {
           throw const ApiException(ApiErrorCode.invalidParams, 'bad channel');
         }
         _mutating('channel.set');
+        checkAdminPin?.call(c.adminPin);
         if (c.channel == channel) return const JobRef(jobId: null).toJson();
         if (channel == Channel.beta &&
             c.channel == Channel.stable &&
@@ -449,12 +464,13 @@ class MockSystemRelay {
         }
         return _started(JobKind.channel, onSuccess: () => channel = c.channel);
       case 'system.base.set':
-        _closed(p, const ['base', 'acknowledge_downgrade']);
+        _closed(p, const ['base', 'acknowledge_downgrade', 'admin_pin']);
         final b = SystemBaseSetParams.fromJson(p);
         if (b.base == Base.unknown) {
           throw const ApiException(ApiErrorCode.invalidParams, 'bad base');
         }
         _mutating('base.set');
+        checkAdminPin?.call(b.adminPin);
         if (b.base == base) return const JobRef(jobId: null).toJson();
         if (base == Base.unstable &&
             b.base == Base.stable &&
@@ -837,7 +853,11 @@ class MockSystemRelay {
       j.stage = Stage.finishing;
       j.result = j.kind == JobKind.updateCheck
           ? _lastCheck?.toJson()
-          : AppliedResult(generation: generation, rev: rev).toJson();
+          : AppliedResult(
+              generation: generation,
+              rev: rev,
+              featuresReadded: j.featuresReadded,
+            ).toJson();
     }
     final restart = sessionRestartRequired ?? (ok && j.restart);
     j.restart = restart;
