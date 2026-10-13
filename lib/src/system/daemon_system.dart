@@ -82,6 +82,22 @@ String? releaseVersion(String? v) =>
 
 final _semver = RegExp(r'^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$');
 
+/// How a release is named on screen. `release/version` is the stable release
+/// a commit is built on, so a beta also carries its commit: `0.7.0.1a2b3c4
+/// beta`, `0.7.0 stable`. Anything else (no channel, the date fallback, no
+/// revision) is shown as it is.
+String releaseName(String version, String? rev, UpdateChannel? channel) {
+  if (releaseVersion(version) == null) return version;
+  return switch (channel) {
+    UpdateChannel.beta when rev != null && _hexRev.hasMatch(rev) =>
+      '$version.${rev.substring(0, 7)} beta',
+    UpdateChannel.stable => '$version stable',
+    _ => version,
+  };
+}
+
+final _hexRev = RegExp(r'^[0-9a-f]{7,}$');
+
 /// A daemon-provided line, trimmed to one line of at most 120 characters;
 /// null when empty.
 String? _oneLine(String? s) {
@@ -472,15 +488,18 @@ class DaemonUpdates implements UpdatesRepository {
       result = api.UpdateCheckResult.fromJson(map);
     }
     final info = await _conn.systemInfo();
+    final channel = _channel(info.channel);
     final a = result.available;
     _status = UpdateStatus(
-      currentVersion: info.version,
+      currentVersion: releaseName(info.version, info.rev, channel),
       currentRev: result.currentRev ?? '',
       available: a == null
           ? null
           : AvailableUpdate(
               rev: a.rev,
-              version: releaseVersion(a.version) ?? _dateVersion(_unix(a.date)),
+              version: releaseVersion(a.version) == null
+                  ? _dateVersion(_unix(a.date))
+                  : releaseName(a.version!, a.rev, channel),
               date: _unix(a.date),
               summary: a.summary,
               severity: a.security == null ? null : _severity(a.security!),
@@ -584,9 +603,10 @@ class DaemonSystem implements SystemRepository {
   @override
   Future<SystemInfo> info() => guardCall(() async {
     final i = await _conn.systemInfo();
+    final channel = _channel(i.channel);
     return SystemInfo(
-      version: i.version,
-      channel: _channel(i.channel),
+      version: releaseName(i.version, i.rev, channel),
+      channel: channel,
       base: _base(i.base),
       rev: i.rev,
       generation: i.generation,

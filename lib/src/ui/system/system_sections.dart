@@ -239,7 +239,8 @@ class _UpdatesSectionState extends State<UpdatesSection> {
           Text(
             info.channel == null
                 ? 'HinterOS ${status.currentVersion}. This box follows no update channel.'
-                : 'HinterOS ${status.currentVersion}, ${info.channel!.label} channel.',
+                : 'HinterOS ${status.currentVersion}. Updates come from the '
+                      '${info.channel!.label} channel.',
             style: t.label,
           ),
         );

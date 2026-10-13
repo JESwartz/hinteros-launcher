@@ -160,7 +160,7 @@ void main() {
       expect(find.textContaining('not running'), findsOneWidget);
       h.mock.system.unavailable = null;
       await press(t, [kEnter]); // Try again
-      expect(find.text('0.1.0'), findsOneWidget);
+      expect(find.text('0.1.0 stable'), findsOneWidget);
       expect(find.textContaining('Settings are unavailable'), findsNothing);
     });
 
@@ -184,7 +184,7 @@ void main() {
       await enterSettingsEntry(t, 'about');
       expect(find.byType(DevBadge), findsOneWidget);
       expect(find.text('DEV'), findsOneWidget);
-      expect(find.text('0.1.0'), findsOneWidget);
+      expect(find.text('0.1.0 stable'), findsOneWidget);
       expect(find.text('hinteros.local'), findsOneWidget);
       expect(
         find.text('SHA256:2CixtE95MNbZHanQGv6hP2D3qfguu9QZfjca2OaupKI'),

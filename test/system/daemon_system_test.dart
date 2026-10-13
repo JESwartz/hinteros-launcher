@@ -392,7 +392,7 @@ void main() {
       await pumpEventQueue();
       mock.system.finishJob(mock.system.runningJobId!);
       final st = await f;
-      expect(st.currentVersion, '0.1.0');
+      expect(st.currentVersion, '0.1.0 stable');
       expect(st.available!.rev, _rev);
       expect(st.available!.isSecurity, isTrue);
       expect(st.available!.severity, SecuritySeverity.high);
@@ -425,7 +425,7 @@ void main() {
       await pumpEventQueue();
       mock.system.finishJob(mock.system.runningJobId!);
       final a = (await f).available!;
-      expect(a.version, '0.6.1');
+      expect(a.version, '0.6.1 stable');
       expect(a.securitySummary, 'A website could take over the browser.');
     });
 
@@ -455,6 +455,39 @@ void main() {
         expect(releaseVersion(v), isNull, reason: '$v');
       }
     });
+
+    test('releaseName: a beta carries its commit, stable its channel', () {
+      const rev = '9a8b7c6d5e4f30211a2b3c4d5e6f708192a3b4c5';
+      expect(
+        releaseName('0.7.0', rev, UpdateChannel.beta),
+        '0.7.0.9a8b7c6 beta',
+      );
+      expect(releaseName('0.7.0', rev, UpdateChannel.stable), '0.7.0 stable');
+      expect(releaseName('0.7.0', rev, null), '0.7.0');
+      // A beta without a usable revision, and names that are not versions.
+      expect(releaseName('0.7.0', null, UpdateChannel.beta), '0.7.0');
+      expect(releaseName('0.7.0', 'xyz', UpdateChannel.beta), '0.7.0');
+      expect(releaseName('unknown', rev, UpdateChannel.stable), 'unknown');
+    });
+
+    test(
+      'a beta update and the running beta are named with their commits',
+      () async {
+        final (mock, s) = await _setup();
+        mock.system
+          ..channel = api.Channel.beta
+          ..version = '0.7.0'
+          ..rev = '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d';
+        mock.system.nextUpdate = _update(version: '0.7.0');
+        final f = s.updates.check();
+        await pumpEventQueue();
+        mock.system.finishJob(mock.system.runningJobId!);
+        final st = await f;
+        expect(st.currentVersion, '0.7.0.1a2b3c4 beta');
+        expect(st.available!.version, '0.7.0.${_rev.substring(0, 7)} beta');
+        expect((await s.system.info()).version, '0.7.0.1a2b3c4 beta');
+      },
+    );
 
     test('severities map: medium is moderate', () async {
       final (mock, s) = await _setup();
