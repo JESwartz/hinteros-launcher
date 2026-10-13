@@ -21,6 +21,7 @@ import 'common.dart';
 import 'dialogs.dart' show Choice, showChoice, showFailureOn;
 import 'profiles/first_launch_terms.dart';
 import 'profiles/profile_loading.dart';
+import 'profiles/profile_ui.dart' show withBoxAdminPin;
 import 'profiles/session_profile.dart';
 import 'games_screen.dart';
 import 'home_screen.dart';
@@ -577,8 +578,14 @@ class _LauncherShellState extends State<LauncherShell> {
     });
     if (choice != SecurityChoice.updateNow) return;
     try {
-      final h = await widget.services.updates.apply(u.rev);
-      if (!mounted) return;
+      // Every profile (the guest too) types the admin PIN first.
+      final h = await withBoxAdminPin(
+        _scopeContext ?? context,
+        widget.services.profiles,
+        title: 'Update HinterOS',
+        action: (pin) => widget.services.updates.apply(u.rev, adminPin: pin),
+      );
+      if (h == null || !mounted) return;
       await _modals.show<JobSnapshot>(
         (c, m) =>
             JobProgressScreen(modal: m, services: widget.services, job: h),

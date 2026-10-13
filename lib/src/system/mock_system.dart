@@ -265,8 +265,8 @@ class MockUpdates implements UpdatesRepository {
 
   final MockJobs jobs;
 
-  /// The profiles whose admin PIN the box-wide actions need (rollback,
-  /// channel, base, hardware). Null: none needed.
+  /// The profiles whose admin PIN the box-wide actions need (update,
+  /// rollback, channel, base, hardware). Null: none needed.
   MockProfileBox? box;
   final DateTime Function() _now;
   UpdateChannel channel;
@@ -312,7 +312,8 @@ class MockUpdates implements UpdatesRepository {
   }
 
   @override
-  Future<JobHandle> apply(String rev) async {
+  Future<JobHandle> apply(String rev, {String? adminPin}) async {
+    box?.checkBoxAdmin(adminPin);
     final a = _status.available;
     if (a == null || a.rev != rev) {
       throw const SystemException(

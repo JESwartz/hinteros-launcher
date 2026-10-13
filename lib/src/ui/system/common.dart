@@ -155,8 +155,8 @@ Future<bool> runJob(
 }
 
 /// [runJob] for a box-wide action that takes the admin profile's PIN
-/// (rollback, channel, base, hardware; [withBoxAdminPin]). Back on the pad:
-/// nothing runs, false.
+/// (update, rollback, channel, base, hardware; [withBoxAdminPin]). Back on
+/// the pad: nothing runs, false.
 Future<bool> runAdminJob(
   BuildContext context,
   SystemServices services, {

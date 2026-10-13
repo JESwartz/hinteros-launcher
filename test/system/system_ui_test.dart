@@ -301,6 +301,7 @@ void main() {
         findsOneWidget,
       );
       await press(t, [kDown, kEnter, kRight, kEnter]); // Update now, confirm
+      await enterPin(t, '2468'); // the admin PIN
     }
 
     testWidgets('check, update, progress with percentage, then failure', (

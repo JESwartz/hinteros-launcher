@@ -288,7 +288,7 @@ void main() {
       await pumpEventQueue();
       mock.system.finishJob(mock.system.runningJobId!);
       await check;
-      final h = await s.updates.apply(_rev);
+      final h = await s.updates.apply(_rev, adminPin: _pin);
       final all = s.jobs.watch(h.jobId).toList();
       await pumpEventQueue();
       mock.system.progressJob(
@@ -536,7 +536,7 @@ void main() {
     test('apply takes only the checked rev; the job updates the box', () async {
       final (mock, s) = await _setup();
       expect(
-        (await _fails(s.updates.apply(_rev))).kind,
+        (await _fails(s.updates.apply(_rev, adminPin: _pin))).kind,
         SystemErrorKind.stateConflict,
       );
       mock.system.nextUpdate = _update();
@@ -545,7 +545,7 @@ void main() {
       mock.system.finishJob(mock.system.runningJobId!);
       await f;
       mock.system.restartNext = true;
-      final h = await s.updates.apply(_rev);
+      final h = await s.updates.apply(_rev, adminPin: _pin);
       expect(h.kind, JobKind.update);
       mock.system.finishJob(h.jobId);
       final done = await s.jobs.watch(h.jobId).last;
@@ -666,38 +666,54 @@ void main() {
   });
 
   group('admin PIN of the box-wide actions (session API 0.13)', () {
-    test('rollback, channel, base and hardware send admin_pin', () async {
-      final mock = _Recording();
-      await mock.waitConnected();
-      addTearDown(mock.close);
-      final s = daemonSystemServices(mock);
-      final sent = mock.sent;
-      final r = await s.updates.rollback(adminPin: _pin);
-      mock.system.finishJob(r.jobId);
-      final c = await s.updates.setChannel(UpdateChannel.beta, adminPin: _pin);
-      mock.system.finishJob(c.jobId);
-      final b = await s.updates.setBase(
-        NixBase.stable,
-        acknowledgeDowngrade: true,
-        adminPin: _pin,
-      );
-      mock.system.finishJob(b.jobId);
-      final h = await s.system.redetectHardware(adminPin: _pin);
-      expect(h.kind, JobKind.hardwareRedetect);
-      await pumpEventQueue();
-      for (final m in [
-        'system.rollback',
-        'system.channel.set',
-        'system.base.set',
-        'system.hardware.redetect',
-      ]) {
-        expect(sent[m], _pin, reason: m);
-      }
-    });
+    test(
+      'update, rollback, channel, base and hardware send admin_pin',
+      () async {
+        final mock = _Recording();
+        await mock.waitConnected();
+        addTearDown(mock.close);
+        final s = daemonSystemServices(mock);
+        final sent = mock.sent;
+        mock.system.nextUpdate = _update();
+        final check = s.updates.check();
+        await pumpEventQueue();
+        mock.system.finishJob(mock.system.runningJobId!);
+        await check;
+        final u = await s.updates.apply(_rev, adminPin: _pin);
+        mock.system.finishJob(u.jobId);
+        final r = await s.updates.rollback(adminPin: _pin);
+        mock.system.finishJob(r.jobId);
+        final c = await s.updates.setChannel(
+          UpdateChannel.beta,
+          adminPin: _pin,
+        );
+        mock.system.finishJob(c.jobId);
+        final b = await s.updates.setBase(
+          NixBase.stable,
+          acknowledgeDowngrade: true,
+          adminPin: _pin,
+        );
+        mock.system.finishJob(b.jobId);
+        final h = await s.system.redetectHardware(adminPin: _pin);
+        expect(h.kind, JobKind.hardwareRedetect);
+        await pumpEventQueue();
+        for (final m in [
+          'system.update.apply',
+          'system.rollback',
+          'system.channel.set',
+          'system.base.set',
+          'system.hardware.redetect',
+        ]) {
+          expect(sent[m], _pin, reason: m);
+        }
+      },
+    );
 
     test('missing or wrong: pin_required for the admin PIN', () async {
       final (_, s) = await _setup();
       for (final f in <Future<Object?> Function()>[
+        () => s.updates.apply(_rev),
+        () => s.updates.apply(_rev, adminPin: '1357'),
         () => s.updates.rollback(),
         () => s.updates.rollback(adminPin: '1111'),
         () => s.updates.setChannel(UpdateChannel.beta),

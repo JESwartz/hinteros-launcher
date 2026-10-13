@@ -308,7 +308,12 @@ class _UpdatesSectionState extends State<UpdatesSection> {
                 confirmLabel: 'Update now',
               );
               if (r == null || !context.mounted) return;
-              await runJob(context, env.services, () => up.apply(a.rev));
+              await runAdminJob(
+                context,
+                env.services,
+                title: 'Update HinterOS',
+                start: (pin) => up.apply(a.rev, adminPin: pin),
+              );
               await reload();
             },
             builder: (f) => SettingRow(title: 'Update now', focused: f),

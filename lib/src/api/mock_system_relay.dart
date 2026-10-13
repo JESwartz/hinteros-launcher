@@ -174,10 +174,10 @@ class MockSystemRelay {
   /// The next mutating call fails with this (rate limit, memory, ...).
   ApiException? failNext;
 
-  /// The admin PIN check of the box-wide actions (`rollback`, `channel.set`,
-  /// `base.set`, `hardware.redetect`; system API 0.5): throws `pin_required`
-  /// or `invalid_params`. Null: no PIN needed (a schema-1 box). [MockDaemon]
-  /// sets it to its profiles' check.
+  /// The admin PIN check of the box-wide actions (`update.apply`,
+  /// `rollback`, `channel.set`, `base.set`, `hardware.redetect`; system API
+  /// 0.5): throws `pin_required` or `invalid_params`. Null: no PIN needed (a
+  /// schema-1 box). [MockDaemon] sets it to its profiles' check.
   void Function(String? adminPin)? checkAdminPin;
 
   /// Ids the next jobs get (then random-looking ones).
@@ -409,9 +409,11 @@ class MockSystemRelay {
         );
         return SystemUpdateCheckResult(jobId: id, result: null).toJson();
       case 'system.update.apply':
-        _closed(p, const ['rev']);
-        final want = SystemUpdateApplyParams.fromJson(p).rev;
+        _closed(p, const ['rev', 'admin_pin']);
+        final ap = SystemUpdateApplyParams.fromJson(p);
+        final want = ap.rev;
         _mutating('update.apply');
+        checkAdminPin?.call(ap.adminPin);
         final a = _lastCheck?.available;
         if (a == null || a.rev != want) {
           throw const ApiException(

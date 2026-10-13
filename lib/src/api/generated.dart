@@ -4214,15 +4214,23 @@ class SystemUpdateCheckResult {
 }
 
 class SystemUpdateApplyParams {
-  const SystemUpdateApplyParams({required this.rev});
+  const SystemUpdateApplyParams({required this.rev, this.adminPin});
 
   /// A full git commit id.
   final String rev;
 
-  factory SystemUpdateApplyParams.fromJson(Map<String, dynamic> json) =>
-      SystemUpdateApplyParams(rev: json['rev'] as String);
+  /// 4 to 8 digits. Never logged.
+  final String? adminPin;
 
-  Map<String, dynamic> toJson() => {'rev': rev};
+  factory SystemUpdateApplyParams.fromJson(Map<String, dynamic> json) =>
+      SystemUpdateApplyParams(
+        rev: json['rev'] as String,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'rev': rev, 'admin_pin': ?adminPin};
 
   @override
   bool operator ==(Object other) =>
@@ -10674,7 +10682,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's update.apply. Install the revision found by the last update.check (job). Action org.hinteros.system.update.apply.
   ///
-  /// rev must equal the last verified check result's available.rev for the current channel and locked revision, else state_conflict. The job re-verifies it, locks the hinteros input to ?rev=&lt;rev&gt; (never re-fetching the branch) and runs the apply flow.
+  /// rev must equal the last verified check result's available.rev for the current channel and locked revision, else state_conflict. The job re-verifies it, locks the hinteros input to ?rev=&lt;rev&gt; (never re-fetching the branch) and runs the apply flow. On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin, from every profile (the guest's included): pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet; an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root. The PIN is checked before rev is compared with the last check. system.update.check needs no PIN.
   Future<SystemUpdateApplyResult> systemUpdateApply(
     SystemUpdateApplyParams params,
   ) async => SystemUpdateApplyResult.fromJson(

@@ -1,10 +1,12 @@
-// The admin PIN of the box-wide actions (session API 0.13): rollback,
+// The admin PIN of the box-wide actions (session API 0.13): an update (from
+// Settings, the banner and the security notice, every profile), rollback,
 // channel and base ask for it on the admin-PIN pad before they run; a wrong
 // PIN asks again, Back on the empty pad does nothing. Also the rollback's
 // "turns on the parts your apps need" line.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/system/mock_system.dart';
 import 'package:hinteros_launcher/src/system/models.dart';
+import 'package:hinteros_launcher/src/ui/settings_screen.dart';
 
 import '../support/harness.dart';
 import '../support/nav_helpers.dart';
@@ -14,11 +16,13 @@ const _askPin = "Type the admin profile's PIN.";
 Harness harness({
   UpdateChannel channel = UpdateChannel.beta,
   String current = 'p1',
+  UpdateStatus? status,
 }) {
   final s = MockSystemServices(
     iconDir: iconDir(),
     now: fixedNow,
     currentProfile: current,
+    status: status,
   );
   s.mockUpdates.channel = channel;
   return Harness(services: s);
@@ -31,6 +35,140 @@ Future<void> openRow(WidgetTester t, int downs) async {
 }
 
 void main() {
+  group('update', () {
+    /// Settings > Updates with an update: Update now, confirmed: the pad.
+    Future<Harness> settingsPad(WidgetTester t) async {
+      setView(t);
+      final h = harness(status: mockBehind(mockOrdinaryUpdate()));
+      await h.pump(t);
+      // Up twice: the update banner, then the tabs.
+      await press(t, [kUp, kUp, kRight, kRight, kRight, kRight, kDown]);
+      await press(t, [
+        ...List.filled(settingsEntryIds.indexOf('updates'), kDown),
+        kRight, // into the pane
+        kDown, kEnter, // check, apply
+      ]);
+      expect(find.text('Update to HinterOS 0.6.1?'), findsOneWidget);
+      await press(t, [kRight, kEnter]);
+      expect(find.text('Update HinterOS'), findsOneWidget);
+      expect(find.text(_askPin), findsOneWidget);
+      expect(h.services.mockJobs.started, isEmpty);
+      return h;
+    }
+
+    /// The security notice after its lock: Update now: the pad.
+    Future<Harness> noticePad(WidgetTester t, {String current = 'p1'}) async {
+      setView(t);
+      final h = harness(
+        current: current,
+        status: mockBehind(mockSecurityUpdate()),
+      );
+      await h.pump(t);
+      expect(find.text('Security update'), findsOneWidget);
+      await t.pump(const Duration(seconds: 5));
+      await press(t, [kRight, kEnter]); // Update now
+      expect(find.text('Update HinterOS'), findsOneWidget);
+      expect(find.text(_askPin), findsOneWidget);
+      expect(h.services.mockJobs.started, isEmpty);
+      return h;
+    }
+
+    testWidgets('Settings: the right PIN starts it', (t) async {
+      final h = await settingsPad(t);
+      await enterPin(t, '2468');
+      expect(find.text(_askPin), findsNothing);
+      expect(h.services.mockJobs.started.single.kind, JobKind.update);
+      expect(find.text('Updating HinterOS'), findsOneWidget);
+    });
+
+    testWidgets('Settings: a wrong PIN asks again', (t) async {
+      final h = await settingsPad(t);
+      await enterPin(t, '1357');
+      expect(find.text('Wrong PIN.'), findsOneWidget);
+      expect(h.services.mockJobs.started, isEmpty);
+      await enterPin(t, '2468');
+      expect(h.services.mockJobs.started.single.kind, JobKind.update);
+    });
+
+    testWidgets('Settings: Back on the pad does nothing', (t) async {
+      final h = await settingsPad(t);
+      await press(t, [kEscape]);
+      expect(find.text(_askPin), findsNothing);
+      expect(find.text('Updating HinterOS'), findsNothing);
+      expect(h.services.mockJobs.started, isEmpty);
+    });
+
+    testWidgets('the banner leads to Update now, which asks the PIN', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness(status: mockBehind(mockOrdinaryUpdate()));
+      await h.pump(t);
+      await press(t, [kUp]);
+      expect(focusLabel(), 'update-banner/update-banner:0');
+      await press(t, [kEnter]); // See update: Settings > Updates
+      await press(t, [kRight, kDown, kEnter, kRight, kEnter]);
+      expect(find.text(_askPin), findsOneWidget);
+      expect(h.services.mockJobs.started, isEmpty);
+      await enterPin(t, '0000');
+      expect(find.text('Wrong PIN.'), findsOneWidget);
+      expect(h.services.mockJobs.started, isEmpty);
+      await enterPin(t, '2468');
+      expect(h.services.mockJobs.started.single.kind, JobKind.update);
+    });
+
+    testWidgets('security notice: the right PIN starts it', (t) async {
+      final h = await noticePad(t);
+      await enterPin(t, '2468');
+      expect(h.services.mockJobs.started.single.kind, JobKind.update);
+      expect(find.text('Updating HinterOS'), findsOneWidget);
+    });
+
+    testWidgets('security notice: a wrong PIN asks again', (t) async {
+      final h = await noticePad(t);
+      await enterPin(t, '1111');
+      expect(find.text('Wrong PIN.'), findsOneWidget);
+      expect(h.services.mockJobs.started, isEmpty);
+      await enterPin(t, '2468');
+      expect(h.services.mockJobs.started.single.kind, JobKind.update);
+    });
+
+    testWidgets('security notice: Back on the pad does nothing', (t) async {
+      final h = await noticePad(t);
+      await press(t, [kEscape]);
+      expect(find.text(_askPin), findsNothing);
+      expect(find.text('Updating HinterOS'), findsNothing);
+      expect(h.services.mockJobs.started, isEmpty);
+    });
+
+    testWidgets('the guest is asked too', (t) async {
+      final h = await noticePad(t, current: 'guest');
+      await enterPin(t, '2468');
+      expect(h.services.mockJobs.started.single.kind, JobKind.update);
+    });
+
+    test('the mock asks for the admin PIN like the service', () async {
+      final s = MockSystemServices(
+        now: fixedNow,
+        status: mockBehind(mockOrdinaryUpdate()),
+      );
+      addTearDown(s.dispose);
+      final rev = s.updates.status.available!.rev;
+      await expectLater(
+        s.updates.apply(rev),
+        throwsA(
+          isA<SystemException>().having(
+            (e) => e.kind,
+            'kind',
+            SystemErrorKind.pinRequired,
+          ),
+        ),
+      );
+      final h = await s.updates.apply(rev, adminPin: '2468');
+      expect(h.kind, JobKind.update);
+    });
+  });
+
   group('rollback', () {
     /// Roll back to the previous version, confirmed: the pad is up.
     Future<Harness> toPad(WidgetTester t) async {

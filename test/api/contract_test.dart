@@ -79,6 +79,7 @@ Future<void> _prepareSystem(
   // that is not about the PIN describes a box that needs none (an admin
   // profile without a PIN yet).
   const pinned = {
+    'system.update.apply',
     'system.rollback',
     'system.channel.set',
     'system.base.set',

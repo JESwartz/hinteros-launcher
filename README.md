@@ -89,9 +89,11 @@ flutter run -d linux --dart-entrypoint-args=--mock
 ### Session API 0.13: admin PIN for box-wide actions, guest wipe
 
 - **Admin PIN** (`lib/src/ui/profiles/profile_ui.dart` `withBoxAdminPin`, `runAdminJob` in
-  `lib/src/ui/system/common.dart`): rollback, channel change and software base change send
-  `admin_pin` (system API 0.5). The launcher asks first on the same admin-PIN pad as the other
-  admin actions when `profiles.list` shows an admin profile with a PIN; a wrong PIN
+  `lib/src/ui/system/common.dart`): installing an update (Settings > Updates "Update now", which
+  the update banner leads to, and the security notice; every profile, the guest too), rollback,
+  channel change and software base change send `admin_pin` (system API 0.5).
+  The launcher asks first on the same admin-PIN pad as the other admin actions when
+  `profiles.list` shows an admin profile with a PIN; a wrong PIN
   (`pin_required {pin: admin}`) stays on the pad, Back on the empty pad does nothing. With no PIN
   on the admin profile, or when `profiles.list` fails, the call goes without one, and a
   `pin_required {pin: admin}` answer still opens the pad; with no admin profile (first boot) the

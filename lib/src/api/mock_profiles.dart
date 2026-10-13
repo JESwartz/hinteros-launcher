@@ -210,10 +210,11 @@ class MockProfileSession {
     throw _pinRequired(which);
   }
 
-  /// The admin PIN of the box-wide actions (system API 0.5: `rollback`,
-  /// `channel.set`, `base.set`, `hardware.redetect`): none on a schema-1 box
-  /// or for an admin profile without a PIN yet; `pin_required {pin: admin}`
-  /// when it is missing or wrong, or when there is no admin profile.
+  /// The admin PIN of the box-wide actions (system API 0.5: `update.apply`,
+  /// `rollback`, `channel.set`, `base.set`, `hardware.redetect`): none on a
+  /// schema-1 box or for an admin profile without a PIN yet;
+  /// `pin_required {pin: admin}` when it is missing or wrong, or when there
+  /// is no admin profile.
   void checkBoxAdminPin(String? pin) {
     if (pin != null && !RegExp(r'^[0-9]{4,8}$').hasMatch(pin)) {
       throw const ApiException(

@@ -461,6 +461,7 @@ void main() {
       await t.pumpAndSettle();
       h.mock.system.restartNext = true;
       await press(t, [kRight, kEnter]); // Update now
+      await enterPin(t, '2468'); // the admin PIN
       h.mock.system.finishJob(h.mock.system.runningJobId!);
       await t.pumpAndSettle();
       expect(find.text('Restart session'), findsOneWidget);

@@ -223,6 +223,7 @@ void main() {
       h.services.mockUpdates.nextAvailable = mockOrdinaryUpdate();
       await enterSettingsEntry(t, 'updates');
       await press(t, [kEnter, kDown, kEnter, kRight, kEnter]);
+      await enterPin(t, '2468'); // the admin PIN
     }
 
     testWidgets('downloading, 40 percent', (t) async {

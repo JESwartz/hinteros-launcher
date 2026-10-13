@@ -569,11 +569,11 @@ class DaemonUpdates implements UpdatesRepository {
       '${d.day.toString().padLeft(2, '0')}';
 
   @override
-  Future<JobHandle> apply(String rev) => _jobs.start(
+  Future<JobHandle> apply(String rev, {String? adminPin}) => _jobs.start(
     JobKind.update,
-    () async =>
-        (await _conn.systemUpdateApply(api.SystemUpdateApplyParams(rev: rev)))
-            .jobId,
+    () async => (await _conn.systemUpdateApply(
+      api.SystemUpdateApplyParams(rev: rev, adminPin: adminPin),
+    )).jobId,
   );
 
   @override

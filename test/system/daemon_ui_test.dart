@@ -254,6 +254,7 @@ void main() {
       await t.pumpAndSettle();
       h.mock.system.restartNext = true;
       await press(t, [kRight, kEnter]);
+      await enterPin(t, '2468'); // the admin PIN
       final job = h.mock.system.runningJobId!;
       expect(h.mock.system.log.last, 'update.apply');
       h.mock.system.progressJob(

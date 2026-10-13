@@ -47,7 +47,8 @@ class _UnavailableUpdates implements UpdatesRepository {
   @override
   Future<UpdateStatus> check() => Future.error(_gone);
   @override
-  Future<JobHandle> apply(String rev) => Future.error(_gone);
+  Future<JobHandle> apply(String rev, {String? adminPin}) =>
+      Future.error(_gone);
   @override
   Future<List<Generation>> generations() => Future.error(_gone);
   @override

@@ -96,14 +96,15 @@ abstract class UpdatesRepository {
   /// [SystemErrorKind.updateUnreachable] / `updateVerificationFailed`.
   Future<UpdateStatus> check();
 
-  /// `update.apply {rev}`: [rev] must be the last verified check's.
-  Future<JobHandle> apply(String rev);
+  /// `update.apply {rev, admin_pin?}`: [rev] must be the last verified
+  /// check's. The admin PIN as for [rollback].
+  Future<JobHandle> apply(String rev, {String? adminPin});
 
   /// `generations.list`, newest first.
   Future<List<Generation>> generations();
 
-  // The box-wide actions (rollback, channel, base, hardware) take the admin
-  // profile's PIN (session API 0.13): missing or wrong gives
+  // The box-wide actions (update, rollback, channel, base, hardware) take
+  // the admin profile's PIN (session API 0.13): missing or wrong gives
   // [SystemErrorKind.pinRequired] with `pin: admin`. None is needed on a
   // schema-1 box or while the admin profile has no PIN.
 

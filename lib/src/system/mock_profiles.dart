@@ -131,9 +131,9 @@ class MockProfileBox {
   /// need no PIN.
   bool schema1 = false;
 
-  /// The admin PIN of the box-wide actions (rollback, channel, base,
-  /// hardware; session API 0.13): none on a schema-1 box or while the admin
-  /// profile has no PIN; `pin_required {pin: admin}` when it is missing or
+  /// The admin PIN of the box-wide actions (update, rollback, channel,
+  /// base, hardware; session API 0.13): none on a schema-1 box or while the
+  /// admin profile has no PIN; `pin_required {pin: admin}` when it is missing or
   /// wrong, or when there is no admin profile.
   void checkBoxAdmin(String? pin) {
     if (schema1) return;

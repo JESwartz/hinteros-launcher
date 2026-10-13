@@ -971,7 +971,7 @@ Future<bool> withAdminPin(
   return pin != null;
 }
 
-/// A box-wide action (rollback, channel, base, hardware; session API 0.13)
+/// A box-wide action (update, rollback, channel, base, hardware; API 0.13)
 /// with the admin profile's PIN, on the same pad as [withAdminPin]. The pad
 /// comes first when the admin profile has a PIN; without one (a migrated
 /// admin profile, a box before profiles: `profiles.list` fails) or without

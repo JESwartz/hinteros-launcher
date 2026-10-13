@@ -125,6 +125,7 @@ void main() {
       await h.pump(t);
       await t.pump(const Duration(seconds: 5));
       await press(t, [kRight, kEnter]);
+      await enterPin(t, '2468'); // the admin PIN
       expect(h.services.mockJobs.started.single.kind, JobKind.update);
       expect(find.text('Updating HinterOS'), findsOneWidget);
     });
