@@ -181,7 +181,12 @@ class SettingsScreen extends StatelessWidget {
                   top: 24,
                   bottom: 24,
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(HinterTokens.s2),
+                    // Room for the focus ring of the first and last rows,
+                    // beyond the fades.
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: HinterTokens.s2,
+                      vertical: 24 + HinterTokens.focusRoom,
+                    ),
                     child: Column(
                       children: [
                         for (var i = 0; i < _items.length; i++) ...[
@@ -242,7 +247,7 @@ class _ListRow extends StatelessWidget {
     return FocusFrame(
       focused: focused,
       radius: HinterTokens.radiusSmall,
-      scale: 1.03,
+      scale: 1,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: selected ? t.surfaceHigh : t.surface,
@@ -301,7 +306,12 @@ class _Detail extends StatelessWidget {
       top: 24,
       bottom: 24,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(HinterTokens.s2),
+        padding: const EdgeInsets.fromLTRB(
+          HinterTokens.s2,
+          HinterTokens.s2,
+          HinterTokens.s2,
+          24 + HinterTokens.focusRoom,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -353,7 +363,7 @@ class _OptionRow extends StatelessWidget {
     return FocusFrame(
       focused: focused,
       radius: HinterTokens.radiusSmall,
-      scale: 1.02,
+      scale: 1,
       child: SizedBox(
         width: 520,
         child: DecoratedBox(

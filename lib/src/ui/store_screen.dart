@@ -320,7 +320,7 @@ class _CategoryRow extends StatelessWidget {
     return FocusFrame(
       focused: focused,
       radius: HinterTokens.radiusSmall,
-      scale: 1.03,
+      scale: 1,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: selected ? t.surfaceHigh : t.surface,

@@ -46,10 +46,12 @@ class FocusFrame extends StatelessWidget {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(radius),
                       boxShadow: [
+                        // Soft: it marks the card without reaching the
+                        // cards next to it.
                         BoxShadow(
-                          color: t.accent.withValues(alpha: 0.75),
-                          blurRadius: 44,
-                          spreadRadius: 6,
+                          color: t.accent.withValues(alpha: 0.35),
+                          blurRadius: 18,
+                          spreadRadius: 2,
                         ),
                       ],
                     ),

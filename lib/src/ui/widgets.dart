@@ -97,7 +97,7 @@ class SettingRow extends StatelessWidget {
     return FocusFrame(
       focused: focused,
       radius: HinterTokens.radiusSmall,
-      scale: 1.02,
+      scale: 1,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: t.surface,

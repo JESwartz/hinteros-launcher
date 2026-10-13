@@ -109,8 +109,13 @@ class HinterTokens {
   static const double fsTitle = 40;
   static const double fsHeadline = 56;
 
-  /// Focus scale-up (skipped when reducing motion).
+  /// Focus scale-up (skipped when reducing motion). Rows in a list do not
+  /// grow (scale 1): they fill their column, so growing would cut them off.
   static const double focusScale = 1.08;
+
+  /// How far the focus marker reaches outside its card (the ring is 9 px out).
+  /// A scrolling list keeps this much room at its edges, beyond its fade.
+  static const double focusRoom = 12;
 
   Duration get fast => reduceMotion ? Duration.zero : _fast;
   Duration get medium => reduceMotion ? Duration.zero : _medium;
