@@ -9,6 +9,7 @@ import 'package:hinteros_launcher/src/installer/gamepad.dart';
 import 'package:hinteros_launcher/src/installer/keyboard_fallback.dart';
 import 'package:hinteros_launcher/src/installer/ui/host.dart';
 import 'package:hinteros_launcher/src/installer/ui/installer_app.dart';
+import 'package:hinteros_launcher/src/installer/ui/steps.dart' show eraseHold;
 import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
 
 import 'harness.dart';
@@ -70,6 +71,22 @@ class InstallerHarness {
   }
 
   Future<void> accept(WidgetTester t) => press(t, NavAction.accept);
+
+  /// A held down for [d] on the pad, then let go.
+  Future<void> holdAccept(WidgetTester t, Duration d) async {
+    _pad.add((NavAction.accept, NavPhase.press));
+    await t.pump();
+    await pumpFor(t, d);
+    _pad.add((NavAction.accept, NavPhase.release));
+    await t.pumpAndSettle();
+  }
+
+  /// On the summary: A held on "Erase and install" until it runs.
+  Future<void> eraseAndInstall(WidgetTester t) async {
+    await moveTo(t, 'actions', 1);
+    await holdAccept(t, eraseHold + const Duration(milliseconds: 100));
+  }
+
   Future<void> back(WidgetTester t) => press(t, NavAction.back);
 
   /// Focus label `content/<row>:<col>` of the focused item.

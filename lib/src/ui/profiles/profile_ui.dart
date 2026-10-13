@@ -15,6 +15,7 @@ import '../../system/models.dart';
 import '../../system/profiles.dart';
 import '../../theme/hinter_theme.dart';
 import '../focus_frame.dart';
+import '../hold.dart';
 import '../modal_host.dart';
 import '../nav_focusable.dart';
 import '../pages.dart' show FullPage;
@@ -285,8 +286,8 @@ class PinController extends ChangeNotifier {
 /// [holdToSubmit] (removing a profile): the OK key ([submitLabel], "Delete")
 /// must be held down that long, A or Enter. Pressing it turns it slightly red
 /// at once and fills it with red from the left; letting go early empties it
-/// and nothing happens; full, [onSubmit] runs. The key that deletes a digit
-/// is then called "Erase".
+/// and nothing happens; full, [onSubmit] runs ([HoldController], [HoldFill]).
+/// The key that deletes a digit is then called "Erase".
 class PinPad extends StatefulWidget {
   const PinPad({
     super.key,
@@ -324,10 +325,8 @@ class PinPad extends StatefulWidget {
 }
 
 class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
-  AnimationController? _hold;
-
-  /// The submit key is held down right now.
-  bool _holding = false;
+  /// The hold of the submit key ([PinPad.holdToSubmit]).
+  HoldController? _hold;
 
   @override
   void initState() {
@@ -335,14 +334,11 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
     widget.region.onBack = _back;
     final h = widget.holdToSubmit;
     if (h != null) {
-      _hold = AnimationController(vsync: this, duration: h)
-        ..addStatusListener((s) {
-          if (s != AnimationStatus.completed || !_holding) return;
-          _holding = false;
-          if (mounted) setState(() {});
-          widget.onSubmit();
-          _hold?.value = 0;
-        });
+      _hold = HoldController(
+        vsync: this,
+        duration: h,
+        onDone: () => widget.onSubmit(),
+      );
       widget.region.onRaw = _raw;
     }
   }
@@ -387,19 +383,10 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
   }
 
   void _startHold() {
-    final h = _hold;
-    if (h == null || _holding || !_canSubmit) return;
-    setState(() => _holding = true);
-    unawaited(h.forward(from: 0));
+    if (_canSubmit) _hold?.start();
   }
 
-  void _stopHold() {
-    final h = _hold;
-    if (h == null || !_holding) return;
-    h.stop();
-    h.value = 0;
-    setState(() => _holding = false);
-  }
+  void _stopHold() => _hold?.stop();
 
   bool _back() {
     if (widget.controller.delete()) return true;
@@ -491,9 +478,7 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
                                 validPin(widget.controller.pin)) &&
                             (r < 3 || c != 0 || !widget.controller.isEmpty),
                         wide: labels[r][c].length > 1,
-                        hold: hold != null && labels[r][c] == 'OK'
-                            ? (_holding ? hold.value : null)
-                            : null,
+                        hold: labels[r][c] == 'OK' ? hold?.fill : null,
                       ),
                     ),
                   ],
@@ -534,43 +519,22 @@ class _Key extends StatelessWidget {
       focused: focused,
       radius: HinterTokens.radiusSmall,
       scale: 1.06,
-      child: Container(
+      child: HoldFill(
+        fill: h,
         width: 150,
         height: 104,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: h == null ? base : Color.lerp(base, t.danger, 0.35),
-          borderRadius: BorderRadius.circular(HinterTokens.radiusSmall),
-          border: Border.all(
-            color: h != null
-                ? t.danger
-                : (enabled ? t.textDim : t.textDim.withValues(alpha: 0.4)),
-            width: 2,
-          ),
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (h != null)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FractionallySizedBox(
-                  widthFactor: h.clamp(0.0, 1.0),
-                  heightFactor: 1,
-                  child: ColoredBox(color: t.danger),
-                ),
-              ),
-            Center(
-              child: Text(
-                label,
-                style: (wide ? t.label : t.title).copyWith(
-                  color: h != null
-                      ? t.text
-                      : (enabled ? t.text : t.textDim.withValues(alpha: 0.6)),
-                ),
-              ),
+        base: base,
+        border: enabled ? t.textDim : t.textDim.withValues(alpha: 0.4),
+        radius: HinterTokens.radiusSmall,
+        child: Center(
+          child: Text(
+            label,
+            style: (wide ? t.label : t.title).copyWith(
+              color: h != null
+                  ? t.text
+                  : (enabled ? t.text : t.textDim.withValues(alpha: 0.6)),
             ),
-          ],
+          ),
         ),
       ),
     );

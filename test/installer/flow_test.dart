@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart';
 import 'package:hinteros_launcher/src/installer/backend.dart';
 import 'package:hinteros_launcher/src/installer/fake_backend.dart';
 import 'package:hinteros_launcher/src/installer/flow.dart';
 
+import '../support/harness.dart' show pumpFor;
 import '../support/installer_harness.dart';
 
 const online = NetworkState(
@@ -126,7 +128,7 @@ void main() {
         await h.moveTo(t, 'd3');
         await h.accept(t);
         expect(h.flow.disk, isNull);
-        expect(find.text('Warning'), findsNothing);
+        expect(h.flow.step, InstallerStep.disk);
 
         // The NVMe disk can.
         await h.choose(t, 'd0');
@@ -135,53 +137,13 @@ void main() {
       },
     );
 
-    testWidgets('two confirmations, each can be answered "go back"', (t) async {
+    testWidgets('Continue goes on without a question', (t) async {
       final h = await toDisk(t);
       await h.choose(t, 'd0');
-
-      // First warning: the safe answer has the focus.
       await h.choose(t, 'actions', 1);
-      expect(
-        find.text('Everything on this disk will be erased'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('cannot be undone'), findsOneWidget);
-      expect(h.focus, matches(RegExp(r'^modal-\d+/buttons:0$')));
-      await h.accept(t); // Go back
-      expect(find.text('Warning'), findsNothing);
-      expect(h.flow.step, InstallerStep.disk);
-
-      // Back (B) closes it, too.
-      await h.accept(t);
-      expect(find.text('Warning'), findsOneWidget);
-      await h.back(t);
-      expect(find.text('Warning'), findsNothing);
-      expect(h.flow.step, InstallerStep.disk);
-
-      // Yes to the first, no to the second.
-      await h.moveTo(t, 'actions', 1);
-      await h.accept(t);
-      await h.press(t, NavAction.right);
-      await h.accept(t); // I understand, continue
-      expect(
-        find.textContaining('Last check: erase Example NVMe'),
-        findsOneWidget,
-      );
-      expect(h.flow.step, InstallerStep.disk);
-      expect(h.focus, matches(RegExp(r'^modal-\d+/buttons:0$')));
-      await h.accept(t); // No, go back
-      expect(h.flow.step, InstallerStep.disk);
-      expect(find.text('Warning'), findsNothing);
-
-      // Yes to both.
-      await h.moveTo(t, 'actions', 1);
-      await h.accept(t);
-      await h.press(t, NavAction.right);
-      await h.accept(t);
-      await h.press(t, NavAction.right);
-      await h.accept(t); // Yes, erase this disk
       expect(h.flow.step, InstallerStep.account);
       expect(h.flow.disk!.name, 'nvme0n1');
+      expect(h.backend.calls, isNot(contains('install')));
     });
 
     testWidgets('no usable disk: an error and no way on', (t) async {
@@ -428,7 +390,7 @@ void main() {
 
     testWidgets('offline default: exactly the backend format', (t) async {
       final h = await toSummary(t);
-      expect(find.text('erased completely'), findsOneWidget);
+      expect(find.textContaining('Erase Example NVMe'), findsOneWidget);
       expect(h.flow.buildPlan().toJson(), {
         'disk': '/dev/nvme0n1',
         'hostname': 'hinteros',
@@ -509,16 +471,84 @@ void main() {
       return h;
     }
 
+    testWidgets('the summary shows the disk that is erased', (t) async {
+      final h = await toSummary(t);
+      expect(find.text('Erase Example NVMe 512GB, 512 GB'), findsOneWidget);
+      expect(
+        find.text('Everything on this disk is deleted. You cannot undo this.'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Hold A on Erase and install for 5 seconds.'),
+        findsOneWidget,
+      );
+      expect(h.focus, 'content/actions:0', reason: 'Back has the focus');
+    });
+
+    testWidgets('a short hold does not erase', (t) async {
+      final backend = FakeInstallerBackend();
+      final h = await toSummary(t, backend: backend);
+      await h.moveTo(t, 'actions', 1);
+      // A press and release, then a hold that stops at 4 s.
+      await h.holdAccept(t, Duration.zero);
+      await h.holdAccept(t, const Duration(seconds: 4));
+      await t.pump(const Duration(seconds: 10));
+      expect(h.flow.step, InstallerStep.summary);
+      expect(h.flow.phase, InstallPhase.idle);
+      expect(backend.calls, isNot(contains('validate')));
+      expect(backend.calls, isNot(contains('install')));
+    });
+
+    testWidgets('a 5 s hold erases and installs', (t) async {
+      final backend = FakeInstallerBackend();
+      final h = await toSummary(t, backend: backend);
+      await h.moveTo(t, 'actions', 1);
+      await h.holdAccept(t, const Duration(milliseconds: 4900));
+      expect(h.flow.step, InstallerStep.summary, reason: 'let go at 4.9 s');
+      await h.holdAccept(t, const Duration(milliseconds: 5100));
+      expect(backend.calls, containsAllInOrder(['validate', 'install']));
+      expect(h.flow.step, InstallerStep.done);
+    });
+
+    testWidgets('Enter held on a keyboard erases too', (t) async {
+      final backend = FakeInstallerBackend();
+      final h = await toSummary(t, backend: backend);
+      await h.moveTo(t, 'actions', 1);
+      await t.sendKeyDownEvent(LogicalKeyboardKey.enter);
+      await pumpFor(t, const Duration(seconds: 2));
+      await t.sendKeyUpEvent(LogicalKeyboardKey.enter);
+      await t.pumpAndSettle();
+      expect(h.flow.step, InstallerStep.summary);
+      await t.sendKeyDownEvent(LogicalKeyboardKey.enter);
+      await pumpFor(t, const Duration(milliseconds: 5100));
+      await t.sendKeyUpEvent(LogicalKeyboardKey.enter);
+      await t.pumpAndSettle();
+      expect(h.flow.step, InstallerStep.done);
+    });
+
+    testWidgets('B and Back go back, nothing erased', (t) async {
+      final backend = FakeInstallerBackend();
+      final h = await toSummary(t, backend: backend);
+      await h.moveTo(t, 'actions', 1);
+      await h.back(t);
+      expect(h.flow.step, InstallerStep.apps);
+      h.flow.go(InstallerStep.summary);
+      await t.pumpAndSettle();
+      await h.choose(t, 'actions'); // Back
+      expect(h.flow.step, InstallerStep.apps);
+      expect(backend.calls, isNot(contains('validate')));
+    });
+
     testWidgets('a whole install: validate, install, Done, restart', (t) async {
       final backend = FakeInstallerBackend();
       final h = await toSummary(t, backend: backend);
-      expect(find.text('Install HinterOS'), findsOneWidget);
+      expect(find.text('Erase and install'), findsOneWidget);
       expect(
         h.focus,
         'content/actions:0',
         reason: 'Back has the focus, not Install',
       );
-      await h.choose(t, 'actions', 1);
+      await h.eraseAndInstall(t);
 
       expect(backend.calls.where((c) => c == 'validate' || c == 'install'), [
         'validate',
@@ -554,7 +584,7 @@ void main() {
         delay: const Duration(milliseconds: 100),
       );
       final h = await toSummary(t, backend: backend);
-      await h.choose(t, 'actions', 1);
+      await h.eraseAndInstall(t);
       expect(h.flow.phase, InstallPhase.validating);
       expect(find.text('Checking your choices'), findsOneWidget);
 
@@ -592,7 +622,7 @@ void main() {
           '/dev/nvme0n1 is in use (mounted at: /iso)',
         );
       final h = await toSummary(t, backend: backend);
-      await h.choose(t, 'actions', 1);
+      await h.eraseAndInstall(t);
       expect(h.flow.phase, InstallPhase.refused);
       expect(h.flow.outcome!.exitCode, 2);
       expect(find.text('The install did not start'), findsOneWidget);
@@ -621,7 +651,7 @@ void main() {
       final backend = FakeInstallerBackend()
         ..installScript = FakeScript.failed();
       final h = await toSummary(t, backend: backend);
-      await h.choose(t, 'actions', 1);
+      await h.eraseAndInstall(t);
       expect(h.flow.phase, InstallPhase.failed);
       expect(h.flow.outcome!.exitCode, 1);
       expect(find.text('The install did not finish'), findsOneWidget);
@@ -650,7 +680,7 @@ void main() {
       final InstallerHarness h;
       try {
         h = await toSummary(t);
-        await h.choose(t, 'actions', 1);
+        await h.eraseAndInstall(t);
       } finally {
         debugPrint = old;
       }

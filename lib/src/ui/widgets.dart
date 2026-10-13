@@ -473,6 +473,18 @@ class Pane {
     );
   }
 
+  /// A row of [count] items that [child] builds itself (its own
+  /// [NavFocusable]s at `key:0` .. `key:count-1`).
+  void row(
+    String key,
+    int count,
+    Widget child, {
+    double gap = HinterTokens.s2,
+  }) {
+    _rows.add(NavRow(key, count));
+    add(child, gap: gap);
+  }
+
   /// Hands the rows to the region and returns the content.
   Widget build() {
     region.setRows(_rows);

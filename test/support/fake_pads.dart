@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart' show NavAction;
 import 'package:hinteros_launcher/src/installer/gamepad.dart';
 
+import 'harness.dart' show pumpFor;
+
 /// One synthetic `struct input_event` (the time stamp is zero).
 Uint8List frame(int type, int code, int value) {
   final d = ByteData(inputEventSize);
@@ -153,6 +155,17 @@ class PadRig {
       await t.pump();
       center();
     }
+    await t.pump();
+  }
+
+  /// [a]'s button held down for [d] (a little longer, so a hold of exactly
+  /// [d] completes), then let go.
+  Future<void> hold(WidgetTester t, NavAction a, Duration d) async {
+    final code = _btn[a]!;
+    _send([frame(1, code, 1), frame(0, 0, 0)]);
+    await t.pump();
+    await pumpFor(t, d + const Duration(milliseconds: 100));
+    _send([frame(1, code, 0), frame(0, 0, 0)]);
     await t.pump();
   }
 

@@ -8,10 +8,11 @@ import 'package:hinteros_launcher/src/installer/fake_backend.dart';
 import 'package:hinteros_launcher/src/installer/flow.dart';
 import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
 
+import '../support/harness.dart' show pumpFor;
 import '../support/installer_harness.dart';
 
-/// Golden screenshots of the installer screens at 1920x1080 (and the disk
-/// warning in high contrast). Regenerate with `nix run .#update-goldens`.
+/// Golden screenshots of the installer screens at 1920x1080 (and the
+/// summary in high contrast). Regenerate with `nix run .#update-goldens`.
 void main() {
   const wired = NetworkState(
     wiredConnected: true,
@@ -120,40 +121,6 @@ void main() {
     );
   });
 
-  Future<void> firstWarning(InstallerHarness h, WidgetTester t) async {
-    h.flow.go(InstallerStep.disk);
-    await t.pumpAndSettle();
-    await h.choose(t, 'd0');
-    await h.choose(t, 'actions', 1);
-  }
-
-  testWidgets('disk: the first warning', (t) async {
-    await shot(t, 'disk_warning', setup: (h) => firstWarning(h, t));
-  });
-
-  testWidgets('disk: the first warning, high contrast and large text', (
-    t,
-  ) async {
-    await shot(
-      t,
-      'disk_warning_highcontrast',
-      settings: const LauncherSettings(highContrast: true, textScale: 1.4),
-      setup: (h) => firstWarning(h, t),
-    );
-  });
-
-  testWidgets('disk: the second confirmation', (t) async {
-    await shot(
-      t,
-      'disk_confirm',
-      setup: (h) async {
-        await firstWarning(h, t);
-        await h.press(t, NavAction.right);
-        await h.accept(t);
-      },
-    );
-  });
-
   testWidgets('account with a password that does not match', (t) async {
     await shot(
       t,
@@ -234,6 +201,34 @@ void main() {
         await filled(h, t);
       },
     );
+  });
+
+  testWidgets('summary, high contrast and large text', (t) async {
+    await shot(
+      t,
+      'summary_highcontrast',
+      settings: const LauncherSettings(highContrast: true, textScale: 1.4),
+      setup: (h) => filled(h, t),
+    );
+  });
+
+  testWidgets('summary, Erase and install held for 2 of 5 seconds', (t) async {
+    InstallerHarness? held;
+    await shot(
+      t,
+      'summary_hold',
+      settle: false,
+      setup: (h) async {
+        held = h;
+        await filled(h, t);
+        await h.moveTo(t, 'actions', 1);
+        h.console(t).action(NavAction.accept, NavPhase.press);
+        await pumpFor(t, const Duration(seconds: 2));
+      },
+    );
+    held!.console(t).action(NavAction.accept, NavPhase.release);
+    await t.pumpAndSettle();
+    expect(held!.flow.step, InstallerStep.summary);
   });
 
   testWidgets('progress with a warning', (t) async {

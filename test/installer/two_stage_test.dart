@@ -65,7 +65,7 @@ void main() {
       h.flow.setRepeat('change-me-now');
       h.flow.go(InstallerStep.summary);
       await t.pumpAndSettle();
-      await h.choose(t, 'actions', 1);
+      await h.eraseAndInstall(t);
       return h;
     }
 

@@ -155,3 +155,16 @@ extension HarnessLaunch on Harness {
     await tester.pumpAndSettle();
   }
 }
+
+/// Frames every 100 ms for [d] (after one to start), as a held button sees
+/// them: an animation started by the first frame runs its whole length.
+Future<void> pumpFor(WidgetTester t, Duration d) async {
+  await t.pump();
+  const step = Duration(milliseconds: 100);
+  var left = d;
+  while (left > Duration.zero) {
+    final s = left < step ? left : step;
+    await t.pump(s);
+    left -= s;
+  }
+}

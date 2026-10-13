@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../nav/nav_controller.dart';
-import '../../nav/nav_model.dart';
 import '../../theme/hinter_theme.dart';
 import '../../ui/app_selection.dart';
-import '../../ui/dialogs.dart' show DialogButtons;
-import '../../ui/modal_host.dart' show ModalHandle;
+import '../../ui/hold.dart';
+import '../../ui/nav_focusable.dart';
 import '../../ui/pages.dart';
 import '../../ui/widgets.dart';
 import '../backend.dart';
@@ -277,41 +276,6 @@ class DiskStep extends StatelessWidget {
 
   final StepEnv env;
 
-  /// The big warning, then a second question. Resolves true when both were
-  /// answered "erase".
-  Future<bool> _confirm(BuildContext context, DiskInfo d) async {
-    final m = env.console.modals;
-    final first =
-        await m.show<bool>(
-          (c, h) => EraseConfirm(
-            modal: h,
-            title: 'Everything on this disk will be erased',
-            lines: [
-              '${d.title}, ${d.sizeLabel}',
-              'All files on it are deleted. This cannot be undone.',
-              'To keep files, choose "Go back" and copy them first.',
-            ],
-            backLabel: 'Go back',
-            eraseLabel: 'I understand, continue',
-          ),
-        ) ??
-        false;
-    if (!first) return false;
-    return await m.show<bool>(
-          (c, h) => EraseConfirm(
-            modal: h,
-            title: 'Last check: erase ${d.title}?',
-            lines: [
-              'Erase ${d.title} (${d.sizeLabel}) and install HinterOS on it?',
-              'Nothing is erased until you start the install.',
-            ],
-            backLabel: 'No, go back',
-            eraseLabel: 'Yes, erase this disk',
-          ),
-        ) ??
-        false;
-  }
-
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -375,93 +339,11 @@ class DiskStep extends StatelessWidget {
         }
         p.buttons('actions', [
           btn('Look again', f.loadDisks),
-          btn(
-            'Continue',
-            f.disk == null
-                ? null
-                : () async {
-                    if (await _confirm(context, f.disk!)) f.next();
-                  },
-            primary: true,
-            enabled: f.disk != null,
-          ),
+          // Erasing is confirmed once, on the summary (hold to erase).
+          btn('Continue', f.next, primary: true, enabled: f.disk != null),
         ], gap: HinterTokens.s3);
-        return StepPage(
-          step: InstallerStep.disk,
-          subtitle: 'The disk is erased',
-          child: scrolling(p.build()),
-        );
+        return StepPage(step: InstallerStep.disk, child: scrolling(p.build()));
       },
-    );
-  }
-}
-
-/// A full-screen question about erasing. The safe answer comes first and has
-/// the focus; the danger styling does not rely on colour alone (a big
-/// heading and a border).
-class EraseConfirm extends StatelessWidget {
-  const EraseConfirm({
-    super.key,
-    required this.modal,
-    required this.title,
-    required this.lines,
-    required this.backLabel,
-    required this.eraseLabel,
-  });
-
-  final ModalHandle<bool> modal;
-  final String title;
-  final List<String> lines;
-  final String backLabel;
-  final String eraseLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = HinterTheme.of(context);
-    modal.region.setRows(const [NavRow('buttons', 2)]);
-    return FullPage(
-      title: 'Warning',
-      child: Align(
-        alignment: Alignment.topLeft,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(HinterTokens.s4),
-              decoration: BoxDecoration(
-                color: t.surface,
-                borderRadius: BorderRadius.circular(HinterTokens.radiusCard),
-                border: Border.all(color: t.danger, width: 6),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: t.headline.copyWith(color: t.danger)),
-                  for (final l in lines) ...[
-                    const SizedBox(height: HinterTokens.s2),
-                    Text(l, style: t.body),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: HinterTokens.s4),
-            DialogButtons(
-              region: modal.region,
-              rowKey: 'buttons',
-              buttons: [
-                btn(backLabel, () => modal.close(false)),
-                btn(
-                  eraseLabel,
-                  () => modal.close(true),
-                  primary: true,
-                  danger: true,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -661,6 +543,12 @@ class AppsStep extends StatelessWidget {
 
 // ------------------------------------------------------------------ summary
 
+/// How long A is held on "Erase and install" (the one confirmation that the
+/// disk is erased).
+const eraseHold = Duration(seconds: 5);
+
+/// The answers, and the one place that erases the disk: a hold of
+/// [eraseHold] on "Erase and install". Back goes back.
 class SummaryStep extends StatelessWidget {
   const SummaryStep({super.key, required this.env});
 
@@ -674,15 +562,13 @@ class SummaryStep extends StatelessWidget {
         final f = env.flow;
         final t = HinterTheme.of(context);
         final p = Pane(env.region);
-        Widget line(String k, String v, {Color? color}) => Padding(
+        Widget line(String k, String v) => Padding(
           padding: const EdgeInsets.only(bottom: HinterTokens.s1),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(width: 380, child: Text(k, style: t.bodyDim)),
-              Expanded(
-                child: Text(v, style: t.body.copyWith(color: color)),
-              ),
+              Expanded(child: Text(v, style: t.body)),
             ],
           ),
         );
@@ -690,12 +576,36 @@ class SummaryStep extends StatelessWidget {
         final appNames = [
           for (final a in f.apps?.selectedApps ?? const []) a.name,
         ];
+        // The danger does not rely on colour alone: a heading and a border.
+        p.add(
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(HinterTokens.s3),
+            decoration: BoxDecoration(
+              color: t.surface,
+              borderRadius: BorderRadius.circular(HinterTokens.radiusCard),
+              border: Border.all(color: t.danger, width: 6),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  d == null ? 'No disk' : 'Erase ${d.title}, ${d.sizeLabel}',
+                  style: t.headline.copyWith(color: t.danger),
+                ),
+                const SizedBox(height: HinterTokens.s1),
+                Text(
+                  'Everything on this disk is deleted. You cannot undo this.',
+                  style: t.body,
+                ),
+              ],
+            ),
+          ),
+        );
         p.add(
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              line('Disk', d == null ? '-' : '${d.title}, ${d.sizeLabel}'),
-              line('The disk will be', 'erased completely', color: t.danger),
               line('Admin user', f.username),
               line('Computer name', f.hostname),
               line('SSH', f.ssh ? 'On' : 'Off'),
@@ -711,22 +621,46 @@ class SummaryStep extends StatelessWidget {
               ),
             ],
           ),
+          gap: HinterTokens.s3,
         );
-        p.buttons('actions', [
-          btn('Back', f.back),
-          btn(
-            'Install HinterOS',
-            f.ready
-                ? () {
-                    f.go(InstallerStep.install);
-                    f.startInstall();
-                  }
-                : null,
-            primary: true,
-            danger: true,
-            enabled: f.ready,
+        p.row(
+          'actions',
+          2,
+          Wrap(
+            spacing: HinterTokens.s2,
+            runSpacing: HinterTokens.s1,
+            children: [
+              NavFocusable(
+                region: env.region,
+                rowKey: 'actions',
+                col: 0,
+                onSelect: f.back,
+                builder: (_, focused) =>
+                    HButton(label: 'Back', focused: focused),
+              ),
+              HoldButton(
+                region: env.region,
+                rowKey: 'actions',
+                col: 1,
+                label: 'Erase and install',
+                duration: eraseHold,
+                enabled: f.ready,
+                onDone: () {
+                  if (!f.ready) return;
+                  f.go(InstallerStep.install);
+                  f.startInstall();
+                },
+              ),
+            ],
           ),
-        ], gap: HinterTokens.s4);
+          gap: HinterTokens.s3,
+        );
+        p.add(
+          Text(
+            'Hold A on Erase and install for ${eraseHold.inSeconds} seconds.',
+            style: t.caption,
+          ),
+        );
         return StepPage(
           step: InstallerStep.summary,
           child: scrolling(p.build()),

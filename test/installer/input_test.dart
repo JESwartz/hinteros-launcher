@@ -4,8 +4,10 @@ import 'package:hinteros_launcher/src/api/api.dart';
 import 'package:hinteros_launcher/src/installer/fake_backend.dart'
     show mockDisks;
 import 'package:hinteros_launcher/src/installer/flow.dart';
+import 'package:hinteros_launcher/src/installer/ui/steps.dart' show eraseHold;
 
 import '../support/fake_pads.dart';
+import '../support/harness.dart' show pumpFor;
 import '../support/installer_harness.dart';
 
 /// The installer driven by a physical keyboard, and by a stick, nothing else.
@@ -133,6 +135,12 @@ void main() {
           await t.pumpAndSettle();
         },
         typed: (s) => s,
+        holdAccept: (t, h) async {
+          await t.sendKeyDownEvent(LogicalKeyboardKey.enter);
+          await pumpFor(t, eraseHold + const Duration(milliseconds: 100));
+          await t.sendKeyUpEvent(LogicalKeyboardKey.enter);
+          await t.pumpAndSettle();
+        },
       );
     });
   });
@@ -158,6 +166,10 @@ void main() {
             await h.press(t, NavAction.menu);
           },
           typed: (s) => 'q' * s.length,
+          holdAccept: (t, h) async {
+            await rig.hold(t, NavAction.accept, eraseHold);
+            await t.pumpAndSettle();
+          },
         );
       } finally {
         await rig.dispose(t);
@@ -211,6 +223,7 @@ Future<void> _walk(
   required Future<void> Function(WidgetTester, InstallerHarness, String)
   typeText,
   required String Function(String) typed,
+  required Future<void> Function(WidgetTester, InstallerHarness) holdAccept,
 }) async {
   await h.pump(t);
   await h.choose(t, 'start');
@@ -219,11 +232,6 @@ Future<void> _walk(
   expect(h.flow.step, InstallerStep.disk);
   await h.choose(t, 'd0');
   await h.choose(t, 'actions', 1);
-  expect(find.text('Everything on this disk will be erased'), findsOneWidget);
-  await h.press(t, NavAction.right);
-  await h.accept(t); // I understand, continue
-  await h.press(t, NavAction.right);
-  await h.accept(t); // Yes, erase this disk
   expect(h.flow.step, InstallerStep.account);
 
   await h.choose(t, 'user');
@@ -243,7 +251,8 @@ Future<void> _walk(
   expect(h.flow.step, InstallerStep.apps);
   await h.choose(t, 'continue');
   expect(h.flow.step, InstallerStep.summary);
-  await h.choose(t, 'actions', 1); // Install HinterOS
+  await h.moveTo(t, 'actions', 1);
+  await holdAccept(t, h); // Erase and install
 
   expect(h.flow.step, InstallerStep.done);
   final plan = h.backend.plans.last;
