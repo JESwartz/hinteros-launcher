@@ -456,11 +456,11 @@ void main() {
       }
     });
 
-    test('releaseName: a beta carries its commit, stable its channel', () {
+    test('releaseName: a beta is the next patch plus its commit', () {
       const rev = '9a8b7c6d5e4f30211a2b3c4d5e6f708192a3b4c5';
       expect(
         releaseName('0.7.0', rev, UpdateChannel.beta),
-        '0.7.0.9a8b7c6 beta',
+        '0.7.1.9a8b7c6 beta',
       );
       expect(releaseName('0.7.0', rev, UpdateChannel.stable), '0.7.0 stable');
       expect(releaseName('0.7.0', rev, null), '0.7.0');
@@ -468,6 +468,8 @@ void main() {
       expect(releaseName('0.7.0', null, UpdateChannel.beta), '0.7.0');
       expect(releaseName('0.7.0', 'xyz', UpdateChannel.beta), '0.7.0');
       expect(releaseName('unknown', rev, UpdateChannel.stable), 'unknown');
+      expect(nextPatch('0.9.9'), '0.9.10');
+      expect(nextPatch('0.7.0-rc.1'), '0.7.0-rc.1');
     });
 
     test(
@@ -483,9 +485,9 @@ void main() {
         await pumpEventQueue();
         mock.system.finishJob(mock.system.runningJobId!);
         final st = await f;
-        expect(st.currentVersion, '0.7.0.1a2b3c4 beta');
-        expect(st.available!.version, '0.7.0.${_rev.substring(0, 7)} beta');
-        expect((await s.system.info()).version, '0.7.0.1a2b3c4 beta');
+        expect(st.currentVersion, '0.7.1.1a2b3c4 beta');
+        expect(st.available!.version, '0.7.1.${_rev.substring(0, 7)} beta');
+        expect((await s.system.info()).version, '0.7.1.1a2b3c4 beta');
       },
     );
 
