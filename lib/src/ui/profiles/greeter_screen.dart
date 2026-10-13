@@ -377,7 +377,7 @@ class _GreeterScreenState extends State<GreeterScreen> {
     } on SystemException catch (e) {
       setState(
         () => _message = e.kind == SystemErrorKind.profileLimit
-            ? 'This box has as many profiles as it can have.'
+            ? 'This box has the maximum number of profiles.'
             : e.message,
       );
       return;
@@ -441,7 +441,7 @@ class _GreeterScreenState extends State<GreeterScreen> {
               StatusLine(
                 err is SystemException
                     ? err.message
-                    : "The profiles can't be shown right now.",
+                    : "Can't show the profiles right now.",
                 error: true,
               ),
               const SizedBox(height: HinterTokens.s3),
@@ -484,9 +484,6 @@ class _GreeterScreenState extends State<GreeterScreen> {
       tiles: tiles,
       onSelect: (t) => unawaited(_choose(t)),
       title: v.firstBoot ? 'Welcome' : 'Who is watching?',
-      subtitle: v.firstBoot
-          ? 'This box is getting ready for its first profile.'
-          : 'Choose your profile. Move with the D-pad, A chooses.',
       power: [
         if (widget.system != null) ...[
           PowerAction.sleep,

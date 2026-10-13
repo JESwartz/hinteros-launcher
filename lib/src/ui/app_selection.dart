@@ -175,10 +175,7 @@ class AppSelectionView extends StatelessWidget {
         }
         final terms = c.withTerms;
         if (terms.isNotEmpty) {
-          p.add(
-            Text('Terms of the apps you picked', style: t.label),
-            gap: HinterTokens.s3,
-          );
+          p.add(Text('App terms', style: t.label), gap: HinterTokens.s3);
           for (var i = 0; i < terms.length; i++) {
             final a = terms[i];
             final done = c.termsAccepted(a);
@@ -205,19 +202,15 @@ class AppSelectionView extends StatelessWidget {
         p.add(
           Text(
             c.selected.isEmpty
-                ? 'Nothing selected. You can add apps later from the Store.'
+                ? 'Nothing selected.'
                 : '${c.selected.length} selected. '
-                      '${c.needsNetwork ? 'Download: ${_size(c.downloadMiB)}${online ? '' : ', and this box is not online. Apps that need a download can be added later from the Store.'}.' : 'Nothing to download.'}',
+                      '${c.needsNetwork ? 'Download: ${_size(c.downloadMiB)}${online ? '' : '. This box is offline'}.' : 'Nothing to download.'}',
             style: t.bodyDim,
           ),
           gap: HinterTokens.s3,
         );
         if (!c.termsComplete) {
-          p.add(
-            const StatusLine(
-              'Accept the terms above to continue, or untick those apps.',
-            ),
-          );
+          p.add(const StatusLine('Accept the terms or untick those apps.'));
         }
         p.buttons('continue', [
           btn(

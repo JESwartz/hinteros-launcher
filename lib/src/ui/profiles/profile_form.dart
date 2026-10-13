@@ -146,7 +146,7 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
     final v = await widget.editText(
       title: widget.admin ? 'Your name' : 'Name of the profile',
       initial: _name,
-      hint: 'Shown on the profile picker. 1 to 32 characters.',
+      hint: '1 to 32 characters.',
     );
     if (v == null || !mounted) return;
     setState(() {
@@ -173,7 +173,7 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
     }
     if (_pin.pin != _firstPin) {
       _go(_Step.pin);
-      setState(() => _error = "The two PINs didn't match. Choose it again.");
+      setState(() => _error = "The PINs don't match. Try again.");
       return;
     }
     _go(_Step.lock);
@@ -226,17 +226,13 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
             onSelect: () => unawaited(_editName()),
             builder: (_, f) => SettingRow(
               title: _name.isEmpty ? 'Choose a name' : _name,
-              subtitle: 'Press A to type',
               focused: f,
               dim: _name.isEmpty,
             ),
           ),
           if (_error != null) StatusLine(_error!, error: true),
           if (_error == null && dup)
-            const StatusLine(
-              'Another profile has this name. That is allowed, but it may '
-              'be confusing on the picker.',
-            ),
+            const StatusLine('Another profile has this name.'),
           _buttons('next', [btn('Continue', _nameNext, primary: true)]),
         ]);
       case _Step.color:
@@ -290,8 +286,7 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
                 Text(pinDisclaimer, style: t.bodyDim),
                 if (widget.admin)
                   Text(
-                    'The admin PIN also changes other profiles and the box. '
-                    'If you forget it, it can be reset with the admin '
+                    'If you forget the admin PIN, reset it with the admin '
                     "account's password.",
                     style: t.caption,
                   ),
@@ -321,16 +316,12 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
             onSelect: () => setState(() => _locked = !_locked),
             builder: (_, f) => SettingRow(
               title: 'Lock this profile',
-              subtitle:
-                  'On: locked, it asks for the PIN to open, also when the box '
-                  'wakes from sleep. Off: unlocked, it opens without the PIN.',
               focused: f,
               trailing: ToggleMark(on: _locked),
             ),
           ),
           Text(
-            'Either way the PIN is asked for before the profile is changed '
-            'or removed.',
+            'Changing or removing the profile always needs the PIN.',
             style: t.bodyDim,
           ),
           _buttons('next', [
@@ -497,7 +488,7 @@ class _ProfileJobPageState extends State<ProfileJobPage> {
                 error: JobError(
                   message: e is SystemException
                       ? e.message
-                      : 'The service stopped reporting on this.',
+                      : 'Lost contact with the service.',
                 ),
               ),
             );
@@ -537,11 +528,11 @@ class _ProfileJobPageState extends State<ProfileJobPage> {
             const StatusLine('Done.', ok: true)
           else ...[
             StatusLine(
-              s.error?.message ?? 'It stopped before it was done.',
+              s.error?.message ?? 'It stopped before it finished.',
               error: true,
             ),
             const SizedBox(height: HinterTokens.s2),
-            Text('Nothing was changed. You can try again.', style: t.body),
+            Text('Nothing was changed. Try again.', style: t.body),
           ],
           const SizedBox(height: HinterTokens.s4),
           DialogButtonsRow(

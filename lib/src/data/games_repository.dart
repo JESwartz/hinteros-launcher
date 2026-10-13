@@ -26,12 +26,10 @@ extension GameState on Game {
   /// Why [canLaunch] is false, for a message; null when it can launch.
   String? get cannotLaunchReason => switch (effectiveState) {
     InstallState.installed => null,
-    InstallState.updateRequired =>
-      '$name needs an update first. Open Steam to update it.',
-    InstallState.updating =>
-      '$name is updating. You can play it when that is done.',
+    InstallState.updateRequired => 'Open Steam to update $name.',
+    InstallState.updating => '$name is updating. Try again when it finishes.',
     InstallState.installing =>
-      '$name is still installing. You can play it when that is done.',
+      '$name is installing. Try again when it finishes.',
     InstallState.uninstalling => '$name is being removed.',
     InstallState.unknown => '$name is updating.',
   };

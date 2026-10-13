@@ -51,8 +51,8 @@ class _LaunchingScreenState extends State<LaunchingScreen> {
     final t = HinterTheme.of(context);
     final steam = widget.id == 'steam';
     final hint = steam
-        ? 'Steam is updating itself — the first start can take a few minutes'
-        : 'This can take a minute the first time';
+        ? 'Steam is updating itself. This can take a few minutes.'
+        : 'The first start can take a minute.';
     return Semantics(
       container: true,
       liveRegion: true,

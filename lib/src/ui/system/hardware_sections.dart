@@ -31,8 +31,7 @@ class DisplaySection extends StatelessWidget {
         if (!info.canSet) {
           p.add(
             const StatusLine(
-              "This display's resolution can't be changed from here. "
-              'HinterOS uses what your TV prefers.',
+              "The resolution of this display can't be changed.",
             ),
           );
         }
@@ -43,7 +42,6 @@ class DisplaySection extends StatelessWidget {
                   .show<void>((c, m) => SafeAreaGuide(modal: m)),
           builder: (f) => SettingRow(
             title: 'Check the picture edges',
-            subtitle: 'Shows the safe area, to spot overscan.',
             focused: f,
             trailing: const _SafePreview(),
           ),
@@ -66,10 +64,7 @@ class DisplaySection extends StatelessWidget {
             builder: (f) => SettingRow(
               title: m.label,
               focused: f,
-              subtitle: [
-                m.name,
-                if (m.preferred) 'recommended by your TV',
-              ].join(', '),
+              subtitle: [m.name, if (m.preferred) 'recommended'].join(', '),
               trailing: Text(m.current ? 'Current' : '', style: t.bodyDim),
               leading: _Radio(selected: m.current),
             ),
@@ -95,9 +90,7 @@ class DisplaySection extends StatelessWidget {
       await showMessage(
         context,
         title: "Can't change this",
-        body:
-            "This display's resolution can't be changed from here. HinterOS "
-            'uses what your TV prefers.',
+        body: "The resolution of this display can't be changed.",
       );
       return;
     }
@@ -227,11 +220,7 @@ class _KeepDisplayDialogState extends State<KeepDisplayDialog> {
     return DialogCard(
       title: 'Keep ${widget.mode.label}?',
       children: [
-        Text(
-          'If you can see this, the TV accepts it. Going back to the old '
-          'setting in $_left seconds unless you keep it.',
-          style: t.bodyDim,
-        ),
+        Text('The old setting comes back in $_left seconds.', style: t.bodyDim),
         const SizedBox(height: HinterTokens.s4),
         DialogButtons(
           region: widget.modal.region,
@@ -290,13 +279,9 @@ class SafeAreaGuide extends StatelessWidget {
                         Text('Safe area', style: t.headline),
                         const SizedBox(height: HinterTokens.s2),
                         Text(
-                          'You should see the red line at the very edge of '
-                          'the screen on all four sides. If it is cut off, '
-                          'the TV is zooming the picture (overscan): look for '
-                          'a "Just scan", "Screen fit" or "1:1" picture '
-                          'setting on the TV. The blue frame is the margin '
-                          'HinterOS keeps clear, so everything important '
-                          'stays visible even on a TV that cannot be fixed.',
+                          'The red line must show on all four sides. If it '
+                          'is cut off, set the TV picture size to "Just '
+                          'scan", "Screen fit" or "1:1".',
                           style: t.body,
                         ),
                         const SizedBox(height: HinterTokens.s4),
@@ -553,26 +538,20 @@ class PowerSection extends StatelessWidget {
           );
         }
 
-        row(
-          'sleep',
-          PowerAction.sleep,
-          'Sleep',
-          'Wake it with a controller button.',
-          null,
-        );
+        row('sleep', PowerAction.sleep, 'Sleep', null, null);
         row(
           'restart',
           PowerAction.restart,
           'Restart',
           null,
-          'Everything that is running is closed, then the box starts again.',
+          'All running apps close.',
         );
         row(
           'shutdown',
           PowerAction.shutdown,
           'Shut down',
           null,
-          'Everything that is running is closed and the box turns off.',
+          'All running apps close.',
         );
         return p.build();
       },

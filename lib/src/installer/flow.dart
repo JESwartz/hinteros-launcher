@@ -196,9 +196,7 @@ class InstallerFlow extends ChangeNotifier {
       networkMessage = e.message;
     } on TimeoutException {
       net = const NetworkState();
-      networkMessage =
-          'Checking took longer than ${checkTimeout.inSeconds} seconds. '
-          'Choose "Check again" to try once more.';
+      networkMessage = 'The check took too long. Choose "Check again".';
     }
     checking = false;
     waitingForLink = false;
@@ -270,9 +268,7 @@ class InstallerFlow extends ChangeNotifier {
       networkMessage = e.message;
     } on TimeoutException {
       wifi = const [];
-      networkMessage =
-          'Searching for Wi-Fi took longer than ${checkTimeout.inSeconds} '
-          'seconds. Choose "Search again" to try once more.';
+      networkMessage = 'The Wi-Fi search took too long. Choose "Search again".';
     }
     scanning = false;
     notifyListeners();
@@ -361,7 +357,7 @@ class InstallerFlow extends ChangeNotifier {
     if (username.isNotEmpty && usernameProblem != null) return usernameProblem;
     if (password.isNotEmpty && passwordProblem != null) return passwordProblem;
     if (repeat.isNotEmpty && !passwordsMatch) {
-      return 'The two passwords are not the same.';
+      return 'The passwords do not match.';
     }
     return null;
   }
@@ -516,7 +512,7 @@ class InstallerFlow extends ChangeNotifier {
           '${total > 1 ? ' · $index of $total' : ''}';
     }
     if (_planApps.isEmpty) return null;
-    return _appsBegun ? 'Finishing up the apps' : 'Getting the apps ready';
+    return _appsBegun ? 'Finishing the apps' : 'Preparing the apps';
   }
 
   /// Names of the apps that could not be installed.

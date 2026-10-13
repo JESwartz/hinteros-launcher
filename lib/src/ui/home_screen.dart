@@ -14,10 +14,10 @@ import 'nav_focusable.dart';
 Widget? connectionNotice(ConnectionStatus s) => switch (s) {
   Connected() => null,
   VersionMismatch() => Notice(
-    title: "Launcher and system service versions don't match",
+    title: "Launcher and service versions don't match",
     detail:
-        'This launcher speaks API ${s.clientApiVersion}, the service '
-        'speaks ${s.serverApiVersion}. Retrying; an update may be half applied.',
+        'Launcher API ${s.clientApiVersion}, service API '
+        '${s.serverApiVersion}. Retrying.',
   ),
   Unreachable() => Notice(
     title: "Can't reach the HinterOS service",
@@ -59,8 +59,7 @@ class HomeScreen extends StatelessWidget {
         if (data.appList == null && data.appsError != null) {
           return const Notice(
             title: "Couldn't load apps",
-            detail:
-                'The HinterOS service did not answer. Retrying on reconnect.',
+            detail: 'The HinterOS service did not answer. Retrying.',
           );
         }
         return EdgeFade(

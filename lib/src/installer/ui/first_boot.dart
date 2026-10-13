@@ -207,8 +207,7 @@ class _FirstBootScreenState extends State<FirstBootScreen> {
       case FirstBootStep.welcome:
         p.add(
           Text(
-            'Let us set up this computer. It takes a minute. Move with '
-            'the D-pad, A chooses, B goes back.',
+            'Use the D-pad to move. Press A to choose and B to go back.',
             style: t.title,
           ),
         );
@@ -238,8 +237,7 @@ class _FirstBootScreenState extends State<FirstBootScreen> {
       case FirstBootStep.controllers:
         p.add(
           Text(
-            'Put your controller in pairing mode. It appears below and '
-            'pairs when you choose it.',
+            'Put your controller in pairing mode, then choose it below.',
             style: t.bodyDim,
           ),
         );
@@ -271,17 +269,11 @@ class _FirstBootScreenState extends State<FirstBootScreen> {
             m == null
                 ? 'Checking the display...'
                 : 'The picture is ${m.width} by ${m.height} at '
-                      '${m.refreshHz.round()} Hz. Can you read this '
-                      'comfortably?',
+                      '${m.refreshHz.round()} Hz. Can you read this?',
             style: t.title,
           ),
         );
-        p.add(
-          Text(
-            'If not, you can change it later in Settings.',
-            style: t.bodyDim,
-          ),
-        );
+        p.add(Text('If not, change it later in Settings.', style: t.bodyDim));
       case FirstBootStep.done:
         p.add(Text('You are ready to use HinterOS.', style: t.title));
     }
@@ -299,8 +291,7 @@ class _FirstBootScreenState extends State<FirstBootScreen> {
     ], gap: HinterTokens.s4);
     return FullPage(
       title: _step.title,
-      subtitle:
-          'Setup, step ${_step.index + 1} of ${FirstBootStep.values.length}',
+      subtitle: 'Step ${_step.index + 1} of ${FirstBootStep.values.length}',
       child: scrolling(p.build()),
     );
   }

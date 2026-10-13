@@ -35,7 +35,10 @@ void main() {
         expect(find.text('Password for Neighbour Net'), findsOneWidget);
         await t.enterText(find.byType(TextField), 'nope');
         await press(t, [kEnter]);
-        expect(find.textContaining('not accepted'), findsOneWidget);
+        expect(
+          find.textContaining('Wrong password. Try again.'),
+          findsOneWidget,
+        );
         await t.enterText(find.byType(TextField), 'wifi-pass');
         await press(t, [kEnter]);
         expect(find.text('Password for Neighbour Net'), findsNothing);
@@ -163,7 +166,7 @@ void main() {
       final h = harness();
       await h.pump(t);
       await enterSettingsEntry(t, 'ssh');
-      expect(find.textContaining('log in as the admin account'), findsWidgets);
+      expect(find.text('Needs the admin password.'), findsWidgets);
       expect(find.text('Admin password'), findsNothing);
       await press(t, [kEnter]); // SSH: ssh.set waits for the prompt
       expect(find.text('Admin password'), findsOneWidget);
@@ -180,10 +183,7 @@ void main() {
       await t.enterText(find.byType(TextField), 'wrong');
       await press(t, [kEnter]);
       expect(find.text('Admin password'), findsOneWidget);
-      expect(
-        find.text('That is not the password. 2 tries left.'),
-        findsOneWidget,
-      );
+      expect(find.text('Wrong password. 2 tries left.'), findsOneWidget);
       expect(field(t).text, isEmpty, reason: 'the password is not kept');
       expect(h.services.mockSystem.log, isNot(contains('ssh:on')));
       expect(h.services.mockJobs.started, isEmpty);
@@ -198,7 +198,7 @@ void main() {
       await t.pumpAndSettle();
       await press(t, [kEnter]); // Close
       expect(
-        find.textContaining('On. Log in as the admin account'),
+        find.textContaining('Log in as the admin account at'),
         findsOneWidget,
       );
     });
@@ -214,19 +214,22 @@ void main() {
       for (final left in ['2 tries', '1 try']) {
         await t.enterText(find.byType(TextField), 'wrong');
         await press(t, [kEnter]);
-        expect(
-          find.text('That is not the password. $left left.'),
-          findsOneWidget,
-        );
+        expect(find.text('Wrong password. $left left.'), findsOneWidget);
       }
       await t.enterText(find.byType(TextField), 'wrong');
       await press(t, [kEnter]);
       expect(find.text('Admin password'), findsNothing);
-      expect(find.textContaining('wrong too many times'), findsOneWidget);
+      expect(
+        find.textContaining('too many times. Nothing was changed.'),
+        findsOneWidget,
+      );
       expect(h.services.mockAuth.attempts, 3);
       expect(h.services.mockJobs.started, isEmpty);
       await press(t, [kEnter]);
-      expect(find.textContaining('wrong too many times'), findsNothing);
+      expect(
+        find.textContaining('too many times. Nothing was changed.'),
+        findsNothing,
+      );
     });
 
     testWidgets('Back cancels the request: auth.cancel, nothing changes', (
@@ -309,7 +312,10 @@ void main() {
       await toUpdateNow(t, h);
       final job = h.services.mockJobs.started.single;
       expect(find.text('Updating HinterOS'), findsOneWidget);
-      expect(find.textContaining('session will restart'), findsOneWidget);
+      expect(
+        find.textContaining('The session restarts when this finishes'),
+        findsOneWidget,
+      );
       h.services.mockJobs.progress(
         job.jobId,
         JobStage.downloading,
@@ -328,11 +334,11 @@ void main() {
         ),
       );
       await t.pumpAndSettle();
-      expect(find.text("The update didn't finish"), findsOneWidget);
+      expect(find.text('Update failed'), findsOneWidget);
       expect(find.textContaining('Not enough disk space'), findsOneWidget);
-      expect(find.textContaining('Nothing was changed'), findsOneWidget);
+      expect(find.textContaining('Nothing changed'), findsOneWidget);
       await press(t, [kEnter]); // Close
-      expect(find.text("The update didn't finish"), findsNothing);
+      expect(find.text('Update failed'), findsNothing);
       expect(h.services.mockUpdates.status.currentVersion, '0.6.0');
     });
 
@@ -366,7 +372,7 @@ void main() {
       await t.pumpAndSettle();
       await press(t, [kEnter]); // Cancel
       expect(find.text('Cancelled'), findsOneWidget);
-      expect(find.textContaining('Nothing was changed'), findsOneWidget);
+      expect(find.textContaining('Nothing changed'), findsOneWidget);
     });
 
     testWidgets('a finished update that needs a session restart offers it', (

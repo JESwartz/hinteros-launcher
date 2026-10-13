@@ -90,7 +90,7 @@ class ProfilePickerView extends StatelessWidget {
     required this.tiles,
     required this.onSelect,
     this.title = 'Who is watching?',
-    this.subtitle = 'Choose your profile. Move with the D-pad, A chooses.',
+    this.subtitle,
     this.power = const [],
     this.onPower,
     this.message,

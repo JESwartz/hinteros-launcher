@@ -47,7 +47,7 @@ void main() {
     final h = await removeOwnProfile(t);
     expect(endingPage.hitTestable(), findsOneWidget);
     expect(find.text('Removing Sam…'), findsOneWidget);
-    expect(find.text("You'll be taken to the profile picker."), findsOneWidget);
+    expect(find.text("You'll be taken to the profile picker."), findsNothing);
     // No way back: nav does nothing.
     await keys(t, [kEscape, kEscape, kUp, kEnter], settle: false);
     h.mock.pressHome();

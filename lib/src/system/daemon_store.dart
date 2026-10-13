@@ -272,7 +272,7 @@ class DaemonStore implements StoreRepository {
     () async => (await _conn.systemAppsRollback(
       api.SystemAppsRollbackParams(generation: generation),
     )).jobId,
-    nothingToDo: 'Your apps already are like that.',
+    nothingToDo: 'Nothing to change.',
   );
 
   @override

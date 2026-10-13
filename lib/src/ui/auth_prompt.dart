@@ -136,7 +136,7 @@ class _AuthPromptDialogState extends State<AuthPromptDialog> {
       widget.modal.close(true);
     } else if (answer.attemptsLeft > 0) {
       _again(
-        'That is not the password. '
+        'Wrong password. '
         '${answer.attemptsLeft == 1 ? '1 try' : '${answer.attemptsLeft} tries'}'
         ' left.',
       );
@@ -145,7 +145,7 @@ class _AuthPromptDialogState extends State<AuthPromptDialog> {
       // closes this.
       setState(() {
         _busy = true;
-        _error = 'That is not the password. No tries left.';
+        _error = 'Wrong password. No tries left.';
       });
     }
   }
@@ -200,7 +200,7 @@ class _AuthPromptDialogState extends State<AuthPromptDialog> {
           scrollIntoView: false,
           onSelect: () => setState(() => _reveal = !_reveal),
           builder: (_, f) => SettingRow(
-            title: 'Show what I type',
+            title: 'Show password',
             focused: f,
             leading: CheckMark(checked: _reveal),
           ),

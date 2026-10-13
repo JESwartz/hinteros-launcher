@@ -152,7 +152,7 @@ void main() {
     expect(focusLabel(), 'modal-0/pin0:0');
 
     await p.typePin('1111');
-    expect(find.text("That PIN didn't match."), findsOneWidget);
+    expect(find.text('Wrong PIN.'), findsOneWidget);
     await p.typePin('1112');
     await p.typePin('1113');
     await p.typePin('1114');
@@ -241,10 +241,7 @@ void main() {
     await p.typePin('2580');
     expect(find.text('Type the PIN again.'), findsOneWidget);
     await p.typePin('2581');
-    expect(
-      find.text("The two PINs didn't match. Choose it again."),
-      findsOneWidget,
-    );
+    expect(find.text("The PINs don't match. Try again."), findsOneWidget);
     await p.typePin('2580');
     await p.typePin('2580');
     expect(find.text('Lock this profile'), findsOneWidget);
@@ -275,10 +272,7 @@ void main() {
     await p.press(NavAction.right);
     await p.press(NavAction.accept);
     expect(find.text('Forgot your PIN?'), findsOneWidget);
-    expect(
-      find.textContaining('sudo hinteros-system reset-pin Sam'),
-      findsOneWidget,
-    );
+    expect(find.text('Ask the person who set up this box.'), findsOneWidget);
   });
 
   testWidgets('a pending switch to a locked profile goes straight to its PIN '

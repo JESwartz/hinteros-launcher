@@ -36,10 +36,7 @@ void main() {
   testWidgets('renaming another profile asks for the admin PIN', (t) async {
     final h = await open(t);
     await keys(t, [kDown, kEnter]); // Sam
-    expect(
-      find.text("Changing another profile needs the admin profile's PIN."),
-      findsOneWidget,
-    );
+    expect(find.text("Changes need the admin profile's PIN."), findsOneWidget);
     expect(find.text('Switch to this profile'), findsOneWidget);
     await keys(t, [kDown, kEnter]); // Rename
     await t.enterText(find.byType(EditableText), 'Samantha');
@@ -47,9 +44,9 @@ void main() {
     await keys(t, [kEnter]);
     expect(find.byType(EditableText), findsOneWidget);
     await keys(t, [kEnter]);
-    expect(find.text("This needs the admin profile's PIN."), findsOneWidget);
+    expect(find.text("Type the admin profile's PIN."), findsOneWidget);
     await typePin(t, '1357'); // Sam's own PIN is not the admin PIN
-    expect(find.text("That PIN didn't match."), findsOneWidget);
+    expect(find.text('Wrong PIN.'), findsOneWidget);
     await typePin(t, '2468');
     expect(h.services.mockProfiles.log, contains('rename:p3:Samantha'));
     expect(find.text('Samantha'), findsOneWidget);
@@ -68,10 +65,9 @@ void main() {
     await keys(t, [kRight, kEnter]);
     // No "hold A" page: straight to the PIN, Delete instead of OK.
     expect(find.textContaining('Hold A for 3 seconds'), findsNothing);
+    expect(find.text("Type the admin profile's PIN."), findsOneWidget);
     expect(
-      find.textContaining(
-        "Type the admin profile's PIN, then hold A on Delete",
-      ),
+      find.textContaining('Hold A on Delete for 3 seconds.'),
       findsOneWidget,
     );
     expect(find.text('Delete'), findsOneWidget);
@@ -141,7 +137,7 @@ void main() {
     await t.pump(const Duration(milliseconds: 3100));
     await t.sendKeyUpEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    expect(find.text("That PIN didn't match."), findsOneWidget);
+    expect(find.text('Wrong PIN.'), findsOneWidget);
     expect(h.services.mockProfiles.log, isNot(contains('remove:p3')));
     expect(fill(), isNull);
   });
@@ -180,7 +176,7 @@ void main() {
     await keys(t, [kEnter]); // Switch to this profile
     expect(find.text('Switch to Sam'), findsOneWidget);
     await typePin(t, '2468'); // the admin PIN is not Sam's
-    expect(find.text("That PIN didn't match."), findsOneWidget);
+    expect(find.text('Wrong PIN.'), findsOneWidget);
     expect(h.services.mockProfiles.log, isNot(contains('switch:p3')));
     await typePin(t, '1357', settle: false);
     expect(h.services.mockProfiles.log, contains('switch:p3'));

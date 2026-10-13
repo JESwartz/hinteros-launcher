@@ -137,7 +137,7 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
                 error: JobError(
                   message: e is SystemException
                       ? e.message
-                      : 'The service stopped reporting on this job.',
+                      : 'Lost contact with this job.',
                 ),
               ),
             );
@@ -163,18 +163,12 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
     try {
       await endSessionWith(
         context,
-        const SessionEnding(
-          title: 'Restarting the session…',
-          detail: "You'll be back in a moment.",
-        ),
+        const SessionEnding(title: 'Restarting the session…'),
         widget.services.system.restartSession,
       );
     } on SystemException catch (e) {
       if (mounted) {
-        setState(
-          () => _cancelNote =
-              "The session can't be restarted from here: ${e.message}",
-        );
+        setState(() => _cancelNote = "Can't restart the session: ${e.message}");
       }
       return;
     }
@@ -202,11 +196,11 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
       headline = 'Cancelled';
     } else {
       headline = switch (s.kind) {
-        JobKind.update => "The update didn't finish",
-        JobKind.rollback => "The rollback didn't finish",
-        JobKind.install => "The install didn't finish",
-        JobKind.remove => "The removal didn't finish",
-        _ => "That didn't finish",
+        JobKind.update => 'Update failed',
+        JobKind.rollback => 'Rollback failed',
+        JobKind.install => 'Install failed',
+        JobKind.remove => 'Removal failed',
+        _ => 'Failed',
       };
     }
 
@@ -253,42 +247,34 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
               Text(
                 s.percent != null
                     ? '${s.percent}%${s.detail == null ? '' : '  ${s.detail}'}'
-                    : (s.detail ?? 'Working. This can take a few minutes.'),
+                    : (s.detail ?? 'Working…'),
                 style: t.bodyDim,
               ),
             ],
             if (!s.finished && s.kind.mayRestartSession) ...[
               const SizedBox(height: HinterTokens.s3),
               const StatusLine(
-                'Your session will restart when this finishes. Anything '
-                'running now, including games, will be closed.',
+                'The session restarts when this finishes. Open games and apps '
+                'close.',
               ),
             ],
             if (s.finished && s.ok) ...[
               StatusLine(
                 restart
-                    ? 'The change is in. The session has to restart to use '
-                          'it.'
-                    : 'The change is in.',
+                    ? 'Restart the session to use the change.'
+                    : 'Change applied.',
                 ok: true,
               ),
             ],
             if (s.finished && !s.ok) ...[
-              if (s.error != null)
-                StatusLine(_describeError(s.error!), error: true),
+              if (s.error != null) StatusLine(s.error!.message, error: true),
               const SizedBox(height: HinterTokens.s2),
               Text(
                 s.cancelled
-                    ? 'Nothing was changed. HinterOS is still exactly as it '
-                          'was.'
-                    : 'Nothing was changed. HinterOS is still running the '
-                          'version it ran before, and you can try again.',
+                    ? 'Nothing changed.'
+                    : 'Nothing changed. Try again.',
                 style: t.body,
               ),
-              if (s.error?.logHint != null) ...[
-                const SizedBox(height: HinterTokens.s1),
-                Text('For the log: ${s.error!.logHint}', style: t.caption),
-              ],
             ],
             if (_cancelNote != null) ...[
               const SizedBox(height: HinterTokens.s2),
@@ -328,11 +314,6 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
         ),
       ),
     );
-  }
-
-  static String _describeError(JobError e) {
-    final stage = e.stage == null ? '' : ' (${e.stage!.label.toLowerCase()})';
-    return '${e.message}$stage';
   }
 
   static List<JobStage> _stagesOf(JobSnapshot s) {
@@ -605,9 +586,8 @@ class _TermsScreenState extends State<TermsScreen> {
           const SizedBox(height: HinterTokens.s2),
           Text(
             _atEnd
-                ? 'You have read to the end.'
-                : 'Up and down scroll; L1 and R1 scroll a page. Read to the '
-                      'end to accept.',
+                ? 'You read to the end.'
+                : 'Read to the end to accept. L1 and R1 scroll a page.',
             style: t.caption,
           ),
           if (widget.note != null) ...[
@@ -858,15 +838,11 @@ class _SecurityNoticeState extends State<SecurityNotice> {
                 const SizedBox(height: HinterTokens.s1),
                 Text(u.summary, style: t.body),
                 const SizedBox(height: HinterTokens.s2),
-                Text(
-                  'Updating takes a few minutes and restarts your session. '
-                  'Nothing is updated unless you choose it.',
-                  style: t.bodyDim,
-                ),
+                Text('The update restarts your session.', style: t.bodyDim),
                 const SizedBox(height: HinterTokens.s4),
                 Text(
                   _locked
-                      ? 'Please read this. You can choose in $_left '
+                      ? 'You can choose in $_left '
                             '${_left == 1 ? 'second' : 'seconds'}.'
                       : 'Choose when to update.',
                   key: const ValueKey('countdown'),

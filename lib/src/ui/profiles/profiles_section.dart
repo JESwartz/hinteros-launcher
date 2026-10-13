@@ -109,9 +109,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
     final choice = await showChoice<String>(
       context,
       title: p.name,
-      body: own
-          ? 'Your profile.'
-          : "Changing another profile needs the admin profile's PIN.",
+      body: own ? null : "Changes need the admin profile's PIN.",
       choices: [
         if (!own && !me.guest && widget.session != null)
           const Choice('Switch to this profile', 'switch'),
@@ -156,7 +154,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
     final name = await sessionEditText(context)(
       title: 'Rename ${p.name}',
       initial: p.name,
-      hint: 'Shown on the profile picker. 1 to 32 characters.',
+      hint: '1 to 32 characters.',
     );
     if (name == null || name.trim() == p.name || !mounted) return;
     if (own) {
@@ -208,7 +206,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
       body: 'Type the new PIN again.',
       check: (pin) async => pin == first
           ? const PinAccepted()
-          : const PinFailed("The two PINs didn't match."),
+          : const PinFailed("The PINs don't match."),
     );
     return again;
   }
@@ -217,7 +215,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
     final current = await showPinEntry(
       context,
       title: 'Change PIN',
-      body: 'First your current PIN.',
+      body: 'Type your current PIN.',
       forgotPinFor: myName,
       submitLabel: 'Next',
       check: (_) async => const PinAccepted(),
@@ -235,7 +233,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
         await _message(
           'PIN not changed',
           r.retryAt == null
-              ? "Your current PIN didn't match. Nothing was changed."
+              ? "Wrong current PIN. Nothing was changed."
               : 'Too many tries. ${retryText(r.retryAt!.difference(DateTime.now()))}',
         );
       } else {
@@ -260,10 +258,10 @@ class _ProfilesSectionState extends State<ProfilesSection> {
       title: p.locked ? 'Unlock this profile' : 'Lock this profile',
       forgotPinFor: p.name,
       body: p.locked
-          ? 'Unlocked, your profile opens without the PIN. Type your PIN '
-                'to confirm.'
-          : 'Locked, your profile asks for its PIN to open, also after '
-                'sleep. Type your PIN to confirm.',
+          ? 'Your profile then opens without the PIN. Type your PIN to '
+                'confirm.'
+          : 'Your profile then needs the PIN to open and after sleep. Type '
+                'your PIN to confirm.',
       disclaimer: true,
       check: (pin) async {
         try {
@@ -297,18 +295,13 @@ class _ProfilesSectionState extends State<ProfilesSection> {
     final endings = own ? SessionEndingScope.maybeOf(context) : null;
     final ending = SessionEnding(
       title: 'Removing ${p.name}…',
-      detail: "You'll be taken to the profile picker.",
       identity: LoadingIdentity(name: p.name, color: p.color),
     );
     // The PIN, then Delete held for 3 seconds (letting go early starts over).
     await showPinEntry(
       context,
       title: 'Remove ${p.name}',
-      body: own
-          ? 'Type your PIN, then hold A on Delete for 3 seconds to remove '
-                'your profile.'
-          : "Type the admin profile's PIN, then hold A on Delete for 3 "
-                'seconds to remove ${p.name}.',
+      body: own ? 'Type your PIN.' : "Type the admin profile's PIN.",
       forgotPinFor: own ? p.name : forgotPinAdmin,
       submitLabel: 'Delete',
       holdToSubmit: const Duration(seconds: 3),
@@ -357,8 +350,8 @@ class _ProfilesSectionState extends State<ProfilesSection> {
       title: 'Put your apps back?',
       body:
           'Your apps go back to how they were on ${shortDate(g.date)}: '
-          '${g.ids.map((i) => names[i] ?? i).join(', ')}. Other profiles '
-          'are not changed. Your data in the apps stays.',
+          '${g.ids.map((i) => names[i] ?? i).join(', ')}. Your app data '
+          'stays.',
       confirmLabel: 'Put them back',
     );
     if (ok == null || !mounted) return;
@@ -395,7 +388,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
     );
     if (!ran || !mounted) return;
     if (nothing) {
-      await _message('Starter apps', 'Those already are the starter apps.');
+      await _message('Starter apps', 'Nothing changed.');
       return;
     }
     await showJobProgress(context, _s, job!);
@@ -405,10 +398,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
     JobHandle? job;
     final ran = await withAdminPin(
       context,
-      title: enabled ? 'Turn the guest off' : 'Turn the guest on',
-      body: enabled
-          ? 'The picker stops offering Guest. This takes about a minute.'
-          : 'The picker offers Guest again. This takes about a minute.',
+      title: enabled ? 'Turn off Guest' : 'Turn on Guest',
       action: (pin) async => job = await _p.setGuest(!enabled, pin),
     );
     if (!ran || job == null || !mounted) return;
@@ -432,8 +422,8 @@ class _ProfilesSectionState extends State<ProfilesSection> {
         if (me.guest) {
           p.add(
             Text(
-              'You are using the guest profile. Everything in it is cleared '
-              'when the box restarts.',
+              'You are using Guest. Everything in it is cleared when the box '
+              'restarts.',
               style: t.body,
             ),
           );
@@ -464,7 +454,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
             if (x.admin) 'Admin',
             if (x.locked) 'Locked',
             x.usage == null
-                ? 'Storage not measured yet'
+                ? 'Size not known yet'
                 : '${bytesLabel(x.usage!.totalBytes)} used',
           ];
           p.item(
@@ -491,8 +481,8 @@ class _ProfilesSectionState extends State<ProfilesSection> {
             focused: f,
             dim: state.full,
             subtitle: state.full
-                ? 'This box has ${state.max} profiles, the most it can have.'
-                : 'A name, a colour and a PIN. Takes about a minute.',
+                ? 'This box has the maximum of ${state.max} profiles.'
+                : null,
           ),
           gap: HinterTokens.s3,
         );
@@ -504,13 +494,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
           p.item(
             'starter',
             onSelect: () => unawaited(_starter()),
-            builder: (f) => SettingRow(
-              title: 'Starter apps',
-              subtitle:
-                  'The apps new profiles and the guest start with, chosen '
-                  'from your apps.',
-              focused: f,
-            ),
+            builder: (f) => SettingRow(title: 'Starter apps', focused: f),
           );
           p.item(
             'guest',
@@ -519,9 +503,8 @@ class _ProfilesSectionState extends State<ProfilesSection> {
             builder: (f) => SettingRow(
               title: 'Guest',
               subtitle: state.guestEnabled
-                  ? 'Anyone can use the box as a guest; cleared at every '
-                        'restart.${state.guestUsage == null ? '' : ' Now ${bytesLabel(state.guestUsage!.totalBytes)}.'}'
-                  : 'The picker does not offer Guest.',
+                  ? 'Cleared at every restart.${state.guestUsage == null ? '' : ' ${bytesLabel(state.guestUsage!.totalBytes)} used.'}'
+                  : null,
               focused: f,
               trailing: ToggleMark(on: state.guestEnabled),
             ),
@@ -569,15 +552,7 @@ class _AppHistoryPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = HinterTheme.of(context);
     final p = Pane(modal.region);
-    p.add(
-      Text(
-        'Your apps as they were before a change. Only your profile changes; '
-        'your data in the apps stays.',
-        style: t.body,
-      ),
-    );
     var any = false;
     for (var i = 1; i < generations.length; i++) {
       final g = generations[i];
@@ -595,12 +570,11 @@ class _AppHistoryPage extends StatelessWidget {
       );
     }
     if (!any) {
-      p.add(const StatusLine('There is no earlier state of your apps yet.'));
+      p.add(const StatusLine('No earlier app states yet.'));
     }
     p.buttons('close', [btn('Close', modal.close)], gap: HinterTokens.s4);
     return FullPage(
       title: 'App history',
-      subtitle: 'B goes back.',
       child: SingleChildScrollView(child: p.build()),
     );
   }
@@ -633,9 +607,8 @@ class _StarterPageState extends State<_StarterPage> {
     final p = Pane(region);
     p.add(
       Text(
-        'New profiles and guest sessions start with these apps. Profiles '
-        'that exist now keep their own apps. You can choose from the apps '
-        'in your profile.',
+        'New profiles and Guest start with these apps. Existing profiles do '
+        'not change.',
         style: t.body,
       ),
     );
@@ -648,9 +621,6 @@ class _StarterPageState extends State<_StarterPage> {
         ),
         builder: (f) => SettingRow(
           title: a.name,
-          subtitle: a.hasTerms
-              ? 'Each profile accepts its terms the first time it opens it.'
-              : null,
           focused: f,
           leading: CheckMark(checked: _chosen.contains(a.id)),
         ),

@@ -96,12 +96,9 @@ void main() {
     // game: no other question). A wrong one changes nothing; B goes back.
     await keys(t, [right, enter]);
     expect(find.text('Switch to Sam'), findsOneWidget);
-    expect(
-      find.textContaining('Nothing in this profile closes until'),
-      findsOneWidget,
-    );
+    expect(find.text("Type Sam's PIN."), findsOneWidget);
     await typePin(t, '0000');
-    expect(find.text("That PIN didn't match."), findsOneWidget);
+    expect(find.text('Wrong PIN.'), findsOneWidget);
     expect(h.services.mockProfiles.log, isNot(contains('switch:p3')));
     await keys(t, [escape]);
     expect(find.text('Switch to Sam'), findsNothing);
@@ -144,10 +141,7 @@ void main() {
     expect(first, inInclusiveRange(10, 11));
     await t.pump(const Duration(seconds: 3));
     expect(shown(), first + 3);
-    expect(
-      find.text('Force-closing it may lose unsaved data.'),
-      findsOneWidget,
-    );
+    expect(find.text('Force close can lose unsaved data.'), findsOneWidget);
     expect(focusLabel(), endsWith('/buttons:0'));
     await keys(t, [enter], settle: false); // Keep waiting
     await t.pump(const Duration(milliseconds: 1050));
@@ -180,26 +174,17 @@ void main() {
     await h.pump(t);
     h.services.mockProfiles.sleep();
     await t.pumpAndSettle();
-    expect(
-      find.text('This profile is locked. Type its PIN to go on.'),
-      findsOneWidget,
-    );
+    expect(find.text('Type the PIN to unlock.'), findsOneWidget);
     // B on the empty pad does not leave.
     await keys(t, [escape]);
-    expect(
-      find.text('This profile is locked. Type its PIN to go on.'),
-      findsOneWidget,
-    );
-    // How a forgotten PIN is removed (root, in a terminal).
+    expect(find.text('Type the PIN to unlock.'), findsOneWidget);
+    // Where to go with a forgotten PIN (the command is in the docs).
     expect(find.text('Forgot your PIN?'), findsOneWidget);
-    expect(
-      find.textContaining('sudo hinteros-system reset-pin Sam'),
-      findsOneWidget,
-    );
+    expect(find.text('Ask the person who set up this box.'), findsOneWidget);
     await typePin(t, '2468');
-    expect(find.text("That PIN didn't match."), findsOneWidget);
+    expect(find.text('Wrong PIN.'), findsOneWidget);
     await typePin(t, '1357');
-    expect(find.textContaining('This profile is locked'), findsNothing);
+    expect(find.textContaining('Type the PIN to unlock'), findsNothing);
     expect(h.services.mockProfiles.log, contains('unlock'));
   });
 

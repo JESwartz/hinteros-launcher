@@ -60,10 +60,7 @@ void main() {
       await h.start(t);
       expect(find.text('Living Room'), findsOneWidget);
       expect(find.text('Office (802.1X)'), findsOneWidget);
-      expect(
-        find.text('This kind of network cannot be used here.'),
-        findsOneWidget,
-      );
+      expect(find.text('Not supported.'), findsOneWidget);
 
       // A wrong password: the error is shown, still offline.
       await h.choose(t, 'w0');
@@ -193,10 +190,7 @@ void main() {
       );
       await h.start(t);
       await h.choose(t, 'actions', 1);
-      expect(
-        find.textContaining('None of the disks can be used'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('No disk can be used'), findsOneWidget);
       expect(buttonEnabled(t, 'Continue'), isFalse);
     });
   });
@@ -236,7 +230,7 @@ void main() {
       await h.type(t, 'longpassword1');
       await h.choose(t, 'pw2');
       await h.type(t, 'longpassword2');
-      expect(find.text('The two passwords are not the same.'), findsOneWidget);
+      expect(find.text('The passwords do not match.'), findsOneWidget);
       expect(buttonEnabled(t, 'Continue'), isFalse);
       // Accepting a disabled Continue does nothing.
       await h.moveTo(t, 'actions');
@@ -245,8 +239,8 @@ void main() {
 
       await h.choose(t, 'pw2');
       await h.type(t, 'longpassword1');
-      expect(find.text('The two passwords are not the same.'), findsNothing);
-      expect(find.text('The account looks good.'), findsOneWidget);
+      expect(find.text('The passwords do not match.'), findsNothing);
+      expect(find.text('The account looks good.'), findsNothing);
       expect(buttonEnabled(t, 'Continue'), isTrue);
       await h.choose(t, 'actions');
       expect(h.flow.step, InstallerStep.options);
@@ -313,7 +307,9 @@ void main() {
         expect(find.text('Enable SSH'), findsOneWidget);
         expect(find.text('Off'), findsOneWidget);
         expect(
-          find.textContaining('log in as the admin, with the password'),
+          find.textContaining(
+            'Lets other computers on your network log in as the admin',
+          ),
           findsOneWidget,
         );
         await h.choose(t, 'ssh');
@@ -629,7 +625,7 @@ void main() {
       expect(h.flow.phase, InstallPhase.failed);
       expect(h.flow.outcome!.exitCode, 1);
       expect(find.text('The install did not finish'), findsOneWidget);
-      expect(find.textContaining('stopped part of the way'), findsOneWidget);
+      expect(find.textContaining('stopped before the end'), findsOneWidget);
       expect(
         find.textContaining('Installing the system failed'),
         findsOneWidget,

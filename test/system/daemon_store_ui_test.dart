@@ -90,7 +90,7 @@ void main() {
       await h.pump(t);
       await endStartupCheck(t, h);
       await openSteam(t);
-      expect(find.text('Not installed for this profile.'), findsOneWidget);
+      expect(find.text('Not installed.'), findsOneWidget);
       await press(t, [kEnter]); // Install
       expect(find.text('Install Steam for this profile?'), findsOneWidget);
       await press(t, [kRight, kEnter]); // Continue
@@ -121,7 +121,7 @@ void main() {
       await press(t, [kEnter]); // Close
       // store_changed refreshed the listing: Steam is installed now.
       expect(h.mock.system.installedApps, ['steam']);
-      expect(find.text('Installed for this profile.'), findsOneWidget);
+      expect(find.text('Installed.'), findsOneWidget);
     });
 
     testWidgets('a stale revision is retried once, silently', (t) async {
@@ -183,13 +183,15 @@ void main() {
       await endStartupCheck(t, h);
       await openApp(t, 2, rows: 1); // Video: Crunchyroll, Jellyfin / Kodi, Plex
       expect(find.text('Kodi'), findsWidgets);
-      expect(find.textContaining('together with Jellyfin'), findsOneWidget);
+      expect(
+        find.textContaining("Can't be installed with Jellyfin"),
+        findsOneWidget,
+      );
       await press(t, [kEnter, kRight, kEnter]); // Install, confirm
       expect(find.text("Kodi can't be installed"), findsOneWidget);
       expect(
         find.textContaining(
-          'Kodi cannot be installed together with Jellyfin. Remove Jellyfin '
-          'first if you want Kodi.',
+          "Kodi can't be installed with Jellyfin. Remove Jellyfin first.",
         ),
         findsOneWidget,
       );
@@ -208,9 +210,9 @@ void main() {
       await press(t, [kEnter, kRight, kEnter]);
       expect(find.text('Not enough space'), findsOneWidget);
       expect(find.textContaining('about 620 MB'), findsOneWidget);
-      expect(find.textContaining('100 MB are free'), findsOneWidget);
+      expect(find.textContaining('100 MB free'), findsOneWidget);
       expect(
-        find.textContaining('Remove an app you do not use'),
+        find.textContaining('Remove an app or delete files'),
         findsOneWidget,
       );
       expect(h.mock.system.runningJobId, isNull);
@@ -244,7 +246,7 @@ void main() {
       await h.pump(t);
       await endStartupCheck(t, h);
       await openSteam(t);
-      expect(find.text('Installed for this profile.'), findsOneWidget);
+      expect(find.text('Installed.'), findsOneWidget);
       await press(t, [kRight, kEnter]); // Remove
       expect(find.text('Remove Steam from this profile?'), findsOneWidget);
       await press(t, [kEnter, kDown, kRight, kEnter]); // tick, Remove
@@ -259,7 +261,7 @@ void main() {
       expect(find.text('Done'), findsOneWidget);
       await press(t, [kEnter]);
       expect(h.mock.system.installedApps, isEmpty);
-      expect(find.text('Not installed for this profile.'), findsOneWidget);
+      expect(find.text('Not installed.'), findsOneWidget);
     });
 
     testWidgets('without data: one confirmation, delete_data false', (t) async {
@@ -284,10 +286,7 @@ void main() {
       await t.pumpAndSettle();
       await openApp(t, 2, more: 1); // Video: Jellyfin
       await press(t, [kRight, kEnter]); // Remove
-      expect(
-        find.textContaining('is running now and is closed first'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('Jellyfin closes first'), findsOneWidget);
       await press(t, [kDown, kRight, kEnter]);
       expect(h.mock.running, isEmpty);
       expect(appsLog(h), ['apps.remove:jellyfin:data=false']);
@@ -321,7 +320,7 @@ void main() {
       expect(find.text('Installed, no longer offered'), findsOneWidget);
       expect(
         find.textContaining(
-          'This app is retired. Replaced by the Video player. It keeps working',
+          'This app is retired. Replaced by the Video player. It still works',
         ),
         findsOneWidget,
       );
@@ -337,7 +336,7 @@ void main() {
       await openApp(t, 4); // Installed
       expect(find.text('Installed, going away'), findsOneWidget);
       expect(
-        find.textContaining('The next update takes this app away'),
+        find.textContaining('The next update removes this app'),
         findsOneWidget,
       );
       expect(find.text('Remove'), findsOneWidget);
@@ -374,7 +373,7 @@ void main() {
       // only; the Store tab is one tab right of Apps.
       await press(t, [kUp, kUp, kRight, kRight, kRight]);
       expect(
-        find.text('More apps are available after the next update: New player.'),
+        find.text('More apps come with the next update: New player.'),
         findsOneWidget,
       );
       await press(t, [
@@ -385,12 +384,12 @@ void main() {
       ]);
       expect(
         find.textContaining(
-          'This update takes away Old player (Replaced by the Video player.)',
+          'This update removes Old player (Replaced by the Video player.)',
         ),
         findsOneWidget,
       );
       expect(
-        find.textContaining('adds to the Store: New player'),
+        find.textContaining('New in the Store: New player'),
         findsOneWidget,
       );
     });

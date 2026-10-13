@@ -30,7 +30,7 @@ void main() {
     );
     await t.pumpAndSettle();
     expect(find.text('Welcome'), findsOneWidget);
-    expect(find.text('Setup, step 1 of 5'), findsOneWidget);
+    expect(find.text('Step 1 of 5'), findsOneWidget);
 
     await press(NavAction.accept); // Start
     expect(find.text('Internet'), findsOneWidget);

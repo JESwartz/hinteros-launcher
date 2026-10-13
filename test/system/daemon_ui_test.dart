@@ -64,7 +64,7 @@ void main() {
       await h.pump(t);
       await endStartupCheck(t, h);
       await enterSettingsEntry(t, 'ssh');
-      expect(find.textContaining('asks for the admin password'), findsWidgets);
+      expect(find.text('Needs the admin password.'), findsWidgets);
       await press(t, [kEnter]);
       // ssh.set waits at the daemon; authentication_requested shows the prompt.
       expect(find.text('Admin password'), findsOneWidget);
@@ -76,10 +76,7 @@ void main() {
       expect(h.mock.system.runningJobId, isNull);
       await t.enterText(find.byType(TextField), 'wrong');
       await press(t, [kEnter]);
-      expect(
-        find.text('That is not the password. 2 tries left.'),
-        findsOneWidget,
-      );
+      expect(find.text('Wrong password. 2 tries left.'), findsOneWidget);
       await t.enterText(find.byType(TextField), 'correct horse');
       await press(t, [kEnter]);
       // authorized: the dialog is gone and the job's progress shows.
@@ -89,7 +86,7 @@ void main() {
       await t.pumpAndSettle();
       await press(t, [kEnter]); // Close
       expect(
-        find.textContaining('On. Log in as the admin account'),
+        find.textContaining('Log in as the admin account at'),
         findsOneWidget,
       );
       expect(h.mock.auth.pendingCookies, isEmpty);
@@ -141,7 +138,7 @@ void main() {
       await t.pumpAndSettle();
       await press(t, [kEnter]); // Close
       expect(
-        find.textContaining('On. Log in as the admin account'),
+        find.textContaining('Log in as the admin account at'),
         findsOneWidget,
       );
     });
@@ -171,7 +168,7 @@ void main() {
           api.SystemUnavailableDataReason.versionMismatch;
       await h.pump(t);
       await enterSettingsEntry(t, 'ssh');
-      expect(find.textContaining('until the session restarts'), findsOneWidget);
+      expect(find.textContaining('Restart the session'), findsOneWidget);
     });
   });
 

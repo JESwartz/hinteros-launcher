@@ -55,7 +55,7 @@ void main() {
     await t.pump(launchingHintAfter - const Duration(seconds: 1));
     expect(hint, findsNothing);
     await t.pump(const Duration(seconds: 2));
-    expect(find.text('This can take a minute the first time'), findsOneWidget);
+    expect(find.text('The first start can take a minute.'), findsOneWidget);
     h.mock.finishStart('jellyfin');
     await frames(t);
 

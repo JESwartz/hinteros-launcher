@@ -1,5 +1,8 @@
 /// Turns what a call on the daemon threw into a [SystemException], for the
 /// system relay (3xxx) and the runtime settings (4xxx) alike.
+///
+/// The daemon's own messages are for the log (see [guardCall]); the
+/// [SystemException.message] is always a short line written here.
 library;
 
 import '../api/api.dart' as api;
@@ -14,7 +17,7 @@ SystemException systemExceptionFrom(Object e) {
   if (e is api.DaemonUnavailableException) {
     return const SystemException(
       SystemErrorKind.unavailable,
-      'Settings are unavailable: the launcher is not connected to HinterOS.',
+      'Settings are unavailable. The launcher is not connected to HinterOS.',
       data: {'reason': 'down'},
     );
   }
@@ -28,9 +31,8 @@ SystemException systemExceptionFrom(Object e) {
         return SystemException(
           SystemErrorKind.unavailable,
           mismatch
-              ? 'Settings are unavailable until the session restarts: the '
-                    'system service was updated.'
-              : 'Settings are unavailable: the HinterOS system service is '
+              ? 'Settings are unavailable. Restart the session.'
+              : 'Settings are unavailable. The HinterOS system service is '
                     'not running.',
           data: data,
         );
@@ -45,20 +47,30 @@ SystemException systemExceptionFrom(Object e) {
         return SystemException(
           SystemErrorKind.deviceFailed,
           switch (data['reason']) {
-            'not_applied' =>
-              'The display did not switch to that mode. HinterOS may be '
-                  'started with a fixed resolution.',
-            'nothing_to_revert' => 'There is no display change to go back.',
-            'wifi_disabled' => 'Wi-Fi is turned off.',
+            'not_applied' => 'The display did not change to that mode.',
+            'nothing_to_revert' => 'There is no display change to undo.',
+            'wifi_disabled' => 'Wi-Fi is off.',
+            'no_wifi_device' => 'There is no Wi-Fi adapter in this box.',
             'no_adapter' => 'There is no Bluetooth adapter in this box.',
-            _ => e.message,
+            'not_in_range' => 'The network is out of range.',
+            'no_address' => 'The network gave no address. Try again.',
+            'connect_failed' ||
+            'activation_failed' => "Can't connect. Try again.",
+            'auth_failed' => 'The device did not accept the pairing.',
+            'rejected' => 'The pairing was rejected.',
+            'canceled' => 'The pairing was cancelled.',
+            'timeout' => 'No answer in time. Try again.',
+            'in_progress' => 'Bluetooth is busy. Try again in a moment.',
+            'not_ready' => 'Bluetooth is not ready. Try again in a moment.',
+            'not_available' => 'The device is not available.',
+            _ => "That didn't work. Try again.",
           },
           data: data,
         );
       case api.ApiErrorCode.wrongPassword:
         return SystemException(
           SystemErrorKind.wrongPassword,
-          'That password was not accepted. Try again.',
+          'Wrong password. Try again.',
           data: data,
         );
       case api.ApiErrorCode.notAuthorized:
@@ -78,8 +90,7 @@ SystemException systemExceptionFrom(Object e) {
           SystemErrorKind.permissionDenied,
           switch (data['reason']) {
             'polkit' =>
-              'The admin password was wrong too many times. Nothing was '
-                  'changed.',
+              'Wrong admin password too many times. Nothing was changed.',
             'profile' => 'Only a profile can do this.',
             _ => 'This is not allowed on this box right now.',
           },
@@ -88,29 +99,29 @@ SystemException systemExceptionFrom(Object e) {
       case api.ApiErrorCode.authenticationRequired:
         return SystemException(
           SystemErrorKind.authenticationRequired,
-          'The admin password was not given, so nothing was changed.',
+          'No admin password was given, so nothing was changed.',
           data: data,
         );
       case api.ApiErrorCode.appConflict:
         return SystemException(
           SystemErrorKind.appConflict,
-          '${data['id']} and ${data['conflicts_with']} cannot be on this '
-          'box together.',
+          "${data['id']} and ${data['conflicts_with']} can't be installed "
+          'together.',
           data: data,
         );
       case api.ApiErrorCode.termsRequired:
         return SystemException(
           SystemErrorKind.termsRequired,
-          'The terms of ${data['id']} have to be accepted first.',
+          'Accept the terms of ${data['id']} first.',
           data: data,
         );
       case api.ApiErrorCode.insufficientResources:
         return SystemException(
           SystemErrorKind.insufficientResources,
           data['kind'] == 'disk'
-              ? 'There is not enough free disk space for this. Free some '
-                    'space (remove an app or delete files) and try again.'
-              : 'There is not enough free memory for this.',
+              ? 'Not enough free disk space. Remove an app or delete files, '
+                    'then try again.'
+              : 'Not enough free memory.',
           data: data,
         );
       case api.ApiErrorCode.pinRequired:
@@ -120,14 +131,14 @@ SystemException systemExceptionFrom(Object e) {
               ? 'Too many tries with that PIN.'
               : switch (data['pin']) {
                   'admin' => "This needs the admin profile's PIN.",
-                  _ => "That PIN didn't match.",
+                  _ => 'Wrong PIN.',
                 },
           data: data,
         );
       case api.ApiErrorCode.profileLimit:
         return SystemException(
           SystemErrorKind.profileLimit,
-          'This box has as many profiles as it can have '
+          'This box has the maximum number of profiles '
           '(${data['max'] ?? 8}).',
           data: data,
         );
@@ -140,7 +151,7 @@ SystemException systemExceptionFrom(Object e) {
       case api.ApiErrorCode.rateLimited:
         return SystemException(
           SystemErrorKind.rateLimited,
-          'Too many changes in a short time. Try again in a moment.',
+          'Too many changes. Try again in a moment.',
           data: data,
         );
       case api.ApiErrorCode.stateConflict:
@@ -148,27 +159,31 @@ SystemException systemExceptionFrom(Object e) {
           SystemErrorKind.stateConflict,
           data['reason'] == 'update_rev'
               ? 'That is not the update that was checked. Check again.'
-              : 'The settings changed in the meantime. Try again.',
+              : 'The settings changed. Try again.',
           data: data,
         );
       case api.ApiErrorCode.updateUnreachable:
         return SystemException(
           SystemErrorKind.updateUnreachable,
-          "Can't reach the update server right now.",
+          "Can't reach the update server right now. Try again later.",
           data: data,
         );
       case api.ApiErrorCode.updateVerificationFailed:
         return SystemException(
           SystemErrorKind.updateVerificationFailed,
-          'The update did not pass its safety check.',
+          'The update failed its safety check. Nothing was changed.',
           data: data,
         );
       case api.ApiErrorCode.notFound:
-        return SystemException(SystemErrorKind.notFound, e.message, data: data);
+        return SystemException(
+          SystemErrorKind.notFound,
+          'That is not there any more.',
+          data: data,
+        );
       case api.ApiErrorCode.needsAcknowledgement:
         return SystemException(
           SystemErrorKind.needsAcknowledgement,
-          e.message,
+          'This is a downgrade.',
           data: data,
         );
       case api.ApiErrorCode.invalidParams:
@@ -176,25 +191,36 @@ SystemException systemExceptionFrom(Object e) {
           SystemErrorKind.invalidParams,
           switch (data['reason']) {
             'unsupported_security' =>
-              "This kind of network (WEP or a business login) can't be "
-                  'joined from here.',
+              "This type of network (WEP or a business login) isn't "
+                  'supported.',
             'not_available' =>
               'That app is not available in this version of HinterOS.',
-            _ => e.message,
+            'not_in_admin_profile' =>
+              'That app is not installed in the admin profile.',
+            _ => "HinterOS can't do that.",
           },
           data: data,
         );
       case api.ApiErrorCode.methodNotFound:
         return const SystemException(
           SystemErrorKind.unavailable,
-          'This needs a newer HinterOS service than the one that is running.',
+          'This needs a newer HinterOS service.',
         );
     }
-    return SystemException(SystemErrorKind.failed, e.message, data: data);
+    return SystemException(
+      SystemErrorKind.failed,
+      'Something went wrong. Try again.',
+      data: data,
+    );
   }
-  return SystemException(SystemErrorKind.failed, 'Something went wrong ($e).');
+  return const SystemException(
+    SystemErrorKind.failed,
+    'Something went wrong. Try again.',
+  );
 }
 
+/// Runs [call]; a failure is logged with the daemon's own message and
+/// rethrown as a [SystemException] with a short message for the screen.
 Future<T> guardCall<T>(Future<T> Function() call) async {
   try {
     return await call();

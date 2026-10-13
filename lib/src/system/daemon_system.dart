@@ -143,13 +143,47 @@ JobError _jobError(api.ErrorObject e) {
       SystemErrorKind.insufficientResources,
     _ => null,
   };
+  // The daemon's message is for the log (the job_finished handler logs it):
+  // the screen gets a short line of its own.
   return JobError(
-    message: e.message,
+    message: switch (kind) {
+      SystemErrorKind.updateUnreachable =>
+        "Can't reach the update server right now. Try again later.",
+      SystemErrorKind.updateVerificationFailed =>
+        'The update failed its safety check.',
+      SystemErrorKind.needsAcknowledgement => 'This is a downgrade.',
+      SystemErrorKind.insufficientResources =>
+        data['kind'] == 'disk'
+            ? 'Not enough free disk space.'
+            : 'Not enough free memory.',
+      _ => stage == null ? 'Job failed' : 'Job failed while ${_verb(stage)}',
+    },
     stage: stage,
     logHint: data['log_hint'] as String?,
     kind: kind,
   );
 }
+
+/// The error's `log_hint`, for the log line of a failed job.
+String _hint(api.ErrorObject? e) {
+  final d = e?.data;
+  final h = d is Map ? d['log_hint'] : null;
+  return h is String && h.isNotEmpty ? ' (log hint: $h)' : '';
+}
+
+/// The stage in "Job failed while ...".
+String _verb(JobStage s) => switch (s) {
+  JobStage.preparing => 'preparing',
+  JobStage.fetching => 'fetching',
+  JobStage.verifying => 'verifying',
+  JobStage.box => 'preparing the box',
+  JobStage.evaluating => 'evaluating',
+  JobStage.downloading => 'downloading',
+  JobStage.building => 'building',
+  JobStage.activating => 'switching over',
+  JobStage.apps => 'updating the apps',
+  JobStage.finishing => 'finishing',
+};
 
 /// A job that ended because of `jobs.cancel` (state `cancelled`, or
 /// `job_finished` with `job_failed` and the message "cancelled").
@@ -219,7 +253,7 @@ class DaemonJobs implements JobsRepository {
   Future<JobHandle> start(
     JobKind kind,
     Future<String?> Function() call, {
-    String nothingToDo = 'There is nothing to change.',
+    String nothingToDo = 'Nothing to change.',
   }) async {
     final id = await guardCall(call);
     if (id == null) {
@@ -279,7 +313,8 @@ class DaemonJobs implements JobsRepository {
           final err = ev.error;
           logSink(
             'hinteros-launcher: job ${kind.name} (${ev.jobId}) failed'
-            '${err == null ? '' : ": ${err.code} ${err.message}"}',
+            '${err == null ? '' : ": ${err.code} ${err.message}"}'
+            '${_hint(err)}',
           );
         }
         _set(
@@ -466,7 +501,7 @@ class DaemonUpdates implements UpdatesRepository {
       if (id == null) {
         throw const SystemException(
           SystemErrorKind.failed,
-          'The update check gave no answer.',
+          'The update check gave no result.',
         );
       }
       _jobs.track(id, JobKind.updateCheck);
@@ -482,7 +517,7 @@ class DaemonUpdates implements UpdatesRepository {
       if (map == null) {
         throw const SystemException(
           SystemErrorKind.failed,
-          'The update check gave no answer.',
+          'The update check gave no result.',
         );
       }
       result = api.UpdateCheckResult.fromJson(map);
@@ -573,7 +608,7 @@ class DaemonUpdates implements UpdatesRepository {
         acknowledgeDowngrade: acknowledgeDowngrade ? true : null,
       ),
     )).jobId,
-    nothingToDo: 'This box already follows that channel.',
+    nothingToDo: 'This box already uses that channel.',
   );
 
   @override
@@ -655,6 +690,7 @@ class DaemonSystem implements SystemRepository {
         _jobs.track(id, JobKind.rebuild);
         return JobHandle(id, JobKind.rebuild);
       } catch (e) {
+        logFailure('settings.set', e);
         final err = systemExceptionFrom(e);
         if (err.kind == SystemErrorKind.stateConflict && attempt == 0) continue;
         throw err;
@@ -704,10 +740,11 @@ class DaemonSystem implements SystemRepository {
           data['reason'] == 'not_greetd') {
         throw const SystemException(
           SystemErrorKind.unavailable,
-          'This is not a TV session, so it cannot be restarted from here.',
+          'This is not a TV session.',
           data: {'reason': 'not_greetd'},
         );
       }
+      logFailure('session.restart', e);
       throw systemExceptionFrom(e);
     }
   }

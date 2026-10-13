@@ -9,7 +9,7 @@ import 'repositories.dart';
 
 const _gone = SystemException(
   SystemErrorKind.unavailable,
-  'This needs a newer HinterOS service than the one that is running.',
+  'This needs a newer HinterOS service.',
 );
 
 class _UnavailableJobs implements JobsRepository {

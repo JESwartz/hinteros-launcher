@@ -312,7 +312,9 @@ class LauncherData extends ChangeNotifier {
       _failures.add(
         Failure(
           title: "Couldn't start $name",
-          body: "HinterOS started $name, but $why.",
+          body: reason == ExitReason.launchTimeout
+              ? "$name didn't open a window."
+              : "$name stopped right away${code == null ? '' : ' (exit status $code)'}.",
           detail: reason.name,
         ),
       );
@@ -437,15 +439,12 @@ class LauncherData extends ChangeNotifier {
     final code = e is ApiException ? e.code : null;
     final body = switch (code) {
       ApiErrorCode.appNotFound =>
-        "$name isn't in HinterOS's app list (any more). It may have been "
-            'removed; the Store can install it again.',
+        "$name isn't installed any more. Install it again from the Store.",
       ApiErrorCode.appLaunchFailed =>
-        "HinterOS tried to $verb $name, but its program wouldn't run. "
-            'It may be broken or missing.',
+        "$name won't run. It may be broken or missing.",
       _ when e is DaemonUnavailableException =>
-        "The launcher lost its connection to the HinterOS service, so $name "
-            "wasn't touched. It reconnects by itself; try again in a moment.",
-      _ => "Something went wrong when trying to $verb $name.",
+        "Lost the connection to the HinterOS service. Try again in a moment.",
+      _ => 'Something went wrong.',
     };
     final detail = switch (e) {
       ApiException() => 'Error ${e.code}: ${e.message}',

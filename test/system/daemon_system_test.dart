@@ -108,7 +108,7 @@ void main() {
       mock.system.unavailable = api.SystemUnavailableDataReason.versionMismatch;
       final e = await _fails(s.system.info());
       expect(e.kind, SystemErrorKind.unavailable);
-      expect(e.message, contains('restarts'));
+      expect(e.message, contains('Restart the session'));
     });
 
     test('not connected is unavailable too', () async {
@@ -173,7 +173,7 @@ void main() {
       expect((await outcome).outcome, AuthOutcome.failed);
       final e = await call;
       expect(e.kind, SystemErrorKind.permissionDenied);
-      expect(e.message, contains('wrong too many times'));
+      expect(e.message, contains('Wrong admin password too many times'));
       expect(mock.system.sshEnabled, isFalse);
     });
 

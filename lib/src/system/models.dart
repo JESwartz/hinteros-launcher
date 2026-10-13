@@ -187,8 +187,8 @@ enum JobStage {
 
   /// 0.12: the rebuild that switches on what new apps need box-wide
   /// (32-bit graphics for Steam).
-  box('Getting the box ready for the apps'),
-  evaluating('Working out what changes'),
+  box('Preparing the box'),
+  evaluating('Evaluating changes'),
   downloading('Downloading'),
   building('Building'),
   activating('Switching over'),
@@ -296,21 +296,19 @@ class JobHandle {
 // ---------------------------------------------------------------- updates
 
 enum UpdateChannel {
-  beta('Beta', 'Gets changes first.'),
-  stable('Stable', 'Changes arrive after they have run on Beta.');
+  beta('Beta'),
+  stable('Stable');
 
-  const UpdateChannel(this.label, this.blurb);
+  const UpdateChannel(this.label);
   final String label;
-  final String blurb;
 }
 
 enum NixBase {
-  unstable('Latest', 'Newest software (nixos-unstable).'),
-  stable('Stable', 'Older, steadier software. Switching down needs a warning.');
+  unstable('Latest'),
+  stable('Stable');
 
-  const NixBase(this.label, this.blurb);
+  const NixBase(this.label);
   final String label;
-  final String blurb;
 }
 
 /// The `security` trailer's severity of a signed update commit.

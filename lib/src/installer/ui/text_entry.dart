@@ -140,9 +140,7 @@ class TextEntryScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: HinterTokens.s2),
                 Text(
-                  secret
-                      ? 'Characters are hidden. Done, Menu or Enter saves; View or Esc cancels.'
-                      : 'Done, Menu or Enter saves; View or Esc cancels.',
+                  'Done, Menu or Enter saves; View or Esc cancels.',
                   style: t.caption,
                 ),
               ],

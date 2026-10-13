@@ -57,7 +57,7 @@ void main() {
       await t.enterText(find.byType(TextField), 'nope nope');
       await press(t, [kEnter]);
       expect(find.text('Password for Neighbour'), findsOneWidget);
-      expect(find.textContaining('not accepted'), findsOneWidget);
+      expect(find.textContaining('Wrong password. Try again.'), findsOneWidget);
       expect(r.status().wifiSsid, 'Home', reason: 'nothing changed');
       await t.enterText(find.byType(TextField), 'wifi-pass');
       await press(t, [kEnter]);
@@ -100,7 +100,7 @@ void main() {
       await enterSettingsEntry(t, 'net');
       await press(t, [kDown, kDown, kDown, kDown, kDown, kDown, kEnter]);
       expect(find.text('Office'), findsWidgets);
-      expect(find.textContaining("can't be joined"), findsWidgets);
+      expect(find.textContaining("isn't supported"), findsOneWidget);
       expect(h.mock.runtime.calls.where((c) => c == 'wifi.connect'), isEmpty);
     });
 
@@ -126,10 +126,7 @@ void main() {
       await h.pump(t);
       await endStartupCheck(t, h);
       await enterSettingsEntry(t, 'net');
-      expect(
-        find.textContaining('does not reach the internet'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('No internet.'), findsOneWidget);
     });
   });
 
@@ -282,7 +279,10 @@ void main() {
       await h.pump(t);
       await endStartupCheck(t, h);
       await enterSettingsEntry(t, 'display');
-      expect(find.textContaining("can't be changed from here"), findsOneWidget);
+      expect(
+        find.textContaining("The resolution of this display can't be changed."),
+        findsOneWidget,
+      );
       await pick(t, 1);
       expect(find.text("Can't change this"), findsOneWidget);
       expect(h.mock.runtime.calls, isNot(contains('display.set_mode')));
@@ -296,7 +296,10 @@ void main() {
       h.mock.runtime.displayIgnoresMode = true;
       await enterSettingsEntry(t, 'display');
       await pick(t, 1);
-      expect(find.textContaining('did not switch'), findsOneWidget);
+      expect(
+        find.textContaining('did not change to that mode'),
+        findsOneWidget,
+      );
       expect(find.textContaining('Keep '), findsNothing);
     });
   });

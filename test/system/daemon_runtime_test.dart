@@ -72,7 +72,7 @@ void main() {
       );
       final e = await _fails(s.network.connect('Office', password: 'x'));
       expect(e.kind, SystemErrorKind.invalidParams);
-      expect(e.message, contains("can't be joined"));
+      expect(e.message, contains("isn't supported"));
       expect(
         (await _fails(s.network.connect('Gone'))).kind,
         SystemErrorKind.notFound,
@@ -285,7 +285,7 @@ void main() {
       final e = await _fails(s.displayAudio.setDisplayMode(info.modes.last));
       expect(e.kind, SystemErrorKind.deviceFailed);
       expect(e.data['reason'], 'not_applied');
-      expect(e.message, contains('did not switch'));
+      expect(e.message, contains('did not change to that mode'));
       expect(
         (await _fails(s.displayAudio.revertDisplayMode())).data['reason'],
         'nothing_to_revert',

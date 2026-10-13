@@ -32,16 +32,7 @@ class RemoteAccessSection extends StatelessWidget {
       load: () async => (await sys.ssh(), await sys.info()),
       builder: (context, data, reload) {
         final (ssh, info) = data;
-        final t = HinterTheme.of(context);
         final p = Pane(env.region);
-        p.add(
-          Text(
-            'With SSH on, you can log in to this box from another computer '
-            'on your home network. You log in as the admin account, with its '
-            'password.',
-            style: t.body,
-          ),
-        );
         p.item(
           'ssh',
           onSelect: () async {
@@ -50,9 +41,7 @@ class RemoteAccessSection extends StatelessWidget {
           },
           builder: (f) => SettingRow(
             title: 'SSH',
-            subtitle: ssh.enabled
-                ? null
-                : 'Turning it on asks for the admin password.',
+            subtitle: ssh.enabled ? null : 'Needs the admin password.',
             focused: f,
             trailing: ToggleMark(on: ssh.enabled),
           ),
@@ -61,8 +50,8 @@ class RemoteAccessSection extends StatelessWidget {
         if (ssh.enabled) {
           p.add(
             StatusLine(
-              'On. Log in as the admin account at ${info.hostname}.local '
-              'with its password.',
+              'Log in as the admin account at ${info.hostname}.local, with '
+              'its password.',
               ok: true,
             ),
             gap: HinterTokens.s2,
@@ -89,7 +78,7 @@ class _UpdatesSectionState extends State<UpdatesSection> {
   /// "This update takes away Plex (reason), ...": installed apps the update
   /// removes from the catalog.
   static String _takesAway(List<CatalogChange> apps) =>
-      'This update takes away ${[for (final n in apps) n.reason == null || n.reason!.isEmpty ? n.name : '${n.name} (${n.reason})'].join(', ')}.';
+      'This update removes ${[for (final n in apps) n.reason == null || n.reason!.isEmpty ? n.name : '${n.name} (${n.reason})'].join(', ')}.';
 
   bool _checking = false;
   String? _checkError;
@@ -107,11 +96,9 @@ class _UpdatesSectionState extends State<UpdatesSection> {
     } on SystemException catch (e) {
       _checkError = switch (e.kind) {
         SystemErrorKind.updateUnreachable =>
-          "Can't reach the update server right now. Nothing else depends on "
-              'it: everything keeps working. Try again later.',
+          "Can't reach the update server right now. Try again later.",
         SystemErrorKind.updateVerificationFailed =>
-          'The update did not pass its safety check, so it was not used. '
-              'Nothing was changed.',
+          'The update failed its safety check. Nothing was changed.',
         _ => e.message,
       };
     }
@@ -137,8 +124,8 @@ class _UpdatesSectionState extends State<UpdatesSection> {
           c,
           title: ackTitle,
           body:
-              '${e.message} Software on this box may go back to an older '
-              'version. You can roll back afterwards.',
+              'Software on this box may go back to an older version. You can '
+              'roll back afterwards.',
           confirmLabel: 'Switch anyway',
           danger: true,
         );
@@ -176,14 +163,12 @@ class _UpdatesSectionState extends State<UpdatesSection> {
         : '${n.sublist(0, n.length - 1).join(', ')} and ${n.last}';
     return [
       if (gone.isNotEmpty)
-        '${list(gone)} ${gone.length == 1 ? 'is' : 'are'} not in that '
-            'version: ${gone.length == 1 ? 'that profile disappears' : 'those profiles disappear'} '
+        '${list(gone)} ${gone.length == 1 ? 'disappears' : 'disappear'} '
             'until you update again. ${gone.length == 1 ? 'Its' : 'Their'} '
             'files stay on the box.',
       if (empty.isNotEmpty)
-        '${list(empty)} ${empty.length == 1 ? 'comes' : 'come'} back, but '
-            'empty: ${empty.length == 1 ? 'that profile was' : 'those profiles were'} '
-            'removed since, with everything in ${empty.length == 1 ? 'it' : 'them'}.',
+        '${list(empty)} ${empty.length == 1 ? 'comes' : 'come'} back '
+            'empty.',
     ];
   }
 
@@ -206,7 +191,7 @@ class _UpdatesSectionState extends State<UpdatesSection> {
           ? 'Roll back to the previous version?'
           : 'Roll back to generation ${g.generation}?',
       body:
-          'The box switches to an earlier version of HinterOS and the '
+          'The box goes back to an earlier version of HinterOS. The '
           'session restarts. Your apps and games stay.',
       extra: [for (final c in changes) StatusLine(c, error: true)],
       confirmLabel: 'Roll back',
@@ -236,13 +221,9 @@ class _UpdatesSectionState extends State<UpdatesSection> {
         final t = HinterTheme.of(context);
         final p = Pane(env.region);
         p.add(
-          Text(
-            info.channel == null
-                ? 'HinterOS ${status.currentVersion}. This box follows no update channel.'
-                : 'HinterOS ${status.currentVersion}. Updates come from the '
-                      '${info.channel!.label} channel.',
-            style: t.label,
-          ),
+          // The version names the channel ("0.7.0.1a2b3c4 beta"), and so
+          // does the Channel row.
+          Text('HinterOS ${status.currentVersion}', style: t.label),
         );
         if (_checkError != null) {
           p.add(StatusLine(_checkError!, error: true));
@@ -250,7 +231,7 @@ class _UpdatesSectionState extends State<UpdatesSection> {
           p.add(
             StatusLine(
               'Update available: HinterOS ${a.version}'
-              '${a.isSecurity ? ' (security update, severity ${a.severity!.label})' : ''}. '
+              '${a.isSecurity ? ' (security update, ${a.severity!.label})' : ''}. '
               '${a.summary}',
               error: a.isSecurity,
             ),
@@ -272,7 +253,7 @@ class _UpdatesSectionState extends State<UpdatesSection> {
           if (added != null && added.isNotEmpty) {
             p.add(
               Text(
-                'It also adds to the Store: ${[for (final n in added) n.name].join(', ')}.',
+                'New in the Store: ${[for (final n in added) n.name].join(', ')}.',
                 style: t.bodyDim,
               ),
             );
@@ -284,7 +265,6 @@ class _UpdatesSectionState extends State<UpdatesSection> {
           builder: (f) => SettingRow(
             title: _checking ? 'Checking...' : 'Check for updates',
             focused: f,
-            subtitle: 'Nothing is ever installed without you choosing it.',
           ),
           gap: HinterTokens.s2,
         );
@@ -296,8 +276,8 @@ class _UpdatesSectionState extends State<UpdatesSection> {
                 context,
                 title: 'Update to HinterOS ${a.version}?',
                 body:
-                    'It downloads, installs and then restarts your session. '
-                    'If it fails, nothing is changed.',
+                    'Your session restarts after the update. If it fails, '
+                    'nothing is changed.',
                 extra: [
                   if (a.removedApps?.isNotEmpty ?? false)
                     StatusLine(_takesAway(a.removedApps!), error: true),
@@ -317,11 +297,10 @@ class _UpdatesSectionState extends State<UpdatesSection> {
             final c = await showChoice<UpdateChannel>(
               context,
               title: 'Update channel',
-              body: 'Which releases this box follows.',
               choices: [
                 for (final c in UpdateChannel.values)
                   Choice(
-                    '${c.label}${c == info.channel ? ' (current)' : ''}: ${c.blurb}',
+                    '${c.label}${c == info.channel ? ' (current)' : ''}',
                     c,
                   ),
               ],
@@ -349,7 +328,7 @@ class _UpdatesSectionState extends State<UpdatesSection> {
                 choices: [
                   for (final b in NixBase.values)
                     Choice(
-                      '${b.label}${b == info.base ? ' (current)' : ''}: ${b.blurb}',
+                      '${b.label}${b == info.base ? ' (current)' : ''}',
                       b,
                     ),
                 ],

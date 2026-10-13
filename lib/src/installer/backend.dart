@@ -130,7 +130,7 @@ class DiskInfo {
           'installer stick.';
     }
     if (removable) {
-      return 'Removable drive. It could be the installer USB stick.';
+      return 'Removable drive. It may be the installer USB stick.';
     }
     if (sizeBytes < minDiskBytes) return 'Too small: at least 16 GB needed.';
     return null;

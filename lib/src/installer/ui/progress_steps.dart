@@ -39,9 +39,7 @@ class InstallStepView extends StatelessWidget {
         return StepPage(
           step: InstallerStep.install,
           title: title,
-          subtitle: f.running
-              ? 'This takes a few minutes. Do not turn the computer off.'
-              : null,
+          subtitle: f.running ? 'Do not turn off the computer.' : null,
           child: scrolling(DefaultTextStyle(style: t.body, child: p.build())),
         );
       },
@@ -59,7 +57,7 @@ class InstallStepView extends StatelessWidget {
     // measurable fraction the bar is indeterminate.
     final String caption;
     if (inApps) {
-      caption = f.appsLine ?? 'Installing the apps';
+      caption = f.appsLine ?? 'Installing apps';
     } else if (current >= 0) {
       caption =
           'Step ${current + 1} of ${installStages.length} · '
@@ -164,9 +162,8 @@ class InstallStepView extends StatelessWidget {
       StatusLine(
         refused
             ? 'Nothing was changed on your disk.'
-            : 'The install stopped part of the way. The disk may have been '
-                  'changed and the computer may not start HinterOS yet. '
-                  'Trying again starts over.',
+            : 'The install stopped before the end. The disk may be changed '
+                  'and HinterOS may not start. "Try again" starts over.',
         error: !refused,
       ),
     );
@@ -181,7 +178,7 @@ class InstallStepView extends StatelessWidget {
       );
     }
     p.add(
-      Text('The full log is in $installLogPath', style: t.caption),
+      Text('Full log: $installLogPath', style: t.caption),
       gap: HinterTokens.s2,
     );
     p.buttons('actions', [
@@ -215,19 +212,13 @@ class _DoneStepViewState extends State<DoneStepView> {
     final t = HinterTheme.of(context);
     final f = env.flow;
     final p = Pane(env.region);
-    p.add(
-      Text(
-        'Remove the USB stick, then restart. The computer starts HinterOS '
-        'from its disk.',
-        style: t.title,
-      ),
-    );
+    p.add(Text('Remove the USB stick, then restart.', style: t.title));
     final failedApps = f.failedAppNames;
     if (failedApps.isNotEmpty) {
       p.add(
         StatusLine(
-          "HinterOS is installed. These apps couldn't be installed and can be "
-          "added later from the Store: ${failedApps.join(', ')}",
+          "These apps did not install. Add them later from the Store: "
+          "${failedApps.join(', ')}",
         ),
         gap: HinterTokens.s3,
       );

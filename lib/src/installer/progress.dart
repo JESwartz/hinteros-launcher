@@ -136,11 +136,11 @@ class InstallRun {
 const _stageLabels = {
   'validate': 'Checking your choices',
   'partition': 'Erasing and preparing the disk',
-  'facter': 'Looking at this computer\'s hardware',
+  'facter': 'Checking the hardware',
   'config': 'Writing the settings',
   'install': 'Installing HinterOS',
   'snapshot': 'Checking the result',
-  'finalize': 'Finishing up',
+  'finalize': 'Finishing',
   'done': 'Done',
 };
 
@@ -161,86 +161,65 @@ String stageLabel(String stage) => _stageLabels[stage] ?? 'Working';
 /// about it. Unknown codes get a general sentence (the backend's own message
 /// is shown as well).
 String explainCode(String? code) => switch (code) {
-  'not-root' => 'The installer was not started with the rights it needs.',
+  'not-root' => 'The installer does not have the rights it needs.',
   'plan-unreadable' || 'plan-invalid' || 'unknown-field' =>
-    'The installer could not understand the choices it was '
-        'given. This is a bug in the installer.',
+    'The installer could not read your choices. This is an installer bug.',
   'disk-missing' || 'disk-not-found' =>
-    'The disk you picked is not there any more. Was it '
-        'unplugged? Go back and pick a disk again.',
+    'The disk you chose is not found. Make sure it is connected, then go '
+        'back and choose a disk again.',
   'disk-not-a-disk' =>
-    'What you picked is not a whole disk. Go back and '
-        'choose another one.',
+    'This is not a whole disk. Go back and choose another one.',
   'disk-in-use' =>
-    'The disk you picked is in use, perhaps because it is '
-        'the installer USB stick. Choose a different disk.',
+    'The disk you chose is in use. It may be the installer USB stick. '
+        'Choose a different disk.',
   'disk-too-small' =>
-    'The disk you picked is too small. HinterOS needs a '
-        'disk of at least 16 GB.',
+    'The disk you chose is too small. HinterOS needs at least 16 GB.',
   'mnt-in-use' =>
-    'Something from an earlier try is still in the way. '
-        'Restart the installer and try again.',
+    'An earlier try is still in the way. Restart the installer and try '
+        'again.',
   'hostname-invalid' =>
-    'The computer name is not allowed. Go back to '
-        'the options and change it.',
+    'The computer name is not allowed. Go back to Options and change it.',
   'admin-missing' || 'admin-password-missing' =>
-    'The admin account needs a password. Go back '
-        'and set one.',
+    'The admin account needs a password. Go back and set one.',
   'admin-password-ambiguous' ||
   'admin-password-invalid' ||
   'admin-hash-invalid' =>
-    'The admin password cannot be used. Go back and '
-        'choose another.',
+    'The admin password cannot be used. Go back and choose another.',
   'admin-user-invalid' || 'admin-user-reserved' =>
-    'The admin user name is not allowed. Go back and '
-        'choose another.',
+    'The admin user name is not allowed. Go back and choose another.',
   'ssh-invalid' || 'channel-invalid' || 'base-invalid' || 'network-invalid' =>
-    'One of the options is not valid. This is a bug in '
-        'the installer.',
-  'apps-invalid' || 'app-unknown' || 'app-duplicate' =>
-    'The app list is not valid. Go back to the apps and '
-        'check it.',
+    'One of the options is not valid. This is an installer bug.',
+  'apps-invalid' ||
+  'app-unknown' ||
+  'app-duplicate' => 'The app list is not valid. Go back to Apps and check it.',
   'app-needs-network' =>
-    'Some of the apps you picked are downloaded, and '
-        'this computer is not online. Connect to the internet, or untick '
-        'those apps (they can be added later from the Store).',
+    'Some apps you chose need the internet, and this computer is not '
+        'online. Connect to the internet, or untick those apps.',
   'no-network' =>
-    'The installer needs the internet for the apps you '
-        'picked, but could not reach it. Check the cable or the Wi-Fi.',
-  'app-failed' =>
-    'An app could not be installed. HinterOS itself is fine, and the app '
-        'can be added later from the Store.',
+    'The apps you chose need the internet, but the installer cannot reach '
+        'it. Check the cable or the Wi-Fi.',
+  'app-failed' => 'An app did not install. Add it later from the Store.',
   'wifi-invalid' => 'The Wi-Fi details cannot be used.',
   'wifi-failed' =>
-    'The Wi-Fi connection did not work. The install goes on '
-        'without it.',
+    'The Wi-Fi connection did not work. The install continues without it.',
   'not-uefi' =>
-    'This computer did not start the installer in UEFI mode. '
-        'HinterOS needs UEFI: check the firmware boot settings and start '
-        'from the USB stick again.',
+    'The installer did not start in UEFI mode. Turn on UEFI in the '
+        'firmware settings, then start from the USB stick again.',
   'already-running' => 'An install is already running.',
   'low-memory' => 'This computer has little memory. The install may fail.',
-  'mount-failed' =>
-    'The new disk could not be set up. The disk may be '
-        'faulty.',
-  'step-failed' => 'A step of the install failed. The log has the details.',
+  'mount-failed' => 'Could not set up the disk. It may be faulty.',
+  'step-failed' => 'A step of the install failed. See the log.',
   'hash-failed' => 'The admin password could not be stored.',
   'copy-failed' =>
-    'Files could not be copied to the new disk. It may be '
-        'full or faulty.',
+    'Could not copy files to the disk. It may be full or faulty.',
   'install-failed' =>
-    'Installing the system failed. If you are online this '
-        'can be a problem with a download: trying again often helps.',
+    'Installing the system failed. A download may have failed. Try again.',
   'snapshot-missing' => 'The installed system is incomplete. Try again.',
-  'snapshot-differs' =>
-    'A setting was restored to match the installed '
-        'system. Nothing for you to do.',
+  'snapshot-differs' => 'A setting was changed to match the installed system.',
   'facter-failed' =>
-    'The hardware could not be examined, so the system '
-        'uses general drivers. It should still work.',
+    'Could not check the hardware. HinterOS uses general drivers.',
   'unmount-failed' =>
-    'The disk could not be released cleanly. Wait a '
-        'moment before you restart.',
+    'The disk was not released cleanly. Wait a moment before you restart.',
   'internal' => 'The installer stopped unexpectedly.',
   _ => 'The install could not be completed.',
 };

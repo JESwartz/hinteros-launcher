@@ -70,7 +70,7 @@ void main() {
     await t.pump(const Duration(seconds: 2));
     expect(h.flow.checking, isFalse);
     expect(find.byKey(const ValueKey('spinner')), findsNothing);
-    expect(find.textContaining('took longer than 10 seconds'), findsOneWidget);
+    expect(find.textContaining('The check took too long.'), findsOneWidget);
     expect(find.text('This computer is not online.'), findsOneWidget);
     expect(buttonEnabled(t, 'Check again'), isTrue);
   });
@@ -111,7 +111,7 @@ void main() {
     await t.pump(const Duration(seconds: 11));
     expect(h.flow.scanning, isFalse);
     expect(
-      find.textContaining('Searching for Wi-Fi took longer'),
+      find.textContaining('The Wi-Fi search took too long.'),
       findsOneWidget,
     );
     expect(buttonEnabled(t, 'Search again'), isTrue);

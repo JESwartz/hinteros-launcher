@@ -139,7 +139,7 @@ void main() {
     await keys(t, [enter]);
     expect(find.text("Couldn't start Steam"), findsOneWidget);
     expect(
-      find.textContaining("Steam, but its program wouldn't run"),
+      find.textContaining("Steam won't run. It may be broken or missing."),
       findsOneWidget,
     );
     expect(find.text('Error 2002: spawn went wrong'), findsOneWidget);
@@ -167,7 +167,10 @@ void main() {
     await h.pump(t);
     await keys(t, [enter]);
     expect(find.text("Couldn't start Steam"), findsOneWidget);
-    expect(find.textContaining("isn't in HinterOS's app list"), findsOneWidget);
+    expect(
+      find.textContaining("Steam isn't installed any more"),
+      findsOneWidget,
+    );
     expect(log.single, contains('error 2001'));
   });
 

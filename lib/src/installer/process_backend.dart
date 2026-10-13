@@ -137,7 +137,7 @@ class ProcessInstallerBackend implements InstallerBackend {
     // TODO(hardware): check on real hardware that nmcli --ask reads a piped
     // stdin on the ISO's NetworkManager version.
     if (ssid.isEmpty || ssid.startsWith('-')) {
-      throw const InstallerException('That network cannot be joined here.');
+      throw const InstallerException('Cannot join this network.');
     }
     final Process p;
     try {
@@ -162,7 +162,9 @@ class ProcessInstallerBackend implements InstallerBackend {
       rc = await p.exitCode.timeout(const Duration(seconds: 50));
     } on TimeoutException {
       p.kill();
-      throw const InstallerException('The connection took too long.');
+      throw const InstallerException(
+        'The connection took too long. Try again.',
+      );
     }
     if (rc != 0) {
       throw InstallerException(

@@ -263,13 +263,7 @@ class _FirstBootPageState extends State<FirstBootPage> {
     if (_message != null) p.add(StatusLine(_message!, error: true));
     switch (_step) {
       case FirstBootStep.welcome:
-        p.add(
-          Text(
-            "This is setup: let's get this box ready for you. It takes a few "
-            'minutes. Ready to begin?',
-            style: t.title,
-          ),
-        );
+        p.add(Text('Set up this box. It takes a few minutes.', style: t.title));
         p.add(
           Text(
             'Move with the D-pad, A chooses, B goes back.',
@@ -279,8 +273,7 @@ class _FirstBootPageState extends State<FirstBootPage> {
       case FirstBootStep.controllers:
         p.add(
           Text(
-            'Put a controller in pairing mode. It appears below; choose it to '
-            'pair.',
+            'Put a controller in pairing mode, then choose it below.',
             style: t.bodyDim,
           ),
         );
@@ -310,11 +303,11 @@ class _FirstBootPageState extends State<FirstBootPage> {
         p.add(
           StatusLine(
             n == null
-                ? 'Looking at the network...'
+                ? 'Checking the network...'
                 : (n.online
-                      ? 'This box is online.'
-                      : 'Not online. Everything here works offline too; '
-                            'updates and the Store need the internet.'),
+                      ? 'Online.'
+                      : 'Not online. Updates and the Store need the '
+                            'internet.'),
             ok: n?.online ?? false,
           ),
         );
@@ -337,8 +330,8 @@ class _FirstBootPageState extends State<FirstBootPage> {
           Text(
             d == null
                 ? 'Checking the display...'
-                : 'Choose a resolution if the picture is too small, too '
-                      'big or not sharp.',
+                : 'Choose a resolution if the picture does not fit or is '
+                      'not sharp.',
             style: t.bodyDim,
           ),
         );
@@ -351,10 +344,7 @@ class _FirstBootPageState extends State<FirstBootPage> {
             builder: (f) => SettingRow(
               title: m.label,
               focused: f,
-              subtitle: [
-                m.name,
-                if (m.preferred) 'recommended by your TV',
-              ].join(', '),
+              subtitle: [m.name, if (m.preferred) 'recommended'].join(', '),
               trailing: Text(m.current ? 'Current' : '', style: t.bodyDim),
             ),
           );
@@ -363,13 +353,7 @@ class _FirstBootPageState extends State<FirstBootPage> {
         // The form is open over this; only a failed setup shows here.
         break;
       case FirstBootStep.done:
-        p.add(
-          Text(
-            'You are ready, ${_createdName ?? ''}. Add more profiles in '
-            'Settings, Profiles.',
-            style: t.title,
-          ),
-        );
+        p.add(Text('You are ready, ${_createdName ?? ''}.', style: t.title));
     }
     if (_step != FirstBootStep.profile || _message != null) {
       p.buttons('actions', [
@@ -387,8 +371,7 @@ class _FirstBootPageState extends State<FirstBootPage> {
     }
     return FullPage(
       title: _step.title,
-      subtitle:
-          'Setup, step ${_step.index + 1} of ${FirstBootStep.values.length}',
+      subtitle: 'Step ${_step.index + 1} of ${FirstBootStep.values.length}',
       child: SingleChildScrollView(child: p.build()),
     );
   }

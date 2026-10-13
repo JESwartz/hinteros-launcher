@@ -735,7 +735,7 @@ class _LauncherShellState extends State<LauncherShell> {
     // Phase 2.
     Section.server => const Notice(
       title: 'Server',
-      detail: 'Jellyfin, Plex and file sharing arrive in phase 2.',
+      detail: 'Not available yet.',
     ),
   };
 

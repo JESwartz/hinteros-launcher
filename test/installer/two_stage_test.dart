@@ -131,8 +131,7 @@ void main() {
       expect(h.flow.step, InstallerStep.done);
       expect(
         find.textContaining(
-          "HinterOS is installed. These apps couldn't be installed and can "
-          'be added later from the Store: YouTube',
+          'These apps did not install. Add them later from the Store: YouTube',
         ),
         findsOneWidget,
       );

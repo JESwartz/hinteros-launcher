@@ -6,6 +6,7 @@ library;
 import 'dart:async';
 
 import '../api/api.dart' as api;
+import '../log.dart';
 import 'daemon_errors.dart';
 import 'models.dart';
 import 'repositories.dart';
@@ -72,7 +73,10 @@ class DaemonAuth implements AuthRepository {
       await _conn.authCancel(api.AuthCancelParams(cookie: cookie));
     } on api.ApiException catch (e) {
       // Over already (answered, timed out, cancelled elsewhere).
-      if (e.code != api.ApiErrorCode.notFound) throw systemExceptionFrom(e);
+      if (e.code != api.ApiErrorCode.notFound) {
+        logFailure('auth.cancel', e);
+        throw systemExceptionFrom(e);
+      }
     } on api.DaemonUnavailableException {
       // The daemon is gone; its prompt went with it.
     }

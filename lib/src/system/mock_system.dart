@@ -522,12 +522,12 @@ class MockSystem implements SystemRepository {
         case AuthOutcome.failed:
           throw const SystemException(
             SystemErrorKind.permissionDenied,
-            'The admin password was wrong too many times. Nothing was changed.',
+            'Wrong admin password too many times. Nothing was changed.',
           );
         case AuthOutcome.cancelled:
           throw const SystemException(
             SystemErrorKind.authenticationRequired,
-            'The admin password was not given, so nothing was changed.',
+            'No admin password was given, so nothing was changed.',
             data: {'action': 'org.hinteros.system.ssh'},
           );
       }

@@ -17,68 +17,34 @@ import 'profiles/session_profile.dart';
 
 /// One entry of the settings list and the options its detail pane offers.
 class _Setting {
-  const _Setting(this.id, this.title, this.blurb, [this.listTitle]);
+  const _Setting(this.id, this.title, [this.listTitle]);
 
   final String id;
   final String title;
-  final String blurb;
 
   /// A shorter title for the list, where the full one would not fit.
   final String? listTitle;
 }
 
 const _items = [
-  _Setting(
-    'text',
-    'Text size',
-    'Scales all text in the launcher. Layouts make room for it.',
-  ),
-  _Setting(
-    'contrast',
-    'High contrast',
-    'Black background, white text and a yellow focus marker.',
-  ),
-  _Setting(
-    'focus',
-    'Focus marker',
-    'How the selected card is marked. All styles differ in shape, not only colour.',
-  ),
-  _Setting(
-    'motion',
-    'Reduce motion',
-    'No scaling or sliding; the focus marker still shows.',
-  ),
+  _Setting('text', 'Text size'),
+  _Setting('contrast', 'High contrast'),
+  _Setting('focus', 'Focus marker'),
+  _Setting('motion', 'Reduce motion'),
   _Setting(
     'osk_text',
     'Show typed passwords on the on-screen keyboard',
-    'Off: in password fields the keyboard shows dots instead of what you type (so passwords stay off the TV), apart from the newest character for a moment. Other text always shows as typed. A on a text field opens the keyboard; anywhere else, hold Guide and press Y.',
     'Typed passwords on keyboard',
   ),
-  _Setting(
-    'profiles',
-    'Profiles',
-    'Who uses this box: names, colours, PINs, and switching.',
-  ),
-  _Setting(
-    'net',
-    'Network',
-    'Wi-Fi networks. Connect once; every profile uses it.',
-  ),
-  _Setting('bt', 'Bluetooth', 'Pair controllers and headsets.'),
-  _Setting(
-    'display',
-    'Display',
-    'Resolution and refresh rate, and a check for overscan.',
-  ),
-  _Setting('audio', 'Audio', 'Where sound plays, and how loud.'),
-  _Setting('power', 'Power', 'Sleep, restart or shut down.'),
-  _Setting('ssh', 'Remote access', 'Log in from another computer over SSH.'),
-  _Setting(
-    'updates',
-    'Updates',
-    'Channel, updates, rollback and the versions on this box.',
-  ),
-  _Setting('about', 'About', 'Version and identity of this box.'),
+  _Setting('profiles', 'Profiles'),
+  _Setting('net', 'Network'),
+  _Setting('bt', 'Bluetooth'),
+  _Setting('display', 'Display'),
+  _Setting('audio', 'Audio'),
+  _Setting('power', 'Power'),
+  _Setting('ssh', 'Remote access'),
+  _Setting('updates', 'Updates'),
+  _Setting('about', 'About'),
 ];
 
 class _Option {
@@ -340,8 +306,6 @@ class _Detail extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(setting.title, style: t.headline),
-            const SizedBox(height: HinterTokens.s1),
-            Text(setting.blurb, style: t.bodyDim),
             const SizedBox(height: HinterTokens.s4),
             if (_systemIds.contains(setting.id))
               KeyedSubtree(

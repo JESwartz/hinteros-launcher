@@ -70,24 +70,17 @@ class WelcomeStep extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
     final p = Pane(env.region);
+    p.add(Text('This installs HinterOS on this computer.', style: t.title));
     p.add(
       Text(
-        'This installs HinterOS on this computer. You only need your '
-        'controller.',
-        style: t.title,
-      ),
-    );
-    p.add(
-      Text(
-        'Move with the D-pad, press A to choose and B to go back. '
-        'It takes a few minutes.',
+        'Use the D-pad to move. Press A to choose and B to go back.',
         style: t.bodyDim,
       ),
       gap: HinterTokens.s3,
     );
     p.add(
       Text(
-        'Before you start: anything on the disk you choose will be erased.',
+        'The installer erases the disk you choose.',
         style: t.body.copyWith(color: t.danger),
       ),
       gap: HinterTokens.s3,
@@ -135,9 +128,7 @@ class NetworkStep extends StatelessWidget {
         final p = Pane(env.region);
         p.add(
           Text(
-            'An internet connection lets you pick apps like Steam and Plex. '
-            'Without one you can still install YouTube, Firefox, Jellyfin '
-            'and Crunchyroll.',
+            'Some apps, such as Steam, need the internet.',
             style: t.bodyDim,
           ),
         );
@@ -234,9 +225,7 @@ class NetworkStep extends StatelessWidget {
                 focused: focused,
                 dim: !ap.supported,
                 leading: SignalBars(bars: ap.bars),
-                subtitle: !ap.supported
-                    ? 'This kind of network cannot be used here.'
-                    : null,
+                subtitle: !ap.supported ? 'Not supported.' : null,
                 trailing: connected
                     ? Text(
                         'Connected',
@@ -299,10 +288,8 @@ class DiskStep extends StatelessWidget {
             title: 'Everything on this disk will be erased',
             lines: [
               '${d.title}, ${d.sizeLabel}',
-              'All files, photos, games and programs on it will be deleted. '
-                  'This cannot be undone.',
-              'If anything on this disk matters to you, press "Go back" and '
-                  'copy it somewhere else first.',
+              'All files on it are deleted. This cannot be undone.',
+              'To keep files, choose "Go back" and copy them first.',
             ],
             backLabel: 'Go back',
             eraseLabel: 'I understand, continue',
@@ -316,8 +303,7 @@ class DiskStep extends StatelessWidget {
             title: 'Last check: erase ${d.title}?',
             lines: [
               'Erase ${d.title} (${d.sizeLabel}) and install HinterOS on it?',
-              'Nothing is erased yet: that happens when you start the '
-                  'install on the last screen.',
+              'Nothing is erased until you start the install.',
             ],
             backLabel: 'No, go back',
             eraseLabel: 'Yes, erase this disk',
@@ -381,8 +367,8 @@ class DiskStep extends StatelessWidget {
         if (disks != null && disks.isNotEmpty && !disks.any((d) => d.usable)) {
           p.add(
             const StatusLine(
-              'None of the disks can be used. Check that this computer has '
-              'an internal disk of at least 16 GB.',
+              'No disk can be used. HinterOS needs an internal disk of at '
+              'least 16 GB.',
               error: true,
             ),
           );
@@ -495,15 +481,6 @@ class AccountStep extends StatelessWidget {
         final f = env.flow;
         final t = HinterTheme.of(context);
         final p = Pane(env.region);
-        p.add(
-          Text(
-            'This is the admin account. It can change the system, and with '
-            'SSH turned on it is the account you log in with from another '
-            'computer. Use a password you can type on the keyboard on the '
-            'screen.',
-            style: t.bodyDim,
-          ),
-        );
         Widget value(String s, {bool dim = false}) =>
             Text(s, style: dim ? t.caption : t.bodyDim.copyWith(color: t.text));
         p.item(
@@ -524,7 +501,6 @@ class AccountStep extends StatelessWidget {
                 ? value('Not set', dim: true)
                 : value(f.username),
           ),
-          gap: HinterTokens.s3,
         );
         p.item(
           'pw',
@@ -552,7 +528,6 @@ class AccountStep extends StatelessWidget {
               title: 'Password again',
               initial: f.repeat,
               secret: true,
-              hint: 'Type the same password once more',
             );
             if (v != null) f.setRepeat(v);
           },
@@ -567,11 +542,6 @@ class AccountStep extends StatelessWidget {
         final problem = f.accountProblem;
         if (problem != null) {
           p.add(StatusLine(problem, error: true), gap: HinterTokens.s3);
-        } else if (f.accountValid) {
-          p.add(
-            const StatusLine('The account looks good.', ok: true),
-            gap: HinterTokens.s3,
-          );
         }
         p.buttons('actions', [
           btn('Continue', f.next, primary: true, enabled: f.accountValid),
@@ -613,7 +583,6 @@ class OptionsStep extends StatelessWidget {
           },
           builder: (focused) => SettingRow(
             title: 'Computer name',
-            subtitle: 'How this computer shows up on your network.',
             focused: focused,
             trailing: Text(f.hostname, style: t.body),
           ),
@@ -624,9 +593,7 @@ class OptionsStep extends StatelessWidget {
           builder: (focused) => SettingRow(
             title: 'Enable SSH',
             subtitle:
-                'Lets you log in as the admin, with the password, from '
-                'another computer on your home network. Leave it off unless '
-                'you know you want this.',
+                'Lets other computers on your network log in as the admin.',
             focused: focused,
             trailing: ToggleMark(on: f.ssh),
           ),
@@ -636,7 +603,6 @@ class OptionsStep extends StatelessWidget {
           onSelect: f.toggleChannel,
           builder: (focused) => SettingRow(
             title: 'Update channel',
-            subtitle: f.channel.blurb,
             focused: focused,
             trailing: Text(f.channel.label, style: t.body),
           ),
@@ -673,12 +639,10 @@ class AppsStep extends StatelessWidget {
         final apps = f.apps;
         return StepPage(
           step: InstallerStep.apps,
-          subtitle:
-              'Tick what you want; more can be added later from the Store',
           child: apps == null
               ? const Align(
                   alignment: Alignment.topLeft,
-                  child: StatusLine('Loading the list of apps...'),
+                  child: StatusLine('Loading apps...'),
                 )
               : ClipRect(
                   clipper: const _SideBleed(),
@@ -734,7 +698,7 @@ class SummaryStep extends StatelessWidget {
               line('The disk will be', 'erased completely', color: t.danger),
               line('Admin user', f.username),
               line('Computer name', f.hostname),
-              line('SSH', f.ssh ? 'On (login with the password)' : 'Off'),
+              line('SSH', f.ssh ? 'On' : 'Off'),
               line('Update channel', f.channel.label),
               line('Apps', appNames.isEmpty ? 'None' : appNames.join(', ')),
               line(
@@ -765,7 +729,6 @@ class SummaryStep extends StatelessWidget {
         ], gap: HinterTokens.s4);
         return StepPage(
           step: InstallerStep.summary,
-          subtitle: 'Check everything, then install',
           child: scrolling(p.build()),
         );
       },

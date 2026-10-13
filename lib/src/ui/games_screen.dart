@@ -97,12 +97,6 @@ class _SteamPrompt extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Steam is not installed', style: t.headline),
-          const SizedBox(height: HinterTokens.s2),
-          Text(
-            'Your games come from Steam. Install it and they will show up '
-            'here.',
-            style: t.bodyDim,
-          ),
           const SizedBox(height: HinterTokens.s4),
           NavFocusable(
             region: region,

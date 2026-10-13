@@ -45,7 +45,7 @@ void main() {
     final h = await _passwordDialog(t);
     await t.enterText(find.byType(TextField), 'nope');
     await press(t, [kEnter]); // Enter on the field submits
-    expect(find.textContaining('not accepted'), findsOneWidget);
+    expect(find.textContaining('Wrong password. Try again.'), findsOneWidget);
     expect(h.mock.oskVisible, isTrue, reason: 'back for the retry');
     await t.enterText(find.byType(TextField), 'wifi-pass');
     await press(t, [kEnter]);

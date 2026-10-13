@@ -213,10 +213,8 @@ class CloseConfirm extends StatelessWidget {
                     const SizedBox(height: HinterTokens.s2),
                     Text(
                       id == 'steam'
-                          ? 'This closes Big Picture. Steam itself keeps '
-                                'running.'
-                          : 'It will be asked to quit. Anything not saved in '
-                                'it may be lost.',
+                          ? 'This closes Big Picture. Steam keeps running.'
+                          : 'Unsaved work may be lost.',
                       style: t.bodyDim,
                     ),
                     const SizedBox(height: HinterTokens.s4),

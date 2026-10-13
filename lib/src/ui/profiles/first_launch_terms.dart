@@ -45,8 +45,7 @@ Future<bool> firstLaunchTerms(
       context,
       title: "${app.name} can't start yet",
       body:
-          '${app.name} needs its terms (${t.title}) accepted first, and '
-          "their text can't be read on this box. Try again after the next "
+          "Can't read the terms (${t.title}). Try again after the next "
           'update.',
     );
     return false;
@@ -71,9 +70,6 @@ Future<bool> firstLaunchTerms(
     context,
     asStoreApp,
     acceptLabel: 'Accept and open',
-    note:
-        '${app.name} came with this profile. Each profile accepts its terms '
-        'for itself, the first time it opens it.',
   );
   if (!context.mounted) return false;
   if (!ok) {
@@ -83,10 +79,10 @@ Future<bool> firstLaunchTerms(
       context,
       title: "${app.name} won't open",
       body:
-          '${app.name} stays installed, but it opens only once its terms '
-          'are accepted.',
+          '${app.name} stays installed. It opens only after you accept its '
+          'terms.',
       choices: [
-        const Choice('Keep it for later', 'keep'),
+        const Choice('Keep', 'keep'),
         if (listed != null)
           Choice('Remove ${app.name}', 'remove', danger: true),
       ],

@@ -45,10 +45,7 @@ void main() {
     expect(focusLabel(), 'home/apps:0'); // Steam
     await press(t, [kEnter]);
     expect(find.text('Terms for Steam'), findsOneWidget);
-    expect(
-      find.textContaining('Each profile accepts its terms'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Read to the end to accept'), findsOneWidget);
     expect(h.mock.running, isEmpty);
     await readToEnd(t);
     await press(t, [kRight, kEnter]); // Accept and open
@@ -99,7 +96,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('Not installed for this profile.'), findsOneWidget);
+    expect(find.text('Not installed.'), findsOneWidget);
     await press(t, [kEnter]); // Install is disabled
     expect(find.textContaining('for this profile?'), findsNothing);
     expect(h.services.mockStore.log, isEmpty);

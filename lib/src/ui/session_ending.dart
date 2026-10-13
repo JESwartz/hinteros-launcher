@@ -161,7 +161,4 @@ SessionEnding powerEnding(PowerAction a) => SessionEnding(
     PowerAction.shutdown => 'Shutting down…',
     PowerAction.sleep => 'Going to sleep…',
   },
-  detail: a == PowerAction.restart
-      ? 'HinterOS starts again in a moment.'
-      : null,
 );

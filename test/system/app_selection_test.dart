@@ -84,7 +84,10 @@ void main() {
       expect(c.downloadMiB, 1000);
       expect(find.text('Read and accept'), findsOneWidget);
       expect(enabled(t, 'Continue'), isFalse);
-      expect(find.textContaining('Accept the terms above'), findsOneWidget);
+      expect(
+        find.textContaining('Accept the terms or untick those apps'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('Continue waits for the terms, which must be read to the end', (

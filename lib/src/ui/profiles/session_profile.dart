@@ -160,8 +160,8 @@ class ProfileSession extends ChangeNotifier {
         ctx,
         title: 'Set your PIN',
         body:
-            'Profiles have PINs now. Choose one for '
-            '${current?.displayName ?? 'this profile'}: 4 to 8 digits.',
+            'Choose a PIN for ${current?.displayName ?? 'this profile'}: '
+            '4 to 8 digits.',
         disclaimer: true,
         canLeave: false,
         submitLabel: 'Next',
@@ -174,7 +174,7 @@ class ProfileSession extends ChangeNotifier {
         body: 'Type the PIN again.',
         check: (pin) async {
           if (pin != first) {
-            return const PinFailed("The two PINs didn't match.");
+            return const PinFailed("The PINs don't match.");
           }
           try {
             await profiles.setPin(pin);
@@ -216,7 +216,7 @@ class ProfileSession extends ChangeNotifier {
       (context, modal) => PinEntryPage(
         modal: modal,
         title: c?.displayName ?? 'Locked',
-        body: 'This profile is locked. Type its PIN to go on.',
+        body: 'Type the PIN to unlock.',
         forgotPinFor: c?.displayName,
         canLeave: false,
         avatar: ProfileAvatar(
@@ -345,9 +345,7 @@ class ProfileSession extends ChangeNotifier {
     final sure = await showConfirm(
       context,
       title: '${games.first.name} is still running',
-      body:
-          'A game is running. Progress that is not saved is lost when '
-          'it closes. Switch anyway?',
+      body: 'Unsaved progress is lost. Switch anyway?',
       confirmLabel: 'Close it and switch',
       danger: true,
     );
@@ -377,9 +375,7 @@ class ProfileSession extends ChangeNotifier {
         final typed = await showPinEntry(
           context,
           title: 'Switch to $name',
-          body:
-              "Type $name's PIN. Nothing in this profile closes until it is "
-              'right.',
+          body: "Type $name's PIN.",
           avatar: avatar,
           forgotPinFor: name,
           check: (p) async {
@@ -482,8 +478,7 @@ class ProfileSession extends ChangeNotifier {
       context,
       title: 'End the guest session?',
       body:
-          'The guest session ends and the profile picker opens. Everything '
-          'the guest did (sign-ins, installed apps, files) is removed when '
+          'Everything the guest did (sign-ins, apps, files) is removed when '
           'the box restarts.',
       confirmLabel: 'End guest session',
       danger: true,
@@ -503,7 +498,6 @@ class ProfileSession extends ChangeNotifier {
       await _whileEnding(
         const SessionEnding(
           title: 'Ending the guest session…',
-          detail: "You'll be taken to the profile picker.",
           identity: LoadingIdentity.guestIdentity,
           cover: false,
         ),
@@ -557,7 +551,7 @@ Future<({String id, String name, String pin, bool locked})?> createProfileFlow(
         context,
         title: "Couldn't add the profile",
         body: e is SystemException && e.kind == SystemErrorKind.profileLimit
-            ? 'This box has as many profiles as it can have.'
+            ? 'This box has the maximum number of profiles.'
             : (e is SystemException ? e.message : '$e'),
       );
     }
@@ -684,9 +678,6 @@ class _SessionPickerPageState extends State<SessionPickerPage> {
       region: region,
       tiles: tiles,
       onSelect: widget.modal.close,
-      subtitle:
-          'Choose your profile. Move with the D-pad, A chooses; '
-          'B goes back.',
       power: [
         if (widget.system != null) ...[
           PowerAction.sleep,
@@ -814,7 +805,7 @@ class _SwitchingPageState extends State<SwitchingPage> {
         _progress.appName == null
             ? 'Closing apps...'
             : 'Closing ${_progress.appName}...',
-      SwitchStage.closingSteam => 'Closing Steam (it saves to the cloud)...',
+      SwitchStage.closingSteam => 'Closing Steam...',
       SwitchStage.ending || SwitchStage.cancelled =>
         widget.targetName == null
             ? 'Opening the profile picker...'
@@ -824,7 +815,6 @@ class _SwitchingPageState extends State<SwitchingPage> {
       title: widget.targetName == null
           ? 'Leaving ${widget.fromName}'
           : 'Switching to ${widget.targetName}',
-      subtitle: 'Everything running in ${widget.fromName} closes first.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -836,7 +826,7 @@ class _SwitchingPageState extends State<SwitchingPage> {
               style: t.title,
             ),
             const SizedBox(height: HinterTokens.s1),
-            Text('Force-closing it may lose unsaved data.', style: t.body),
+            Text('Force close can lose unsaved data.', style: t.body),
           ],
           if (_error != null) ...[
             const SizedBox(height: HinterTokens.s2),

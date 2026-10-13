@@ -6,12 +6,11 @@ library;
 import 'dart:convert';
 
 enum InstallChannel {
-  stable('Stable', 'For everyday use. Changes arrive after they were tried.'),
-  beta('Beta', 'New things first. Can have rough edges.');
+  stable('Stable'),
+  beta('Beta');
 
-  const InstallChannel(this.label, this.blurb);
+  const InstallChannel(this.label);
   final String label;
-  final String blurb;
 }
 
 /// What the backend's `network` field says about the connection.
@@ -55,8 +54,8 @@ abstract final class PlanChecks {
   static String? username(String v) {
     if (v.isEmpty) return 'Choose a user name.';
     if (!_user.hasMatch(v)) {
-      return 'Use lowercase letters, digits, - and _ only, starting with a '
-          'letter (at most 32 characters).';
+      return 'Use only lowercase letters, digits, - and _. Start with a '
+          'letter. Use at most 32 characters.';
     }
     if (_reservedUsers.contains(v) ||
         v.startsWith('systemd-') ||
@@ -79,8 +78,8 @@ abstract final class PlanChecks {
 
   static String? hostname(String v) {
     if (!_host.hasMatch(v)) {
-      return 'Use 1 to 63 lowercase letters, digits and hyphens, not '
-          'starting or ending with a hyphen.';
+      return 'Use 1 to 63 lowercase letters, digits and hyphens. Do not '
+          'start or end with a hyphen.';
     }
     return null;
   }

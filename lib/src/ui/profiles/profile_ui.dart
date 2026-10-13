@@ -23,9 +23,8 @@ import '../widgets.dart';
 /// The wording every PIN screen carries (profiles.md: no screen calls a PIN
 /// secure).
 const pinDisclaimer =
-    'Your PIN keeps others from opening your profile or changing it by '
-    'mistake. It is not a lock: someone with access to this box can get '
-    'around it.';
+    'Your PIN stops others from using your profile by mistake. Someone with '
+    'access to this box can get around it.';
 
 /// The colour of a profile. Mid-tone colours that keep their hue on a dark
 /// TV; the initial on top picks black or white for contrast.
@@ -636,7 +635,7 @@ final class PinAccepted extends PinAttempt {
   const PinAccepted();
 }
 
-/// "That PIN didn't match."
+/// "Wrong PIN."
 final class PinWrong extends PinAttempt {
   const PinWrong();
 }
@@ -802,7 +801,7 @@ class _PinEntryPageState extends State<PinEntryPage> {
         widget.modal.close(pin);
       case PinWrong():
         _pin.clear();
-        setState(() => _error = "That PIN didn't match.");
+        setState(() => _error = 'Wrong PIN.');
       case PinLocked(:final until):
         _pin.clear();
         setState(() {
@@ -851,12 +850,11 @@ class _PinEntryPageState extends State<PinEntryPage> {
                 const SizedBox(height: HinterTokens.s3),
                 Text(
                   '${switch (widget.holdToSubmit) {
-                    null => 'Type the PIN with the pad, then OK.',
-                    final h => 'Type the PIN with the pad, then hold A on '
-                        '${widget.submitLabel} for ${h.inSeconds} seconds; '
-                        'letting go early stops it.',
-                  }} B deletes a digit'
-                  '${widget.canLeave ? '; B with nothing typed goes back' : ''}.',
+                    null => '',
+                    final h => 'Hold A on ${widget.submitLabel} for '
+                        '${h.inSeconds} seconds. ',
+                  }}B deletes a digit'
+                  '${widget.canLeave ? ' or goes back' : ''}.',
                   style: t.caption,
                 ),
                 if (widget.disclaimer) ...[
@@ -959,7 +957,7 @@ Future<bool> withAdminPin(
   final pin = await showPinEntry(
     context,
     title: title,
-    body: body ?? 'This needs the admin profile\'s PIN.',
+    body: body ?? "Type the admin profile's PIN.",
     forgotPinFor: forgotPinAdmin,
     check: (pin) async {
       try {
@@ -979,18 +977,10 @@ Future<bool> withAdminPin(
 /// name is not at hand.
 const forgotPinAdmin = '';
 
-/// The reset command for [name] (quoted when it has spaces); the admin
-/// placeholder for [forgotPinAdmin].
-String resetPinCommand(String name) {
-  final arg = name.isEmpty
-      ? '<admin profile name>'
-      : (name.contains(RegExp(r'\s')) ? '"$name"' : name);
-  return 'sudo hinteros-system reset-pin $arg';
-}
-
 /// "Forgot your PIN?": only the person who set up the box can remove a PIN,
-/// from a terminal as root (owner decision); the profile then chooses a new
-/// one at its next start. Nothing else about the box is shown.
+/// from a terminal as root (`sudo hinteros-system reset-pin <name>`, owner
+/// decision); the profile then chooses a new one at its next start. The
+/// command is in the documentation, not on screen (the UI is not the docs).
 class ForgotPinHint extends StatelessWidget {
   const ForgotPinHint({super.key, required this.who});
 
@@ -1005,11 +995,7 @@ class ForgotPinHint extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Forgot your PIN?', style: t.caption.copyWith(color: t.text)),
-        Text(
-          'The person who set up this box can remove it from a terminal: '
-          '${resetPinCommand(who)}. You then choose a new one.',
-          style: t.caption,
-        ),
+        Text('Ask the person who set up this box.', style: t.caption),
       ],
     );
   }

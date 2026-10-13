@@ -266,7 +266,7 @@ class _StoreScreenState extends State<StoreScreen> {
               const <CatalogChange>[])
         a.name,
     ];
-    return 'More apps are available after the next update'
+    return 'More apps come with the next update'
         '${names.isEmpty ? '' : ': ${names.join(', ')}'}.';
   }
 
@@ -280,7 +280,7 @@ class _StoreScreenState extends State<StoreScreen> {
       padding: const EdgeInsets.all(HinterTokens.s4),
       child: Text(
         cat == StoreScreen.installedCat
-            ? 'Nothing from the Store is installed yet.'
+            ? 'Nothing installed yet.'
             : 'Nothing here yet.',
         style: t.bodyDim,
       ),
@@ -497,13 +497,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     final about = app.description.isEmpty ? app.summary : app.description;
     if (about.isNotEmpty) p.add(Text(about, style: t.body));
     if (!installed && app.sizeMiB > 0) {
-      p.add(
-        Text(
-          'Size: ${app.sizeLabel}. '
-          '${app.onIso ? 'Included with the installer.' : 'Downloads when you install it.'}',
-          style: t.bodyDim,
-        ),
-      );
+      p.add(Text('Size: ${app.sizeLabel}.', style: t.bodyDim));
     }
     if (!installed && deps.isNotEmpty) {
       p.add(
@@ -516,8 +510,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
     if (!installed && inTheWay.isNotEmpty) {
       p.add(
         StatusLine(
-          "Can't be installed together with ${inTheWay.join(', ')}, which "
-          '${inTheWay.length == 1 ? 'is' : 'are'} installed.',
+          "Can't be installed with ${inTheWay.join(', ')}. Remove "
+          '${inTheWay.length == 1 ? 'it' : 'them'} first.',
         ),
       );
     }
@@ -531,27 +525,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
     }
     p.add(
       Text(switch (state) {
-        StoreState.available => 'Not installed for this profile.',
+        StoreState.available => 'Not installed.',
         StoreState.installing => 'Installing...',
         StoreState.removing => 'Removing...',
-        _ => 'Installed for this profile.',
+        _ => 'Installed.',
       }, style: t.label),
       gap: HinterTokens.s3,
     );
     if (state == StoreState.retired) {
-      p.add(
-        StatusLine(
-          'This app is retired.${_reason(app)} It keeps working, and you '
-          'can remove it.',
-        ),
-      );
+      p.add(StatusLine('This app is retired.${_reason(app)} It still works.'));
     } else if (state == StoreState.unavailable) {
-      p.add(
-        StatusLine(
-          'The next update takes this app away.${_reason(app)} You can '
-          'remove it now.',
-        ),
-      );
+      p.add(StatusLine('The next update removes this app.${_reason(app)}'));
     }
     // An app that needs a service the box does not run cannot be installed
     // here; only the admin profile can add the service (owner answer).
@@ -564,8 +548,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         Text(
           '${app.name} needs ${needs.join(' and ')}, which this box does not '
           'run. The admin profile can install '
-          '${needs.length == 1 ? 'it' : 'them'} in the Server section; then '
-          '${app.name} can be installed here.',
+          '${needs.length == 1 ? 'it' : 'them'} in the Server section.',
           style: t.body.copyWith(color: t.danger, fontWeight: FontWeight.w700),
         ),
       );

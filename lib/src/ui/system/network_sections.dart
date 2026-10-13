@@ -65,9 +65,7 @@ class _NetworkSectionState extends State<NetworkSection> {
         await showMessage(
           context,
           title: 'Search took too long',
-          body:
-              'Looking for Wi-Fi networks took longer than 10 seconds. '
-              'Choose "Scan again" to try once more.',
+          body: 'Select "Scan again" to try again.',
         );
       }
     } finally {
@@ -142,7 +140,7 @@ class _NetworkSectionState extends State<NetworkSection> {
           );
           p.add(Text('Networks nearby', style: t.label), gap: HinterTokens.s2);
           if (networks.isEmpty) {
-            p.add(Text('No networks found yet.', style: t.bodyDim));
+            p.add(Text('No networks found.', style: t.bodyDim));
           }
           for (var i = 0; i < networks.length; i++) {
             final n = networks[i];
@@ -156,7 +154,7 @@ class _NetworkSectionState extends State<NetworkSection> {
                   if (n.connected) 'Connected',
                   if (!n.connected && n.saved) 'Saved',
                   if (!n.supported)
-                    "Can't be joined from here"
+                    'Not supported'
                   else
                     n.secured ? 'Needs a password' : 'Open',
                   n.strength,
@@ -187,12 +185,9 @@ class _NetworkSectionState extends State<NetworkSection> {
         : null;
     if (where == null) return const StatusLine('Not connected.');
     return switch (s.connectivity) {
-      Connectivity.none || Connectivity.limited => StatusLine(
-        '$where, but it does not reach the internet.',
-      ),
-      Connectivity.portal => StatusLine(
-        '$where. The network wants you to sign in first.',
-      ),
+      Connectivity.none ||
+      Connectivity.limited => StatusLine('$where. No internet.'),
+      Connectivity.portal => StatusLine('$where. The network needs a sign-in.'),
       _ => StatusLine('$where.', ok: true),
     };
   }
@@ -203,8 +198,8 @@ class _NetworkSectionState extends State<NetworkSection> {
         context,
         title: n.ssid,
         body:
-            "This kind of network (WEP or a business login) can't be joined "
-            'from here.',
+            "This type of network (WEP or a business login) isn't "
+            'supported.',
       );
       return;
     }
@@ -212,7 +207,7 @@ class _NetworkSectionState extends State<NetworkSection> {
       final c = await showChoice<String>(
         context,
         title: n.ssid,
-        body: 'You are connected to this network.',
+        body: 'Connected.',
         choices: const [
           Choice('Disconnect', 'disconnect'),
           Choice('Forget this network', 'forget', danger: true),
@@ -242,9 +237,7 @@ class _NetworkSectionState extends State<NetworkSection> {
       if (e.kind == SystemErrorKind.wrongPassword && n.secured) {
         await _askPassword(
           n,
-          body:
-              'The saved password for ${n.ssid} was not accepted. Type the '
-              'current one.',
+          body: 'The saved password was not accepted. Type the new one.',
         );
       } else {
         await showMessage(context, title: refusalTitle(e), body: e.message);
@@ -260,10 +253,7 @@ class _NetworkSectionState extends State<NetworkSection> {
     await showTextEntry(
       context,
       title: 'Password for ${n.ssid}',
-      body:
-          body ??
-          'Wi-Fi passwords are kept on this box for everyone who uses it, '
-              'so you only enter it once.',
+      body: body,
       secret: true,
       submitLabel: 'Connect',
       submit: (pw) async {
@@ -273,7 +263,7 @@ class _NetworkSectionState extends State<NetworkSection> {
           return null;
         } on SystemException catch (e) {
           return e.kind == SystemErrorKind.wrongPassword
-              ? 'That password was not accepted. Try again.'
+              ? 'Wrong password. Try again.'
               : e.message;
         }
       },
@@ -403,9 +393,7 @@ class _BluetoothSectionState extends State<BluetoothSection> {
       final r = await showConfirm(
         context,
         title: 'Pair with ${d.name}?',
-        body:
-            'Put it in pairing mode first (for a controller, hold its '
-            'pairing button until the light flashes).',
+        body: 'Put the device in pairing mode first.',
         confirmLabel: 'Pair',
       );
       if (r == null) return;
@@ -461,9 +449,7 @@ class _BluetoothSectionState extends State<BluetoothSection> {
       },
       builder: (f) => SettingRow(
         title: 'Look for new devices',
-        subtitle: _scanning
-            ? 'Searching. Put your device in pairing mode.'
-            : null,
+        subtitle: _scanning ? 'Put your device in pairing mode.' : null,
         focused: f,
         trailing: ToggleMark(
           on: _scanning,

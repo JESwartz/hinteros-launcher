@@ -61,7 +61,10 @@ void main() {
       await h.pump(t);
       await keys(t, [...toGames, down, enter]); // r1:0, Hades
       expect(h.mock.running, isEmpty);
-      expect(find.textContaining('needs an update first'), findsOneWidget);
+      expect(
+        find.textContaining('Open Steam to update Hades.'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('games_changed refreshes the grid', (t) async {

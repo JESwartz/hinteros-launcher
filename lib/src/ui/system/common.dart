@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../log.dart';
 import '../../nav/nav_controller.dart';
 import '../../system/models.dart';
 import '../../system/repositories.dart';
@@ -12,8 +13,13 @@ import '../widgets.dart';
 /// A readable line for whatever went wrong.
 String describeError(Object e) => switch (e) {
   SystemException(:final message) => message,
-  _ => 'Something went wrong ($e).',
+  _ => _unexpected(e),
 };
+
+String _unexpected(Object e) {
+  logFailure('a settings section', e);
+  return 'Something went wrong. Try again.';
+}
 
 /// The title of the message that explains a refused change.
 String refusalTitle(SystemException e) => switch (e.kind) {

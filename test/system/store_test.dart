@@ -44,10 +44,7 @@ void main() {
     expect(find.text('Steam'), findsOneWidget);
     expect(find.text('Installed'), findsWidgets);
     expect(find.byKey(const ValueKey('more-apps')), findsOneWidget);
-    expect(
-      find.text('More apps are available after the next update.'),
-      findsOneWidget,
-    );
+    expect(find.text('More apps come with the next update.'), findsOneWidget);
     await press(t, [kDown]);
     expect(find.text('Moonlight'), findsOneWidget, reason: 'Games category');
     await press(t, [kRight]);
@@ -97,7 +94,7 @@ void main() {
       await openApp(t, 1, 1); // Steam (Moonlight comes first)
       await press(t, [kEnter]); // Install
       expect(find.text('Install Steam for this profile?'), findsOneWidget);
-      expect(find.textContaining('You read it in full next'), findsOneWidget);
+      expect(find.textContaining('Read and accept it next'), findsOneWidget);
       await press(t, [kRight, kEnter]); // Continue
       expect(find.text('Terms for Steam'), findsOneWidget);
     }
@@ -186,7 +183,7 @@ void main() {
         1,
         1,
       ); // Steam (Moonlight comes first) (installed): detail
-      expect(find.text('Installed for this profile.'), findsOneWidget);
+      expect(find.text('Installed.'), findsOneWidget);
       await press(t, [kRight, kEnter]); // Remove
       expect(find.text('Remove Steam from this profile?'), findsOneWidget);
       expect(
@@ -237,7 +234,7 @@ void main() {
       await press(t, [kEnter]);
       // The install flow starts right here, not in the Store tab.
       expect(find.text('Install Steam for this profile?'), findsOneWidget);
-      expect(find.textContaining('You read it in full next'), findsOneWidget);
+      expect(find.textContaining('Read and accept it next'), findsOneWidget);
       await press(t, [kRight, kEnter]); // Continue
       expect(find.text('Terms for Steam'), findsOneWidget);
       for (var i = 0; i < 60 && !buttonEnabled(t, 'Accept and install'); i++) {
