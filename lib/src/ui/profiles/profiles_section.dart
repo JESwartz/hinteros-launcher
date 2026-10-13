@@ -422,8 +422,8 @@ class _ProfilesSectionState extends State<ProfilesSection> {
         if (me.guest) {
           p.add(
             Text(
-              'You are using Guest. Everything in it is cleared when the box '
-              'restarts.',
+              'You are using Guest. Everything in it is removed when you end '
+              'the guest session or the box restarts.',
               style: t.body,
             ),
           );

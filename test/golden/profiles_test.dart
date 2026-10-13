@@ -174,6 +174,26 @@ void moreGoldens() {
     await shot(t, 'rollback_profiles');
   });
 
+  testWidgets('rollback that turns box features back on (0.13)', (t) async {
+    setView(t);
+    await harness().pump(t);
+    await enterSettingsEntry(t, 'updates');
+    // check, channel, rollback, generations 12, 11, 10.
+    await keys(t, [kDown, kDown, kDown, kDown, kDown, kEnter]);
+    await shot(t, 'rollback_readds');
+    // Roll back: the admin PIN first.
+    await keys(t, [kRight, kEnter]);
+    await shot(t, 'rollback_admin_pin');
+  });
+
+  testWidgets('End guest session: removed now', (t) async {
+    setView(t);
+    await harness(current: 'guest').pump(t);
+    await openChip(t);
+    await keys(t, [kDown, kEnter]);
+    await shot(t, 'end_guest_confirm');
+  });
+
   testWidgets('first frame: loading the profile', (t) async {
     setView(t);
     final h = Harness(mock: StuckConnection(const Connecting()));

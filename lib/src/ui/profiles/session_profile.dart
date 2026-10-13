@@ -477,9 +477,7 @@ class ProfileSession extends ChangeNotifier {
     final ok = await showConfirm(
       context,
       title: 'End the guest session?',
-      body:
-          'Everything the guest did (sign-ins, apps, files) is removed when '
-          'the box restarts.',
+      body: 'Everything the guest did (sign-ins, apps, files) is removed now.',
       confirmLabel: 'End guest session',
       danger: true,
     );
@@ -498,6 +496,7 @@ class ProfileSession extends ChangeNotifier {
       await _whileEnding(
         const SessionEnding(
           title: 'Ending the guest session…',
+          detail: 'Removing everything the guest did.',
           identity: LoadingIdentity.guestIdentity,
           cover: false,
         ),

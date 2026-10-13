@@ -131,6 +131,12 @@ void main() {
     await h.pump(t);
     await openChip(t);
     await keys(t, [kDown, kEnter]); // End guest session
+    expect(
+      find.text(
+        'Everything the guest did (sign-ins, apps, files) is removed now.',
+      ),
+      findsOneWidget,
+    );
     await keys(t, [kRight, kEnter], settle: false);
     await frames(t, 20);
     expect(h.services.mockProfiles.log, contains('end_guest'));
@@ -141,6 +147,7 @@ void main() {
     await frames(t, 10);
     expect(endingPage.hitTestable(), findsOneWidget);
     expect(find.text('Ending the guest session…'), findsOneWidget);
+    expect(find.text('Removing everything the guest did.'), findsOneWidget);
     expect(connectionError, findsNothing);
     // Nothing moves it.
     await keys(t, [kEscape, kEnter], settle: false);
