@@ -28,11 +28,15 @@ class StepPage extends StatelessWidget {
     super.key,
     required this.step,
     required this.child,
+    this.flow,
     this.title,
     this.subtitle,
   });
 
   final InstallerStep step;
+
+  /// For "Step n of N" (it depends on whether the version step is shown).
+  final InstallerFlow? flow;
   final String? title;
   final String? subtitle;
   final Widget child;
@@ -40,8 +44,8 @@ class StepPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sub = [
-      if (step.isQuestion)
-        'Step ${step.questionNumber} of ${InstallerStep.questionCount}',
+      if (step.isQuestion && flow != null)
+        'Step ${flow!.questionNumber(step)} of ${flow!.questionCount}',
       ?subtitle,
     ].join('. ');
     return FullPage(
@@ -262,6 +266,72 @@ class NetworkStep extends StatelessWidget {
         ], gap: HinterTokens.s3);
         return StepPage(
           step: InstallerStep.network,
+          flow: env.flow,
+          child: scrolling(p.build()),
+        );
+      },
+    );
+  }
+}
+
+// ------------------------------------------------------------------ version
+
+/// Only when the installer is online and the channel has a newer HinterOS:
+/// the installer's own version (focused) or the newer one.
+class VersionStep extends StatelessWidget {
+  const VersionStep({super.key, required this.env});
+
+  final StepEnv env;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: env.flow,
+      builder: (context, _) {
+        final f = env.flow;
+        final t = HinterTheme.of(context);
+        final p = Pane(env.region);
+        final iso = f.isoRelease;
+        final newer = f.newer;
+        if (f.checkingNewer || iso == null || newer == null) {
+          // Nothing to press while it looks: B goes back.
+          p.add(const StatusLine('Looking for a newer HinterOS…', busy: true));
+        } else {
+          p.add(
+            Text(
+              'A newer HinterOS is on the ${f.channel.label} channel.',
+              style: t.title,
+            ),
+          );
+          p.add(
+            Text('Choose the version to install.', style: t.bodyDim),
+            gap: HinterTokens.s1,
+          );
+          p.buttons('iso', [
+            btn(
+              'Install ${f.releaseLabel(iso)}',
+              () => f.chooseVersion(newer: false),
+              primary: true,
+            ),
+          ], gap: HinterTokens.s4);
+          p.add(
+            Text('This version is on the USB stick.', style: t.caption),
+            gap: HinterTokens.s1,
+          );
+          p.buttons('newer', [
+            btn(
+              'Install ${f.releaseLabel(newer)}',
+              () => f.chooseVersion(newer: true),
+            ),
+          ], gap: HinterTokens.s4);
+          p.add(
+            Text('The newer version needs the internet.', style: t.caption),
+            gap: HinterTokens.s1,
+          );
+        }
+        return StepPage(
+          step: InstallerStep.version,
+          flow: f,
           child: scrolling(p.build()),
         );
       },
@@ -342,7 +412,11 @@ class DiskStep extends StatelessWidget {
           // Erasing is confirmed once, on the summary (hold to erase).
           btn('Continue', f.next, primary: true, enabled: f.disk != null),
         ], gap: HinterTokens.s3);
-        return StepPage(step: InstallerStep.disk, child: scrolling(p.build()));
+        return StepPage(
+          step: InstallerStep.disk,
+          flow: env.flow,
+          child: scrolling(p.build()),
+        );
       },
     );
   }
@@ -430,6 +504,7 @@ class AccountStep extends StatelessWidget {
         ], gap: HinterTokens.s3);
         return StepPage(
           step: InstallerStep.account,
+          flow: env.flow,
           child: scrolling(p.build()),
         );
       },
@@ -498,6 +573,7 @@ class OptionsStep extends StatelessWidget {
         ], gap: HinterTokens.s3);
         return StepPage(
           step: InstallerStep.options,
+          flow: env.flow,
           child: scrolling(p.build()),
         );
       },
@@ -521,6 +597,7 @@ class AppsStep extends StatelessWidget {
         final apps = f.apps;
         return StepPage(
           step: InstallerStep.apps,
+          flow: env.flow,
           child: apps == null
               ? const Align(
                   alignment: Alignment.topLeft,
@@ -606,6 +683,7 @@ class SummaryStep extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              line('Version', f.planVersionLabel),
               line('Admin user', f.username),
               line('Computer name', f.hostname),
               line('SSH', f.ssh ? 'On' : 'Off'),
@@ -663,6 +741,7 @@ class SummaryStep extends StatelessWidget {
         );
         return StepPage(
           step: InstallerStep.summary,
+          flow: env.flow,
           child: scrolling(p.build()),
         );
       },

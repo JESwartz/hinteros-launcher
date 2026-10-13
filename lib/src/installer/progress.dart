@@ -30,6 +30,8 @@ class InstallEvent {
     this.appTotal,
     this.stepPercent,
     this.failedApps = const [],
+    this.rev,
+    this.version,
   });
 
   final String stage;
@@ -57,6 +59,11 @@ class InstallEvent {
 
   /// On the final `done` line: the apps that could not be installed.
   final List<String> failedApps;
+
+  /// On the final `done` line: the revision and release version that were
+  /// installed (the installer's own or a newer one).
+  final String? rev;
+  final String? version;
 
   bool get isError => level == InstallLevel.error;
   bool get isWarning => level == InstallLevel.warn;
@@ -91,6 +98,8 @@ InstallEvent? parseProgressLine(String line) {
   final code = j['code'];
   final app = j['app'];
   final failed = j['failed_apps'];
+  final rev = j['rev'];
+  final version = j['version'];
   int? whole(Object? v) => v is num ? v.round() : null;
   final sp = whole(j['step_percent']);
   final ai = whole(j['app_index']);
@@ -102,6 +111,8 @@ InstallEvent? parseProgressLine(String line) {
     appTotal: at != null && at > 0 ? at : null,
     stepPercent: sp?.clamp(0, 100),
     failedApps: failed is List ? failed.whereType<String>().toList() : const [],
+    rev: rev is String && rev.isNotEmpty ? rev : null,
+    version: version is String && version.isNotEmpty ? version : null,
     stage: stage,
     percent: percent,
     level: level,
@@ -135,6 +146,7 @@ class InstallRun {
 /// The stages in order, in plain words.
 const _stageLabels = {
   'validate': 'Checking your choices',
+  'fetch': 'Downloading HinterOS',
   'partition': 'Erasing and preparing the disk',
   'facter': 'Checking the hardware',
   'config': 'Writing the settings',
@@ -147,6 +159,19 @@ const _stageLabels = {
 /// Stages shown as a checklist, in order (`done` is the end, not a step).
 const installStages = [
   'validate',
+  'partition',
+  'facter',
+  'config',
+  'install',
+  'snapshot',
+  'finalize',
+];
+
+/// The same for a newer HinterOS than the installer's: it is downloaded
+/// first.
+const newerInstallStages = [
+  'validate',
+  'fetch',
   'partition',
   'facter',
   'config',
@@ -220,6 +245,22 @@ String explainCode(String? code) => switch (code) {
     'Could not check the hardware. HinterOS uses general drivers.',
   'unmount-failed' =>
     'The disk was not released cleanly. Wait a moment before you restart.',
+  'fetch-failed' =>
+    'The newer HinterOS did not download. Check the internet connection.',
+  'rev-not-tip' =>
+    'The newer HinterOS changed on the server. Choose the version again.',
+  'rev-needs-network' =>
+    'The newer HinterOS needs the internet, and this computer is not online.',
+  'rev-invalid' =>
+    'The version you chose is not valid. This is an '
+        'installer bug.',
+  'unsigned' || 'unknown-signer' || 'not-fast-forward' =>
+    'The newer HinterOS cannot be verified. Install the version on this '
+        'USB stick.',
+  'repo-unreachable' || 'timeout' =>
+    'The HinterOS server did not answer. Check the internet connection.',
+  'channel-missing' => 'The update channel is not on the HinterOS server.',
+  'iso-rev-unknown' => 'This installer cannot install a newer HinterOS.',
   'internal' => 'The installer stopped unexpectedly.',
   _ => 'The install could not be completed.',
 };

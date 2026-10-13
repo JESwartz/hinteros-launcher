@@ -347,4 +347,46 @@ void main() {
       },
     );
   });
+
+  /// Online with a newer HinterOS on the channel, on the version step.
+  Future<void> toVersion(InstallerHarness h, WidgetTester t) async {
+    h.flow.go(InstallerStep.network);
+    await t.pumpAndSettle();
+    await h.choose(t, 'actions', 1);
+    expect(h.flow.step, InstallerStep.version);
+  }
+
+  testWidgets('version: a newer HinterOS on the channel', (t) async {
+    await shot(
+      t,
+      'version',
+      backend: FakeInstallerBackend(state: wired, newer: mockNewer()),
+      setup: (h) => toVersion(h, t),
+    );
+  });
+
+  testWidgets('version, high contrast and large text', (t) async {
+    await shot(
+      t,
+      'version_highcontrast',
+      backend: FakeInstallerBackend(state: wired, newer: mockNewer()),
+      settings: const LauncherSettings(highContrast: true, textScale: 1.4),
+      setup: (h) => toVersion(h, t),
+    );
+  });
+
+  testWidgets('the newer HinterOS did not finish (exit 1)', (t) async {
+    await shot(
+      t,
+      'newer_failed',
+      backend: FakeInstallerBackend(state: wired, newer: mockNewer())
+        ..newerInstallScript = FakeScript.failed(),
+      setup: (h) async {
+        await toVersion(h, t);
+        await h.choose(t, 'newer');
+        await filled(h, t);
+        await h.choose(t, 'actions', 1);
+      },
+    );
+  });
 }

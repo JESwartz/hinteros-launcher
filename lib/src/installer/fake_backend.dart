@@ -154,6 +154,36 @@ class FakeScript {
     _e('install', percent, 'Installing', InstallLevel.info),
     _e('install', percent, message, InstallLevel.error, code),
   ], 1);
+
+  /// A whole install of a newer HinterOS: validate, then `fetch` (no
+  /// measurable fraction), then the usual stages.
+  static FakeScript newerOk(String version) => FakeScript([
+    _e('validate', 0, 'Checking the plan'),
+    _e('validate', 6, 'Checking the newer HinterOS on the stable channel'),
+    _e('validate', 8, 'Plan accepted'),
+    _e('fetch', 9, 'Downloading HinterOS $version'),
+    _e('fetch', 9, 'HinterOS $version is downloaded'),
+    _e('partition', 20, 'Disk is partitioned and mounted'),
+    _e('config', 30, 'Device configuration written'),
+    _e('install', 57, 'Installing the system', InstallLevel.info, null, 62),
+    _e('snapshot', 90, 'Checking the config snapshot'),
+    _e('finalize', 97, 'System installed'),
+    _e('done', 100, 'HinterOS $version is installed.'),
+  ], 0);
+
+  /// The newer HinterOS does not download: exit 1, the disk not touched.
+  static FakeScript fetchFailed() => FakeScript([
+    _e('validate', 0, 'Checking the plan'),
+    _e('validate', 8, 'Plan accepted'),
+    _e('fetch', 9, 'Downloading HinterOS'),
+    _e(
+      'fetch',
+      9,
+      'could not download the newer revision; see $installLogPath',
+      InstallLevel.error,
+      'fetch-failed',
+    ),
+  ], 1);
 }
 
 /// A scripted backend: no processes, no devices. Used by the widget tests
@@ -170,7 +200,11 @@ class FakeInstallerBackend implements InstallerBackend {
     this.installScript,
     this.delay = Duration.zero,
     this.wifiPasswords = const {},
-  }) : _wifi = wifi ?? mockWifi(),
+    Map<InstallChannel, HinterRelease>? newer,
+    this.checkError,
+    this.defaultChannel = InstallChannel.stable,
+  }) : newer = newer ?? {},
+       _wifi = wifi ?? mockWifi(),
        _disks = disks ?? mockDisks(),
        _catalog = catalog ?? mockInstallerCatalog();
 
@@ -207,6 +241,29 @@ class FakeInstallerBackend implements InstallerBackend {
   /// Every call, in order: `network`, `scanWifi`, `connectWifi:<ssid>`,
   /// `disks`, `catalog`, `validate`, `install`, `reboot`.
   final calls = <String>[];
+
+  /// The installer's own revision, as `--check-newer` reports it.
+  static const isoRelease = HinterRelease(
+    rev: '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d',
+    version: '0.7.0',
+  );
+
+  /// What each channel offers that is newer than [isoRelease] (none by
+  /// default). Change it between calls to script a channel moving on.
+  Map<InstallChannel, HinterRelease> newer;
+
+  /// When set, `checkNewer` fails with it (offline, unsigned, ...).
+  InstallerException? checkError;
+
+  /// The channel a check without one gets (`hinteros.installer.channel`).
+  InstallChannel defaultChannel;
+
+  /// When set, `checkNewer` waits for it (a slow check, for tests).
+  Future<void>? checkHold;
+
+  /// The script of an install with a newer `rev` (null: [installScript] and
+  /// the rest, as for the installer's own version).
+  FakeScript? newerInstallScript;
 
   /// The plan of every `validate` / `install` call as the backend would get
   /// it on stdin (UTF-8 JSON). Contains the password: this is a fake.
@@ -297,15 +354,46 @@ class FakeInstallerBackend implements InstallerBackend {
     return List.of(_catalog);
   }
 
+  @override
+  Future<NewerCheck> checkNewer({InstallChannel? channel}) async {
+    final ch = channel ?? defaultChannel;
+    calls.add('checkNewer:${channel?.name ?? 'default'}');
+    await checkHold;
+    final error = checkError;
+    if (error != null) throw error;
+    return NewerCheck(channel: ch, iso: isoRelease, newer: newer[ch]);
+  }
+
+  /// What a plan installs: a newer release it names, else the installer's.
+  HinterRelease _installed(InstallPlan plan) =>
+      newer.values.where((r) => r.rev == plan.rev).firstOrNull ?? isoRelease;
+
   InstallRun _run(String call, InstallPlan plan, FakeScript script) {
     calls.add(call);
     stdinPlans.add(utf8.decode(plan.encode()));
     final c = StreamController<InstallEvent>();
     final done = Completer<int>();
+    final installed = _installed(plan);
     unawaited(() async {
       for (final e in script.events) {
         await Future<void>.delayed(delay);
-        c.add(e);
+        // Like the backend, the final line of an install names what it
+        // installed.
+        c.add(
+          call == 'install' && e.isDone && e.rev == null
+              ? InstallEvent(
+                  stage: e.stage,
+                  percent: e.percent,
+                  level: e.level,
+                  message: e.message,
+                  code: e.code,
+                  phase: e.phase,
+                  failedApps: e.failedApps,
+                  rev: installed.rev,
+                  version: installed.version,
+                )
+              : e,
+        );
       }
       await c.close();
       done.complete(script.exitCode);
@@ -321,7 +409,10 @@ class FakeInstallerBackend implements InstallerBackend {
   InstallRun install(InstallPlan plan) => _run(
     'install',
     plan,
-    installScript ?? installScriptFor?.call(plan) ?? FakeScript.installOk,
+    (plan.rev != null ? newerInstallScript : null) ??
+        installScript ??
+        installScriptFor?.call(plan) ??
+        FakeScript.installOk,
   );
 
   @override
@@ -387,3 +478,16 @@ List<StoreApp> mockInstallerCatalog() => [
   for (final a in mockCatalog())
     if (a.installer) a,
 ];
+
+/// Newer releases on both channels: a stable 0.7.1, and a beta that still
+/// says 0.7.0 (a beta keeps the stable version it builds on).
+Map<InstallChannel, HinterRelease> mockNewer() => {
+  InstallChannel.stable: const HinterRelease(
+    rev: '9f8e7d6c5b4a39281706f5e4d3c2b1a098765432',
+    version: '0.7.1',
+  ),
+  InstallChannel.beta: const HinterRelease(
+    rev: '5e4d3c2b1a0918273645f5e4d3c2b1a098765abc',
+    version: '0.7.0',
+  ),
+};

@@ -100,6 +100,7 @@ class InstallPlan {
     this.acceptedTerms = const {},
     this.wifiSsid,
     this.wifiPsk,
+    this.rev,
   });
 
   /// Whole-disk device path (lsblk's PATH, `/dev/nvme0n1`).
@@ -122,6 +123,10 @@ class InstallPlan {
   final String? wifiSsid;
   final String? wifiPsk;
 
+  /// A newer HinterOS revision of [channel] to install instead of the
+  /// installer's own (from `--check-newer`). Null: the installer's own.
+  final String? rev;
+
   Map<String, Object?> toJson() => {
     'disk': disk,
     'hostname': hostname,
@@ -134,6 +139,7 @@ class InstallPlan {
     'acceptedTerms': acceptedTerms,
     if (wifiSsid != null)
       'wifi': {'ssid': wifiSsid, if (wifiPsk != null) 'psk': wifiPsk},
+    if (rev != null) 'rev': rev,
   };
 
   /// The bytes for the backend's stdin (UTF-8 JSON, one line).
@@ -142,5 +148,5 @@ class InstallPlan {
   @override
   String toString() =>
       'InstallPlan(disk: $disk, host: $hostname, admin: $adminUser, '
-      'ssh: $ssh, channel: ${channel.name}, apps: $apps, acceptedTerms: $acceptedTerms, password: <hidden>)';
+      'ssh: $ssh, channel: ${channel.name}, apps: $apps, acceptedTerms: $acceptedTerms, rev: $rev, password: <hidden>)';
 }

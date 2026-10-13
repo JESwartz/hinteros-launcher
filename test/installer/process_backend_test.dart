@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hinteros_launcher/src/installer/backend.dart';
 import 'package:hinteros_launcher/src/installer/plan.dart';
 import 'package:hinteros_launcher/src/installer/process_backend.dart';
 import 'package:hinteros_launcher/src/installer/progress.dart';
@@ -135,5 +136,72 @@ exit 2
     // An index of another version falls back instead of failing.
     File('${dir.path}/catalog.json').writeAsStringSync('{"indexVersion":9}');
     expect((await backend().catalog()).length, 4);
+  });
+
+  group('--check-newer', () {
+    const iso = '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d';
+    const tip = '9f8e7d6c5b4a39281706f5e4d3c2b1a098765432';
+
+    test('a newer release: the channel is passed, the JSON read', () async {
+      write('''
+printf '%s\\n' "\$@" > "\$OUT/argv"
+echo "human text on stderr" >&2
+echo '{"channel":"beta","iso":{"rev":"$iso","version":"0.7.0"},"newer":{"rev":"$tip","version":"0.7.0","date":1767225600,"signer":"release"}}'
+''');
+      final r = await ProcessInstallerBackend(installBinary: script)
+          .checkNewer(channel: InstallChannel.beta);
+      expect(File('${dir.path}/argv').readAsLinesSync(), [
+        '--check-newer',
+        '--channel',
+        'beta',
+      ]);
+      expect(r.channel, InstallChannel.beta);
+      expect(r.iso.rev, iso);
+      expect(r.iso.version, '0.7.0');
+      expect(r.newer!.rev, tip);
+      expect(r.newer!.version, '0.7.0', reason: 'equal versions on beta');
+    });
+
+    test('nothing newer; no channel: the installer default', () async {
+      write('''
+printf '%s\\n' "\$@" > "\$OUT/argv"
+echo '{"channel":"stable","iso":{"rev":"$iso","version":"0.7.0"},"newer":null}'
+''');
+      final r = await ProcessInstallerBackend(installBinary: script)
+          .checkNewer();
+      expect(File('${dir.path}/argv').readAsLinesSync(), ['--check-newer']);
+      expect(r.channel, InstallChannel.stable);
+      expect(r.newer, isNull);
+    });
+
+    test('a failed check throws with the backend code and message', () async {
+      write(r'''
+echo '{"phase":"check","stage":"check","percent":0,"level":"error","code":"unsigned","message":"the tip is not signed"}'
+exit 1
+''');
+      await expectLater(
+        ProcessInstallerBackend(installBinary: script).checkNewer(),
+        throwsA(
+          isA<InstallerException>()
+              .having((e) => e.code, 'code', 'unsigned')
+              .having((e) => e.message, 'message', 'the tip is not signed'),
+        ),
+      );
+    });
+
+    test('an answer it cannot read, or no binary, throws too', () async {
+      write("echo '{\"channel\":\"stable\"}'\n");
+      await expectLater(
+        ProcessInstallerBackend(installBinary: script).checkNewer(),
+        throwsA(isA<InstallerException>()),
+      );
+      await expectLater(
+        ProcessInstallerBackend(installBinary: '${dir.path}/does-not-exist')
+            .checkNewer(),
+        throwsA(
+          isA<InstallerException>().having((e) => e.code, 'code', 'internal'),
+        ),
+      );
+    });
   });
 }

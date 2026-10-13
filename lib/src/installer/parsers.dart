@@ -7,6 +7,7 @@ import 'dart:convert';
 
 import '../system/models.dart';
 import 'backend.dart';
+import 'plan.dart';
 
 /// Arguments for the disk listing (no shell; fixed strings).
 const lsblkArgs = [
@@ -213,3 +214,38 @@ List<StoreApp> fallbackCatalog() => const [
     installerDefault: true,
   ),
 ];
+
+final _rev40 = RegExp(r'^[0-9a-f]{40}$');
+
+HinterRelease? _release(Object? v) {
+  if (v is! Map) return null;
+  final rev = v['rev'];
+  final version = v['version'];
+  if (rev is! String || !_rev40.hasMatch(rev)) return null;
+  return HinterRelease(
+    rev: rev,
+    version: version is String && version.isNotEmpty
+        ? version
+        : rev.substring(0, 12),
+  );
+}
+
+/// The one stdout line of a successful `hinteros-install --check-newer`.
+/// Throws [FormatException] when it is not that shape.
+NewerCheck parseNewerCheck(String line) {
+  final Object? j = jsonDecode(line.trim());
+  if (j is! Map) throw const FormatException('not an object');
+  final channel = InstallChannel.values
+      .where((c) => c.name == j['channel'])
+      .firstOrNull;
+  final iso = _release(j['iso']);
+  if (channel == null || iso == null) {
+    throw const FormatException('channel or iso missing');
+  }
+  final n = j['newer'];
+  final newer = n == null ? null : _release(n);
+  if (n != null && newer == null) {
+    throw const FormatException('newer is malformed');
+  }
+  return NewerCheck(channel: channel, iso: iso, newer: newer);
+}

@@ -2,10 +2,27 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../log.dart';
+import '../system/daemon_system.dart' show releaseName;
+import '../system/models.dart' show UpdateChannel;
 import '../ui/app_selection.dart';
 import 'backend.dart';
 import 'plan.dart';
 import 'progress.dart';
+
+/// "HinterOS 0.7.0 stable (1a2b3c4)": a release named the way the launcher
+/// names it on a box of [channel] (a beta is the next patch plus the
+/// commit, "HinterOS 0.7.1.1a2b3c4 beta"), with the short commit unless
+/// the name already has it.
+String installVersionLabel(String version, String rev, InstallChannel channel) {
+  final name = releaseName(
+    version,
+    rev,
+    channel == InstallChannel.beta ? UpdateChannel.beta : UpdateChannel.stable,
+  );
+  final short = rev.length >= 7 ? rev.substring(0, 7) : rev;
+  return name.contains(short) ? 'HinterOS $name' : 'HinterOS $name ($short)';
+}
 
 /// One app in the second stage of the install.
 enum AppInstallState { waiting, installing, done, failed }
@@ -13,6 +30,9 @@ enum AppInstallState { waiting, installing, done, failed }
 enum InstallerStep {
   welcome('Welcome'),
   network('Internet'),
+
+  /// Only when a newer HinterOS than the installer's is on the channel.
+  version('HinterOS version'),
   disk('Disk'),
   account('Admin account'),
   options('Options'),
@@ -24,10 +44,9 @@ enum InstallerStep {
   const InstallerStep(this.title);
   final String title;
 
-  /// "Step 3 of 6" for the question screens (Internet .. Summary).
+  /// The question screens (Internet .. Summary) show "Step 3 of 6": see
+  /// [InstallerFlow.questionNumber].
   bool get isQuestion => index >= network.index && index <= summary.index;
-  static int get questionCount => summary.index - network.index + 1;
-  int get questionNumber => index - network.index + 1;
 }
 
 /// Where the install itself is.
@@ -85,10 +104,38 @@ class InstallerFlow extends ChangeNotifier {
   }
 
   /// The step after the current one (apps are skipped never: they work
-  /// offline too).
+  /// offline too). After the internet step, and after the options when the
+  /// channel changed, comes the version step if a newer HinterOS is there.
   void next() {
-    if (_step.index < InstallerStep.done.index) {
-      go(InstallerStep.values[_step.index + 1]);
+    switch (_step) {
+      case InstallerStep.network:
+        unawaited(
+          _askVersion(
+            after: InstallerStep.disk,
+            before: InstallerStep.network,
+            fromNetwork: true,
+          ),
+        );
+      case InstallerStep.version:
+        go(_versionNext);
+      case InstallerStep.options:
+        // Asks again for another channel, or when the offer was not answered.
+        if (online &&
+            (_checkedChannel != channel ||
+                (versionOffered && _answeredRev != newer!.rev))) {
+          unawaited(
+            _askVersion(
+              after: InstallerStep.apps,
+              before: InstallerStep.options,
+            ),
+          );
+        } else {
+          go(InstallerStep.apps);
+        }
+      case InstallerStep.done:
+        break;
+      default:
+        go(InstallerStep.values[_step.index + 1]);
     }
   }
 
@@ -99,7 +146,156 @@ class InstallerFlow extends ChangeNotifier {
       _step != InstallerStep.done;
 
   void back() {
-    if (canGoBack) go(InstallerStep.values[_step.index - 1]);
+    if (!canGoBack) return;
+    switch (_step) {
+      case InstallerStep.version:
+        _askToken++; // a check still running no longer moves on
+        go(_versionBack);
+      case InstallerStep.disk:
+        go(versionOffered ? InstallerStep.version : InstallerStep.network);
+      default:
+        go(InstallerStep.values[_step.index - 1]);
+    }
+  }
+
+  /// "Step n of N" on the question screens: the version step counts only
+  /// when a newer HinterOS is offered.
+  int get questionCount =>
+      InstallerStep.summary.index -
+      InstallerStep.network.index +
+      (versionOffered ? 1 : 0);
+
+  int questionNumber(InstallerStep s) {
+    final n = s.index - InstallerStep.network.index + 1;
+    return !versionOffered && s.index > InstallerStep.version.index ? n - 1 : n;
+  }
+
+  // ------------------------------------------------------------- version
+
+  /// How long a check for a newer HinterOS may take before it is given up
+  /// (the backend stops its own network steps after 120 s).
+  static const checkNewerTimeout = Duration(seconds: 150);
+
+  /// A check for a newer HinterOS is running.
+  bool checkingNewer = false;
+
+  /// The last check that worked; null before one did, or when the last
+  /// one failed.
+  NewerCheck? newerCheck;
+
+  /// The installer's own release, once a check reported it.
+  HinterRelease? isoRelease;
+
+  /// The channel the last check (good or failed) was for; null: none yet.
+  InstallChannel? _checkedChannel;
+  bool _lastCheckOk = false;
+  bool _defaultKnown = false;
+  bool _channelTouched = false;
+  Future<void>? _checkRun;
+  int _askToken = 0;
+
+  /// Where the version step goes on to, and back to.
+  InstallerStep _versionNext = InstallerStep.disk;
+  InstallerStep _versionBack = InstallerStep.network;
+
+  /// The newer revision the person chose; null: the installer's own.
+  String? chosenRev;
+
+  /// The newer revision the person last answered about (either way).
+  String? _answeredRev;
+
+  /// The newer HinterOS of the chosen channel, when one is offered (only
+  /// while online).
+  HinterRelease? get newer {
+    final c = newerCheck;
+    return online && c != null && c.channel == channel ? c.newer : null;
+  }
+
+  bool get versionOffered => newer != null;
+
+  /// Whether the plan installs the newer HinterOS.
+  bool get installsNewer => chosenRev != null && newer?.rev == chosenRev;
+
+  /// "HinterOS 0.7.0 stable (1a2b3c4)" for a release on the chosen channel.
+  String releaseLabel(HinterRelease r) =>
+      installVersionLabel(r.version, r.rev, channel);
+
+  /// The version the plan installs, for the summary.
+  String get planVersionLabel {
+    final n = newer;
+    if (installsNewer && n != null) return releaseLabel(n);
+    final iso = isoRelease;
+    return iso == null ? 'HinterOS from this USB stick' : releaseLabel(iso);
+  }
+
+  /// Shows the version step when the internet is there and a newer
+  /// HinterOS is on the channel; otherwise goes straight to [after]. Checks
+  /// the channel first unless the last check already answered for it.
+  Future<void> _askVersion({
+    required InstallerStep after,
+    required InstallerStep before,
+    bool fromNetwork = false,
+    bool force = false,
+  }) async {
+    final token = ++_askToken;
+    _versionNext = after;
+    _versionBack = before;
+    if (!online) {
+      go(after);
+      return;
+    }
+    final known = !force && _checkedChannel == channel;
+    if (known && (_lastCheckOk || !fromNetwork)) {
+      go(versionOffered ? InstallerStep.version : after);
+      return;
+    }
+    go(InstallerStep.version);
+    // A check already running may be for another channel: then once more.
+    for (var i = 0; i < 2; i++) {
+      await _checkNewer(adoptDefault: fromNetwork);
+      if (_disposed || token != _askToken) return;
+      if (_checkedChannel == channel) break;
+    }
+    if (_step == InstallerStep.version && !versionOffered) go(after);
+  }
+
+  Future<void> _checkNewer({required bool adoptDefault}) =>
+      _checkRun ??= _check(adoptDefault).whenComplete(() => _checkRun = null);
+
+  Future<void> _check(bool adoptDefault) async {
+    checkingNewer = true;
+    notifyListeners();
+    // The first check asks for the installer's own channel and takes it as
+    // the default, unless the person already chose one.
+    final useDefault = adoptDefault && !_channelTouched && !_defaultKnown;
+    final asked = channel;
+    try {
+      final r = await backend
+          .checkNewer(channel: useDefault ? null : asked)
+          .timeout(checkNewerTimeout);
+      isoRelease = r.iso;
+      newerCheck = r;
+      if (useDefault && !_channelTouched) channel = r.channel;
+      _defaultKnown = true;
+      _checkedChannel = r.channel;
+      _lastCheckOk = true;
+    } catch (e) {
+      // Not offered, then: the installer's own version is installed.
+      logFailure('checking for a newer HinterOS', e);
+      newerCheck = null;
+      _checkedChannel = asked;
+      _lastCheckOk = false;
+    }
+    if (chosenRev != null && newer?.rev != chosenRev) chosenRev = null;
+    checkingNewer = false;
+    if (!_disposed) notifyListeners();
+  }
+
+  /// The person's answer on the version step.
+  void chooseVersion({required bool newer}) {
+    _answeredRev = this.newer?.rev;
+    chosenRev = newer ? this.newer?.rev : null;
+    go(_versionNext);
   }
 
   // ------------------------------------------------------------- network
@@ -385,6 +581,9 @@ class InstallerFlow extends ChangeNotifier {
     channel = channel == InstallChannel.stable
         ? InstallChannel.beta
         : InstallChannel.stable;
+    _channelTouched = true;
+    // A newer version of the other channel is not this one's.
+    if (chosenRev != null && newer?.rev != chosenRev) chosenRev = null;
     notifyListeners();
   }
 
@@ -430,6 +629,7 @@ class InstallerFlow extends ChangeNotifier {
       acceptedTerms: a.acceptances,
       wifiSsid: online ? joinedSsid : null,
       wifiPsk: online && joinedSsid != null ? _joinedPsk : null,
+      rev: installsNewer ? chosenRev : null,
     );
   }
 
@@ -577,6 +777,10 @@ class InstallerFlow extends ChangeNotifier {
   Future<void> startInstall() async {
     if (running || !ready) return;
     final plan = buildPlan();
+    runRev = plan.rev;
+    runLabel = planVersionLabel;
+    _runChannel = plan.channel;
+    _doneEvent = null;
     outcome = null;
     warnings = const [];
     percent = 0;
@@ -604,6 +808,7 @@ class InstallerFlow extends ChangeNotifier {
       progressStage = e.stage;
       percent = e.percent;
       progressMessage = e.message;
+      if (e.isDone) _doneEvent = e;
       if (e.isWarning) warnings = [...warnings, e];
       notifyListeners();
     }
@@ -638,6 +843,53 @@ class InstallerFlow extends ChangeNotifier {
     phase = InstallPhase.idle;
     outcome = null;
     go(InstallerStep.summary);
+  }
+
+  /// The newer revision the last run installed or tried to (null: the
+  /// installer's own).
+  String? runRev;
+
+  /// The version the last run installed or tried to, for the screens.
+  String runLabel = '';
+  InstallChannel _runChannel = InstallChannel.stable;
+  InstallEvent? _doneEvent;
+
+  /// The stages of the current run, in order.
+  List<String> get stages =>
+      runRev != null ? newerInstallStages : installStages;
+
+  /// The last run with a newer HinterOS was refused or failed.
+  bool get newerFailed =>
+      runRev != null &&
+      (phase == InstallPhase.failed || phase == InstallPhase.refused);
+
+  /// Whether the failed run stopped before it touched the disk: refused,
+  /// or the newer HinterOS did not download.
+  bool get diskUntouched =>
+      phase == InstallPhase.refused || outcome?.error?.code == 'fetch-failed';
+
+  /// From a failed newer install back to the version step (the channel is
+  /// checked again); the choice then goes on to the summary.
+  void chooseVersionAgain() {
+    phase = InstallPhase.idle;
+    outcome = null;
+    unawaited(
+      _askVersion(
+        after: InstallerStep.summary,
+        before: InstallerStep.summary,
+        force: true,
+      ),
+    );
+  }
+
+  /// "HinterOS 0.7.1 stable (9f8e7d6)": what the finished install put on
+  /// the disk, from the backend's last line; null when it did not say.
+  String? get installedLabel {
+    final e = _doneEvent;
+    final v = e?.version;
+    final r = e?.rev;
+    if (v == null || r == null) return null;
+    return installVersionLabel(v, r, _runChannel);
   }
 
   Future<void> reboot() => backend.reboot();

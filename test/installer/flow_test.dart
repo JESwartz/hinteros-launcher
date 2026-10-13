@@ -562,7 +562,10 @@ void main() {
         'password': 'change-me-now',
       });
       expect(h.flow.step, InstallerStep.done);
-      expect(find.text('HinterOS is installed'), findsOneWidget);
+      expect(
+        find.text('HinterOS 0.7.0 stable (1a2b3c4) is installed'),
+        findsOneWidget,
+      );
       expect(find.textContaining('Remove the USB stick'), findsOneWidget);
       expect(
         find.textContaining('general drivers'),

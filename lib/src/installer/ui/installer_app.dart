@@ -59,6 +59,7 @@ class InstallerScreen extends StatefulWidget {
 class _InstallerScreenState extends State<InstallerScreen> {
   late InstallerStep _step = widget.flow.step;
   late InstallPhase _phase = widget.flow.phase;
+  late bool _checkingNewer = widget.flow.checkingNewer;
 
   InstallerFlow get _flow => widget.flow;
 
@@ -102,15 +103,18 @@ class _InstallerScreenState extends State<InstallerScreen> {
     if (!mounted) return;
     final stepChanged = _flow.step != _step;
     final phaseChanged = _flow.phase != _phase;
+    final checkEnded = _checkingNewer && !_flow.checkingNewer;
     if (stepChanged) {
       _step = _flow.step;
       widget.console.newScreen();
       _entered(_step);
-    } else if (phaseChanged && !_flow.running) {
+    } else if ((phaseChanged && !_flow.running) ||
+        (checkEnded && _step == InstallerStep.version)) {
       // Buttons appeared (or the retry started): focus follows.
       widget.console.refocus();
     }
     _phase = _flow.phase;
+    _checkingNewer = _flow.checkingNewer;
     setState(() {});
   }
 
@@ -122,6 +126,7 @@ class _InstallerScreenState extends State<InstallerScreen> {
       child: switch (_step) {
         InstallerStep.welcome => WelcomeStep(env: env),
         InstallerStep.network => NetworkStep(env: env),
+        InstallerStep.version => VersionStep(env: env),
         InstallerStep.disk => DiskStep(env: env),
         InstallerStep.account => AccountStep(env: env),
         InstallerStep.options => OptionsStep(env: env),

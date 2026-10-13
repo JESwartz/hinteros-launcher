@@ -9,10 +9,40 @@ import 'progress.dart';
 
 /// A backend call that did not work, with a sentence for the screen.
 class InstallerException implements Exception {
-  const InstallerException(this.message);
+  const InstallerException(this.message, {this.code});
   final String message;
+
+  /// The backend's error code, when it gave one.
+  final String? code;
   @override
-  String toString() => message;
+  String toString() => code == null ? message : '$message ($code)';
+}
+
+/// One HinterOS revision: its commit and its `release/version`.
+class HinterRelease {
+  const HinterRelease({required this.rev, required this.version});
+
+  /// 40 hex digits.
+  final String rev;
+
+  /// `MAJOR.MINOR.PATCH[-suffix]`, or the first 12 hex digits of [rev] when
+  /// the revision has no readable version.
+  final String version;
+}
+
+/// What `hinteros-install --check-newer` found: the installer's own
+/// revision and, when the channel's verified tip is newer, that one.
+class NewerCheck {
+  const NewerCheck({required this.channel, required this.iso, this.newer});
+
+  /// The channel that was checked (the installer's default when none was
+  /// asked for).
+  final InstallChannel channel;
+  final HinterRelease iso;
+
+  /// Null: nothing newer than [iso] on [channel]. On beta the versions can
+  /// be equal; only this field says "newer".
+  final HinterRelease? newer;
 }
 
 class NetworkState {
@@ -164,6 +194,12 @@ abstract class InstallerBackend {
 
   /// The apps the installer offers, from the catalog index on the ISO.
   Future<List<StoreApp>> catalog();
+
+  /// `hinteros-install --check-newer [--channel ...]`: whether [channel]
+  /// (null: the installer's own default) has a newer signed HinterOS than
+  /// this installer. Touches nothing. Throws [InstallerException] (with the
+  /// backend's code) when the check fails.
+  Future<NewerCheck> checkNewer({InstallChannel? channel});
 
   /// `hinteros-install --plan - --validate-only`: touches nothing.
   InstallRun validate(InstallPlan plan);

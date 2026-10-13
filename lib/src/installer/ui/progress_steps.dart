@@ -33,6 +33,8 @@ class InstallStepView extends StatelessWidget {
         }
         final title = switch (f.phase) {
           InstallPhase.refused => 'The install did not start',
+          InstallPhase.failed when f.diskUntouched =>
+            'The install did not start',
           InstallPhase.failed => 'The install did not finish',
           _ => 'Installing HinterOS',
         };
@@ -51,7 +53,8 @@ class InstallStepView extends StatelessWidget {
     // Nothing to press while it runs: Back is off, too.
     env.region.setRows(const []);
     final inApps = f.section == InstallSection.apps;
-    final current = installStages.indexOf(f.progressStage);
+    final stages = f.stages;
+    final current = stages.indexOf(f.progressStage);
     // One bar for the step being worked on (a stage, or one app), not for the
     // whole chain: the steps run at very different speeds. Without a
     // measurable fraction the bar is indeterminate.
@@ -60,8 +63,8 @@ class InstallStepView extends StatelessWidget {
       caption = f.appsLine ?? 'Installing apps';
     } else if (current >= 0) {
       caption =
-          'Step ${current + 1} of ${installStages.length} · '
-          '${stageLabel(installStages[current])}';
+          'Step ${current + 1} of ${stages.length} · '
+          '${stageLabel(stages[current])}';
     } else {
       caption = stageLabel(f.progressStage);
     }
@@ -78,7 +81,7 @@ class InstallStepView extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (var i = 0; i < installStages.length; i++)
+            for (var i = 0; i < stages.length; i++)
               Padding(
                 padding: const EdgeInsets.only(bottom: HinterTokens.s1),
                 child: Row(
@@ -86,7 +89,7 @@ class InstallStepView extends StatelessWidget {
                     CheckMark(checked: i < current, size: 32),
                     const SizedBox(width: HinterTokens.s2),
                     Text(
-                      stageLabel(installStages[i]),
+                      stageLabel(stages[i]),
                       style: i == current
                           ? t.label.copyWith(color: t.accent)
                           : (i < current ? t.body : t.bodyDim),
@@ -157,7 +160,7 @@ class InstallStepView extends StatelessWidget {
     final t = HinterTheme.of(context);
     final o = f.outcome;
     final e = o?.error;
-    final refused = f.phase == InstallPhase.refused;
+    final refused = f.diskUntouched;
     p.add(
       StatusLine(
         refused
@@ -168,6 +171,12 @@ class InstallStepView extends StatelessWidget {
       ),
     );
     p.add(Text(explainCode(e?.code), style: t.title), gap: HinterTokens.s3);
+    if (f.newerFailed) {
+      p.add(
+        Text('Version: ${f.runLabel}', style: t.body),
+        gap: HinterTokens.s2,
+      );
+    }
     if (e != null) {
       p.add(
         Text(
@@ -183,7 +192,12 @@ class InstallStepView extends StatelessWidget {
     );
     p.buttons('actions', [
       btn('Try again', f.startInstall, primary: true),
-      btn('Change my choices', f.leaveFailure),
+      // A newer HinterOS that did not install: choose the version again
+      // (the one on the USB stick, for example).
+      if (f.newerFailed)
+        btn('Choose another version', f.chooseVersionAgain)
+      else
+        btn('Change my choices', f.leaveFailure),
     ], gap: HinterTokens.s4);
   }
 }
@@ -240,7 +254,9 @@ class _DoneStepViewState extends State<DoneStepView> {
     }
     return StepPage(
       step: InstallerStep.done,
-      title: 'HinterOS is installed',
+      title: f.installedLabel == null
+          ? 'HinterOS is installed'
+          : '${f.installedLabel} is installed',
       child: scrolling(p.build()),
     );
   }

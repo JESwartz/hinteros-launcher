@@ -34,6 +34,13 @@ bool wantsFirstBoot(List<String> args) =>
 ///  - `refused`: the backend refuses the plan (exit 2, `disk-in-use`)
 ///  - `apps-failed`: the system installs, then the first picked app fails
 ///  - `failed`: the install fails part-way (exit 1, `install-failed`)
+///  - `newer`: online over a cable; both channels have a newer HinterOS,
+///    which installs (with its download stage)
+///  - `newer-failed`: as `newer`, but the newer one fails part-way (exit 1);
+///    the installer's own version installs
+///  - `newer-fetch-failed`: as `newer`, but the newer one does not download
+///  - `check-error`: online, but the check for a newer HinterOS fails (the
+///    version step is skipped)
 FakeInstallerBackend mockBackend(String scenario) {
   final b = FakeInstallerBackend(
     delay: const Duration(milliseconds: 600),
@@ -41,7 +48,14 @@ FakeInstallerBackend mockBackend(String scenario) {
       'Living Room': 'correct horse',
       'Neighbour 5G': 'correct horse',
     },
-    state: scenario == 'online'
+    state:
+        const {
+          'online',
+          'newer',
+          'newer-failed',
+          'newer-fetch-failed',
+          'check-error',
+        }.contains(scenario)
         ? const NetworkState(
             wiredConnected: true,
             wifiAvailable: true,
@@ -63,6 +77,20 @@ FakeInstallerBackend mockBackend(String scenario) {
       );
     case 'failed':
       b.installScript = FakeScript.failed();
+    case 'newer':
+      b.newer = mockNewer();
+      b.newerInstallScript = FakeScript.newerOk('0.7.1');
+    case 'newer-failed':
+      b.newer = mockNewer();
+      b.newerInstallScript = FakeScript.failed();
+    case 'newer-fetch-failed':
+      b.newer = mockNewer();
+      b.newerInstallScript = FakeScript.fetchFailed();
+    case 'check-error':
+      b.checkError = const InstallerException(
+        'the tip of the stable channel is not signed',
+        code: 'unsigned',
+      );
   }
   return b;
 }

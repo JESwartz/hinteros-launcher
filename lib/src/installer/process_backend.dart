@@ -196,6 +196,58 @@ class ProcessInstallerBackend implements InstallerBackend {
     return fallbackCatalog();
   }
 
+  /// The backend cuts its own network steps off after 120 s in total; this
+  /// is only a guard against a hung process.
+  static const checkNewerTimeout = Duration(seconds: 150);
+
+  @override
+  Future<NewerCheck> checkNewer({InstallChannel? channel}) async {
+    final ProcessResult r;
+    try {
+      r = await Process.run(
+        installBinary,
+        [
+          '--check-newer',
+          if (channel != null) ...['--channel', channel.name],
+        ],
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
+      ).timeout(checkNewerTimeout);
+    } on ProcessException {
+      throw const InstallerException(
+        'hinteros-install is not available on this system.',
+        code: 'internal',
+      );
+    } on TimeoutException {
+      throw const InstallerException(
+        'The check for a newer HinterOS took too long.',
+        code: 'timeout',
+      );
+    }
+    // stdout is one JSON line; stderr is text for people and is not kept.
+    final line = (r.stdout as String)
+        .split('\n')
+        .lastWhere((l) => l.trim().isNotEmpty, orElse: () => '');
+    if (r.exitCode == 0) {
+      try {
+        return parseNewerCheck(line);
+      } on FormatException {
+        throw const InstallerException(
+          'The check for a newer HinterOS gave an answer this installer '
+          'cannot read.',
+          code: 'internal',
+        );
+      }
+    }
+    final e = parseProgressLine(line);
+    throw InstallerException(
+      e?.message ??
+          'The check for a newer HinterOS failed '
+              '(status ${r.exitCode}).',
+      code: e?.code,
+    );
+  }
+
   InstallRun _run(InstallPlan plan, List<String> args) {
     final events = StreamController<InstallEvent>();
     final done = Completer<int>();
