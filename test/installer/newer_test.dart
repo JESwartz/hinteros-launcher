@@ -60,7 +60,7 @@ void main() {
       expect(b.calls.where((c) => c.startsWith('checkNewer')), isEmpty);
       expect(find.text('Step 2 of 6'), findsOneWidget);
       await fill(h, t);
-      expect(find.text('HinterOS from this USB stick'), findsOneWidget);
+      expect(find.text(isoLabel), findsOneWidget, reason: 'from --info');
       expect(h.flow.buildPlan().toJson().containsKey('rev'), isFalse);
     });
 
@@ -97,8 +97,89 @@ void main() {
       );
       expect(find.textContaining('signed'), findsNothing);
       await fill(h, t);
-      expect(find.text('HinterOS from this USB stick'), findsOneWidget);
+      expect(find.text(isoLabel), findsOneWidget, reason: 'from --info');
       expect(h.flow.buildPlan().rev, isNull);
+    });
+  });
+
+  group('offline: the version and channel from --info', () {
+    const betaLabel = 'HinterOS 0.7.1.1a2b3c4 beta';
+
+    testWidgets('a beta installer starts on Beta and names its version', (
+      t,
+    ) async {
+      final b = FakeInstallerBackend(
+        newer: mockNewer(),
+        defaultChannel: InstallChannel.beta,
+      );
+      final h = await pastNetwork(t, b);
+      expect(b.calls, contains('info'));
+      expect(b.calls.where((c) => c.startsWith('checkNewer')), isEmpty);
+      expect(h.flow.channel, InstallChannel.beta);
+      h.flow.go(InstallerStep.options);
+      await t.pumpAndSettle();
+      expect(find.text('Beta'), findsOneWidget);
+      await fill(h, t);
+      expect(find.text(betaLabel), findsOneWidget);
+      expect(find.text('HinterOS from this USB stick'), findsNothing);
+      final plan = h.flow.buildPlan().toJson();
+      expect(plan['channel'], 'beta');
+      expect(plan.containsKey('rev'), isFalse);
+    });
+
+    testWidgets('a stable installer: Stable and its version', (t) async {
+      final b = FakeInstallerBackend();
+      final h = await pastNetwork(t, b);
+      expect(h.flow.channel, InstallChannel.stable);
+      await fill(h, t);
+      expect(find.text(isoLabel), findsOneWidget);
+    });
+
+    testWidgets('a channel the person chose stays', (t) async {
+      final b = FakeInstallerBackend(defaultChannel: InstallChannel.beta);
+      final h = await pastNetwork(t, b);
+      h.flow.toggleChannel(); // Stable
+      await h.flow.loadInfo();
+      expect(h.flow.channel, InstallChannel.stable);
+    });
+
+    testWidgets('--info fails: logged, Stable, no version name', (t) async {
+      final b = FakeInstallerBackend(
+        defaultChannel: InstallChannel.beta,
+        infoError: const InstallerException(
+          'hinteros-install failed (status 2).',
+        ),
+      );
+      final h = await pastNetwork(t, b);
+      expect(
+        logged.join('\n'),
+        contains(
+          'reading the installer version failed: '
+          'hinteros-install failed (status 2).',
+        ),
+      );
+      expect(h.flow.channel, InstallChannel.stable);
+      await fill(h, t);
+      expect(find.text('HinterOS from this USB stick'), findsOneWidget);
+    });
+
+    test('--info output: read, or a bad shape refused', () {
+      final r = parseInstallerInfo(
+        '{"iso":{"rev":"$stableRev","version":"0.7.0"},"channel":"beta"}',
+      );
+      expect(r.channel, InstallChannel.beta);
+      expect(r.iso.rev, stableRev);
+      expect(r.iso.version, '0.7.0');
+      expect(
+        () => parseInstallerInfo('{"iso":{"rev":"x"},"channel":"stable"}'),
+        throwsFormatException,
+      );
+      expect(
+        () => parseInstallerInfo(
+          '{"iso":{"rev":"$stableRev","version":"0.7.0"},"channel":"x"}',
+        ),
+        throwsFormatException,
+      );
     });
   });
 

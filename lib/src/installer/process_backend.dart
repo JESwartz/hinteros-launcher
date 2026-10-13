@@ -196,6 +196,25 @@ class ProcessInstallerBackend implements InstallerBackend {
     return fallbackCatalog();
   }
 
+  @override
+  Future<InstallerInfo> info() async {
+    // Offline and instant: only what is built into the installer.
+    final out = await _stdout(installBinary, const [
+      '--info',
+    ], timeout: const Duration(seconds: 10));
+    final line = out
+        .split('\n')
+        .lastWhere((l) => l.trim().isNotEmpty, orElse: () => '');
+    try {
+      return parseInstallerInfo(line);
+    } on FormatException {
+      throw const InstallerException(
+        'hinteros-install --info gave an answer this installer cannot read.',
+        code: 'internal',
+      );
+    }
+  }
+
   /// The backend cuts its own network steps off after 120 s in total; this
   /// is only a guard against a hung process.
   static const checkNewerTimeout = Duration(seconds: 150);

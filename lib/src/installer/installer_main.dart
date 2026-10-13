@@ -11,6 +11,7 @@ import 'fake_backend.dart';
 import 'flow.dart';
 import 'gamepad.dart';
 import 'keyboard_fallback.dart';
+import 'plan.dart' show InstallChannel;
 import 'process_backend.dart';
 import 'ui/first_boot.dart';
 import 'ui/installer_app.dart';
@@ -41,6 +42,8 @@ bool wantsFirstBoot(List<String> args) =>
 ///  - `newer-fetch-failed`: as `newer`, but the newer one does not download
 ///  - `check-error`: online, but the check for a newer HinterOS fails (the
 ///    version step is skipped)
+///  - `beta`: an offline beta installer (`--info` says beta: the Options
+///    step starts on Beta)
 FakeInstallerBackend mockBackend(String scenario) {
   final b = FakeInstallerBackend(
     delay: const Duration(milliseconds: 600),
@@ -86,6 +89,8 @@ FakeInstallerBackend mockBackend(String scenario) {
     case 'newer-fetch-failed':
       b.newer = mockNewer();
       b.newerInstallScript = FakeScript.fetchFailed();
+    case 'beta':
+      b.defaultChannel = InstallChannel.beta;
     case 'check-error':
       b.checkError = const InstallerException(
         'the tip of the stable channel is not signed',

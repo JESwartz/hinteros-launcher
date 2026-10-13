@@ -45,6 +45,18 @@ class NewerCheck {
   final HinterRelease? newer;
 }
 
+/// What `hinteros-install --info` says the installer carries: its own
+/// revision and the channel it is for. Known offline.
+class InstallerInfo {
+  const InstallerInfo({required this.iso, required this.channel});
+
+  final HinterRelease iso;
+
+  /// The installer's channel (`hinteros.installer.channel`): the default
+  /// channel of the plan.
+  final InstallChannel channel;
+}
+
 class NetworkState {
   const NetworkState({
     this.wiredConnected = false,
@@ -194,6 +206,11 @@ abstract class InstallerBackend {
 
   /// The apps the installer offers, from the catalog index on the ISO.
   Future<List<StoreApp>> catalog();
+
+  /// `hinteros-install --info`: the installer's own revision and channel.
+  /// Offline and quick. Throws [InstallerException] when it fails (an older
+  /// installer without `--info`).
+  Future<InstallerInfo> info();
 
   /// `hinteros-install --check-newer [--channel ...]`: whether [channel]
   /// (null: the installer's own default) has a newer signed HinterOS than

@@ -249,3 +249,19 @@ NewerCheck parseNewerCheck(String line) {
   }
   return NewerCheck(channel: channel, iso: iso, newer: newer);
 }
+
+/// The one stdout line of `hinteros-install --info`:
+/// `{"iso":{"rev","version"},"channel":"stable"}`. Throws [FormatException]
+/// when it is not that shape.
+InstallerInfo parseInstallerInfo(String line) {
+  final Object? j = jsonDecode(line.trim());
+  if (j is! Map) throw const FormatException('not an object');
+  final channel = InstallChannel.values
+      .where((c) => c.name == j['channel'])
+      .firstOrNull;
+  final iso = _release(j['iso']);
+  if (channel == null || iso == null) {
+    throw const FormatException('channel or iso missing');
+  }
+  return InstallerInfo(iso: iso, channel: channel);
+}

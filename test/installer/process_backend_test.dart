@@ -204,4 +204,38 @@ exit 1
       );
     });
   });
+
+  group('--info', () {
+    const iso = '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d';
+
+    test('the installer version and channel, from one JSON line', () async {
+      write('''
+printf '%s\\n' "\$@" > "\$OUT/argv"
+echo '{"iso":{"rev":"$iso","version":"0.7.0"},"channel":"beta"}'
+''');
+      final r = await ProcessInstallerBackend(installBinary: script).info();
+      expect(File('${dir.path}/argv').readAsLinesSync(), ['--info']);
+      expect(r.channel, InstallChannel.beta);
+      expect(r.iso.rev, iso);
+      expect(r.iso.version, '0.7.0');
+    });
+
+    test(
+      'an older installer without --info, or a bad answer, throws',
+      () async {
+        write('echo usage >&2\nexit 2\n');
+        await expectLater(
+          ProcessInstallerBackend(installBinary: script).info(),
+          throwsA(isA<InstallerException>()),
+        );
+        write("echo '{\"channel\":\"stable\"}'\n");
+        await expectLater(
+          ProcessInstallerBackend(installBinary: script).info(),
+          throwsA(
+            isA<InstallerException>().having((e) => e.code, 'code', 'internal'),
+          ),
+        );
+      },
+    );
+  });
 }

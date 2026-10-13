@@ -183,8 +183,25 @@ class InstallerFlow extends ChangeNotifier {
   /// one failed.
   NewerCheck? newerCheck;
 
-  /// The installer's own release, once a check reported it.
+  /// The installer's own release, once `--info` or a check reported it.
   HinterRelease? isoRelease;
+
+  /// Reads the installer's own release and channel (`--info`, offline) at
+  /// the start. The channel becomes the default of the Options step unless
+  /// the person already chose one. When it fails: logged, and the version
+  /// and channel come from the first check, as before.
+  Future<void> loadInfo() async {
+    try {
+      final r = await backend.info().timeout(checkTimeout);
+      if (_disposed) return;
+      isoRelease ??= r.iso;
+      if (!_channelTouched && !_defaultKnown) channel = r.channel;
+    } catch (e) {
+      logFailure('reading the installer version', e);
+      return;
+    }
+    notifyListeners();
+  }
 
   /// The channel the last check (good or failed) was for; null: none yet.
   InstallChannel? _checkedChannel;

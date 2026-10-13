@@ -203,6 +203,7 @@ class FakeInstallerBackend implements InstallerBackend {
     Map<InstallChannel, HinterRelease>? newer,
     this.checkError,
     this.defaultChannel = InstallChannel.stable,
+    this.infoError,
   }) : newer = newer ?? {},
        _wifi = wifi ?? mockWifi(),
        _disks = disks ?? mockDisks(),
@@ -239,10 +240,12 @@ class FakeInstallerBackend implements InstallerBackend {
   final Map<String, String> wifiPasswords;
 
   /// Every call, in order: `network`, `scanWifi`, `connectWifi:<ssid>`,
-  /// `disks`, `catalog`, `validate`, `install`, `reboot`.
+  /// `disks`, `catalog`, `info`, `checkNewer:<channel>`, `validate`,
+  /// `install`, `reboot`.
   final calls = <String>[];
 
-  /// The installer's own revision, as `--check-newer` reports it.
+  /// The installer's own revision, as `--info` and `--check-newer` report
+  /// it.
   static const isoRelease = HinterRelease(
     rev: '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d',
     version: '0.7.0',
@@ -255,8 +258,12 @@ class FakeInstallerBackend implements InstallerBackend {
   /// When set, `checkNewer` fails with it (offline, unsigned, ...).
   InstallerException? checkError;
 
-  /// The channel a check without one gets (`hinteros.installer.channel`).
+  /// The channel a check without one gets and `--info` reports
+  /// (`hinteros.installer.channel`): beta for a beta installer.
   InstallChannel defaultChannel;
+
+  /// When set, `info` fails with it (an older installer without `--info`).
+  InstallerException? infoError;
 
   /// When set, `checkNewer` waits for it (a slow check, for tests).
   Future<void>? checkHold;
@@ -352,6 +359,14 @@ class FakeInstallerBackend implements InstallerBackend {
   Future<List<StoreApp>> catalog() async {
     calls.add('catalog');
     return List.of(_catalog);
+  }
+
+  @override
+  Future<InstallerInfo> info() async {
+    calls.add('info');
+    final error = infoError;
+    if (error != null) throw error;
+    return InstallerInfo(iso: isoRelease, channel: defaultChannel);
   }
 
   @override

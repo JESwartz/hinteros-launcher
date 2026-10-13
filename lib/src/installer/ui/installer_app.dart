@@ -76,6 +76,8 @@ class _InstallerScreenState extends State<InstallerScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.console.refocus();
     });
+    // The installer's own version and channel, known offline.
+    _flow.loadInfo();
     // Needed by the offline rules of the app step.
     _flow.refreshNetwork().then((_) => _flow.loadCatalog());
   }
