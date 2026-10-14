@@ -130,7 +130,10 @@ enum JobKind {
   cleanupProfiles('Cleaning up profiles'),
 
   /// 0.14: the automatic clean-up setting (a rebuild).
-  cleanupSet('Saving the automatic clean-up');
+  cleanupSet('Saving the automatic clean-up'),
+
+  /// 0.17: the tip of another channel verified before a switch.
+  channelCheck('Checking the channel');
 
   const JobKind(this.title);
   final String title;
@@ -148,7 +151,7 @@ enum JobKind {
       JobStage.activating,
       JobStage.finishing,
     ],
-    updateCheck => const [
+    updateCheck || channelCheck => const [
       JobStage.preparing,
       JobStage.fetching,
       JobStage.verifying,
@@ -564,6 +567,33 @@ class AvailableUpdate {
   bool get catalogChanged => newApps?.isNotEmpty ?? false;
 
   bool get isSecurity => severity != null;
+}
+
+/// The verified tip of another channel (`system.channel.check`, session API
+/// 0.17): what a switch to [channel] installs. The owner confirms it, then
+/// [UpdatesRepository.setChannel] takes [rev].
+@immutable
+class ChannelTarget {
+  const ChannelTarget({
+    required this.channel,
+    required this.rev,
+    required this.version,
+    required this.date,
+    this.older = false,
+  });
+
+  final UpdateChannel channel;
+
+  /// 40 hex characters; what `channel.set` takes.
+  final String rev;
+
+  /// What to call it on screen ("0.7.0 stable"), or its date.
+  final String version;
+  final DateTime date;
+
+  /// It does not build on the version this box runs: the switch may go back
+  /// to an older version.
+  final bool older;
 }
 
 @immutable

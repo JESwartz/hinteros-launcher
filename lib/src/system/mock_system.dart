@@ -524,24 +524,64 @@ class MockUpdates implements UpdatesRepository {
     );
   }
 
+  /// The last [checkChannel] result (what [setChannel] accepts).
+  ChannelTarget? checkedChannel;
+
+  /// The next [checkChannel] throws this.
+  SystemException? failChannelCheckWith;
+
+  @override
+  Future<ChannelTarget> checkChannel(UpdateChannel c) async {
+    if (c == channel) {
+      throw const SystemException(
+        SystemErrorKind.nothingToDo,
+        'This box already uses that channel.',
+      );
+    }
+    final f = failChannelCheckWith;
+    if (f != null) throw f;
+    // Stable after beta goes back to an older version.
+    return checkedChannel = ChannelTarget(
+      channel: c,
+      rev: c == UpdateChannel.stable
+          ? '7e2d4f6a8b1c3e5d7f9a0b2c4d6e8f1a3b5c7d9e'
+          : '1a2b3c4d5e6f708192a3b4c59a8b7c6d5e4f3021',
+      version: c == UpdateChannel.stable
+          ? '0.6.0 stable'
+          : '0.6.1.1a2b3c4 beta',
+      date: DateTime(2026, 10, 1),
+      older: c == UpdateChannel.stable,
+    );
+  }
+
   @override
   Future<JobHandle> setChannel(
     UpdateChannel c, {
-    bool acknowledgeDowngrade = false,
+    required String rev,
     String? adminPin,
   }) async {
     box?.checkBoxAdmin(adminPin);
-    if (c == UpdateChannel.stable &&
-        channel == UpdateChannel.beta &&
-        !acknowledgeDowngrade) {
+    final t = checkedChannel;
+    if (c == channel) {
       throw const SystemException(
-        SystemErrorKind.needsAcknowledgement,
-        'Stable may be older than what this box runs now.',
+        SystemErrorKind.nothingToDo,
+        'This box already uses that channel.',
+      );
+    }
+    if (t == null || t.channel != c || t.rev != rev) {
+      throw const SystemException(
+        SystemErrorKind.stateConflict,
+        'The channel changed. Try again.',
       );
     }
     return jobs.start(
       JobKind.channel,
-      subject: JobSubject(channel: c, fromChannel: channel),
+      subject: JobSubject(
+        channel: c,
+        fromChannel: channel,
+        rev: rev,
+        version: t.version,
+      ),
       onSuccess: () => channel = c,
     );
   }

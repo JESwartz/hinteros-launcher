@@ -282,45 +282,91 @@ void main() {
   });
 
   group('channel', () {
-    /// Channel -> Stable (a downgrade from beta): the pad is up.
+    /// Channel -> Stable (from beta): the box checks stable, the owner
+    /// confirms the verified version, then the pad is up.
     Future<Harness> toPad(WidgetTester t) async {
       setView(t);
       final h = harness();
       await h.pump(t);
       await openRow(t, 1);
       await press(t, [kDown, kEnter]); // Stable
+      expect(find.text('Switch to Stable?'), findsOneWidget);
+      expect(find.text('HinterOS 0.6.0 stable, 2026-10-01.'), findsOneWidget);
+      expect(
+        find.text('This version is older than the version on this box.'),
+        findsOneWidget,
+      );
+      expect(h.services.mockJobs.started, isEmpty);
+      await press(t, [kRight, kEnter]); // Switch
       expect(find.text('Switch to Stable'), findsOneWidget);
       expect(find.text(_askPin), findsOneWidget);
       return h;
     }
 
-    testWidgets('the right PIN, then the downgrade question', (t) async {
+    testWidgets('the verified version, then the right PIN', (t) async {
       final h = await toPad(t);
       await enterPin(t, '2468');
-      expect(find.text('Switch to Stable?'), findsOneWidget);
-      expect(h.services.mockJobs.started, isEmpty);
-      await press(t, [kRight, kEnter]); // Switch anyway: no second PIN
       expect(find.text(_askPin), findsNothing);
-      expect(h.services.mockJobs.started.single.kind, JobKind.channel);
+      final job = h.services.mockJobs.started.single;
+      expect(job.kind, JobKind.channel);
+      expect(
+        h.services.mockUpdates.checkedChannel!.rev,
+        '7e2d4f6a8b1c3e5d7f9a0b2c4d6e8f1a3b5c7d9e',
+      );
     });
 
     testWidgets('a wrong PIN asks again', (t) async {
       final h = await toPad(t);
       await enterPin(t, '0000');
       expect(find.text('Wrong PIN.'), findsOneWidget);
-      expect(find.text('Switch to Stable?'), findsNothing);
       expect(h.services.mockJobs.started, isEmpty);
       await enterPin(t, '2468');
-      expect(find.text('Switch to Stable?'), findsOneWidget);
+      expect(h.services.mockJobs.started.single.kind, JobKind.channel);
     });
 
     testWidgets('Back on the pad does nothing', (t) async {
       final h = await toPad(t);
       await press(t, [kEscape]);
       expect(find.text(_askPin), findsNothing);
-      expect(find.text('Switch to Stable?'), findsNothing);
       expect(h.services.mockJobs.started, isEmpty);
       expect(h.services.mockUpdates.channel, UpdateChannel.beta);
+    });
+
+    testWidgets('Cancel on the version does nothing', (t) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await openRow(t, 1);
+      await press(t, [kDown, kEnter]); // Stable
+      expect(find.text('Switch to Stable?'), findsOneWidget);
+      await press(t, [kEnter]); // Cancel
+      expect(find.text(_askPin), findsNothing);
+      expect(h.services.mockJobs.started, isEmpty);
+    });
+
+    testWidgets('an older version than the box saw: refused, no switch', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      h.services.mockUpdates.failChannelCheckWith = const SystemException(
+        SystemErrorKind.updateVerificationFailed,
+        'This version is older than one this box already saw. '
+        'Try again later.',
+      );
+      await h.pump(t);
+      await openRow(t, 1);
+      await press(t, [kDown, kEnter]); // Stable
+      expect(find.text('Switch to Stable?'), findsNothing);
+      expect(
+        find.text(
+          'This version is older than one this box already saw. '
+          'Try again later.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text(_askPin), findsNothing);
+      expect(h.services.mockJobs.started, isEmpty);
     });
   });
 
