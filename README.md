@@ -495,7 +495,7 @@ about, the install erases the disk.
 | `lib/src/installer/plan.dart` | `InstallPlan`: the JSON the backend wants (`disk`, `hostname`, `admin {user, password}`, `ssh {enable}`, `channel`, `base`, `network`, `apps`, `wifi {ssid, psk}`), and the UI checks that mirror the backend's |
 | `lib/src/installer/progress.dart` | The stdout lines `{stage, percent, level, message, code?}`, the verdict (exit 0 and a `done` line is success; 2 is "refused, nothing was touched"; 1 or anything else is "failed part-way"; exit 0 with an error line is a failure too), and the plain-words text for every error code |
 | `lib/src/installer/parsers.dart` | `lsblk --json -b` and `nmcli -t` output (`\:` escapes) |
-| `lib/src/system/catalog.dart` | The catalog index (format 2), shared with the Store: `parseCatalogIndex`, `loadCatalogIndex`, the terms reader |
+| `lib/src/system/catalog.dart` | The catalog index (versions 3 and 2), shared with the Store: `parseCatalogIndex`, `loadCatalogIndex`, the terms reader |
 | `lib/src/installer/gamepad.dart` | Controller input without the daemon: reads the evdev gamepads under `/dev/input` (A accepts, B back, X/Y, bumpers, View/Menu; D-pad and the left stick with a 0.5 deadzone, hysteresis and the daemon's key repeat; a rescan every 2 s for hotplug; `evdev_ioctl.dart` reads the stick range with `EVIOCGABS`) |
 | `lib/src/installer/flow.dart` | `InstallerFlow`: the answers, the steps, the install run |
 | `lib/src/installer/ui/` | The screens, the shared input host (`host.dart`), the in-app keyboard (`text_entry.dart`), the first-boot wizard |
@@ -505,17 +505,18 @@ on-screen keyboard (`OskScreen`, same layouts) with an `InProcessKeyboard` as it
 keys go into the field instead of into uinput. Done, Menu or Enter saves; View or Escape cancels. A physical keyboard types into it directly (`OskScreen(hardwareKeys: true)`).
 
 **Catalog.** One model (`StoreApp`) and one parser (`lib/src/system/catalog.dart`) read the real
-index of the catalog repo (`indexVersion` 2, `schema/index.schema.json` there), for the installer
+index of the catalog repo (`indexVersion` 3, and 2 of older systems; `schema/index.schema.json` there), for the installer
 and the Store alike. The installer reads `/run/current-system/sw/share/hinteros/catalog.json` on
 the ISO (`catalogIndexPath`; `ProcessInstallerBackend(catalogPath:)` overrides it for tests); the
 vendor terms are text files next to it (`terms/<id>-<version>.txt`), which the index entry names as
 `terms {title, version, url, retrieved, file}` and the parser reads into `VendorTerms.text`
-(only paths of the form `terms/<name>.txt`). Only `status: available` entries are read. The
-installer lists entries with `installer: true`, pre-selects `installerDefault`, and says "On the
+(only paths of the form `terms/<name>.txt`). Only `status: available` entries are read, and no services (`kind: service`). The
+installer lists entries with a `starter` (index 2: `installer: true`), pre-selects `starter: ticked`
+(index 2: `installerDefault`), and says "On the
 installer" for `onIso` (everything else is a download and is disabled while offline). The safety
 rule: an unfree entry (`free` is not true) whose terms are missing or unreadable is not offered, in
-the installer or the Store. Without an index (or one of another version) the four free ISO apps are
-offered as a fallback.
+the installer or the Store. Without an index (or one of another version) the three free ISO apps
+(Jellyfin, YouTube, Firefox) are offered as a fallback.
 
 **Accepted terms.** The plan carries `acceptedTerms: {"<id>": "<terms version>"}` for the selected
 apps that have terms (always present, `{}` when none); the system repo's `hinteros-install`

@@ -104,10 +104,7 @@ exit 2
     final apps = await ProcessInstallerBackend(
       catalogPath: '${dir.path}/none.json',
     ).catalog();
-    expect(
-      [for (final a in apps) a.id],
-      ['jellyfin', 'youtube', 'crunchyroll', 'firefox'],
-    );
+    expect([for (final a in apps) a.id], ['jellyfin', 'youtube', 'firefox']);
   });
 
   test('a catalog index on the ISO is read, with its terms', () async {
@@ -135,7 +132,7 @@ exit 2
     expect(ids, contains('firefox'));
     // An index of another version falls back instead of failing.
     File('${dir.path}/catalog.json').writeAsStringSync('{"indexVersion":9}');
-    expect((await backend().catalog()).length, 4);
+    expect((await backend().catalog()).length, 3);
   });
 
   group('--check-newer', () {

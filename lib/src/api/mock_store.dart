@@ -70,7 +70,7 @@ StoreApp mockStoreApp({
   state: StoreState.available,
 );
 
-/// The fixture index (format 2, camelCase) as wire apps (snake_case), the
+/// The fixture index (camelCase) as wire apps (snake_case), the
 /// terms file paths made absolute like the daemon's. Empty without the
 /// fixture.
 List<StoreApp> _fixtureApps(String? dir) {
@@ -81,51 +81,56 @@ List<StoreApp> _fixtureApps(String? dir) {
   ) as Map<String, dynamic>;
   return [
     for (final a in (index['apps'] as List).cast<Map<String, dynamic>>())
-      StoreApp(
-        id: a['id'] as String,
-        name: a['name'] as String,
-        summary: a['summary'] as String? ?? '',
-        description: a['description'] as String? ?? '',
-        category: a['category'] as String? ?? 'other',
-        homepage: a['homepage'] as String? ?? '',
-        kind: a['kind'] == 'web' ? AppKind.web : AppKind.native,
-        sizeMib: (a['sizeMiB'] as num?)?.toInt() ?? 0,
-        icon: () {
-          final i = (a['icon'] as Map?)?.cast<String, dynamic>() ?? {};
-          return StoreAppIcon(
-            desktopId: i['desktopId'] as String?,
-            siteUrl: i['siteUrl'] as String?,
-            iconUrl: i['iconUrl'] as String?,
-            firefoxProfile: i['firefoxProfile'] == true,
-            path: i['path'] as String?,
-          );
-        }(),
-        requires: [...(a['requires'] as List? ?? []).cast<String>()],
-        depends: [...(a['depends'] as List? ?? []).cast<String>()],
-        conflicts: [...(a['conflicts'] as List? ?? []).cast<String>()],
-        installer: a['installer'] == true,
-        onIso: a['onIso'] == true,
-        installerDefault: a['installerDefault'] == true,
-        dataPaths: [...(a['dataPaths'] as List? ?? []).cast<String>()],
-        terms: a['terms'] is Map
-            ? () {
-                final t = (a['terms'] as Map).cast<String, dynamic>();
-                return StoreAppTerms(
-                  title: t['title'] as String,
-                  version: t['version'] as String,
-                  url: t['url'] as String,
-                  retrieved: t['retrieved'] as String,
-                  file: '$root/${t['file']}',
-                );
-              }()
-            : null,
-        buildsOnDevice: a['buildsOnDevice'] == true,
-        free: a['free'] == true,
-        redistributable: a['redistributable'] == true,
-        status: CatalogStatus.fromJson(a['status'] as String? ?? 'available'),
-        statusReason: a['statusReason'] as String?,
-        state: StoreState.available,
-      ),
+      // Services (index 3 `kind: service`) are not Store apps, as in the daemon.
+      if (a['kind'] != 'service')
+        StoreApp(
+          id: a['id'] as String,
+          name: a['name'] as String,
+          summary: a['summary'] as String? ?? '',
+          description: a['description'] as String? ?? '',
+          category: a['category'] as String? ?? 'other',
+          homepage: a['homepage'] as String? ?? '',
+          kind: (a['type'] ?? a['kind']) == 'web'
+              ? AppKind.web
+              : AppKind.native,
+          sizeMib: (a['sizeMiB'] as num?)?.toInt() ?? 0,
+          icon: () {
+            final i = (a['icon'] as Map?)?.cast<String, dynamic>() ?? {};
+            return StoreAppIcon(
+              desktopId: i['desktopId'] as String?,
+              siteUrl: i['siteUrl'] as String?,
+              iconUrl: i['iconUrl'] as String?,
+              firefoxProfile: i['firefoxProfile'] == true,
+              path: i['path'] as String?,
+            );
+          }(),
+          requires: [...(a['requires'] as List? ?? []).cast<String>()],
+          depends: [...(a['depends'] as List? ?? []).cast<String>()],
+          conflicts: [...(a['conflicts'] as List? ?? []).cast<String>()],
+          installer: a['starter'] != null || a['installer'] == true,
+          onIso: a['onIso'] == true,
+          installerDefault:
+              a['starter'] == 'ticked' || a['installerDefault'] == true,
+          dataPaths: [...(a['dataPaths'] as List? ?? []).cast<String>()],
+          terms: a['terms'] is Map
+              ? () {
+                  final t = (a['terms'] as Map).cast<String, dynamic>();
+                  return StoreAppTerms(
+                    title: t['title'] as String,
+                    version: t['version'] as String,
+                    url: t['url'] as String,
+                    retrieved: t['retrieved'] as String,
+                    file: '$root/${t['file']}',
+                  );
+                }()
+              : null,
+          buildsOnDevice: a['buildsOnDevice'] == true,
+          free: a['free'] == true,
+          redistributable: a['redistributable'] == true,
+          status: CatalogStatus.fromJson(a['status'] as String? ?? 'available'),
+          statusReason: a['statusReason'] as String?,
+          state: StoreState.available,
+        ),
   ];
 }
 

@@ -1,14 +1,16 @@
 {
   "apps": [
     {
+      "box": [],
       "buildsOnDevice": false,
+      "cache": false,
       "category": "video",
       "conflicts": [],
       "dataPaths": [
         ".local/share/hinteros/firefox/crunchyroll"
       ],
       "depends": [],
-      "description": "Crunchyroll's website in its own full-screen Firefox profile, driven by the controller like a keyboard. Needs a Crunchyroll account; Firefox downloads the video DRM module itself on first play.",
+      "description": "Crunchyroll streams anime series and movies from Japan. Many new episodes come out soon after they show in Japan.",
       "free": true,
       "homepage": "https://www.crunchyroll.com",
       "icon": {
@@ -16,28 +18,30 @@
         "siteUrl": "https://www.crunchyroll.com"
       },
       "id": "crunchyroll",
-      "installer": true,
-      "installerDefault": false,
-      "kind": "web",
+      "kind": "app",
       "name": "Crunchyroll",
-      "onIso": true,
+      "needsServices": [],
+      "onIso": false,
       "redistributable": true,
-      "requires": [],
       "sizeMiB": 1,
+      "starter": null,
       "status": "available",
       "statusReason": null,
-      "summary": "Anime streaming, in a full-screen browser profile.",
-      "terms": null
+      "summary": "Anime series and movies.",
+      "terms": null,
+      "type": "web"
     },
     {
+      "box": [],
       "buildsOnDevice": false,
+      "cache": false,
       "category": "utilities",
       "conflicts": [],
       "dataPaths": [
         ".local/share/hinteros/firefox/firefox"
       ],
       "depends": [],
-      "description": "Firefox in full screen, with its own profile. Use a keyboard and mouse, or the controller as a pointer, to browse the web.",
+      "description": "Firefox is a free, open-source web browser from Mozilla. It has tabs, bookmarks and add-ons.",
       "free": true,
       "homepage": "https://www.mozilla.org/firefox/",
       "icon": {
@@ -45,21 +49,23 @@
         "siteUrl": "https://www.mozilla.org"
       },
       "id": "firefox",
-      "installer": true,
-      "installerDefault": true,
-      "kind": "web",
+      "kind": "app",
       "name": "Firefox",
+      "needsServices": [],
       "onIso": true,
       "redistributable": true,
-      "requires": [],
       "sizeMiB": 1,
+      "starter": "ticked",
       "status": "available",
       "statusReason": null,
-      "summary": "Browse the web on the TV, with a controller or keyboard.",
-      "terms": null
+      "summary": "A web browser.",
+      "terms": null,
+      "type": "web"
     },
     {
+      "box": [],
       "buildsOnDevice": false,
+      "cache": false,
       "category": "video",
       "conflicts": [],
       "dataPaths": [
@@ -71,7 +77,7 @@
         ".cache/Jellyfin Media Player"
       ],
       "depends": [],
-      "description": "The Jellyfin desktop client in its TV mode. Connect to a Jellyfin server on your network (or this box's own, from the Server section).",
+      "description": "Jellyfin plays the movies, series and music on a Jellyfin media server. The server can be on your home network or on this box.",
       "free": true,
       "homepage": "https://jellyfin.org",
       "icon": {
@@ -80,21 +86,52 @@
         "siteUrl": "https://jellyfin.org"
       },
       "id": "jellyfin",
-      "installer": true,
-      "installerDefault": false,
-      "kind": "native",
+      "kind": "app",
       "name": "Jellyfin",
+      "needsServices": [],
       "onIso": true,
       "redistributable": true,
-      "requires": [],
       "sizeMiB": 250,
+      "starter": "offered",
       "status": "available",
       "statusReason": null,
-      "summary": "Watch your Jellyfin server's movies and shows.",
-      "terms": null
+      "summary": "An app for your Jellyfin media server.",
+      "terms": null,
+      "type": "native"
     },
     {
+      "box": [],
       "buildsOnDevice": false,
+      "cache": false,
+      "category": "video",
+      "conflicts": [],
+      "dataPaths": [],
+      "depends": [],
+      "description": "Jellyfin Server keeps your movies, series and music in one library. Jellyfin apps on your home network play from this library.",
+      "free": true,
+      "homepage": "https://jellyfin.org",
+      "icon": {
+        "iconUrl": "https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/SVG/icon-transparent.svg",
+        "siteUrl": "https://jellyfin.org"
+      },
+      "id": "jellyfin-server",
+      "kind": "service",
+      "name": "Jellyfin server",
+      "needsServices": [],
+      "onIso": false,
+      "redistributable": true,
+      "sizeMiB": 600,
+      "starter": null,
+      "status": "available",
+      "statusReason": null,
+      "summary": "A media server for your movies, series and music.",
+      "terms": null,
+      "type": "service"
+    },
+    {
+      "box": [],
+      "buildsOnDevice": false,
+      "cache": false,
       "category": "games",
       "conflicts": [],
       "dataPaths": [
@@ -103,7 +140,7 @@
         ".local/share/Moonlight Game Streaming Project"
       ],
       "depends": [],
-      "description": "Moonlight plays games streamed from a PC running Sunshine or NVIDIA GameStream on your network, with your controller.",
+      "description": "Moonlight plays games that stream from a PC on your network. The PC runs Sunshine or NVIDIA GameStream.",
       "free": true,
       "homepage": "https://moonlight-stream.org",
       "icon": {
@@ -112,21 +149,23 @@
         "siteUrl": "https://moonlight-stream.org"
       },
       "id": "moonlight",
-      "installer": true,
-      "installerDefault": false,
-      "kind": "native",
+      "kind": "app",
       "name": "Moonlight",
+      "needsServices": [],
       "onIso": false,
       "redistributable": true,
-      "requires": [],
       "sizeMiB": 150,
+      "starter": null,
       "status": "available",
       "statusReason": null,
-      "summary": "Stream games from your gaming PC to the TV.",
-      "terms": null
+      "summary": "Game streaming from your PC.",
+      "terms": null,
+      "type": "native"
     },
     {
+      "box": [],
       "buildsOnDevice": true,
+      "cache": false,
       "category": "video",
       "conflicts": [],
       "dataPaths": [
@@ -139,7 +178,7 @@
         ".cache/Plex HTPC"
       ],
       "depends": [],
-      "description": "Plex HTPC, Plex's 10-foot client for the big screen. Sign in with your Plex account to watch your own or shared Plex servers. The app is downloaded from Plex and prepared on this box during install, which takes a few minutes.",
+      "description": "Plex HTPC is the Plex app for TV screens. It plays movies, series and music from your Plex Media Server and from servers that others share with you.",
       "free": false,
       "homepage": "https://www.plex.tv",
       "icon": {
@@ -148,27 +187,32 @@
         "siteUrl": "https://www.plex.tv"
       },
       "id": "plex-htpc",
-      "installer": true,
-      "installerDefault": false,
-      "kind": "native",
+      "kind": "app",
       "name": "Plex",
+      "needsServices": [],
       "onIso": false,
       "redistributable": false,
-      "requires": [],
       "sizeMiB": 300,
+      "starter": "offered",
       "status": "available",
       "statusReason": null,
-      "summary": "Watch your Plex libraries with Plex's TV interface.",
+      "summary": "An app for your Plex media server.",
       "terms": {
         "file": "terms/plex-htpc-2025-10-30.txt",
         "retrieved": "2026-10-06",
         "title": "Plex Terms of Service",
         "url": "https://www.plex.tv/about/privacy-legal/plex-terms-of-service/",
         "version": "2025-10-30"
-      }
+      },
+      "type": "native"
     },
     {
+      "box": [
+        "graphics32",
+        "steam-devices"
+      ],
       "buildsOnDevice": false,
+      "cache": true,
       "category": "games",
       "conflicts": [],
       "dataPaths": [
@@ -176,7 +220,7 @@
         ".steam"
       ],
       "depends": [],
-      "description": "Valve's game store and launcher. Your installed games appear in Games, and Steam's own Big Picture mode handles the store, downloads and settings. Each profile has its own Steam login and library.",
+      "description": "Steam is Valve's store and launcher for PC games. Big Picture mode shows the store, your games and settings on the TV.",
       "free": false,
       "homepage": "https://store.steampowered.com",
       "icon": {
@@ -185,36 +229,69 @@
         "siteUrl": "https://store.steampowered.com"
       },
       "id": "steam",
-      "installer": true,
-      "installerDefault": false,
-      "kind": "native",
+      "kind": "app",
       "name": "Steam",
+      "needsServices": [],
       "onIso": false,
       "redistributable": true,
-      "requires": [
-        "graphics32"
-      ],
       "sizeMiB": 1000,
+      "starter": "offered",
       "status": "available",
       "statusReason": null,
-      "summary": "Play your Steam library on the TV.",
+      "summary": "A game store and launcher.",
       "terms": {
         "file": "terms/steam-2026-09-10.txt",
         "retrieved": "2026-10-06",
         "title": "Steam Subscriber Agreement",
         "url": "https://store.steampowered.com/subscriber_agreement/",
         "version": "2026-09-10"
-      }
+      },
+      "type": "native"
     },
     {
+      "box": [],
       "buildsOnDevice": false,
+      "cache": false,
+      "category": "video",
+      "conflicts": [],
+      "dataPaths": [
+        ".config/VacuumTube",
+        ".cache/VacuumTube"
+      ],
+      "depends": [],
+      "description": "VacuumTube shows YouTube's TV interface in its own app. You can use a game controller to watch videos and browse channels.",
+      "free": true,
+      "homepage": "https://github.com/shy1132/VacuumTube",
+      "icon": {
+        "desktopId": "VacuumTube",
+        "iconUrl": "https://raw.githubusercontent.com/shy1132/VacuumTube/main/assets/icon.png",
+        "siteUrl": "https://github.com/shy1132/VacuumTube"
+      },
+      "id": "vacuum-tube",
+      "kind": "app",
+      "name": "VacuumTube",
+      "needsServices": [],
+      "onIso": false,
+      "redistributable": true,
+      "sizeMiB": 450,
+      "starter": "offered",
+      "status": "available",
+      "statusReason": null,
+      "summary": "An app for YouTube's TV interface.",
+      "terms": null,
+      "type": "native"
+    },
+    {
+      "box": [],
+      "buildsOnDevice": false,
+      "cache": false,
       "category": "video",
       "conflicts": [],
       "dataPaths": [
         ".local/share/hinteros/firefox/youtube"
       ],
       "depends": [],
-      "description": "YouTube's TV interface in its own full-screen Firefox profile, driven by the controller like a keyboard. Sign in with your Google account from the TV screen.",
+      "description": "YouTube has videos, music and live streams from creators all over the world. This app shows YouTube's TV interface.",
       "free": true,
       "homepage": "https://www.youtube.com",
       "icon": {
@@ -223,19 +300,19 @@
         "siteUrl": "https://www.youtube.com"
       },
       "id": "youtube",
-      "installer": true,
-      "installerDefault": true,
-      "kind": "web",
+      "kind": "app",
       "name": "YouTube",
+      "needsServices": [],
       "onIso": true,
       "redistributable": true,
-      "requires": [],
       "sizeMiB": 1,
+      "starter": "ticked",
       "status": "available",
       "statusReason": null,
-      "summary": "YouTube's TV interface, in a full-screen browser profile.",
-      "terms": null
+      "summary": "Videos, music and live streams.",
+      "terms": null,
+      "type": "web"
     }
   ],
-  "indexVersion": 2
+  "indexVersion": 3
 }

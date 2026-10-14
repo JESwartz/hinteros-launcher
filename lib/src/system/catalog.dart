@@ -1,4 +1,4 @@
-/// The catalog index (format 2, `hinteros-catalog` `schema/index.schema.json`),
+/// The catalog index (`hinteros-catalog` `schema/index.schema.json`),
 /// shared by the installer and the Store. One model ([StoreApp]), one parser.
 library;
 
@@ -11,8 +11,10 @@ import 'models.dart';
 /// vendor terms are installed next to it, under `terms/`.
 const catalogIndexPath = '/run/current-system/sw/share/hinteros/catalog.json';
 
-/// The index version this parser reads.
-const catalogIndexVersion = 2;
+/// The index versions this parser reads: 3 (catalog format 3: `type`,
+/// `starter`) and 2 (`kind`, `installer`, `installerDefault`), the one of
+/// older systems.
+const catalogIndexVersions = {2, 3};
 
 /// Reads a terms file named by an index entry (`terms/<id>-<version>.txt`,
 /// relative to the index). Null when it is missing or unreadable.
@@ -49,7 +51,7 @@ List<StoreApp> parseCatalogIndex(
 }) {
   final j = jsonDecode(source);
   if (j is! Map ||
-      j['indexVersion'] != catalogIndexVersion ||
+      !catalogIndexVersions.contains(j['indexVersion']) ||
       j['apps'] is! List) {
     throw const FormatException('unknown catalog index');
   }
@@ -80,6 +82,8 @@ StoreApp? _parseApp(Map<String, Object?> a, TermsReader readTerms) {
   if (id == null || name == null) return null;
   final status = a['status'];
   if (status != 'available') return null;
+  // Services (index 3, `kind: service`) are not apps of a profile.
+  if (a['kind'] == 'service') return null;
 
   VendorTerms? terms;
   final t = a['terms'];
@@ -112,13 +116,15 @@ StoreApp? _parseApp(Map<String, Object?> a, TermsReader readTerms) {
     category: StoreCategory.parse(_str(a['category'])),
     sizeMiB: size is num ? size.toInt() : 0,
     homepage: _str(a['homepage']) ?? '',
-    isWeb: a['kind'] == 'web',
+    // Index 3 has `type` (web/native/service); index 2 had `kind`.
+    isWeb: (a['type'] ?? a['kind']) == 'web',
     depends: _strs(a['depends']),
     conflicts: _strs(a['conflicts']),
     terms: terms,
     free: a['free'] == true,
-    installer: a['installer'] == true,
-    installerDefault: a['installerDefault'] == true,
+    // Index 3: `starter` offered/ticked; index 2: installer/installerDefault.
+    installer: a['starter'] != null || a['installer'] == true,
+    installerDefault: a['starter'] == 'ticked' || a['installerDefault'] == true,
     onIso: a['onIso'] == true,
     buildsOnDevice: a['buildsOnDevice'] == true,
     dataPaths: dataPaths,
