@@ -26,9 +26,14 @@ void main() {
     FakeInstallerBackend? backend,
     LauncherSettings settings = const LauncherSettings(),
     bool settle = true,
+    DateTime Function()? clock,
     required Future<void> Function(InstallerHarness h) setup,
   }) async {
-    final h = InstallerHarness(backend: backend, settings: settings);
+    final h = InstallerHarness(
+      backend: backend,
+      settings: settings,
+      clock: clock,
+    );
     await h.pump(t);
     await h.flow.refreshNetwork();
     await h.flow.loadCatalog();
@@ -237,6 +242,7 @@ void main() {
       t,
       'progress',
       backend: b,
+      settle: false,
       setup: (h) async {
         await filled(h, t);
         await h.choose(t, 'actions', 1);
@@ -388,5 +394,38 @@ void main() {
         await h.choose(t, 'actions', 1);
       },
     );
+  });
+
+  testWidgets('progress, a newer HinterOS builds', (t) async {
+    var now = InstallerHarness.fixedNow;
+    await shot(
+      t,
+      'progress_build',
+      // Slow lines: the minutes count up between them.
+      backend: FakeInstallerBackend(
+        state: wired,
+        newer: mockNewer(),
+        delay: const Duration(seconds: 40),
+      )..newerInstallScript = FakeScript.newerOk('0.7.1'),
+      clock: () => now,
+      settle: false,
+      setup: (h) async {
+        await toVersion(h, t);
+        await h.choose(t, 'newer');
+        await filled(h, t);
+        await h.choose(t, 'actions', 1);
+        for (var i = 0; i < 900 && h.flow.buildIndex != 3; i++) {
+          await t.pump(const Duration(seconds: 1));
+        }
+        now = now.add(const Duration(minutes: 6));
+        // The build line counts up by itself; a fixed spinner frame.
+        await t.pump(const Duration(seconds: 15));
+        expect(
+          find.text('Building hinteros-launcher (3 of 12, 6 min)'),
+          findsOneWidget,
+        );
+      },
+    );
+    await t.pump(const Duration(minutes: 15));
   });
 }

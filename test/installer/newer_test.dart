@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/installer/backend.dart';
 import 'package:hinteros_launcher/src/installer/fake_backend.dart';
@@ -32,9 +33,10 @@ void main() {
   /// From Welcome, through the internet step's Continue.
   Future<InstallerHarness> pastNetwork(
     WidgetTester t,
-    FakeInstallerBackend backend,
-  ) async {
-    final h = InstallerHarness(backend: backend);
+    FakeInstallerBackend backend, {
+    DateTime Function()? clock,
+  }) async {
+    final h = InstallerHarness(backend: backend, clock: clock);
     await h.start(t);
     await h.choose(t, 'actions', 1);
     return h;
@@ -385,7 +387,7 @@ void main() {
       await t.pump(const Duration(milliseconds: 10));
     }
     expect(
-      find.textContaining('Step 2 of 8 · Downloading HinterOS'),
+      find.textContaining('Step 2 of 10 · Downloading HinterOS'),
       findsOneWidget,
     );
     expect(h.flow.stepPercent, isNull, reason: 'an indeterminate bar');
@@ -395,6 +397,75 @@ void main() {
     await t.pumpAndSettle();
     expect(h.flow.step, InstallerStep.done);
     expect(find.text('$newerLabel is installed'), findsOneWidget);
+  });
+
+  testWidgets('the newer HinterOS builds: package name, count, minutes', (
+    t,
+  ) async {
+    var now = DateTime.utc(2026, 10, 14, 12);
+    final b = FakeInstallerBackend(
+      state: wired,
+      newer: mockNewer(),
+      // Slow lines: the minutes count up between them.
+      delay: const Duration(seconds: 40),
+    )..newerInstallScript = FakeScript.newerOk('0.7.1');
+    final h = await pastNetwork(t, b, clock: () => now);
+    await h.choose(t, 'newer');
+    await fill(h, t);
+    await h.eraseAndInstall(t);
+    String? line() {
+      final f = find.byKey(const ValueKey('build-line'));
+      return f.evaluate().isEmpty ? null : t.widget<Text>(f).data;
+    }
+
+    for (var i = 0; i < 600 && h.flow.progressStage != 'packages'; i++) {
+      await t.pump(const Duration(seconds: 1));
+    }
+    expect(find.text('Downloading packages'), findsOneWidget);
+    expect(find.text('Copying packages'), findsNothing);
+    expect(line(), isNull, reason: 'not building yet');
+
+    for (var i = 0; i < 600 && h.flow.buildName == null; i++) {
+      await t.pump(const Duration(seconds: 1));
+    }
+    expect(
+      find.textContaining('Step 7 of 10 · Building HinterOS'),
+      findsOneWidget,
+    );
+    expect(line(), 'Building hinteros-daemon (1 of 12)');
+    // The same package again: its start time stays.
+    now = now.add(const Duration(minutes: 2));
+    for (var i = 0; i < 60 && h.flow.percent < 50; i++) {
+      await t.pump(const Duration(seconds: 1));
+    }
+    expect(h.flow.buildName, 'hinteros-daemon');
+    expect(line(), 'Building hinteros-daemon (1 of 12, 2 min)');
+
+    // The next package starts its own count.
+    for (var i = 0; i < 60 && h.flow.buildIndex == 1; i++) {
+      await t.pump(const Duration(seconds: 1));
+    }
+    expect(line(), 'Building hinteros-launcher (3 of 12)');
+    // Under a minute: no minutes. Then the line counts up by itself.
+    now = now.add(const Duration(seconds: 50));
+    await t.pump(const Duration(seconds: 15));
+    expect(line(), 'Building hinteros-launcher (3 of 12)');
+    now = now.add(const Duration(minutes: 6));
+    await t.pump(const Duration(seconds: 15));
+    expect(line(), 'Building hinteros-launcher (3 of 12, 6 min)');
+
+    // Nothing is building: the backend's words again.
+    for (var i = 0; i < 60 && h.flow.buildName != null; i++) {
+      await t.pump(const Duration(seconds: 1));
+    }
+    expect(line(), isNull);
+    expect(find.text('12 of 12 built'), findsOneWidget);
+    for (var i = 0; i < 600 && h.flow.running; i++) {
+      await t.pump(const Duration(seconds: 1));
+    }
+    await t.pumpAndSettle();
+    expect(h.flow.step, InstallerStep.done);
+    expect(h.flow.buildSince, isNull);
   });
 
   group('wire formats', () {

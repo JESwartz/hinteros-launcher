@@ -73,7 +73,11 @@ class InstallerFlow extends ChangeNotifier {
     this.connectTimeout = const Duration(seconds: 30),
     this.plugGrace = const Duration(seconds: 5),
     this.probeRetries = 3,
-  });
+    DateTime Function()? clock,
+  }) : clock = clock ?? DateTime.now;
+
+  /// The time now (tests fix it): how long a package has been building.
+  final DateTime Function() clock;
 
   /// How long a network check or Wi-Fi scan may take before it is given up.
   final Duration checkTimeout;
@@ -732,6 +736,42 @@ class InstallerFlow extends ChangeNotifier {
     return _appsBegun ? 'Finishing the apps' : 'Preparing the apps';
   }
 
+  /// The package the `build` stage is building now (null when nothing is
+  /// building, or in another stage), its 1-based position and the count.
+  String? buildName;
+  int? buildIndex;
+  int? buildTotal;
+
+  /// When [buildName] was first seen.
+  DateTime? buildSince;
+
+  void _noteBuild(InstallEvent e) {
+    final name = e.phase == InstallSection.system && e.stage == 'build'
+        ? e.build
+        : null;
+    if (name != buildName) buildSince = name == null ? null : clock();
+    buildName = name;
+    buildIndex = name == null ? null : e.buildIndex;
+    buildTotal = name == null ? null : e.buildTotal;
+  }
+
+  /// "Building hinteros-launcher (3 of 12, 6 min)": the package being built,
+  /// with the whole minutes since it started (left out under 1 minute); null
+  /// when nothing is building.
+  String? get buildLine {
+    final name = buildName;
+    if (name == null) return null;
+    final since = buildSince;
+    final minutes = since == null ? 0 : clock().difference(since).inMinutes;
+    final i = buildIndex;
+    final n = buildTotal;
+    final parts = [
+      if (i != null && n != null) '$i of $n',
+      if (minutes >= 1) '$minutes min',
+    ];
+    return 'Building $name${parts.isEmpty ? '' : ' (${parts.join(', ')})'}';
+  }
+
   /// Names of the apps that could not be installed.
   List<String> get failedAppNames => [
     for (final id in _failedIds) _appName(id),
@@ -816,12 +856,17 @@ class InstallerFlow extends ChangeNotifier {
     _currentAppIndex = null;
     _currentAppTotal = null;
     _appsBegun = false;
+    buildName = null;
+    buildIndex = null;
+    buildTotal = null;
+    buildSince = null;
     phase = InstallPhase.validating;
     notifyListeners();
 
     void onEvent(InstallEvent e) {
       _noteApps(e);
       _noteStep(e);
+      _noteBuild(e);
       progressStage = e.stage;
       percent = e.percent;
       progressMessage = e.message;
@@ -874,6 +919,10 @@ class InstallerFlow extends ChangeNotifier {
   /// The stages of the current run, in order.
   List<String> get stages =>
       runRev != null ? newerInstallStages : installStages;
+
+  /// [stage] in plain words for the current run (a newer HinterOS downloads
+  /// its packages; the installer's own copies them from the USB stick).
+  String stageName(String stage) => stageLabel(stage, download: runRev != null);
 
   /// The last run with a newer HinterOS was refused or failed.
   bool get newerFailed =>

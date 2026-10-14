@@ -23,9 +23,13 @@ class InstallerHarness {
     this.padStream,
     this.driver,
     this.keyboard,
+    DateTime Function()? clock,
   }) : backend = backend ?? FakeInstallerBackend() {
-    flow = InstallerFlow(this.backend);
+    // A fixed clock unless the test moves it: the build minutes stay put.
+    flow = InstallerFlow(this.backend, clock: clock ?? () => fixedNow);
   }
+
+  static final fixedNow = DateTime.utc(2026, 10, 14, 12);
 
   final FakeInstallerBackend backend;
   final LauncherSettings settings;
@@ -63,10 +67,20 @@ class InstallerHarness {
   Future<void> press(WidgetTester t, NavAction a) async {
     if (driver != null) {
       await driver!(t, a);
-      await t.pumpAndSettle();
+      await settle(t);
       return;
     }
     _pad.add((a, NavPhase.press));
+    await settle(t);
+  }
+
+  /// Like `pumpAndSettle`, but a running install only gets a frame: its
+  /// spinner turns until the install ends, so it never settles.
+  Future<void> settle(WidgetTester t) async {
+    for (var i = 0; i < 100; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+      if (!t.binding.hasScheduledFrame || flow.running) return;
+    }
     await t.pumpAndSettle();
   }
 
@@ -78,7 +92,7 @@ class InstallerHarness {
     await t.pump();
     await pumpFor(t, d);
     _pad.add((NavAction.accept, NavPhase.release));
-    await t.pumpAndSettle();
+    await settle(t);
   }
 
   /// On the summary: A held on "Erase and install" until it runs.

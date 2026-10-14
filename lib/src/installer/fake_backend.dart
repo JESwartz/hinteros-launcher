@@ -30,6 +30,55 @@ class FakeScript {
     code: code,
   );
 
+  /// A `build` line; [name] null: nothing is being built right now.
+  static InstallEvent _b(
+    int percent,
+    String message,
+    int step, [
+    String? name,
+    int? index,
+  ]) => InstallEvent(
+    stage: 'build',
+    percent: percent,
+    level: InstallLevel.info,
+    message: message,
+    stepPercent: step,
+    build: name,
+    buildIndex: index,
+    buildTotal: 12,
+  );
+
+  /// The system stages: the packages (copied from the USB stick with
+  /// [copy], else downloaded), the build until [until] percent, then the
+  /// boot loader.
+  static List<InstallEvent> _system({bool copy = false, int until = 100}) => [
+    if (copy) _e('packages', 31, 'Copying flake inputs to the new system'),
+    _e('packages', 32, 'Getting the package list'),
+    _e('packages', 36, '120 of 480 packages', InstallLevel.info, null, 25),
+    _e('packages', 40, '480 of 480 packages', InstallLevel.info, null, 100),
+    _b(42, 'Building hinteros-daemon (1 of 12)', 0, 'hinteros-daemon', 1),
+    _b(50, 'Building hinteros-daemon (1 of 12)', 8, 'hinteros-daemon', 1),
+    if (until > 50) ...[
+      _b(
+        57,
+        'Building hinteros-launcher (3 of 12)',
+        17,
+        'hinteros-launcher',
+        3,
+      ),
+      _b(80, '12 of 12 built', 100),
+      _e('bootloader', 85, 'Installing the boot loader'),
+      _e(
+        'bootloader',
+        90,
+        'System installed, boot loader written',
+        InstallLevel.info,
+        null,
+        100,
+      ),
+    ],
+  ];
+
   /// `--validate-only` that accepts the plan.
   static final validateOk = FakeScript([
     _e('validate', 0, 'Checking the plan'),
@@ -54,24 +103,7 @@ class FakeScript {
     ),
     _e('config', 28, 'Writing the device configuration'),
     _e('config', 30, 'Device configuration written to /etc/hinteros'),
-    _e('install', 32, 'Copying flake inputs to the new system'),
-    _e('install', 36, 'Building and installing the system'),
-    _e(
-      'install',
-      57,
-      'Installing: 57 of 100 steps',
-      InstallLevel.info,
-      null,
-      62,
-    ),
-    _e(
-      'install',
-      90,
-      'System installed, boot loader written',
-      InstallLevel.info,
-      null,
-      100,
-    ),
+    ..._system(copy: true),
     _e('snapshot', 92, 'Checking the config snapshot'),
     _e('snapshot', 95, '/etc/hinteros matches the installed generation'),
     _e('finalize', 97, 'Flushing to disk'),
@@ -111,7 +143,7 @@ class FakeScript {
       sys('validate', 8, 'Plan accepted'),
       sys('partition', 20, 'Disk is partitioned and mounted'),
       sys('config', 30, 'Device configuration written'),
-      sys('install', 57, 'Installing the system', 62),
+      ..._system(),
       sys('snapshot', 90, 'Checking the config snapshot'),
       sys('finalize', 97, 'System installed'),
       for (var i = 0; i < n; i++) ...[
@@ -151,8 +183,8 @@ class FakeScript {
     _e('validate', 0, 'Checking the plan'),
     _e('validate', 8, 'Plan accepted'),
     _e('partition', 20, 'Disk is partitioned and mounted'),
-    _e('install', percent, 'Installing', InstallLevel.info),
-    _e('install', percent, message, InstallLevel.error, code),
+    ..._system(until: 50),
+    _e('build', percent, message, InstallLevel.error, code),
   ], 1);
 
   /// A whole install of a newer HinterOS: validate, then `fetch` (no
@@ -165,7 +197,7 @@ class FakeScript {
     _e('fetch', 9, 'HinterOS $version is downloaded'),
     _e('partition', 20, 'Disk is partitioned and mounted'),
     _e('config', 30, 'Device configuration written'),
-    _e('install', 57, 'Installing the system', InstallLevel.info, null, 62),
+    ..._system(),
     _e('snapshot', 90, 'Checking the config snapshot'),
     _e('finalize', 97, 'System installed'),
     _e('done', 100, 'HinterOS $version is installed.'),

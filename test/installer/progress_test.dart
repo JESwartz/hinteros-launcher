@@ -14,7 +14,7 @@ InstallRun run(List<String> lines, int exit) => InstallRun(
 
 void main() {
   group('progress lines', () {
-    test('a normal line', () {
+    test('a line of an older backend: stage install', () {
       final e = parseProgressLine(
         '{"stage":"install","percent":57,"level":"info","message":"Installing: 5 of 9 steps"}',
       )!;
@@ -46,6 +46,40 @@ void main() {
       )!;
       expect(odd.stepPercent, 100);
       expect(odd.appIndex, isNull);
+    });
+
+    test('a build line: package, position, count', () {
+      final e = parseProgressLine(
+        '{"phase":"system","stage":"build","percent":57,"level":"info",'
+        '"message":"Building hinteros-launcher (3 of 12)","step_percent":17,'
+        '"build":"hinteros-launcher","build_index":3,"build_total":12}',
+      )!;
+      expect(e.stage, 'build');
+      expect(e.stepPercent, 17);
+      expect(e.build, 'hinteros-launcher');
+      expect(e.buildIndex, 3);
+      expect(e.buildTotal, 12);
+      final none = parseProgressLine(
+        '{"phase":"system","stage":"build","percent":80,"level":"info",'
+        '"message":"12 of 12 built","step_percent":100,"build_total":12}',
+      )!;
+      expect(none.build, isNull, reason: 'nothing is building now');
+      expect(none.buildIndex, isNull);
+      expect(none.buildTotal, 12);
+      final odd = parseProgressLine(
+        '{"stage":"build","percent":50,"level":"info","message":"m",'
+        '"build":"","build_index":0,"build_total":"12"}',
+      )!;
+      expect(odd.build, isNull);
+      expect(odd.buildIndex, isNull);
+      expect(odd.buildTotal, isNull);
+      final packages = parseProgressLine(
+        '{"phase":"system","stage":"packages","percent":32,"level":"info",'
+        '"message":"Getting the package list"}',
+      )!;
+      expect(packages.stage, 'packages');
+      expect(packages.stepPercent, isNull);
+      expect(packages.build, isNull);
     });
 
     test('an error line has a code', () {
@@ -183,6 +217,41 @@ void main() {
         expect(stageLabel(s), isNot('Working'), reason: s);
       }
       expect(stageLabel('mystery'), 'Working');
+    });
+
+    test('the stages of both runs', () {
+      const system = ['packages', 'build', 'bootloader'];
+      expect(installStages, [
+        'validate',
+        'partition',
+        'facter',
+        'config',
+        ...system,
+        'snapshot',
+        'finalize',
+      ]);
+      expect(newerInstallStages, [
+        'validate',
+        'fetch',
+        'partition',
+        'facter',
+        'config',
+        ...system,
+        'snapshot',
+        'finalize',
+      ]);
+      for (final s in newerInstallStages) {
+        expect(stageLabel(s, download: true), isNot('Working'), reason: s);
+      }
+    });
+
+    test('the system stages in plain words', () {
+      expect(stageLabel('packages'), 'Copying packages');
+      expect(stageLabel('packages', download: true), 'Downloading packages');
+      expect(stageLabel('build'), 'Building HinterOS');
+      expect(stageLabel('build', download: true), 'Building HinterOS');
+      expect(stageLabel('bootloader'), 'Installing the boot loader');
+      expect(stageLabel('install'), 'Installing HinterOS', reason: 'older');
     });
 
     test('the backend codes are explained', () {

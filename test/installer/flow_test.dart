@@ -601,9 +601,18 @@ void main() {
         t.widget<Text>(find.byKey(const ValueKey('percent'))).data,
         '${h.flow.stepPercent}%',
       );
-      expect(h.flow.progressStage, 'install');
-      expect(find.textContaining('Step 5 of 7'), findsOneWidget);
-      expect(find.textContaining('Step 5 of 7'), findsOneWidget);
+      expect(h.flow.progressStage, 'build');
+      expect(
+        find.textContaining('Step 6 of 9 · Building HinterOS'),
+        findsOneWidget,
+      );
+      expect(find.text('Copying packages'), findsOneWidget);
+      expect(find.text('Installing the boot loader'), findsOneWidget);
+      expect(
+        t.widget<Text>(find.byKey(const ValueKey('build-line'))).data,
+        'Building hinteros-launcher (3 of 12)',
+      );
+      expect(find.byKey(const ValueKey('spinner')), findsOneWidget);
       expect(find.textContaining('general drivers'), findsOneWidget);
       await h.back(t);
       expect(
@@ -659,6 +668,11 @@ void main() {
       expect(h.flow.outcome!.exitCode, 1);
       expect(find.text('The install did not finish'), findsOneWidget);
       expect(find.textContaining('stopped before the end'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('spinner')),
+        findsNothing,
+        reason: 'nothing runs',
+      );
       expect(
         find.textContaining('Installing the system failed'),
         findsOneWidget,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../theme/hinter_theme.dart';
@@ -64,9 +66,9 @@ class InstallStepView extends StatelessWidget {
     } else if (current >= 0) {
       caption =
           'Step ${current + 1} of ${stages.length} · '
-          '${stageLabel(stages[current])}';
+          '${f.stageName(stages[current])}';
     } else {
-      caption = stageLabel(f.progressStage);
+      caption = f.stageName(f.progressStage);
     }
     p.add(
       _stepHeader(
@@ -89,7 +91,7 @@ class InstallStepView extends StatelessWidget {
                     CheckMark(checked: i < current, size: 32),
                     const SizedBox(width: HinterTokens.s2),
                     Text(
-                      stageLabel(stages[i]),
+                      f.stageName(stages[i]),
                       style: i == current
                           ? t.label.copyWith(color: t.accent)
                           : (i < current ? t.body : t.bodyDim),
@@ -106,7 +108,11 @@ class InstallStepView extends StatelessWidget {
         gap: HinterTokens.s2,
       );
     }
-    if (f.progressMessage.isNotEmpty) {
+    if (!inApps && f.buildLine != null) {
+      // Builds can take long with nothing new from the backend: the minutes
+      // go on by themselves.
+      p.add(_BuildLine(flow: f), gap: HinterTokens.s1);
+    } else if (f.progressMessage.isNotEmpty) {
       p.add(Text(f.progressMessage, style: t.caption), gap: HinterTokens.s1);
     }
     for (final w in f.warnings) {
@@ -125,7 +131,7 @@ class InstallStepView extends StatelessWidget {
         children: [
           Text('Installing HinterOS', style: t.title),
           const SizedBox(height: HinterTokens.s1),
-          Text(caption, key: key, style: t.label),
+          _SpinnerCaption(caption: caption, captionKey: key),
           const SizedBox(height: HinterTokens.s1),
           Row(
             children: [
@@ -200,6 +206,72 @@ class InstallStepView extends StatelessWidget {
         btn('Change my choices', f.leaveFailure),
     ], gap: HinterTokens.s4);
   }
+}
+
+/// The caption of the running install with a spinner on its left, as high as
+/// one line of the caption.
+class _SpinnerCaption extends StatelessWidget {
+  const _SpinnerCaption({required this.caption, required this.captionKey});
+
+  final String caption;
+  final Key captionKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = HinterTheme.of(context).label;
+    final line = TextPainter(
+      text: TextSpan(text: caption, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final size = line.preferredLineHeight;
+    line.dispose();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Spinner(size: size),
+        const SizedBox(width: HinterTokens.s1),
+        Expanded(
+          child: Text(caption, key: captionKey, style: style),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Building hinteros-launcher (3 of 12, 6 min)", built again every 15
+/// seconds so the minutes count up while the backend says nothing new.
+class _BuildLine extends StatefulWidget {
+  const _BuildLine({required this.flow});
+
+  final InstallerFlow flow;
+
+  @override
+  State<_BuildLine> createState() => _BuildLineState();
+}
+
+class _BuildLineState extends State<_BuildLine> {
+  late final Timer _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 15), (_) => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _tick.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Text(
+    widget.flow.buildLine ?? '',
+    key: const ValueKey('build-line'),
+    style: HinterTheme.of(context).caption,
+  );
 }
 
 /// The last screen: remove the stick, restart.

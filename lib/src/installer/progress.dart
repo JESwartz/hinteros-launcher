@@ -1,7 +1,8 @@
 /// What `hinteros-install` prints on stdout: one JSON object per line,
 /// `{stage, percent, level, message, code?}` plus, all optional: `phase`
 /// (`system`|`apps`), `step_percent` (0..100 of the current stage or app
-/// alone; absent = unmeasurable), `app`, `app_index`, `app_total`; and what its exit status means
+/// alone; absent = unmeasurable), `app`, `app_index`, `app_total`, `build`,
+/// `build_index`, `build_total`; and what its exit status means
 /// (0 done, 2 refused before anything was touched, 1 failed part-way).
 library;
 
@@ -32,6 +33,9 @@ class InstallEvent {
     this.failedApps = const [],
     this.rev,
     this.version,
+    this.build,
+    this.buildIndex,
+    this.buildTotal,
   });
 
   final String stage;
@@ -64,6 +68,12 @@ class InstallEvent {
   /// installed (the installer's own or a newer one).
   final String? rev;
   final String? version;
+
+  /// On `build` lines: the package being built now (absent when nothing is
+  /// being built), its 1-based position and how many there are.
+  final String? build;
+  final int? buildIndex;
+  final int? buildTotal;
 
   bool get isError => level == InstallLevel.error;
   bool get isWarning => level == InstallLevel.warn;
@@ -104,6 +114,9 @@ InstallEvent? parseProgressLine(String line) {
   final sp = whole(j['step_percent']);
   final ai = whole(j['app_index']);
   final at = whole(j['app_total']);
+  final build = j['build'];
+  final bi = whole(j['build_index']);
+  final bt = whole(j['build_total']);
   return InstallEvent(
     phase: j['phase'] == 'apps' ? InstallSection.apps : InstallSection.system,
     app: app is String && app.isNotEmpty ? app : null,
@@ -113,6 +126,9 @@ InstallEvent? parseProgressLine(String line) {
     failedApps: failed is List ? failed.whereType<String>().toList() : const [],
     rev: rev is String && rev.isNotEmpty ? rev : null,
     version: version is String && version.isNotEmpty ? version : null,
+    build: build is String && build.isNotEmpty ? build : null,
+    buildIndex: bi != null && bi > 0 ? bi : null,
+    buildTotal: bt != null && bt > 0 ? bt : null,
     stage: stage,
     percent: percent,
     level: level,
@@ -150,7 +166,10 @@ const _stageLabels = {
   'partition': 'Erasing and preparing the disk',
   'facter': 'Checking the hardware',
   'config': 'Writing the settings',
+  // Older backends: the packages, the build and the boot loader in one.
   'install': 'Installing HinterOS',
+  'build': 'Building HinterOS',
+  'bootloader': 'Installing the boot loader',
   'snapshot': 'Checking the result',
   'finalize': 'Finishing',
   'done': 'Done',
@@ -162,7 +181,9 @@ const installStages = [
   'partition',
   'facter',
   'config',
-  'install',
+  'packages',
+  'build',
+  'bootloader',
   'snapshot',
   'finalize',
 ];
@@ -175,12 +196,18 @@ const newerInstallStages = [
   'partition',
   'facter',
   'config',
-  'install',
+  'packages',
+  'build',
+  'bootloader',
   'snapshot',
   'finalize',
 ];
 
-String stageLabel(String stage) => _stageLabels[stage] ?? 'Working';
+/// [stage] in plain words. [download]: the packages come from the internet
+/// (a newer HinterOS), not from the USB stick.
+String stageLabel(String stage, {bool download = false}) => stage == 'packages'
+    ? (download ? 'Downloading packages' : 'Copying packages')
+    : _stageLabels[stage] ?? 'Working';
 
 /// A plain explanation for a backend error or warning code, with what to do
 /// about it. Unknown codes get a general sentence (the backend's own message
