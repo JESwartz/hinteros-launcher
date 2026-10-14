@@ -196,6 +196,13 @@ class InstallStepView extends StatelessWidget {
       Text('Full log: $installLogPath', style: t.caption),
       gap: HinterTokens.s2,
     );
+    // Another disk is at the chosen path: the same plan cannot work.
+    if (f.diskChanged) {
+      p.buttons('actions', [
+        btn('Select the disk', f.chooseDiskAgain, primary: true),
+      ], gap: HinterTokens.s4);
+      return;
+    }
     p.buttons('actions', [
       btn('Try again', f.startInstall, primary: true),
       // A newer HinterOS that did not install: choose the version again

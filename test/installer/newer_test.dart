@@ -472,6 +472,7 @@ void main() {
     test('plan.rev is sent only when set', () {
       const plan = InstallPlan(
         disk: '/dev/sda',
+        diskSeq: 1,
         hostname: 'h',
         adminUser: 'u',
         adminPassword: 'p',
@@ -479,6 +480,7 @@ void main() {
       expect(plan.toJson().containsKey('rev'), isFalse);
       const withRev = InstallPlan(
         disk: '/dev/sda',
+        diskSeq: 1,
         hostname: 'h',
         adminUser: 'u',
         adminPassword: 'p',

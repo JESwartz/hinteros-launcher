@@ -214,11 +214,15 @@ String stageLabel(String stage, {bool download = false}) => stage == 'packages'
 /// is shown as well).
 String explainCode(String? code) => switch (code) {
   'not-root' => 'The installer does not have the rights it needs.',
-  'plan-unreadable' || 'plan-invalid' || 'unknown-field' =>
+  'plan-unreadable' ||
+  'plan-invalid' ||
+  'unknown-field' ||
+  'disk-seq-invalid' =>
     'The installer could not read your choices. This is an installer bug.',
   'disk-missing' || 'disk-not-found' =>
     'The disk you chose is not found. Make sure it is connected, then go '
         'back and choose a disk again.',
+  'disk-changed' => 'The disk changed. Select the disk again.',
   'disk-not-a-disk' =>
     'This is not a whole disk. Go back and choose another one.',
   'disk-in-use' =>

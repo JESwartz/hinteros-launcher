@@ -18,6 +18,7 @@ void main() {
       final nvme = byName['nvme0n1']!;
       expect(nvme.path, '/dev/nvme0n1');
       expect(nvme.sizeBytes, 512110190592);
+      expect(nvme.diskSeq, 1);
       expect(nvme.title, 'Example NVMe 512GB');
       expect(nvme.sizeLabel, '512 GB');
       expect(nvme.usable, isTrue);
@@ -38,17 +39,28 @@ void main() {
     test('old lsblk: sizes and flags as strings', () {
       final d = parseLsblk(
         '{"blockdevices":[{"name":"sda","path":"/dev/sda","size":"34359738368",'
-        '"model":null,"tran":"sata","type":"disk","rm":"0","mountpoints":[null]}]}',
+        '"model":null,"tran":"sata","type":"disk","rm":"0","mountpoints":[null],'
+        '"disk-seq":"7"}]}',
       ).single;
       expect(d.sizeBytes, 34359738368);
+      expect(d.diskSeq, 7);
       expect(d.removable, isFalse);
       expect(d.title, 'sda');
       expect(d.usable, isTrue);
     });
 
+    test('without a disk sequence number a disk cannot be chosen', () {
+      final d = parseLsblk(
+        '{"blockdevices":[{"name":"sda","path":"/dev/sda","size":34359738368,'
+        '"model":null,"tran":"sata","type":"disk","rm":false,"mountpoints":[null]}]}',
+      ).single;
+      expect(d.diskSeq, isNull);
+      expect(d.unusableReason, 'Cannot identify this disk.');
+    });
+
     test('exactly 16 GiB is enough, one byte less is not', () {
       DiskInfo disk(int size) =>
-          DiskInfo(path: '/dev/x', name: 'x', sizeBytes: size);
+          DiskInfo(path: '/dev/x', name: 'x', sizeBytes: size, diskSeq: 1);
       expect(disk(16 * 1024 * 1024 * 1024).usable, isTrue);
       expect(disk(16 * 1024 * 1024 * 1024 - 1).usable, isFalse);
     });
@@ -63,7 +75,7 @@ void main() {
         '--json',
         '-b',
         '-o',
-        'NAME,PATH,SIZE,MODEL,TRAN,TYPE,RM,MOUNTPOINTS',
+        'NAME,PATH,SIZE,MODEL,TRAN,TYPE,RM,MOUNTPOINTS,DISK-SEQ',
       ]);
     });
   });

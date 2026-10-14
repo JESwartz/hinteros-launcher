@@ -14,7 +14,7 @@ const lsblkArgs = [
   '--json',
   '-b',
   '-o',
-  'NAME,PATH,SIZE,MODEL,TRAN,TYPE,RM,MOUNTPOINTS',
+  'NAME,PATH,SIZE,MODEL,TRAN,TYPE,RM,MOUNTPOINTS,DISK-SEQ',
 ];
 
 bool _truthy(Object? v) => v == true || v == 1 || v == '1' || v == 'true';
@@ -64,11 +64,13 @@ List<DiskInfo> parseLsblk(String source) {
     _mounts(d, mounts);
     final model = d['model'];
     final tran = d['tran'];
+    final seq = _int(d['disk-seq']);
     disks.add(
       DiskInfo(
         path: path is String && path.startsWith('/dev/') ? path : '/dev/$name',
         name: name,
         sizeBytes: _int(d['size']),
+        diskSeq: seq > 0 ? seq : null,
         model: model is String ? model.trim() : null,
         transport: tran is String ? tran : null,
         removable: _truthy(d['rm']) || tran == 'usb',

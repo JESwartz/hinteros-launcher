@@ -146,6 +146,23 @@ void main() {
       expect(h.backend.calls, isNot(contains('install')));
     });
 
+    testWidgets('Look again: a disk plugged in again is not the chosen one', (
+      t,
+    ) async {
+      final h = await toDisk(t);
+      await h.choose(t, 'd0');
+      expect(h.flow.disk!.diskSeq, 1);
+      h.backend.replug('/dev/nvme0n1');
+      await h.choose(t, 'actions', 0); // Look again
+      expect(h.flow.disk, isNull, reason: 'same path, another disk');
+      expect(buttonEnabled(t, 'Continue'), isFalse);
+
+      // The SATA disk did not change: its choice stays.
+      await h.choose(t, 'd1');
+      await h.choose(t, 'actions', 0);
+      expect(h.flow.disk!.path, '/dev/sda');
+    });
+
     testWidgets('no usable disk: an error and no way on', (t) async {
       final h = InstallerHarness(
         backend: FakeInstallerBackend(disks: [mockDisks()[3], mockDisks()[2]]),
@@ -393,6 +410,7 @@ void main() {
       expect(find.textContaining('Erase Example NVMe'), findsOneWidget);
       expect(h.flow.buildPlan().toJson(), {
         'disk': '/dev/nvme0n1',
+        'diskSeq': 1,
         'hostname': 'hinteros',
         'admin': {'user': 'james', 'password': 'change-me-now'},
         'ssh': {'enable': false},
@@ -429,6 +447,7 @@ void main() {
       h.flow.apps!.accept(steam);
       expect(h.flow.buildPlan().toJson(), {
         'disk': '/dev/nvme0n1',
+        'diskSeq': 1,
         'hostname': 'tv-box',
         'admin': {'user': 'james', 'password': 'change-me-now'},
         'ssh': {'enable': true},
@@ -657,6 +676,46 @@ void main() {
       await h.accept(t);
       expect(h.flow.step, InstallerStep.done);
       expect(backend.calls.where((c) => c == 'validate').length, 2);
+    });
+
+    testWidgets('the disk changed after the plan was checked: choose it '
+        'again', (t) async {
+      final backend = FakeInstallerBackend();
+      // Unplugged and plugged in again between the check and the install:
+      // the same path, a new disk sequence number.
+      backend.beforeInstall = () {
+        backend.replug('/dev/nvme0n1');
+        backend.beforeInstall = null;
+      };
+      final h = await toSummary(t, backend: backend);
+      await h.eraseAndInstall(t);
+      expect(h.flow.phase, InstallPhase.refused);
+      expect(h.flow.outcome!.error!.code, 'disk-changed');
+      expect(backend.plans.last['diskSeq'], 1);
+      expect(find.text('The install did not start'), findsOneWidget);
+      expect(find.text('Nothing was changed on your disk.'), findsOneWidget);
+      expect(
+        find.text('The disk changed. Select the disk again.'),
+        findsOneWidget,
+      );
+      // The same plan cannot work: no "Try again".
+      expect(find.text('Try again'), findsNothing);
+      expect(h.focus, 'content/actions:0');
+
+      await h.accept(t); // Select the disk
+      expect(h.flow.step, InstallerStep.disk);
+      expect(h.flow.phase, InstallPhase.idle);
+      expect(h.flow.disk, isNull);
+      expect(buttonEnabled(t, 'Continue'), isFalse);
+      expect(h.flow.disks!.first.diskSeq, 6, reason: 'the list is read again');
+
+      // Chosen again, the plan carries the new number and installs.
+      await h.choose(t, 'd0');
+      h.flow.go(InstallerStep.summary);
+      await t.pumpAndSettle();
+      await h.eraseAndInstall(t);
+      expect(h.flow.step, InstallerStep.done);
+      expect(backend.plans.last['diskSeq'], 6);
     });
 
     testWidgets('exit 1: failed part-way; Change my choices', (t) async {

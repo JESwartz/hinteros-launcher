@@ -90,6 +90,7 @@ abstract final class PlanChecks {
 class InstallPlan {
   const InstallPlan({
     required this.disk,
+    required this.diskSeq,
     required this.hostname,
     required this.adminUser,
     required this.adminPassword,
@@ -105,6 +106,11 @@ class InstallPlan {
 
   /// Whole-disk device path (lsblk's PATH, `/dev/nvme0n1`).
   final String disk;
+
+  /// The disk sequence number of [disk] when it was listed
+  /// ([DiskInfo.diskSeq]). The backend refuses the plan (`disk-changed`)
+  /// when the disk at [disk] has another one: it was replaced.
+  final int diskSeq;
   final String hostname;
   final String adminUser;
   final String adminPassword;
@@ -129,6 +135,7 @@ class InstallPlan {
 
   Map<String, Object?> toJson() => {
     'disk': disk,
+    'diskSeq': diskSeq,
     'hostname': hostname,
     'admin': {'user': adminUser, 'password': adminPassword},
     'ssh': {'enable': ssh},
@@ -147,6 +154,6 @@ class InstallPlan {
 
   @override
   String toString() =>
-      'InstallPlan(disk: $disk, host: $hostname, admin: $adminUser, '
+      'InstallPlan(disk: $disk, diskSeq: $diskSeq, host: $hostname, admin: $adminUser, '
       'ssh: $ssh, channel: ${channel.name}, apps: $apps, acceptedTerms: $acceptedTerms, rev: $rev, password: <hidden>)';
 }
