@@ -6,6 +6,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/system/mock_system.dart';
 import 'package:hinteros_launcher/src/system/models.dart';
+import 'package:hinteros_launcher/src/ui/profiles/profile_ui.dart'
+    show rebootPinText;
 import 'package:hinteros_launcher/src/ui/settings_screen.dart';
 
 import '../support/harness.dart';
@@ -88,6 +90,22 @@ void main() {
       expect(h.services.mockJobs.started, isEmpty);
       await enterPin(t, '2468');
       expect(h.services.mockJobs.started.single.kind, JobKind.update);
+    });
+
+    testWidgets('Settings: ten wrong PINs, then a restart is needed', (
+      t,
+    ) async {
+      final h = await settingsPad(t);
+      for (var i = 0; i < 9; i++) {
+        await enterPin(t, '1357');
+        expect(find.text('Wrong PIN.'), findsOneWidget);
+      }
+      await enterPin(t, '1357');
+      expect(find.text(rebootPinText), findsOneWidget);
+      // The pad takes no more digits: the right PIN starts nothing.
+      await enterPin(t, '2468');
+      expect(find.text(rebootPinText), findsOneWidget);
+      expect(h.services.mockJobs.started, isEmpty);
     });
 
     testWidgets('Settings: Back on the pad does nothing', (t) async {

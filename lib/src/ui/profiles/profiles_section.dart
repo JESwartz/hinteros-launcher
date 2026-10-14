@@ -232,7 +232,9 @@ class _ProfilesSectionState extends State<ProfilesSection> {
       if (r != null) {
         await _message(
           'PIN not changed',
-          r.retryAt == null
+          r.rebootRequired
+              ? rebootPinText
+              : r.retryAt == null
               ? "Wrong current PIN. Nothing was changed."
               : 'Too many tries. ${retryText(r.retryAt!.difference(DateTime.now()))}',
         );

@@ -62,13 +62,20 @@ String? nameProblem(String name) {
 }
 
 /// What a refused PIN means for the person typing it: [retryAt] while the
-/// profile's backoff lock lasts ("Try again in 30 seconds").
+/// profile's backoff lock lasts ("Try again in 30 seconds"); [rebootRequired]
+/// when the admin profile's PIN is refused until the box restarts (10 wrong
+/// tries this boot, session API 0.17).
 @immutable
 class PinRefusal {
-  const PinRefusal({required this.kind, this.retryAt});
+  const PinRefusal({
+    required this.kind,
+    this.retryAt,
+    this.rebootRequired = false,
+  });
 
   final PinKind kind;
   final DateTime? retryAt;
+  final bool rebootRequired;
 
   /// From a [SystemErrorKind.pinRequired] exception; null for any other.
   static PinRefusal? of(Object e, {DateTime Function() now = DateTime.now}) {
@@ -81,6 +88,7 @@ class PinRefusal {
       retryAt: ms is int && ms > 0
           ? now().add(Duration(milliseconds: ms))
           : null,
+      rebootRequired: e.data['reboot_required'] == true,
     );
   }
 }
@@ -518,11 +526,14 @@ final class LoginNeedsPin extends LoginOutcome {
   const LoginNeedsPin();
 }
 
-/// The PIN did not match. [retryAt] while the backoff lock lasts.
+/// The PIN did not match. [retryAt] while the backoff lock lasts;
+/// [rebootRequired] when the admin profile's PIN is refused until the box
+/// restarts.
 final class LoginRefused extends LoginOutcome {
-  const LoginRefused({this.retryAt});
+  const LoginRefused({this.retryAt, this.rebootRequired = false});
 
   final DateTime? retryAt;
+  final bool rebootRequired;
 }
 
 /// The picker (`--greeter`): talks to the greeter-mode session daemon only.

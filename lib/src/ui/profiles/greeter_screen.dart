@@ -331,6 +331,7 @@ class _GreeterScreenState extends State<GreeterScreen> {
           final r = await widget.greeter.login(id, pin: pin);
           return switch (r) {
             LoginStarted() => const PinAccepted(),
+            LoginRefused(rebootRequired: true) => const PinRebootRequired(),
             LoginRefused(:final retryAt) =>
               retryAt == null ? const PinWrong() : PinLocked(retryAt),
             LoginNeedsPin() => const PinWrong(),
