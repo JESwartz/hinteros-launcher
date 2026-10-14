@@ -80,13 +80,12 @@ void main() {
   test('the launcher and the on-screen keyboard say hello at 0.8', () async {
     final c = client = DaemonClient(socketPath: sock);
     final hello = await c.waitConnected();
-    expect(hello.apiVersion, '0.13');
-    expect(apiVersion, '0.13');
+    expect(hello.apiVersion, apiVersion);
     final osk = DaemonOskBackend(
       DaemonClient(socketPath: sock, clientInfo: DaemonOskBackend.oskPeer),
     );
     addTearDown(osk.dispose);
-    expect((await osk.connection.waitConnected()).apiVersion, '0.13');
+    expect((await osk.connection.waitConnected()).apiVersion, apiVersion);
   }, skip: _skip());
 
   test('--no-runtime: every runtime method is unavailable, naming its service; '
