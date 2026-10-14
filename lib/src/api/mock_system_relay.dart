@@ -1,7 +1,8 @@
 /// The `system.*` side of [MockDaemon]: what the session daemon relays from the
 /// privileged system service in session API 0.6, with the service's rules
-/// (one mutating job at a time, `needs_acknowledgement` for downgrades,
-/// `state_conflict` for a stale revision or an unverified update rev,
+/// (one mutating job at a time, `needs_acknowledgement` for base downgrades,
+/// `state_conflict` for a stale revision or an unverified update or channel
+/// rev, `channel.check` before `channel.set` (session API 0.17),
 /// `authentication_required` for `ssh.set` to on, a 60 s cache for
 /// `update.check`) and fake jobs that step through their stages and send
 /// `job_started` / `job_progress` / `job_finished`.
@@ -27,7 +28,7 @@ const List<(String, String?)> mockBuilds = [
 
 /// Wire stages of each kind of job (system-api.md "Job model").
 List<Stage> mockStagesOf(JobKind kind) => switch (kind) {
-  JobKind.updateCheck => const [
+  JobKind.updateCheck || JobKind.channelCheck => const [
     Stage.preparing,
     Stage.fetching,
     Stage.verifying,
@@ -268,6 +269,26 @@ class MockSystemRelay {
   final _jobs = <String, _Job>{};
   int _n = 0;
   UpdateCheckResult? _lastCheck;
+  ChannelCheckResult? _lastChannelCheck;
+
+  /// What `channel.check` finds on each channel (session API 0.17); a
+  /// placeholder release when unset.
+  final Map<Channel, AvailableUpdate> channelTips = {};
+
+  static AvailableUpdate _defaultTip(Channel c) => AvailableUpdate(
+    rev: c == Channel.stable
+        ? '7e2d4f6a8b1c3e5d7f9a0b2c4d6e8f1a3b5c7d9e'
+        : '1a2b3c4d5e6f708192a3b4c59a8b7c6d5e4f3021',
+    date: 1791300000,
+    summary: c == Channel.stable ? 'HinterOS 0.7.0' : 'Beta',
+    signer: 'release@hinteros',
+    security: null,
+    commits: 1,
+    newApps: null,
+    removedApps: null,
+    version: '0.7.0',
+    securitySummary: null,
+  );
 
   Job? job(String id) => _jobs[id] == null ? null : _wire(_jobs[id]!);
 
@@ -536,8 +557,39 @@ class MockSystemRelay {
             ];
           },
         );
+      case 'system.channel.check':
+        _closed(p, const ['channel']);
+        final cc = SystemChannelCheckParams.fromJson(p);
+        if (cc.channel == Channel.unknown) {
+          throw const ApiException(ApiErrorCode.invalidParams, 'bad channel');
+        }
+        _mutating('channel.check');
+        if (cc.channel == channel) return const JobRef(jobId: null).toJson();
+        final to = cc.channel;
+        final tip = channelTips[to] ?? _defaultTip(to);
+        final id = _start(
+          JobKind.channelCheck,
+          subject: JobSubject(
+            channel: to,
+            fromChannel: channel,
+            fromRev: rev,
+            rev: tip.rev,
+            version: tip.version,
+          ),
+          onSuccess: () {
+            _lastChannelCheck = ChannelCheckResult(
+              channel: to,
+              currentRev: rev,
+              target: tip,
+              // Stable after beta goes back to an older version.
+              older: channel == Channel.beta && to == Channel.stable,
+              checkedAt: _nowSeconds(),
+            );
+          },
+        );
+        return JobRef(jobId: id).toJson();
       case 'system.channel.set':
-        _closed(p, const ['channel', 'acknowledge_downgrade', 'admin_pin']);
+        _closed(p, const ['channel', 'rev', 'admin_pin']);
         final c = SystemChannelSetParams.fromJson(p);
         if (c.channel == Channel.unknown) {
           throw const ApiException(ApiErrorCode.invalidParams, 'bad channel');
@@ -545,12 +597,15 @@ class MockSystemRelay {
         _mutating('channel.set');
         checkAdminPin?.call(c.adminPin);
         if (c.channel == channel) return const JobRef(jobId: null).toJson();
-        if (channel == Channel.beta &&
-            c.channel == Channel.stable &&
-            c.acknowledgeDowngrade != true) {
+        final checked = _lastChannelCheck;
+        if (checked == null ||
+            checked.channel != c.channel ||
+            checked.currentRev != rev ||
+            checked.target.rev != c.rev) {
           throw const ApiException(
-            ApiErrorCode.needsAcknowledgement,
-            'switching from beta to stable is a downgrade',
+            ApiErrorCode.stateConflict,
+            'rev is not the last verified channel check',
+            {'reason': 'channel_rev'},
           );
         }
         return _started(
@@ -558,10 +613,16 @@ class MockSystemRelay {
           subject: JobSubject(
             channel: c.channel,
             fromChannel: channel,
+            rev: checked.target.rev,
+            version: checked.target.version,
             fromRev: rev,
             fromVersion: version,
           ),
-          onSuccess: () => channel = c.channel,
+          onSuccess: () {
+            channel = c.channel;
+            rev = checked.target.rev;
+            _lastChannelCheck = null;
+          },
         );
       case 'system.base.set':
         _closed(p, const ['base', 'acknowledge_downgrade', 'admin_pin']);
@@ -1166,6 +1227,8 @@ class MockSystemRelay {
       j.stage = Stage.finishing;
       j.result = j.kind == JobKind.updateCheck
           ? _lastCheck?.toJson()
+          : j.kind == JobKind.channelCheck
+          ? _lastChannelCheck?.toJson()
           : j.kind == JobKind.storageMeasure
           ? _measured().toJson()
           : j.cleaned != null
@@ -1195,7 +1258,9 @@ class MockSystemRelay {
     final more = _moreAfterUpdate;
     if (j.kind == JobKind.appsInstall ||
         j.kind == JobKind.appsRemove ||
-        (ok && j.kind != JobKind.updateCheck) ||
+        (ok &&
+            j.kind != JobKind.updateCheck &&
+            j.kind != JobKind.channelCheck) ||
         more != _lastMore) {
       emit('store_changed', const {});
     }

@@ -220,7 +220,7 @@ void main() {
 
   group('Updates', () {
     testWidgets(
-      'a downgrade is confirmed, then retried with the acknowledgement',
+      'a channel switch: the verified version is confirmed, then switched to',
       (t) async {
         setView(t);
         final h = harness();
@@ -230,19 +230,57 @@ void main() {
         await enterSettingsEntry(t, 'updates');
         await press(t, [kDown, kEnter]); // channel
         await press(t, [kDown, kEnter]); // Stable
+        // The box checks stable first (a job, no PIN).
+        expect(h.mock.system.log.last, 'channel.check');
+        h.mock.system.finishJob(h.mock.system.runningJobId!);
+        await t.pumpAndSettle();
+        expect(find.text('Switch to Stable?'), findsOneWidget);
+        expect(find.text('HinterOS 0.7.0 stable, 2026-10-06.'), findsOneWidget);
+        expect(
+          find.text('This version is older than the version on this box.'),
+          findsOneWidget,
+        );
+        expect(h.mock.system.runningJobId, isNull);
+        await press(t, [kRight, kEnter]); // Switch
         expect(find.text("Type the admin profile's PIN."), findsOneWidget);
         await enterPin(t, '2468');
-        expect(find.text('Switch to Stable?'), findsOneWidget);
-        expect(h.mock.system.runningJobId, isNull);
-        await press(t, [kRight, kEnter]); // Switch anyway
         expect(h.mock.system.runningJobId, isNotNull);
-        expect(h.mock.system.log.sublist(h.mock.system.log.length - 2), [
-          'channel.set',
-          'channel.set',
-        ]);
+        expect(h.mock.system.log.last, 'channel.set');
         expect(find.textContaining('Switching from'), findsOneWidget);
       },
     );
+
+    testWidgets('a channel check that finds an older version: refused', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      h.mock.system.channel = api.Channel.beta;
+      await h.pump(t);
+      await endStartupCheck(t, h);
+      await enterSettingsEntry(t, 'updates');
+      await press(t, [kDown, kEnter]); // channel
+      await press(t, [kDown, kEnter]); // Stable
+      h.mock.system.finishJob(
+        h.mock.system.runningJobId!,
+        ok: false,
+        error: const api.ErrorObject(
+          code: api.ApiErrorCode.updateVerificationFailed,
+          message: 'the channel tip is older than a verified tip',
+          data: {'reason': 'older_than_seen'},
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('Switch to Stable?'), findsNothing);
+      expect(
+        find.text(
+          'This version is older than one this box already saw. '
+          'Try again later.',
+        ),
+        findsOneWidget,
+      );
+      expect(h.mock.system.log.last, 'channel.check');
+    });
 
     testWidgets('check, security update, apply, progress and session restart', (
       t,

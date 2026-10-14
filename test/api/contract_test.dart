@@ -104,7 +104,26 @@ Future<void> _prepareSystem(
     case ('system.update.apply', 'started'):
     case ('system.update.check', 'cached'):
       await checked();
-    case ('system.channel.set', 'to stable without acknowledgement'):
+    // 0.17: the examples describe a box on beta; channel.set takes the
+    // revision the last channel.check verified.
+    case ('system.channel.set', 'to stable'):
+      s.channel = Channel.beta;
+      s.channelTips[Channel.stable] = AvailableUpdate(
+        rev: '9a8b7c6d5e4f30211a2b3c4d5e6f708192a3b4c5',
+        date: 1791300000,
+        summary: 'HinterOS 0.7.0',
+        signer: 'release@hinteros',
+        security: null,
+        commits: 1,
+        newApps: null,
+        removedApps: null,
+        version: '0.7.0',
+        securitySummary: null,
+      );
+      final r = await mock.rpc('system.channel.check', {'channel': 'stable'});
+      s.finishJob(r['job_id'] as String);
+    case ('system.channel.set', _):
+    case ('system.channel.check', _):
       s.channel = Channel.beta;
     case ('system.jobs.get', 'failed rebuild'):
       await rebuilding();

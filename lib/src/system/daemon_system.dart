@@ -45,6 +45,7 @@ JobKind _jobKind(api.JobKind k) => switch (k) {
   api.JobKind.cleanupSystem => JobKind.cleanupSystem,
   api.JobKind.cleanupProfiles => JobKind.cleanupProfiles,
   api.JobKind.cleanupSet => JobKind.cleanupSet,
+  api.JobKind.channelCheck => JobKind.channelCheck,
   // The v1 -> v2 apps migration (queued by the service itself).
   api.JobKind.migrateApps => JobKind.rebuild,
   api.JobKind.unknown => JobKind.rebuild,
@@ -206,6 +207,11 @@ BuildProgress? _build(api.ProgressDetail? d) {
 
 DateTime? _unixOrNull(int? seconds) => seconds == null ? null : _unix(seconds);
 
+/// `update_verification_failed {reason: older_than_seen}` (session API 0.17):
+/// the server offers an older version than one this box already verified.
+const olderThanSeen =
+    'This version is older than one this box already saw. Try again later.';
+
 /// `job_finished.error` / `jobs.get`'s error as the progress page shows it.
 JobError _jobError(api.ErrorObject e) {
   final data = e.data is Map
@@ -230,6 +236,9 @@ JobError _jobError(api.ErrorObject e) {
     message: switch (kind) {
       SystemErrorKind.updateUnreachable =>
         "Can't reach the update server right now. Try again later.",
+      SystemErrorKind.updateVerificationFailed
+          when data['reason'] == 'older_than_seen' =>
+        olderThanSeen,
       SystemErrorKind.updateVerificationFailed =>
         'The update failed its safety check.',
       SystemErrorKind.needsAcknowledgement => 'This is a downgrade.',
@@ -734,19 +743,58 @@ class DaemonUpdates implements UpdatesRepository {
         )).jobId,
       );
 
+  static api.Channel _apiChannel(UpdateChannel c) =>
+      c == UpdateChannel.stable ? api.Channel.stable : api.Channel.beta;
+
+  @override
+  Future<ChannelTarget> checkChannel(UpdateChannel channel) =>
+      guardCall(() async {
+        await _connected();
+        final h = await _jobs.start(
+          JobKind.channelCheck,
+          () async => (await _conn.systemChannelCheck(
+            api.SystemChannelCheckParams(channel: _apiChannel(channel)),
+          )).jobId,
+          nothingToDo: 'This box already uses that channel.',
+        );
+        final done = await _jobs.finished(h.jobId);
+        if (!done.ok) {
+          throw SystemException(
+            done.error?.kind ?? SystemErrorKind.failed,
+            done.error?.message ?? 'The check did not finish.',
+          );
+        }
+        final map = done.result;
+        if (map == null) {
+          throw const SystemException(
+            SystemErrorKind.failed,
+            'The check gave no result.',
+          );
+        }
+        final r = api.ChannelCheckResult.fromJson(map);
+        final t = r.target;
+        return ChannelTarget(
+          channel: channel,
+          rev: t.rev,
+          version: releaseVersion(t.version) == null
+              ? _dateVersion(_unix(t.date))
+              : releaseName(t.version!, t.rev, channel),
+          date: _unix(t.date),
+          older: r.older,
+        );
+      });
+
   @override
   Future<JobHandle> setChannel(
     UpdateChannel channel, {
-    bool acknowledgeDowngrade = false,
+    required String rev,
     String? adminPin,
   }) => _jobs.start(
     JobKind.channel,
     () async => (await _conn.systemChannelSet(
       api.SystemChannelSetParams(
-        channel: channel == UpdateChannel.stable
-            ? api.Channel.stable
-            : api.Channel.beta,
-        acknowledgeDowngrade: acknowledgeDowngrade ? true : null,
+        channel: _apiChannel(channel),
+        rev: rev,
         adminPin: adminPin,
       ),
     )).jobId,

@@ -157,9 +157,12 @@ SystemException systemExceptionFrom(Object e) {
       case api.ApiErrorCode.stateConflict:
         return SystemException(
           SystemErrorKind.stateConflict,
-          data['reason'] == 'update_rev'
-              ? 'That is not the update that was checked. Check again.'
-              : 'The settings changed. Try again.',
+          switch (data['reason']) {
+            'update_rev' =>
+              'That is not the update that was checked. Check again.',
+            'channel_rev' => 'The channel changed. Try again.',
+            _ => 'The settings changed. Try again.',
+          },
           data: data,
         );
       case api.ApiErrorCode.updateUnreachable:

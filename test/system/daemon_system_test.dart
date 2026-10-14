@@ -636,16 +636,26 @@ void main() {
       expect(gens.last.rev, isNull);
     });
 
-    test('a downgrade needs the acknowledgement, then goes through', () async {
+    test('a channel switch takes the revision the check verified', () async {
       final (mock, s) = await _setup();
       mock.system.channel = api.Channel.beta;
+      // Nothing checked: refused.
       final e = await _fails(
-        s.updates.setChannel(UpdateChannel.stable, adminPin: _pin),
+        s.updates.setChannel(UpdateChannel.stable, rev: _rev, adminPin: _pin),
       );
-      expect(e.kind, SystemErrorKind.needsAcknowledgement);
+      expect(e.kind, SystemErrorKind.stateConflict);
+      expect(e.message, 'The channel changed. Try again.');
+      final check = s.updates.checkChannel(UpdateChannel.stable);
+      await pumpEventQueue();
+      mock.system.finishJob(mock.system.runningJobId!);
+      final target = await check;
+      expect(target.channel, UpdateChannel.stable);
+      expect(target.rev, '7e2d4f6a8b1c3e5d7f9a0b2c4d6e8f1a3b5c7d9e');
+      expect(target.version, '0.7.0 stable');
+      expect(target.older, isTrue);
       final h = await s.updates.setChannel(
         UpdateChannel.stable,
-        acknowledgeDowngrade: true,
+        rev: target.rev,
         adminPin: _pin,
       );
       expect(h.kind, JobKind.channel);
@@ -666,14 +676,33 @@ void main() {
       );
     });
 
+    test('a channel check that finds an older version than seen', () async {
+      final (mock, s) = await _setup();
+      mock.system.channel = api.Channel.beta;
+      final check = _fails(s.updates.checkChannel(UpdateChannel.stable));
+      await pumpEventQueue();
+      mock.system.finishJob(
+        mock.system.runningJobId!,
+        ok: false,
+        error: const api.ErrorObject(
+          code: api.ApiErrorCode.updateVerificationFailed,
+          message: 'the channel tip is older than a verified tip',
+          data: {'reason': 'older_than_seen'},
+        ),
+      );
+      final e = await check;
+      expect(e.kind, SystemErrorKind.updateVerificationFailed);
+      expect(e.message, olderThanSeen);
+    });
+
     test('same channel: nothing to do', () async {
       final (_, s) = await _setup();
-      expect(
-        (await _fails(
-          s.updates.setChannel(UpdateChannel.stable, adminPin: _pin),
-        )).kind,
-        SystemErrorKind.nothingToDo,
-      );
+      for (final f in [
+        s.updates.setChannel(UpdateChannel.stable, rev: _rev, adminPin: _pin),
+        s.updates.checkChannel(UpdateChannel.stable),
+      ]) {
+        expect((await _fails(f)).kind, SystemErrorKind.nothingToDo);
+      }
     });
 
     test('rollback to an unknown generation is not_found', () async {
@@ -762,8 +791,12 @@ void main() {
         mock.system.finishJob(u.jobId);
         final r = await s.updates.rollback(adminPin: _pin);
         mock.system.finishJob(r.jobId);
+        final checked = s.updates.checkChannel(UpdateChannel.beta);
+        await pumpEventQueue();
+        mock.system.finishJob(mock.system.runningJobId!);
         final c = await s.updates.setChannel(
           UpdateChannel.beta,
+          rev: (await checked).rev,
           adminPin: _pin,
         );
         mock.system.finishJob(c.jobId);
@@ -795,7 +828,7 @@ void main() {
         () => s.updates.apply(_rev, adminPin: '1357'),
         () => s.updates.rollback(),
         () => s.updates.rollback(adminPin: '1111'),
-        () => s.updates.setChannel(UpdateChannel.beta),
+        () => s.updates.setChannel(UpdateChannel.beta, rev: _rev),
         () => s.updates.setBase(NixBase.stable, adminPin: '0000'),
         () => s.system.redetectHardware(),
       ]) {

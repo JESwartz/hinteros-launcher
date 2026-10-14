@@ -82,6 +82,7 @@ class _UpdatesSectionState extends State<UpdatesSection> {
       'This update removes ${[for (final n in apps) n.reason == null || n.reason!.isEmpty ? n.name : '${n.name} (${n.reason})'].join(', ')}.';
 
   bool _checking = false;
+  bool _checkingChannel = false;
   String? _checkError;
   final _key = GlobalKey();
 
@@ -148,6 +149,51 @@ class _UpdatesSectionState extends State<UpdatesSection> {
         await showMessage(c, title: "That didn't work", body: e.message);
       }
     }
+  }
+
+  /// A channel switch (session API 0.17): the box verifies the target
+  /// channel first, the owner confirms that version, and the switch takes
+  /// exactly it (with the admin PIN).
+  Future<void> _switchChannel(UpdateChannel c) async {
+    final up = env.services.updates;
+    setState(() => _checkingChannel = true);
+    final ChannelTarget target;
+    try {
+      target = await up.checkChannel(c);
+    } on SystemException catch (e) {
+      if (mounted) {
+        setState(() => _checkingChannel = false);
+        await showMessage(context, title: "That didn't work", body: e.message);
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _checkingChannel = false);
+    final d = target.date;
+    final r = await showConfirm(
+      context,
+      title: 'Switch to ${c.label}?',
+      body:
+          'HinterOS ${target.version}, '
+          '${d.year}-${d.month.toString().padLeft(2, '0')}-'
+          '${d.day.toString().padLeft(2, '0')}.',
+      extra: [
+        if (target.older)
+          const StatusLine(
+            'This version is older than the version on this box.',
+            error: true,
+          ),
+      ],
+      confirmLabel: 'Switch',
+      danger: target.older,
+    );
+    if (r == null || !mounted) return;
+    await runAdminJob(
+      context,
+      env.services,
+      title: 'Switch to ${c.label}',
+      start: (pin) => up.setChannel(c, rev: target.rev, adminPin: pin),
+    );
   }
 
   /// What a rollback to [target] does to the profiles (M7): accounts the
@@ -334,16 +380,11 @@ class _UpdatesSectionState extends State<UpdatesSection> {
               ],
             );
             if (c == null || c == info.channel) return;
-            await _withAck(
-              'Switch to ${c.label}',
-              (ack, pin) =>
-                  up.setChannel(c, acknowledgeDowngrade: ack, adminPin: pin),
-              'Switch to ${c.label}?',
-            );
+            await _switchChannel(c);
             await reload();
           },
           builder: (f) => SettingRow(
-            title: 'Channel',
+            title: _checkingChannel ? 'Checking...' : 'Channel',
             focused: f,
             trailing: Text(info.channel?.label ?? 'None', style: t.bodyDim),
           ),

@@ -59,9 +59,12 @@ class _UnavailableUpdates implements UpdatesRepository {
   Future<JobHandle> rollback({int? generation, String? adminPin}) =>
       Future.error(_gone);
   @override
+  Future<ChannelTarget> checkChannel(UpdateChannel channel) =>
+      Future.error(_gone);
+  @override
   Future<JobHandle> setChannel(
     UpdateChannel channel, {
-    bool acknowledgeDowngrade = false,
+    required String rev,
     String? adminPin,
   }) => Future.error(_gone);
   @override

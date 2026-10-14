@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.16).
+// Source: schema/session-api.json (session API 0.17).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.16';
+const apiVersion = '0.17';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -38,6 +38,7 @@ const apiMethodNames = <String>[
   'system.rollback',
   'system.update.check',
   'system.update.apply',
+  'system.channel.check',
   'system.channel.set',
   'system.base.set',
   'system.apps.install',
@@ -248,19 +249,19 @@ abstract final class ApiErrorCode {
   /// Too many mutating requests from this user (10 per minute, burst 3).
   static const rateLimited = 3006;
 
-  /// Stale settings revision, or update.apply's rev is not the last verified check result.
+  /// Stale settings revision, update.apply's rev is not the last verified check result (update_rev), or (0.9) channel.set's rev is not the last verified channel.check result for that channel (channel_rev).
   static const stateConflict = 3007;
 
   /// The update server cannot be reached (the 'home lab unreachable' screen).
   static const updateUnreachable = 3008;
 
-  /// The channel tip is unsigned, signed by an unknown signer, or does not descend from the locked revision.
+  /// The channel tip is unsigned, signed by an unknown signer, does not descend from the locked revision (not_fast_forward), or (0.9) does not descend from the newest verified tip this box saw on that channel branch (older_than_seen: an older signed release served again).
   static const updateVerificationFailed = 3009;
 
   /// Unknown generation or job; for runtime settings: a Wi-Fi network not in range, a Bluetooth device, an audio output or a display mode that does not exist, or a bluetooth.confirm with nothing waiting; system.apps.install: an id not in the running generation's catalog; system.apps.remove: an id that is not installed; auth.respond, auth.cancel: no such authentication request (or it is over).
   static const notFound = 3010;
 
-  /// A downgrading channel or base switch without acknowledge_downgrade: true.
+  /// A downgrading base switch without acknowledge_downgrade: true. (Before 0.9 also channel.set; since 0.9 channel.set takes the rev the owner confirmed after channel.check instead.)
   static const needsAcknowledgement = 3011;
 
   /// polkit would allow the action only after interactive authentication (auth_admin: the admin password), and it did not happen: no authentication agent is registered for the caller (no session daemon agent, or another client than the session daemon called), or the user cancelled the prompt or did not answer in time.
@@ -1069,6 +1070,7 @@ enum JobKind {
   cleanupSystem('cleanup_system'),
   cleanupProfiles('cleanup_profiles'),
   cleanupSet('cleanup_set'),
+  channelCheck('channel_check'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -1939,6 +1941,62 @@ class UpdateCheckResult {
 
   @override
   String toString() => 'UpdateCheckResult(${jsonEncode(toJson())})';
+}
+
+/// 0.9: a channel_check job's result: the verified tip of the target channel.
+class ChannelCheckResult {
+  const ChannelCheckResult({
+    required this.channel,
+    required this.currentRev,
+    required this.target,
+    required this.older,
+    required this.checkedAt,
+  });
+
+  /// The target channel.
+  final Channel channel;
+
+  /// The locked revision when the check ran.
+  final String? currentRev;
+
+  /// The target's verified tip; commits and security count the commits the locked revision does not have. new_apps and removed_apps are null (not read).
+  final AvailableUpdate target;
+
+  /// target.rev does not descend from the locked revision: the switch may go back to an older version.
+  final bool older;
+  final int checkedAt;
+
+  factory ChannelCheckResult.fromJson(Map<String, dynamic> json) =>
+      ChannelCheckResult(
+        channel: Channel.fromJson(json['channel'] as String),
+        currentRev: json['current_rev'] == null
+            ? null
+            : json['current_rev'] as String,
+        target: AvailableUpdate.fromJson(
+          (json['target'] as Map).cast<String, dynamic>(),
+        ),
+        older: json['older'] as bool,
+        checkedAt: json['checked_at'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'channel': channel.toJson(),
+    'current_rev': currentRev,
+    'target': target.toJson(),
+    'older': older,
+    'checked_at': checkedAt,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ChannelCheckResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'ChannelCheckResult(${jsonEncode(toJson())})';
 }
 
 class AppliedResultAppsNotUpdatedItem {
@@ -5086,15 +5144,66 @@ class SystemUpdateApplyResult {
   String toString() => 'SystemUpdateApplyResult(${jsonEncode(toJson())})';
 }
 
+class SystemChannelCheckParams {
+  const SystemChannelCheckParams({required this.channel});
+
+  final Channel channel;
+
+  factory SystemChannelCheckParams.fromJson(Map<String, dynamic> json) =>
+      SystemChannelCheckParams(
+        channel: Channel.fromJson(json['channel'] as String),
+      );
+
+  Map<String, dynamic> toJson() => {'channel': channel.toJson()};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemChannelCheckParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemChannelCheckParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemChannelCheckResult {
+  const SystemChannelCheckResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemChannelCheckResult.fromJson(Map<String, dynamic> json) =>
+      SystemChannelCheckResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemChannelCheckResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemChannelCheckResult(${jsonEncode(toJson())})';
+}
+
 class SystemChannelSetParams {
   const SystemChannelSetParams({
     required this.channel,
-    this.acknowledgeDowngrade,
+    this.rev,
     this.adminPin,
   });
 
   final Channel channel;
-  final bool? acknowledgeDowngrade;
+
+  /// A full git commit id.
+  final String? rev;
 
   /// 4 to 8 digits. Never logged.
   final String? adminPin;
@@ -5102,9 +5211,7 @@ class SystemChannelSetParams {
   factory SystemChannelSetParams.fromJson(Map<String, dynamic> json) =>
       SystemChannelSetParams(
         channel: Channel.fromJson(json['channel'] as String),
-        acknowledgeDowngrade: json['acknowledge_downgrade'] == null
-            ? null
-            : json['acknowledge_downgrade'] as bool,
+        rev: json['rev'] == null ? null : json['rev'] as String,
         adminPin: json['admin_pin'] == null
             ? null
             : json['admin_pin'] as String,
@@ -5112,7 +5219,7 @@ class SystemChannelSetParams {
 
   Map<String, dynamic> toJson() => {
     'channel': channel.toJson(),
-    'acknowledge_downgrade': ?acknowledgeDowngrade,
+    'rev': ?rev,
     'admin_pin': ?adminPin,
   };
 
@@ -10647,7 +10754,7 @@ final class JobFinishedEvent extends SessionEvent {
   /// A JSON-RPC error object (codes from this document's errors).
   final ErrorObject? error;
 
-  /// update_check jobs: an UpdateCheckResult; jobs that change the system: an AppliedResult; storage_measure (0.6): a MeasuredResult; cleanup_system and cleanup_profiles (0.6): a CleanedResult.
+  /// update_check jobs: an UpdateCheckResult; jobs that change the system: an AppliedResult; storage_measure (0.6): a MeasuredResult; cleanup_system and cleanup_profiles (0.6): a CleanedResult; channel_check (0.9): a ChannelCheckResult.
   final Object? result;
   final bool sessionRestartRequired;
 
@@ -11639,6 +11746,7 @@ class RateLimitedData {
 enum StateConflictDataReason {
   revision('revision'),
   updateRev('update_rev'),
+  channelRev('channel_rev'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -11704,6 +11812,7 @@ enum UpdateVerificationFailedDataReason {
   unsigned('unsigned'),
   unknownSigner('unknown_signer'),
   notFastForward('not_fast_forward'),
+  olderThanSeen('older_than_seen'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -12221,7 +12330,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's update.check. Look for a newer signed revision of the channel (job), or, within 60 s of the last check, return that result without a job. Action org.hinteros.system.update.check.
   ///
-  /// The job lists the channel branch (git ls-remote of the URL from the running generation's channel table), fetches it into a root-owned bare repo, verifies the tip's SSH signature against the allowed signers shipped in the running generation, requires it to descend from the locked revision, and reads the highest Security: &lt;low|medium|high|critical&gt; trailer among the new commits. The job's result is an UpdateCheckResult; failures are job_failed, update_unreachable or update_verification_failed in job_finished.error.
+  /// The job lists the channel branch (git ls-remote of the URL from the running generation's channel table), fetches it into a root-owned bare repo, verifies the tip's SSH signature against the allowed signers shipped in the running generation, requires it to descend from the locked revision, and reads the highest Security: &lt;low|medium|high|critical&gt; trailer among the new commits. (0.9) It also requires the tip to descend from the newest verified tip this box saw on the branch (older_than_seen), and fetches and verifies the other channels' branches of the table to record their newest verified tips (root-only state that rollbacks and channel switches never lower; their failures do not fail the check). The job's result is an UpdateCheckResult; failures are job_failed, update_unreachable or update_verification_failed in job_finished.error.
   Future<SystemUpdateCheckResult> systemUpdateCheck([
     SystemUpdateCheckParams params = const SystemUpdateCheckParams(),
   ]) async => SystemUpdateCheckResult.fromJson(
@@ -12237,9 +12346,18 @@ mixin SessionApiMethods {
     await rpc('system.update.apply', params.toJson()),
   );
 
-  /// Relayed to the system service's channel.set. Follow another channel (job). Action org.hinteros.system.channel.
+  /// 0.17: relayed to the system service's channel.check (system API 0.9). Verify the tip of another channel before switching to it (job). Action org.hinteros.system.update.check (no PIN).
   ///
-  /// The URL comes from the running generation's channel table, never from params. The target tip must be signed by an allowed signer. Moving from beta to stable, or to a tip that does not descend from the locked revision, needs acknowledge_downgrade: true (else needs_acknowledgement: at once for beta to stable, in job_finished.error for a non-fast-forward tip). Returns job_id null if the channel is already the current one. On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root.
+  /// The job fetches the target channel's branch (URL from the running generation's channel table), verifies the tip's SSH signature against the allowed signers shipped in the running generation, and requires it to descend from (or equal) the newest verified tip this box saw on that branch (update_verification_failed {reason: older_than_seen} otherwise). It does not need to descend from the locked revision: older is true when it does not (the switch may go back to an older version). The job's result is a ChannelCheckResult; the launcher shows target.version and target.date and asks the owner to confirm, then calls channel.set with target.rev. Returns job_id null if the channel is already the current one. Failures are job_failed, update_unreachable or update_verification_failed in job_finished.error.
+  Future<SystemChannelCheckResult> systemChannelCheck(
+    SystemChannelCheckParams params,
+  ) async => SystemChannelCheckResult.fromJson(
+    await rpc('system.channel.check', params.toJson()),
+  );
+
+  /// Relayed to the system service's channel.set. Follow another channel (job), at the revision channel.check verified. Action org.hinteros.system.channel.
+  ///
+  /// The URL comes from the running generation's channel table, never from params. Returns job_id null if the channel is already the current one. Otherwise (0.17) rev is needed and must equal the last channel.check result's target.rev for this channel and the locked revision, else state_conflict {reason: channel_rev}: the owner confirmed that version. The job re-verifies rev (an allowed signer; it must descend from the newest verified tip this box saw on the target branch, else update_verification_failed {reason: older_than_seen}), locks the hinteros input to it on the target branch and runs the apply flow. rev may be older than the locked revision (beta to stable). Before 0.17 the target was the branch tip and acknowledge_downgrade allowed any older signed tip. On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root. The PIN is checked first.
   Future<SystemChannelSetResult> systemChannelSet(
     SystemChannelSetParams params,
   ) async => SystemChannelSetResult.fromJson(

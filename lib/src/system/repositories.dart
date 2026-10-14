@@ -123,11 +123,18 @@ abstract class UpdatesRepository {
   /// `rollback {generation?, admin_pin?}`; null: the previous generation.
   Future<JobHandle> rollback({int? generation, String? adminPin});
 
-  /// `channel.set`. A switch that is a downgrade throws
-  /// [SystemErrorKind.needsAcknowledgement] unless [acknowledgeDowngrade].
+  /// `channel.check` (session API 0.17): verifies the tip of [channel] (a
+  /// job) for the owner to confirm. Throws
+  /// [SystemErrorKind.updateUnreachable] / `updateVerificationFailed` (also
+  /// for a version older than one the box already saw), and
+  /// [SystemErrorKind.nothingToDo] for the current channel. No PIN.
+  Future<ChannelTarget> checkChannel(UpdateChannel channel);
+
+  /// `channel.set {channel, rev}`: [rev] must be the last [checkChannel]
+  /// result's for [channel] (else [SystemErrorKind.stateConflict]).
   Future<JobHandle> setChannel(
     UpdateChannel channel, {
-    bool acknowledgeDowngrade = false,
+    required String rev,
     String? adminPin,
   });
 
