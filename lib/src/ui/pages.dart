@@ -413,7 +413,7 @@ class _JobProgressScreenState extends State<JobProgressScreen> with JobTicker {
         : now.difference(s.lastActivityAt!);
     final under = [
       if (count != null && s.percent != null) '${s.percent}% in all',
-      'Time: ${elapsedText(now.difference(started))}',
+      'Time elapsed: ${elapsedText(now.difference(started))}',
     ];
     return Column(
       key: const ValueKey('job-now'),

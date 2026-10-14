@@ -89,7 +89,7 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('3 of 12'), findsOneWidget);
       expect(find.text('hinteros-daemon 0.7.1, compiling'), findsOneWidget);
-      expect(find.textContaining('Time: Less than 1 min'), findsOneWidget);
+      expect(find.textContaining('Time elapsed: 00:0'), findsOneWidget);
       expect(find.textContaining('20% in all'), findsOneWidget);
       // Nothing new from the job for a second: the bar moves anyway.
       final before = barAlignment(t);
@@ -108,7 +108,7 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('4 of 12'), findsOneWidget);
       expect(find.text('hinteros-daemon 0.7.1, installing'), findsOneWidget);
-      expect(find.textContaining('Time: 12 min'), findsOneWidget);
+      expect(find.textContaining('Time elapsed: 12:0'), findsOneWidget);
       // No estimate of the time left.
       expect(find.textContaining('left'), findsNothing);
     });
@@ -327,9 +327,10 @@ void main() {
     });
 
     test('the elapsed time and the build phases in words', () {
-      expect(elapsedText(const Duration(seconds: 40)), 'Less than 1 min');
-      expect(elapsedText(const Duration(minutes: 12)), '12 min');
-      expect(elapsedText(const Duration(minutes: 65)), '1 h 5 min');
+      expect(elapsedText(const Duration(seconds: 40)), '00:40');
+      expect(elapsedText(const Duration(minutes: 12, seconds: 5)), '12:05');
+      expect(elapsedText(const Duration(minutes: 65)), '1:05:00');
+      expect(elapsedText(const Duration(seconds: -3)), '00:00');
       expect(buildCount(build(11)), '12 of 12');
       // Nix found more than it said: the count never passes the total.
       expect(buildCount(build(12)), '12 of 12');

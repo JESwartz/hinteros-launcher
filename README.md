@@ -133,7 +133,7 @@ API 0.15 (`job_started` / `job_progress` / `job_finished` with `subject`, `start
   `builds_done + 1` capped at `builds_total`) or its percentage ("Downloading 40%"), what builds in
   small text ("hinteros-daemon 0.7.1, compiling"; the bytes while downloading), a bar (filled to
   the percentage with a light band that moves, or a block that moves from end to end without
-  one), the percentage in all while building, and the time it takes ("Time: 12 min"; no estimate
+  one), the percentage in all while building, and the time it has taken ("Time elapsed: 12:05", mm:ss, h:mm:ss after an hour; no estimate
   of the time left). The bar moves once a second (a 0.7 s move, still with reduced motion). The
   service sends a heartbeat at least every 2 s: after 20 s without one the page says "No news for
   30 s. The job is still running." (never that it failed); after 3 min without output from the job
