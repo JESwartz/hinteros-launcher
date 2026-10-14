@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import '../system/mock_system.dart' show mockCatalog;
 import '../system/models.dart';
@@ -238,7 +239,7 @@ class FakeInstallerBackend implements InstallerBackend {
     this.infoError,
   }) : newer = newer ?? {},
        _wifi = wifi ?? mockWifi(),
-       _disks = disks ?? mockDisks(),
+       _disks = List.of(disks ?? mockDisks()),
        _catalog = catalog ?? mockInstallerCatalog();
 
   /// What `network()` reports; joining Wi-Fi changes it.
@@ -270,6 +271,10 @@ class FakeInstallerBackend implements InstallerBackend {
 
   /// `ssid -> password` for secured networks; others fail to connect.
   final Map<String, String> wifiPasswords;
+
+  /// Runs when `install` is called, before its script: a test or scenario
+  /// changes the machine there (see [replug]).
+  void Function()? beforeInstall;
 
   /// Every call, in order: `network`, `scanWifi`, `connectWifi:<ssid>`,
   /// `disks`, `catalog`, `info`, `checkNewer:<channel>`, `validate`,
@@ -387,6 +392,45 @@ class FakeInstallerBackend implements InstallerBackend {
     return List.of(_disks);
   }
 
+  /// The disk at [path] is unplugged and plugged in again: the same path, a
+  /// new disk sequence number (as the kernel does).
+  void replug(String path) {
+    final i = _disks.indexWhere((d) => d.path == path);
+    final d = _disks[i];
+    final next = _disks.map((x) => x.diskSeq ?? 0).reduce(max) + 1;
+    _disks[i] = DiskInfo(
+      path: d.path,
+      name: d.name,
+      sizeBytes: d.sizeBytes,
+      diskSeq: next,
+      model: d.model,
+      transport: d.transport,
+      removable: d.removable,
+      mountpoints: d.mountpoints,
+    );
+  }
+
+  /// As the backend checks the plan's disk: there, and the same disk
+  /// sequence number. Null: it is.
+  FakeScript? _diskRefusal(InstallPlan plan) {
+    final d = _disks.where((x) => x.path == plan.disk).firstOrNull;
+    if (d == null) {
+      return FakeScript.refused(
+        'disk-not-found',
+        '${plan.disk} is not a block device on this machine',
+      );
+    }
+    if (d.diskSeq != plan.diskSeq) {
+      return FakeScript.refused(
+        'disk-changed',
+        'the disk changed: ${plan.disk} is now disk ${d.diskSeq}, not disk '
+            '${plan.diskSeq} of the plan. Nothing was touched. Select the '
+            'disk again',
+      );
+    }
+    return null;
+  }
+
   @override
   Future<List<StoreApp>> catalog() async {
     calls.add('catalog');
@@ -449,18 +493,25 @@ class FakeInstallerBackend implements InstallerBackend {
   }
 
   @override
-  InstallRun validate(InstallPlan plan) =>
-      _run('validate', plan, validateScript ?? FakeScript.validateOk);
+  InstallRun validate(InstallPlan plan) => _run(
+    'validate',
+    plan,
+    _diskRefusal(plan) ?? validateScript ?? FakeScript.validateOk,
+  );
 
   @override
-  InstallRun install(InstallPlan plan) => _run(
-    'install',
-    plan,
-    (plan.rev != null ? newerInstallScript : null) ??
-        installScript ??
-        installScriptFor?.call(plan) ??
-        FakeScript.installOk,
-  );
+  InstallRun install(InstallPlan plan) {
+    beforeInstall?.call();
+    return _run(
+      'install',
+      plan,
+      _diskRefusal(plan) ??
+          (plan.rev != null ? newerInstallScript : null) ??
+          installScript ??
+          installScriptFor?.call(plan) ??
+          FakeScript.installOk,
+    );
+  }
 
   @override
   Future<void> reboot() async => calls.add('reboot');
@@ -474,6 +525,7 @@ List<DiskInfo> mockDisks() => const [
   DiskInfo(
     path: '/dev/nvme0n1',
     name: 'nvme0n1',
+    diskSeq: 1,
     sizeBytes: 512110190592,
     model: 'Example NVMe 512GB',
     transport: 'nvme',
@@ -481,6 +533,7 @@ List<DiskInfo> mockDisks() => const [
   DiskInfo(
     path: '/dev/sda',
     name: 'sda',
+    diskSeq: 2,
     sizeBytes: 1000204886016,
     model: 'Example SATA SSD 1TB',
     transport: 'sata',
@@ -488,6 +541,7 @@ List<DiskInfo> mockDisks() => const [
   DiskInfo(
     path: '/dev/mmcblk0',
     name: 'mmcblk0',
+    diskSeq: 3,
     sizeBytes: 8 * _gib,
     model: 'Example eMMC 8GB',
     transport: null,
@@ -495,6 +549,7 @@ List<DiskInfo> mockDisks() => const [
   DiskInfo(
     path: '/dev/sdb',
     name: 'sdb',
+    diskSeq: 4,
     sizeBytes: 32 * _gib,
     model: 'Example USB Stick',
     transport: 'usb',
@@ -504,6 +559,7 @@ List<DiskInfo> mockDisks() => const [
   DiskInfo(
     path: '/dev/sdc',
     name: 'sdc',
+    diskSeq: 5,
     sizeBytes: 2000398934016,
     model: 'Example USB Drive 2TB',
     transport: 'usb',

@@ -16,6 +16,7 @@ import '../support/installer_fixtures.dart' show catalogFixtureDir;
 void main() {
   const plan = InstallPlan(
     disk: '/dev/nvme0n1',
+    diskSeq: 1,
     hostname: 'hinteros',
     adminUser: 'james',
     adminPassword: 'pa55 w0rd; rm -rf / \$(x)',

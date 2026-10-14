@@ -33,6 +33,8 @@ bool wantsFirstBoot(List<String> args) =>
 ///  - `offline`: no network at all
 ///  - `online`: a cable is connected
 ///  - `refused`: the backend refuses the plan (exit 2, `disk-in-use`)
+///  - `disk-changed`: the chosen disk is replaced after the plan was
+///    checked (exit 2, `disk-changed`); chosen again, it installs
 ///  - `apps-failed`: the system installs, then the first picked app fails
 ///  - `failed`: the install fails part-way (exit 1, `install-failed`)
 ///  - `newer`: online over a cable; both channels have a newer HinterOS,
@@ -78,6 +80,12 @@ FakeInstallerBackend mockBackend(String scenario) {
         'disk-in-use',
         '/dev/nvme0n1 is in use',
       );
+    case 'disk-changed':
+      // Once: chosen again, the disk installs.
+      b.beforeInstall = () {
+        b.replug('/dev/nvme0n1');
+        b.beforeInstall = null;
+      };
     case 'failed':
       b.installScript = FakeScript.failed();
     case 'newer':

@@ -8,6 +8,7 @@ void main() {
     test('matches the backend format field for field', () {
       const plan = InstallPlan(
         disk: '/dev/nvme0n1',
+        diskSeq: 1,
         hostname: 'hinteros',
         adminUser: 'james',
         adminPassword: 'change-me-now',
@@ -17,6 +18,7 @@ void main() {
       // fields the UI always sends (base, network).
       expect(plan.toJson(), {
         'disk': '/dev/nvme0n1',
+        'diskSeq': 1,
         'hostname': 'hinteros',
         'admin': {'user': 'james', 'password': 'change-me-now'},
         'ssh': {'enable': false},
@@ -31,6 +33,7 @@ void main() {
     test('accepted terms are id -> version', () {
       const plan = InstallPlan(
         disk: '/dev/sda',
+        diskSeq: 1,
         hostname: 'box',
         adminUser: 'a',
         adminPassword: 'password1',
@@ -47,6 +50,7 @@ void main() {
     test('only fields the backend knows', () {
       const known = {
         'disk',
+        'diskSeq',
         'hostname',
         'admin',
         'ssh',
@@ -59,6 +63,7 @@ void main() {
       };
       const plan = InstallPlan(
         disk: '/dev/sda',
+        diskSeq: 1,
         hostname: 'box',
         adminUser: 'a',
         adminPassword: 'password1',
@@ -80,6 +85,7 @@ void main() {
     test('an open Wi-Fi network has no psk', () {
       const plan = InstallPlan(
         disk: '/dev/sda',
+        diskSeq: 1,
         hostname: 'box',
         adminUser: 'a',
         adminPassword: 'password1',
@@ -91,6 +97,7 @@ void main() {
     test('encodes as one line of UTF-8 JSON, round-trips', () {
       const plan = InstallPlan(
         disk: '/dev/sda',
+        diskSeq: 1,
         hostname: 'box',
         adminUser: 'a',
         adminPassword: 'pässword "with" \\ quotes',
@@ -103,6 +110,7 @@ void main() {
     test('toString never shows the password', () {
       const plan = InstallPlan(
         disk: '/dev/sda',
+        diskSeq: 1,
         hostname: 'box',
         adminUser: 'a',
         adminPassword: 'hunter2hunter2',

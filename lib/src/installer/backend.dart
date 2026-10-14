@@ -136,6 +136,7 @@ class DiskInfo {
     required this.path,
     required this.name,
     required this.sizeBytes,
+    this.diskSeq,
     this.model,
     this.transport,
     this.removable = false,
@@ -148,6 +149,13 @@ class DiskInfo {
   /// The kernel name (`nvme0n1`).
   final String name;
   final int sizeBytes;
+
+  /// The kernel's disk sequence number (lsblk `DISK-SEQ`): new each time a
+  /// disk is attached and never used again until the next boot. It goes
+  /// into the plan, so the backend can see that the disk at [path] is still
+  /// the one chosen here (a kernel name such as `sdb` goes to the next disk
+  /// plugged in). Null: lsblk did not say; the disk cannot be chosen.
+  final int? diskSeq;
   final String? model;
   final String? transport;
   final bool removable;
@@ -175,6 +183,7 @@ class DiskInfo {
       return 'Removable drive. It may be the installer USB stick.';
     }
     if (sizeBytes < minDiskBytes) return 'Too small: at least 16 GB needed.';
+    if (diskSeq == null) return 'Cannot identify this disk.';
     return null;
   }
 

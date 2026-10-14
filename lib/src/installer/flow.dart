@@ -531,8 +531,13 @@ class InstallerFlow extends ChangeNotifier {
       disks = const [];
       disksMessage = 'The list of disks could not be read.';
     }
+    // The same path with another disk sequence number is another disk (or
+    // the same one plugged in again): the choice is gone.
     final d = disk;
-    if (d != null && !disks!.any((x) => x.path == d.path && x.usable)) {
+    if (d != null &&
+        !disks!.any(
+          (x) => x.path == d.path && x.diskSeq == d.diskSeq && x.usable,
+        )) {
       disk = null;
     }
     notifyListeners();
@@ -630,7 +635,10 @@ class InstallerFlow extends ChangeNotifier {
   // ---------------------------------------------------------------- plan
 
   bool get ready =>
-      disk != null && accountValid && hostnameProblem == null && apps != null;
+      disk?.diskSeq != null &&
+      accountValid &&
+      hostnameProblem == null &&
+      apps != null;
 
   /// The plan, from the answers. Only call when [ready].
   InstallPlan buildPlan() {
@@ -638,6 +646,7 @@ class InstallerFlow extends ChangeNotifier {
     final needsDownload = a.selectedApps.any((x) => !x.onIso);
     return InstallPlan(
       disk: disk!.path,
+      diskSeq: disk!.diskSeq!,
       hostname: hostname,
       adminUser: username,
       adminPassword: password,
@@ -933,6 +942,19 @@ class InstallerFlow extends ChangeNotifier {
   /// or the newer HinterOS did not download.
   bool get diskUntouched =>
       phase == InstallPhase.refused || outcome?.error?.code == 'fetch-failed';
+
+  /// The backend found another disk at the chosen path (it was unplugged,
+  /// or replaced): the disk must be chosen again.
+  bool get diskChanged => outcome?.error?.code == 'disk-changed';
+
+  /// From a run stopped by [diskChanged] back to the disk step (which reads
+  /// the list again), with no disk chosen.
+  void chooseDiskAgain() {
+    phase = InstallPhase.idle;
+    outcome = null;
+    disk = null;
+    go(InstallerStep.disk);
+  }
 
   /// From a failed newer install back to the version step (the channel is
   /// checked again); the choice then goes on to the summary.
