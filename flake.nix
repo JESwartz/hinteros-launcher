@@ -10,7 +10,7 @@
     # The API schema (and the real session daemon for the integration check).
     hinteros-daemon = {
       # M7: the m7 branch. Revert to main (drop ?ref=m7) when M7 merges.
-      url = "git+https://justsomeshed.com/JSwartz/HinterOS/hinteros-daemon.git?ref=m7";
+      url = "git+https://justsomeshed.com/JSwartz/HinterOS/hinteros-daemon.git";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.git-hooks.follows = "git-hooks";
     };
