@@ -426,17 +426,23 @@ void main() {
       expect(h.services.mockJobs.started.single.kind, JobKind.rollback);
     });
 
-    testWidgets('a downgrade needs a second yes', (t) async {
+    testWidgets('a channel switch shows the verified version first', (t) async {
       setView(t);
       final h = harness();
       await h.pump(t);
       await enterSettingsEntry(t, 'updates');
       await press(t, [kDown, kEnter]); // channel
       await press(t, [kDown, kEnter]); // Stable
-      await enterPin(t, '2468');
+      // Checked first: the confirmation names the verified version.
       expect(find.text('Switch to Stable?'), findsOneWidget);
+      expect(find.text('HinterOS 0.6.0 stable, 2026-10-01.'), findsOneWidget);
+      expect(
+        find.text('This version is older than the version on this box.'),
+        findsOneWidget,
+      );
       expect(h.services.mockJobs.started, isEmpty);
       await press(t, [kRight, kEnter]);
+      await enterPin(t, '2468');
       expect(h.services.mockJobs.started.single.kind, JobKind.channel);
     });
   });
