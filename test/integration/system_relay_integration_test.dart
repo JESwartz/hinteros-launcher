@@ -442,7 +442,7 @@ void main() {
       // state.json of the fake root lists steam as installed.
       expect((await c.systemSettingsGet()).settings.apps, ['steam']);
       final l = await c.storeList();
-      expect(l.indexVersion, 2);
+      expect(l.indexVersion, 3);
       expect(l.moreAfterUpdate, isFalse);
       final names = l.apps.map((a) => a.name).toList();
       expect(
@@ -451,6 +451,11 @@ void main() {
         reason: 'by name',
       );
       expect(l.apps.map((a) => a.id), contains('moonlight'));
+      expect(
+        l.apps.map((a) => a.id),
+        isNot(contains('jellyfin-server')),
+        reason: 'a service, not an app',
+      );
       final steam = l.apps.firstWhere((a) => a.id == 'steam');
       expect(steam.state, wire.StoreState.installed);
       expect(l.apps.where((a) => a.id != 'steam').map((a) => a.state).toSet(), {
