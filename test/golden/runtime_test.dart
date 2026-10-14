@@ -131,7 +131,7 @@ void main() {
       harness(),
       run: (t) async {
         await enterSettingsEntry(t, 'display');
-        await press(t, [kDown, kDown, kEnter]);
+        await press(t, [kDown, kEnter, kDown, kEnter]);
         await t.pump(const Duration(seconds: 3));
       },
     );

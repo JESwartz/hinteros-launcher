@@ -98,9 +98,12 @@ Design: `hinteros-docs/design/time-zone.md`. The box's zone (`TimeZoneRepository
   (`time_zone_map.dart`, a `CustomPainter`, equirectangular) with every area of the zone's
   standard offset highlighted (the band, not only the zone) over the land outlines. The map only
   shows. A on the drop-down opens the list under it (or over it, where there is no room): every
-  zone grouped by region, each with its offset now, opening at the current zone (a filled disc
-  marks it). Up and down move, left and right (and L1/R1) go to the start of the previous or
-  next region, A chooses, B closes. No hint text.
+  zone by its offset now, highest at the top (UTC+14:00 at the top, UTC+00:00 in the middle,
+  UTC−12:00 at the bottom), a header per offset and, under it, its zones by name, opening at the
+  current zone (a filled disc marks it). Up and down move, left and right (and L1/R1) go to the
+  start of the previous or next offset, A chooses, B closes. No hint text. The field and its list
+  are the shared drop-down (`lib/src/ui/drop_down.dart`), also used for the display modes in
+  Settings > Display and the first-boot Display step.
 - **First boot**: a "Time zone" step after "Internet", on the box's zone (UTC on a new box);
   a choice applies at once, with no PIN (no admin profile yet).
 - **Settings > Time zone** (`lib/src/ui/system/time_zone_section.dart`): the picker; a choice

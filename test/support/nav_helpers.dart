@@ -9,6 +9,7 @@ const kLeft = LogicalKeyboardKey.arrowLeft;
 const kRight = LogicalKeyboardKey.arrowRight;
 const kEnter = LogicalKeyboardKey.enter;
 const kEscape = LogicalKeyboardKey.escape;
+const kPageUp = LogicalKeyboardKey.pageUp;
 const kPageDown = LogicalKeyboardKey.pageDown;
 
 /// Presses [ks] one by one, settling after each.

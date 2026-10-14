@@ -221,6 +221,30 @@ void main() {
         harness(),
         run: (t) async {
           await enterSettingsEntry(t, 'display');
+          await press(t, [kDown, kEnter, kUp, kUp, kUp, kUp, kEnter]);
+        },
+      );
+    });
+    testWidgets('the open list of display modes', (t) async {
+      await shot(
+        t,
+        'display_modes_list_1080p',
+        harness(),
+        run: (t) async {
+          await enterSettingsEntry(t, 'display');
+          await press(t, [kDown, kEnter, kUp]);
+        },
+      );
+    });
+    testWidgets('the open list of display modes in high contrast at 1.6x', (
+      t,
+    ) async {
+      await shot(
+        t,
+        'display_modes_list_highcontrast_text160_1080p',
+        harness(settings: hc160),
+        run: (t) async {
+          await enterSettingsEntry(t, 'display');
           await press(t, [kDown, kEnter]);
         },
       );
