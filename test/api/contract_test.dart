@@ -138,6 +138,9 @@ Future<void> _prepareSystem(
       ];
     case ('store.list', 'no catalog'):
       s.catalogMissing = true;
+    // 0.14: the storage examples describe a box that was measured.
+    case ('system.storage.get', 'measured') || ('system.storage.tree', _):
+      s.measurement = mockWireMeasurement();
   }
   await _prepareProfiles(mock, method, ex);
   // Jobs the call itself starts get the example's id.

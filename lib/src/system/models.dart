@@ -115,7 +115,20 @@ enum JobKind {
   profileRemove('Removing the profile'),
   guest('Changing the guest'),
   starterSet('Saving the starter apps'),
-  guestEnd('Ending the guest session');
+  guestEnd('Ending the guest session'),
+
+  /// 0.14: measuring what uses the disk (Settings -> Storage).
+  storageMeasure('Measuring the disk'),
+
+  /// 0.14: old system generations removed, then unused files deleted.
+  cleanupSystem('Cleaning up the system'),
+
+  /// 0.14: old app generations of every profile removed, then unused files
+  /// deleted.
+  cleanupProfiles('Cleaning up profiles'),
+
+  /// 0.14: the automatic clean-up setting (a rebuild).
+  cleanupSet('Saving the automatic clean-up');
 
   const JobKind(this.title);
   final String title;
@@ -151,6 +164,17 @@ enum JobKind {
       JobStage.finishing,
     ],
     guestEnd => const [JobStage.preparing, JobStage.finishing],
+    storageMeasure => const [
+      JobStage.preparing,
+      JobStage.measuring,
+      JobStage.finishing,
+    ],
+    cleanupSystem || cleanupProfiles => const [
+      JobStage.preparing,
+      JobStage.cleaning,
+      JobStage.collecting,
+      JobStage.finishing,
+    ],
     appsRollback || starterSet => const [
       JobStage.preparing,
       JobStage.evaluating,
@@ -163,7 +187,8 @@ enum JobKind {
     remove ||
     profileCreate ||
     profileRemove ||
-    guest => const [
+    guest ||
+    cleanupSet => const [
       JobStage.preparing,
       JobStage.building,
       JobStage.activating,
@@ -190,10 +215,19 @@ enum JobStage {
   /// 0.12: the rebuild that switches on what new apps need box-wide
   /// (32-bit graphics for Steam).
   box('Preparing the box'),
+
+  /// 0.14: measuring the disk (with a percentage).
+  measuring('Measuring'),
   evaluating('Evaluating changes'),
   downloading('Downloading'),
   building('Building'),
   activating('Switching over'),
+
+  /// 0.14: removing old generations (a clean-up; no longer cancellable).
+  cleaning('Removing old versions'),
+
+  /// 0.14: deleting files that nothing uses now.
+  collecting('Deleting unused files'),
 
   /// 0.12: every profile's apps are rebuilt for the new system.
   apps('Updating the apps'),

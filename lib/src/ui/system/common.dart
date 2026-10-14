@@ -30,10 +30,17 @@ String refusalTitle(SystemException e) => switch (e.kind) {
 
 /// What a section needs: the services and its pane's region.
 class SectionEnv {
-  const SectionEnv({required this.services, required this.region});
+  const SectionEnv({
+    required this.services,
+    required this.region,
+    this.now = DateTime.now,
+  });
 
   final SystemServices services;
   final NavRegion region;
+
+  /// The clock ("measured 2 hours ago"); fixed in tests.
+  final DateTime Function() now;
 }
 
 /// Loads [load] once and again on [reload]; shows "Loading", or the error with

@@ -80,7 +80,13 @@ Future<void> main(List<String> args) async {
             setupRequired: _mockProfile(args) == 'first-boot',
             profileBox: _mockProfile(args) == 'first-boot'
                 ? MockProfileBox(profiles: [])
-                : null,
+                // Three profiles: the Storage screen's mock homes.
+                : MockProfileBox(
+                    profiles: [
+                      ...MockProfileBox.defaultProfiles(),
+                      mockRobin(),
+                    ],
+                  ),
             extraApps: const [mockServiceApp],
           )
         : daemonSystemServices(connection),

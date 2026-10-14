@@ -12,10 +12,12 @@ import 'dart:io';
 import '../api/mock_store.dart' show mockCatalogDir;
 import 'catalog.dart';
 import 'mock_profiles.dart';
+import 'mock_storage.dart';
 import 'models.dart';
 import 'repositories.dart';
 
 export 'mock_profiles.dart';
+export 'mock_storage.dart';
 
 String _hex(int n, int len) => n.toRadixString(16).padLeft(len, '0');
 
@@ -121,8 +123,13 @@ class MockJobs implements JobsRepository {
         finish(job.snap.jobId, ok: false, error: failWith);
         return;
       }
-      if (s == JobStage.downloading) {
-        progress(job.snap.jobId, s, percent: pct, detail: '$pct% of the files');
+      if (s == JobStage.downloading || s == JobStage.measuring) {
+        progress(
+          job.snap.jobId,
+          s,
+          percent: pct,
+          detail: s == JobStage.downloading ? '$pct% of the files' : null,
+        );
         pct += 25;
         if (pct <= 100) {
           job.timer = Timer(stepDelay, step);
@@ -1350,6 +1357,7 @@ class MockSystemServices extends SystemServices {
     required this.mockStore,
     required this.mockAuth,
     required this.mockProfiles,
+    required this.mockStorage,
   }) : super(
          jobs: mockJobs,
          system: mockSystem,
@@ -1360,6 +1368,7 @@ class MockSystemServices extends SystemServices {
          store: mockStore,
          auth: mockAuth,
          profiles: mockProfiles,
+         storage: mockStorage,
        );
 
   /// [autoRunJobs]: jobs step through their stages by themselves (`--mock`);
@@ -1373,6 +1382,7 @@ class MockSystemServices extends SystemServices {
     String currentProfile = 'p1',
     bool setupRequired = false,
     List<StoreApp> extraApps = const [],
+    bool storageMeasured = true,
   }) {
     final jobs = MockJobs(autoRun: autoRunJobs);
     final box = profileBox ?? MockProfileBox(now: now);
@@ -1384,6 +1394,13 @@ class MockSystemServices extends SystemServices {
       now: now,
       catalog: extraApps.isEmpty ? null : [...mockCatalog(), ...extraApps],
     );
+    final profiles = MockProfiles(
+      jobs,
+      box: box,
+      currentId: currentProfile,
+      setupRequired: setupRequired,
+      adminApps: () => store.installed,
+    );
     return MockSystemServices._(
       mockJobs: jobs,
       mockUpdates: updates,
@@ -1393,12 +1410,13 @@ class MockSystemServices extends SystemServices {
       mockBluetooth: MockBluetooth(),
       mockDisplayAudio: MockDisplayAudio(),
       mockStore: store,
-      mockProfiles: MockProfiles(
+      mockProfiles: profiles,
+      mockStorage: MockStorage(
         jobs,
         box: box,
-        currentId: currentProfile,
-        setupRequired: setupRequired,
-        adminApps: () => store.installed,
+        currentId: () => profiles.currentId,
+        now: now,
+        measured: storageMeasured,
       ),
     );
   }
@@ -1412,6 +1430,7 @@ class MockSystemServices extends SystemServices {
   final MockStore mockStore;
   final MockAuth mockAuth;
   final MockProfiles mockProfiles;
+  final MockStorage mockStorage;
 
   void dispose() {
     mockJobs.dispose();

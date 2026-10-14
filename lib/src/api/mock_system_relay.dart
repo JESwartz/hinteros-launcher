@@ -38,6 +38,17 @@ List<Stage> mockStagesOf(JobKind kind) => switch (kind) {
     Stage.activating,
     Stage.finishing,
   ],
+  JobKind.storageMeasure => const [
+    Stage.preparing,
+    Stage.measuring,
+    Stage.finishing,
+  ],
+  JobKind.cleanupSystem || JobKind.cleanupProfiles => const [
+    Stage.preparing,
+    Stage.cleaning,
+    Stage.collecting,
+    Stage.finishing,
+  ],
   _ => const [
     Stage.preparing,
     Stage.building,
@@ -66,6 +77,9 @@ class _Job {
 
   /// A rollback that turns box features back on (`features_readded`).
   List<BoxFeature>? featuresReadded;
+
+  /// A clean-up's result (0.14).
+  CleanedResult? cleaned;
 }
 
 class MockSystemRelay {
@@ -179,6 +193,34 @@ class MockSystemRelay {
   /// 0.5): throws `pin_required` or `invalid_params`. Null: no PIN needed (a
   /// schema-1 box). [MockDaemon] sets it to its profiles' check.
   void Function(String? adminPin)? checkAdminPin;
+
+  // ---- storage (0.14)
+
+  /// The last measurement (`storage.get`); null until a `storage_measure`
+  /// job finished (or a test sets [mockWireMeasurement]).
+  Measurement? measurement;
+
+  /// The detailed tree of each home, by profile id or `guest`.
+  Map<String, StorageNode> homes = mockWireHomes();
+
+  /// The automatic clean-up (`cleanup.get`).
+  CleanupSettings cleanup = const CleanupSettings(
+    enable: true,
+    frequency: CleanupFrequency.weekly,
+    keepSystem: 5,
+    keepProfiles: 5,
+  );
+
+  /// Whose session it is (a profile id or `guest`): their own tree needs no
+  /// PIN. [MockDaemon] sets it to its profiles' current one.
+  String Function()? currentOwner;
+
+  /// A `storage_measure` job finished: the measurement is new.
+  MeasuredResult _measured() {
+    final at = _nowSeconds();
+    measurement = mockWireMeasurement(at);
+    return MeasuredResult(measuredAt: at);
+  }
 
   /// Ids the next jobs get (then random-looking ones).
   final List<String> jobIdQueue = [];
@@ -489,6 +531,96 @@ class MockSystemRelay {
             _bumpRevision();
           },
         );
+      case 'system.storage.get':
+        _closed(p, const []);
+        return SystemStorageGetResult(measurement: measurement).toJson();
+      case 'system.storage.measure':
+        _closed(p, const []);
+        _mutating('storage.measure');
+        final running = _jobs.values
+            .where(
+              (j) =>
+                  j.state == JobState.running &&
+                  j.kind == JobKind.storageMeasure,
+            )
+            .firstOrNull;
+        if (running != null) return JobRef(jobId: running.id).toJson();
+        return _started(JobKind.storageMeasure);
+      case 'system.storage.tree':
+        _closed(p, const ['id', 'admin_pin']);
+        final tp = SystemStorageTreeParams.fromJson(p);
+        if (!RegExp(r'^(p[1-9][0-9]{0,2}|guest)$').hasMatch(tp.id)) {
+          throw const ApiException(ApiErrorCode.invalidParams, 'bad id', {
+            'field': 'id',
+            'reason': 'bad_format',
+          });
+        }
+        _mutating('storage.tree:${tp.id}');
+        if (tp.id != currentOwner?.call()) checkAdminPin?.call(tp.adminPin);
+        final m = measurement;
+        final home = homes[tp.id];
+        if (m == null || home == null) {
+          throw const ApiException(ApiErrorCode.notFound, 'not measured');
+        }
+        return SystemStorageTreeResult(
+          id: tp.id,
+          measuredAt: m.measuredAt,
+          root: home,
+        ).toJson();
+      case 'system.storage.cleanup_system' || 'system.storage.cleanup_profiles':
+        _closed(p, const ['keep', 'admin_pin']);
+        final keep = p['keep'] as int;
+        final pin = p['admin_pin'] as String?;
+        if (keep < 1 || keep > 10) {
+          throw const ApiException(ApiErrorCode.invalidParams, 'keep', {
+            'field': 'keep',
+            'reason': 'out_of_range',
+          });
+        }
+        final system = method == 'system.storage.cleanup_system';
+        _mutating(system ? 'cleanup_system:$keep' : 'cleanup_profiles:$keep');
+        checkAdminPin?.call(pin);
+        final id = _start(
+          system ? JobKind.cleanupSystem : JobKind.cleanupProfiles,
+        );
+        _jobs[id]!.cleaned = CleanedResult(
+          freedBytes: keep < 3 ? 3000000000 : 1200000000,
+          generationsRemoved: keep < 3 ? 4 : 1,
+        );
+        return JobRef(jobId: id).toJson();
+      case 'system.cleanup.get':
+        _closed(p, const []);
+        return cleanup.toJson();
+      case 'system.cleanup.set':
+        _closed(p, const [
+          'enable',
+          'frequency',
+          'keep_system',
+          'keep_profiles',
+          'admin_pin',
+        ]);
+        final cp = SystemCleanupSetParams.fromJson(p);
+        for (final (k, v) in [
+          ('keep_system', cp.keepSystem),
+          ('keep_profiles', cp.keepProfiles),
+        ]) {
+          if (v < 1 || v > 10) {
+            throw ApiException(ApiErrorCode.invalidParams, k, {
+              'field': k,
+              'reason': 'out_of_range',
+            });
+          }
+        }
+        _mutating('cleanup.set');
+        checkAdminPin?.call(cp.adminPin);
+        final want = CleanupSettings(
+          enable: cp.enable,
+          frequency: cp.frequency,
+          keepSystem: cp.keepSystem,
+          keepProfiles: cp.keepProfiles,
+        );
+        if (want == cleanup) return const JobRef(jobId: null).toJson();
+        return _started(JobKind.cleanupSet, onSuccess: () => cleanup = want);
       case 'system.jobs.get':
         _closed(p, const ['job_id']);
         final j = _find(SystemJobsGetParams.fromJson(p).jobId);
@@ -783,7 +915,7 @@ class MockSystemRelay {
     void step() {
       if (j.state != JobState.running) return;
       final s = stages[i];
-      if (s == Stage.downloading) {
+      if (s == Stage.downloading || s == Stage.measuring) {
         progressJob(j.id, s, percent: pct);
         pct += 25;
         if (pct <= 100) {
@@ -855,6 +987,10 @@ class MockSystemRelay {
       j.stage = Stage.finishing;
       j.result = j.kind == JobKind.updateCheck
           ? _lastCheck?.toJson()
+          : j.kind == JobKind.storageMeasure
+          ? _measured().toJson()
+          : j.cleaned != null
+          ? j.cleaned!.toJson()
           : AppliedResult(
               generation: generation,
               rev: rev,
@@ -902,4 +1038,126 @@ class MockSystemRelay {
       j.timer?.cancel();
     }
   }
+}
+
+// ---------------------------------------------------------------- storage
+
+StorageNode _node(
+  NodeKind kind,
+  int bytes, {
+  List<StorageNode> children = const [],
+  String? id,
+  String? name,
+  int? appId,
+}) => StorageNode(
+  kind: kind,
+  bytes: bytes,
+  children: children,
+  id: id,
+  name: name,
+  appId: appId,
+);
+
+/// The homes of the mock box (James p1, Sam p3, the guest), wire shapes.
+Map<String, StorageNode> mockWireHomes() => {
+  'p1': _node(
+    NodeKind.profile,
+    3000000000,
+    id: 'p1',
+    children: [
+      _node(
+        NodeKind.steam,
+        2000000000,
+        children: [
+          _node(NodeKind.steamGame, 2000000000, name: 'Portal 2', appId: 620),
+        ],
+      ),
+      _node(NodeKind.dir, 800000000, name: '.local'),
+      _node(NodeKind.files, 200000000),
+    ],
+  ),
+  'p3': _node(
+    NodeKind.profile,
+    1000000000,
+    id: 'p3',
+    children: [
+      _node(NodeKind.dir, 900000000, name: 'Music'),
+      _node(NodeKind.files, 100000000),
+    ],
+  ),
+  'guest': _node(
+    NodeKind.guest,
+    10000000,
+    children: [_node(NodeKind.files, 10000000)],
+  ),
+};
+
+/// A measurement of the mock box taken at [at] (Unix seconds).
+Measurement mockWireMeasurement([int at = 1791300000]) {
+  final homes = mockWireHomes();
+  return Measurement(
+    measuredAt: at,
+    disk: const DiskUsage(
+      totalBytes: 512000000000,
+      usedBytes: 21000000000,
+      freeBytes: 491000000000,
+    ),
+    root: _node(
+      NodeKind.disk,
+      512000000000,
+      children: [
+        _node(
+          NodeKind.system,
+          9000000000,
+          children: [
+            const StorageNode(
+              kind: NodeKind.generation,
+              bytes: 1400000000,
+              children: [],
+              generation: 42,
+              date: 1790000000,
+              current: true,
+              booted: false,
+            ),
+            _node(NodeKind.common, 7600000000),
+          ],
+        ),
+        _node(
+          NodeKind.apps,
+          3000000000,
+          children: [
+            _node(NodeKind.appEnv, 900000000, id: 'p1'),
+            _node(NodeKind.shared, 2100000000),
+          ],
+        ),
+        for (final e in homes.entries)
+          _node(
+            e.value.kind,
+            e.value.bytes,
+            id: e.key == 'guest' ? null : e.key,
+          ),
+        _node(NodeKind.other, 3990000000),
+        _node(NodeKind.free, 491000000000),
+      ],
+    ),
+    garbageBytes: 1200000000,
+    estimates: MeasurementEstimates(
+      system: [
+        for (var k = 1; k <= 10; k++)
+          CleanupEstimate(
+            keep: k,
+            generations: k < 3 ? 3 - k : 0,
+            bytes: 1200000000 + (k < 3 ? (3 - k) * 600000000 : 0),
+          ),
+      ],
+      profiles: [
+        for (var k = 1; k <= 10; k++)
+          CleanupEstimate(
+            keep: k,
+            generations: k < 2 ? 2 : 0,
+            bytes: 1200000000 + (k < 2 ? 300000000 : 0),
+          ),
+      ],
+    ),
+  );
 }

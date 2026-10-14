@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.13).
+// Source: schema/session-api.json (session API 0.14).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.13';
+const apiVersion = '0.14';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -63,6 +63,13 @@ const apiMethodNames = <String>[
   'system.audio.save_output',
   'system.starter_set.get',
   'system.starter_set.set',
+  'system.storage.get',
+  'system.storage.measure',
+  'system.storage.tree',
+  'system.storage.cleanup_system',
+  'system.storage.cleanup_profiles',
+  'system.cleanup.get',
+  'system.cleanup.set',
   'system.jobs.get',
   'system.jobs.list',
   'system.jobs.cancel',
@@ -326,6 +333,12 @@ typedef TermsVersion = String;
 
 /// polkit's cookie for one authentication request.
 typedef AuthCookie = String;
+
+/// Generations to keep (the running, booted and current ones always stay).
+typedef Keep = int;
+
+/// A profile id or guest.
+typedef StorageHomeId = String;
 
 /// A Bluetooth address, upper case.
 typedef BtAddress = String;
@@ -1041,6 +1054,10 @@ enum JobKind {
   profilesRemove('profiles_remove'),
   guestSet('guest_set'),
   guestEnd('guest_end'),
+  storageMeasure('storage_measure'),
+  cleanupSystem('cleanup_system'),
+  cleanupProfiles('cleanup_profiles'),
+  cleanupSet('cleanup_set'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -1600,10 +1617,13 @@ enum Stage {
   fetching('fetching'),
   verifying('verifying'),
   box('box'),
+  measuring('measuring'),
   evaluating('evaluating'),
   downloading('downloading'),
   building('building'),
   activating('activating'),
+  cleaning('cleaning'),
+  collecting('collecting'),
   apps('apps'),
   finishing('finishing'),
 
@@ -2003,6 +2023,433 @@ class AppliedResult {
 
   @override
   String toString() => 'AppliedResult(${jsonEncode(toJson())})';
+}
+
+class CleanupParams {
+  const CleanupParams({required this.keep, this.adminPin});
+
+  /// Generations to keep (the running, booted and current ones always stay).
+  final int keep;
+
+  /// 4 to 8 digits. Never logged.
+  final String? adminPin;
+
+  factory CleanupParams.fromJson(Map<String, dynamic> json) => CleanupParams(
+    keep: json['keep'] as int,
+    adminPin: json['admin_pin'] == null ? null : json['admin_pin'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {'keep': keep, 'admin_pin': ?adminPin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is CleanupParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'CleanupParams(${jsonEncode(toJson())})';
+}
+
+enum CleanupFrequency {
+  daily('daily'),
+  weekly('weekly'),
+  monthly('monthly'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const CleanupFrequency(this.value);
+  final String value;
+
+  factory CleanupFrequency.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+class CleanupSettings {
+  const CleanupSettings({
+    required this.enable,
+    required this.frequency,
+    required this.keepSystem,
+    required this.keepProfiles,
+  });
+
+  final bool enable;
+  final CleanupFrequency frequency;
+
+  /// Generations to keep (the running, booted and current ones always stay).
+  final int keepSystem;
+
+  /// Generations to keep (the running, booted and current ones always stay).
+  final int keepProfiles;
+
+  factory CleanupSettings.fromJson(Map<String, dynamic> json) =>
+      CleanupSettings(
+        enable: json['enable'] as bool,
+        frequency: CleanupFrequency.fromJson(json['frequency'] as String),
+        keepSystem: json['keep_system'] as int,
+        keepProfiles: json['keep_profiles'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'enable': enable,
+    'frequency': frequency.toJson(),
+    'keep_system': keepSystem,
+    'keep_profiles': keepProfiles,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is CleanupSettings &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'CleanupSettings(${jsonEncode(toJson())})';
+}
+
+/// What a storage node stands for: disk (the top-level root), system, apps, profile (id), guest, other (what none of the others explains: other store paths, garbage, filesystem overhead), free; generation (what only that generation holds), common (what two or more generations of the parent hold), app_env (one owner's app envs outside the system; id: a profile id, starter or guest), shared (app store paths in two or more owners' envs, counted once); dir (name), files (loose files and folders too small or deep to show), steam (the installed games), steam_game (name, app_id).
+enum NodeKind {
+  disk('disk'),
+  system('system'),
+  apps('apps'),
+  profile('profile'),
+  guest('guest'),
+  other('other'),
+  free('free'),
+  generation('generation'),
+  common('common'),
+  appEnv('app_env'),
+  shared('shared'),
+  dir('dir'),
+  files('files'),
+  steam('steam'),
+  steamGame('steam_game'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const NodeKind(this.value);
+  final String value;
+
+  factory NodeKind.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+/// A segment of the storage ring. Children always add up to bytes (the disk root: to the filesystem's size, unless the measured parts exceed it). Zero-byte nodes are left out except app_env, profile, guest and free. Order: generations newest first, other named nodes largest first, then common, shared, files, other, free. The launcher names kinds itself; name is data (a folder or a game).
+class StorageNode {
+  const StorageNode({
+    required this.kind,
+    required this.bytes,
+    required this.children,
+    this.id,
+    this.name,
+    this.generation,
+    this.date,
+    this.current,
+    this.booted,
+    this.appId,
+  });
+
+  /// What a storage node stands for: disk (the top-level root), system, apps, profile (id), guest, other (what none of the others explains: other store paths, garbage, filesystem overhead), free; generation (what only that generation holds), common (what two or more generations of the parent hold), app_env (one owner's app envs outside the system; id: a profile id, starter or guest), shared (app store paths in two or more owners' envs, counted once); dir (name), files (loose files and folders too small or deep to show), steam (the installed games), steam_game (name, app_id).
+  final NodeKind kind;
+  final int bytes;
+  final List<StorageNode> children;
+
+  /// profile: its id; app_env: a profile id, starter or guest; a profile tree's root.
+  final String? id;
+
+  /// dir: the folder's name; steam_game: the game's name.
+  final String? name;
+  final int? generation;
+
+  /// generation: created (Unix seconds).
+  final int? date;
+
+  /// generation: the running system, or the owner's current apps.
+  final bool? current;
+
+  /// generation: the booted system.
+  final bool? booted;
+
+  /// steam_game: Steam's appid.
+  final int? appId;
+
+  factory StorageNode.fromJson(Map<String, dynamic> json) => StorageNode(
+    kind: NodeKind.fromJson(json['kind'] as String),
+    bytes: json['bytes'] as int,
+    children: (json['children'] as List)
+        .map((x) => StorageNode.fromJson((x as Map).cast<String, dynamic>()))
+        .toList(),
+    id: json['id'] == null ? null : json['id'] as String,
+    name: json['name'] == null ? null : json['name'] as String,
+    generation: json['generation'] == null ? null : json['generation'] as int,
+    date: json['date'] == null ? null : json['date'] as int,
+    current: json['current'] == null ? null : json['current'] as bool,
+    booted: json['booted'] == null ? null : json['booted'] as bool,
+    appId: json['app_id'] == null ? null : json['app_id'] as int,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'kind': kind.toJson(),
+    'bytes': bytes,
+    'children': children.map((x) => x.toJson()).toList(),
+    'id': ?id,
+    'name': ?name,
+    'generation': ?generation,
+    'date': ?date,
+    'current': ?current,
+    'booted': ?booted,
+    'app_id': ?appId,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is StorageNode &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'StorageNode(${jsonEncode(toJson())})';
+}
+
+/// The Nix store's filesystem, like df: used = total minus free blocks, free = available blocks.
+class DiskUsage {
+  const DiskUsage({
+    required this.totalBytes,
+    required this.usedBytes,
+    required this.freeBytes,
+  });
+
+  final int totalBytes;
+  final int usedBytes;
+  final int freeBytes;
+
+  factory DiskUsage.fromJson(Map<String, dynamic> json) => DiskUsage(
+    totalBytes: json['total_bytes'] as int,
+    usedBytes: json['used_bytes'] as int,
+    freeBytes: json['free_bytes'] as int,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'total_bytes': totalBytes,
+    'used_bytes': usedBytes,
+    'free_bytes': freeBytes,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is DiskUsage && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'DiskUsage(${jsonEncode(toJson())})';
+}
+
+class CleanupEstimate {
+  const CleanupEstimate({
+    required this.keep,
+    required this.generations,
+    required this.bytes,
+  });
+
+  /// Generations to keep (the running, booted and current ones always stay).
+  final int keep;
+
+  /// Generations that clean-up would remove now.
+  final int generations;
+
+  /// About what it would free (garbage included).
+  final int bytes;
+
+  factory CleanupEstimate.fromJson(Map<String, dynamic> json) =>
+      CleanupEstimate(
+        keep: json['keep'] as int,
+        generations: json['generations'] as int,
+        bytes: json['bytes'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'keep': keep,
+    'generations': generations,
+    'bytes': bytes,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is CleanupEstimate &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'CleanupEstimate(${jsonEncode(toJson())})';
+}
+
+class MeasurementEstimates {
+  const MeasurementEstimates({required this.system, required this.profiles});
+
+  /// keep 1 to 10, in order.
+  final List<CleanupEstimate> system;
+
+  /// keep 1 to 10, in order.
+  final List<CleanupEstimate> profiles;
+
+  factory MeasurementEstimates.fromJson(Map<String, dynamic> json) =>
+      MeasurementEstimates(
+        system: (json['system'] as List)
+            .map(
+              (x) =>
+                  CleanupEstimate.fromJson((x as Map).cast<String, dynamic>()),
+            )
+            .toList(),
+        profiles: (json['profiles'] as List)
+            .map(
+              (x) =>
+                  CleanupEstimate.fromJson((x as Map).cast<String, dynamic>()),
+            )
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'system': system.map((x) => x.toJson()).toList(),
+    'profiles': profiles.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is MeasurementEstimates &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'MeasurementEstimates(${jsonEncode(toJson())})';
+}
+
+class Measurement {
+  const Measurement({
+    required this.measuredAt,
+    required this.disk,
+    required this.root,
+    required this.garbageBytes,
+    required this.estimates,
+  });
+
+  /// When it finished (Unix seconds).
+  final int measuredAt;
+
+  /// The Nix store's filesystem, like df: used = total minus free blocks, free = available blocks.
+  final DiskUsage disk;
+
+  /// A segment of the storage ring. Children always add up to bytes (the disk root: to the filesystem's size, unless the measured parts exceed it). Zero-byte nodes are left out except app_env, profile, guest and free. Order: generations newest first, other named nodes largest first, then common, shared, files, other, free. The launcher names kinds itself; name is data (a folder or a game).
+  final StorageNode root;
+
+  /// Store paths no GC root reaches now.
+  final int garbageBytes;
+  final MeasurementEstimates estimates;
+
+  factory Measurement.fromJson(Map<String, dynamic> json) => Measurement(
+    measuredAt: json['measured_at'] as int,
+    disk: DiskUsage.fromJson((json['disk'] as Map).cast<String, dynamic>()),
+    root: StorageNode.fromJson((json['root'] as Map).cast<String, dynamic>()),
+    garbageBytes: json['garbage_bytes'] as int,
+    estimates: MeasurementEstimates.fromJson(
+      (json['estimates'] as Map).cast<String, dynamic>(),
+    ),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'measured_at': measuredAt,
+    'disk': disk.toJson(),
+    'root': root.toJson(),
+    'garbage_bytes': garbageBytes,
+    'estimates': estimates.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is Measurement &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'Measurement(${jsonEncode(toJson())})';
+}
+
+/// 0.6, storage_measure jobs.
+class MeasuredResult {
+  const MeasuredResult({required this.measuredAt});
+
+  final int measuredAt;
+
+  factory MeasuredResult.fromJson(Map<String, dynamic> json) =>
+      MeasuredResult(measuredAt: json['measured_at'] as int);
+
+  Map<String, dynamic> toJson() => {'measured_at': measuredAt};
+
+  @override
+  bool operator ==(Object other) =>
+      other is MeasuredResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'MeasuredResult(${jsonEncode(toJson())})';
+}
+
+/// 0.6, cleanup_system and cleanup_profiles jobs. freed_bytes: free space after minus before on the store's filesystem (never negative).
+class CleanedResult {
+  const CleanedResult({
+    required this.freedBytes,
+    required this.generationsRemoved,
+  });
+
+  final int freedBytes;
+  final int generationsRemoved;
+
+  factory CleanedResult.fromJson(Map<String, dynamic> json) => CleanedResult(
+    freedBytes: json['freed_bytes'] as int,
+    generationsRemoved: json['generations_removed'] as int,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'freed_bytes': freedBytes,
+    'generations_removed': generationsRemoved,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is CleanedResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'CleanedResult(${jsonEncode(toJson())})';
 }
 
 class ProgressDetail {
@@ -5937,6 +6384,430 @@ class SystemStarterSetSetResult {
   String toString() => 'SystemStarterSetSetResult(${jsonEncode(toJson())})';
 }
 
+class SystemStorageGetParams {
+  const SystemStorageGetParams();
+
+  factory SystemStorageGetParams.fromJson(Map<String, dynamic> json) =>
+      SystemStorageGetParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemStorageGetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemStorageGetParams(${jsonEncode(toJson())})';
+}
+
+class SystemStorageGetResult {
+  const SystemStorageGetResult({required this.measurement});
+
+  final Measurement? measurement;
+
+  factory SystemStorageGetResult.fromJson(Map<String, dynamic> json) =>
+      SystemStorageGetResult(
+        measurement: json['measurement'] == null
+            ? null
+            : Measurement.fromJson(
+                (json['measurement'] as Map).cast<String, dynamic>(),
+              ),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'measurement': measurement == null ? null : measurement!.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemStorageGetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemStorageGetResult(${jsonEncode(toJson())})';
+}
+
+class SystemStorageMeasureParams {
+  const SystemStorageMeasureParams();
+
+  factory SystemStorageMeasureParams.fromJson(Map<String, dynamic> json) =>
+      SystemStorageMeasureParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemStorageMeasureParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemStorageMeasureParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemStorageMeasureResult {
+  const SystemStorageMeasureResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemStorageMeasureResult.fromJson(Map<String, dynamic> json) =>
+      SystemStorageMeasureResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemStorageMeasureResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemStorageMeasureResult(${jsonEncode(toJson())})';
+}
+
+class SystemStorageTreeParams {
+  const SystemStorageTreeParams({required this.id, this.adminPin});
+
+  /// A profile id or guest.
+  final String id;
+
+  /// 4 to 8 digits. Never logged.
+  final String? adminPin;
+
+  factory SystemStorageTreeParams.fromJson(Map<String, dynamic> json) =>
+      SystemStorageTreeParams(
+        id: json['id'] as String,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'id': id, 'admin_pin': ?adminPin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemStorageTreeParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemStorageTreeParams(${jsonEncode(toJson())})';
+}
+
+class SystemStorageTreeResult {
+  const SystemStorageTreeResult({
+    required this.id,
+    required this.measuredAt,
+    required this.root,
+  });
+
+  /// A profile id or guest.
+  final String id;
+  final int measuredAt;
+
+  /// A segment of the storage ring. Children always add up to bytes (the disk root: to the filesystem's size, unless the measured parts exceed it). Zero-byte nodes are left out except app_env, profile, guest and free. Order: generations newest first, other named nodes largest first, then common, shared, files, other, free. The launcher names kinds itself; name is data (a folder or a game).
+  final StorageNode root;
+
+  factory SystemStorageTreeResult.fromJson(Map<String, dynamic> json) =>
+      SystemStorageTreeResult(
+        id: json['id'] as String,
+        measuredAt: json['measured_at'] as int,
+        root: StorageNode.fromJson(
+          (json['root'] as Map).cast<String, dynamic>(),
+        ),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'measured_at': measuredAt,
+    'root': root.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemStorageTreeResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemStorageTreeResult(${jsonEncode(toJson())})';
+}
+
+class SystemStorageCleanupSystemParams {
+  const SystemStorageCleanupSystemParams({required this.keep, this.adminPin});
+
+  /// Generations to keep (the running, booted and current ones always stay).
+  final int keep;
+
+  /// 4 to 8 digits. Never logged.
+  final String? adminPin;
+
+  factory SystemStorageCleanupSystemParams.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemStorageCleanupSystemParams(
+    keep: json['keep'] as int,
+    adminPin: json['admin_pin'] == null ? null : json['admin_pin'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {'keep': keep, 'admin_pin': ?adminPin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemStorageCleanupSystemParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemStorageCleanupSystemParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemStorageCleanupSystemResult {
+  const SystemStorageCleanupSystemResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemStorageCleanupSystemResult.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemStorageCleanupSystemResult(
+    jobId: json['job_id'] == null ? null : json['job_id'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemStorageCleanupSystemResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemStorageCleanupSystemResult(${jsonEncode(toJson())})';
+}
+
+class SystemStorageCleanupProfilesParams {
+  const SystemStorageCleanupProfilesParams({required this.keep, this.adminPin});
+
+  /// Generations to keep (the running, booted and current ones always stay).
+  final int keep;
+
+  /// 4 to 8 digits. Never logged.
+  final String? adminPin;
+
+  factory SystemStorageCleanupProfilesParams.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemStorageCleanupProfilesParams(
+    keep: json['keep'] as int,
+    adminPin: json['admin_pin'] == null ? null : json['admin_pin'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {'keep': keep, 'admin_pin': ?adminPin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemStorageCleanupProfilesParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemStorageCleanupProfilesParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemStorageCleanupProfilesResult {
+  const SystemStorageCleanupProfilesResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemStorageCleanupProfilesResult.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemStorageCleanupProfilesResult(
+    jobId: json['job_id'] == null ? null : json['job_id'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemStorageCleanupProfilesResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemStorageCleanupProfilesResult(${jsonEncode(toJson())})';
+}
+
+class SystemCleanupGetParams {
+  const SystemCleanupGetParams();
+
+  factory SystemCleanupGetParams.fromJson(Map<String, dynamic> json) =>
+      SystemCleanupGetParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemCleanupGetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemCleanupGetParams(${jsonEncode(toJson())})';
+}
+
+class SystemCleanupGetResult {
+  const SystemCleanupGetResult({
+    required this.enable,
+    required this.frequency,
+    required this.keepSystem,
+    required this.keepProfiles,
+  });
+
+  final bool enable;
+  final CleanupFrequency frequency;
+
+  /// Generations to keep (the running, booted and current ones always stay).
+  final int keepSystem;
+
+  /// Generations to keep (the running, booted and current ones always stay).
+  final int keepProfiles;
+
+  factory SystemCleanupGetResult.fromJson(Map<String, dynamic> json) =>
+      SystemCleanupGetResult(
+        enable: json['enable'] as bool,
+        frequency: CleanupFrequency.fromJson(json['frequency'] as String),
+        keepSystem: json['keep_system'] as int,
+        keepProfiles: json['keep_profiles'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'enable': enable,
+    'frequency': frequency.toJson(),
+    'keep_system': keepSystem,
+    'keep_profiles': keepProfiles,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemCleanupGetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemCleanupGetResult(${jsonEncode(toJson())})';
+}
+
+class SystemCleanupSetParams {
+  const SystemCleanupSetParams({
+    required this.enable,
+    required this.frequency,
+    required this.keepSystem,
+    required this.keepProfiles,
+    this.adminPin,
+  });
+
+  final bool enable;
+  final CleanupFrequency frequency;
+
+  /// Generations to keep (the running, booted and current ones always stay).
+  final int keepSystem;
+
+  /// Generations to keep (the running, booted and current ones always stay).
+  final int keepProfiles;
+
+  /// 4 to 8 digits. Never logged.
+  final String? adminPin;
+
+  factory SystemCleanupSetParams.fromJson(Map<String, dynamic> json) =>
+      SystemCleanupSetParams(
+        enable: json['enable'] as bool,
+        frequency: CleanupFrequency.fromJson(json['frequency'] as String),
+        keepSystem: json['keep_system'] as int,
+        keepProfiles: json['keep_profiles'] as int,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'enable': enable,
+    'frequency': frequency.toJson(),
+    'keep_system': keepSystem,
+    'keep_profiles': keepProfiles,
+    'admin_pin': ?adminPin,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemCleanupSetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemCleanupSetParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemCleanupSetResult {
+  const SystemCleanupSetResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemCleanupSetResult.fromJson(Map<String, dynamic> json) =>
+      SystemCleanupSetResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemCleanupSetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemCleanupSetResult(${jsonEncode(toJson())})';
+}
+
 class SystemJobsGetParams {
   const SystemJobsGetParams({required this.jobId});
 
@@ -9112,7 +9983,7 @@ final class JobFinishedEvent extends SessionEvent {
   /// A JSON-RPC error object (codes from this document's errors).
   final ErrorObject? error;
 
-  /// update_check jobs: an UpdateCheckResult; jobs that change the system: an AppliedResult.
+  /// update_check jobs: an UpdateCheckResult; jobs that change the system: an AppliedResult; storage_measure (0.6): a MeasuredResult; cleanup_system and cleanup_profiles (0.6): a CleanedResult.
   final Object? result;
   final bool sessionRestartRequired;
 
@@ -10907,6 +11778,67 @@ mixin SessionApiMethods {
     SystemStarterSetSetParams params,
   ) async => SystemStarterSetSetResult.fromJson(
     await rpc('system.starter_set.set', params.toJson()),
+  );
+
+  /// Relayed to the system service's storage.get. the last storage measurement (storage.md): the disk, the top level of the ring, every profile's total, the system and apps breakdown, garbage and the clean-up estimates. Read-only, open to every caller.
+  ///
+  /// Null until the first storage_measure job has finished. Kept in /var/lib/hinteros/storage.json (root, 0600) with its time. Never contains a file, folder or Steam game name or an app id: profile and guest nodes have no children here (storage.tree gives a home's detailed tree). estimates.system[keep-1] and estimates.profiles[keep-1] (keep 1 to 10) say how many generations storage.cleanup_system / storage.cleanup_profiles with that keep would remove now and about how many bytes it frees (garbage_bytes included; NAR sizes), from this measurement.
+  Future<SystemStorageGetResult> systemStorageGet([
+    SystemStorageGetParams params = const SystemStorageGetParams(),
+  ]) async => SystemStorageGetResult.fromJson(
+    await rpc('system.storage.get', params.toJson()),
+  );
+
+  /// Relayed to the system service's storage.measure. measure what uses the disk (job storage_measure). Any profile or the guest; no PIN. Action org.hinteros.system.settings.
+  ///
+  /// A storage_measure job that is already running is the answer (its job_id, no new job); another job running is job_busy. Stages preparing, measuring (with percent), finishing; cancellable at any time (the last measurement stays). Measures: statvfs of the store's filesystem; nix path-info --all -s (NAR sizes) and nix-store --gc --print-live (garbage = all minus live); nix-store -qR of every system and app generation; every home with a walk that never follows a symlink, never leaves the home's filesystem and never reads a file (only Steam's libraryfolders.vdf and appmanifest_*.acf, for the games' names). The result is {measured_at}; then call storage.get. Nothing a caller can read (events, results, the job's log) names a file of a home.
+  Future<SystemStorageMeasureResult> systemStorageMeasure([
+    SystemStorageMeasureParams params = const SystemStorageMeasureParams(),
+  ]) async => SystemStorageMeasureResult.fromJson(
+    await rpc('system.storage.measure', params.toJson()),
+  );
+
+  /// Relayed to the system service's storage.tree. one home's detailed tree from the last measurement: its folders and its Steam games. The caller's own home: open; another profile's or the guest's: the admin PIN. Action org.hinteros.system.settings.
+  ///
+  /// id: a profile id or guest (else invalid_params {field: id, reason: bad_format}). The caller's own account (or the guest asking for guest) needs no PIN; anything else needs admin_pin, checked like every box-wide action (pin_required {pin: admin} when missing or wrong, or without an admin profile; an admin profile without a PIN yet passes; schema-1 boxes and root are exempt). not_found: nothing measured yet, or that home was not measured (measure again). The root is kind profile (with id) or guest; its bytes equal the top level's. Children: steam (its children: steam_game, one per installed game, named from appmanifest_&lt;appid&gt;.acf in each Steam library folder inside the home; the game folders are not counted again among the folders), dir (recursively) and files (files directly in a folder, and folders too small or deep to show). At most 6 folder levels, folders of at least max(1 MiB, 0.5 % of the home), at most 16 per folder, at most 400 nodes; names at most 128 characters, control characters replaced by U+FFFD.
+  Future<SystemStorageTreeResult> systemStorageTree(
+    SystemStorageTreeParams params,
+  ) async => SystemStorageTreeResult.fromJson(
+    await rpc('system.storage.tree', params.toJson()),
+  );
+
+  /// Relayed to the system service's storage.cleanup_system. clean up the system (job cleanup_system): remove the system generations older than the newest keep (never the running or the booted one), rewrite the boot menu, collect garbage. Admin PIN every time. Action org.hinteros.system.rebuild.
+  ///
+  /// keep: 1 to 10 (else invalid_params {field: keep, reason: out_of_range}). admin_pin as for every box-wide action. Always a job (garbage is collected even when no generation goes). Stages preparing, cleaning (removing generations with nix-env --delete-generations, then switch-to-configuration boot of the default generation so no boot entry points at a removed one; not cancellable from here), collecting (nix-store --gc), finishing. Result {freed_bytes, generations_removed}: freed_bytes is the store filesystem's free space after minus before. The estimate comes from storage.get's estimates.system. Below 2 the launcher warns that there is no older version to roll back to.
+  Future<SystemStorageCleanupSystemResult> systemStorageCleanupSystem(
+    SystemStorageCleanupSystemParams params,
+  ) async => SystemStorageCleanupSystemResult.fromJson(
+    await rpc('system.storage.cleanup_system', params.toJson()),
+  );
+
+  /// Relayed to the system service's storage.cleanup_profiles. clean up profiles (job cleanup_profiles): in every profile's app env and the starter set's, remove the generations older than the newest keep (never the current one), then collect garbage. Admin PIN every time. Action org.hinteros.system.rebuild.
+  ///
+  /// keep: 1 to 10. The guest's env (a single link) is not touched. Stages preparing, cleaning, collecting, finishing; result {freed_bytes, generations_removed}. Schema-1 boxes: unavailable {service: profiles, reason: schema1}. The estimate comes from storage.get's estimates.profiles. Below 2 the launcher warns that app rollback in those profiles is gone.
+  Future<SystemStorageCleanupProfilesResult> systemStorageCleanupProfiles(
+    SystemStorageCleanupProfilesParams params,
+  ) async => SystemStorageCleanupProfilesResult.fromJson(
+    await rpc('system.storage.cleanup_profiles', params.toJson()),
+  );
+
+  /// Relayed to the system service's cleanup.get. the automatic clean-up setting (state.json settings.cleanup; defaults when absent: on, weekly, keep 5 and 5). Read-only.
+  Future<SystemCleanupGetResult> systemCleanupGet([
+    SystemCleanupGetParams params = const SystemCleanupGetParams(),
+  ]) async => SystemCleanupGetResult.fromJson(
+    await rpc('system.cleanup.get', params.toJson()),
+  );
+
+  /// Relayed to the system service's cleanup.set. change the automatic clean-up (job cleanup_set, a rebuild like ssh.set). Admin PIN. Action org.hinteros.system.settings.
+  ///
+  /// All four fields; keep_system and keep_profiles 1 to 10 (else invalid_params {field, reason: out_of_range}). Writes settings.cleanup {enable, frequency, keepSystem, keepProfiles} to state.json through the apply flow; job_id null when nothing changes (also when it was absent and the defaults are asked for). The system's nix-gc timer and the boot menu limit follow it.
+  Future<SystemCleanupSetResult> systemCleanupSet(
+    SystemCleanupSetParams params,
+  ) async => SystemCleanupSetResult.fromJson(
+    await rpc('system.cleanup.set', params.toJson()),
   );
 
   /// Relayed to the system service's jobs.get. One job: running or among the last 10 finished. Read-only.

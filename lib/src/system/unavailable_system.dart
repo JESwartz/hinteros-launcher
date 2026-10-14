@@ -255,6 +255,29 @@ class _UnavailableAuth implements AuthRepository {
   Future<void> cancel(String cookie) async {}
 }
 
+class _UnavailableStorage implements StorageRepository {
+  @override
+  Future<StorageMeasurement?> get() => Future.error(_gone);
+  @override
+  Future<JobHandle> measure() => Future.error(_gone);
+  @override
+  Future<StorageTree> tree(String id, {String? adminPin}) =>
+      Future.error(_gone);
+  @override
+  Future<JobHandle> cleanup(
+    CleanupTarget target,
+    int keep, {
+    String? adminPin,
+  }) => Future.error(_gone);
+  @override
+  Future<CleanupSettings> cleanupSettings() => Future.error(_gone);
+  @override
+  Future<JobHandle> setCleanupSettings(
+    CleanupSettings settings, {
+    String? adminPin,
+  }) => Future.error(_gone);
+}
+
 /// Every system call fails with `unavailable`.
 SystemServices unavailableSystemServices() => SystemServices(
   jobs: _UnavailableJobs(),
@@ -266,4 +289,5 @@ SystemServices unavailableSystemServices() => SystemServices(
   store: _UnavailableStore(),
   auth: _UnavailableAuth(),
   profiles: const UnavailableProfiles(),
+  storage: _UnavailableStorage(),
 );

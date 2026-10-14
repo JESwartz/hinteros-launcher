@@ -10,5 +10,6 @@ export 'mock_auth.dart' show MockAuthAgent;
 export 'mock_profiles.dart' show MockProfileSession, MockWireProfile;
 export 'mock_runtime.dart';
 export 'mock_store.dart' show mockCatalogDir, mockStoreApp, mockStoreCatalog;
-export 'mock_system_relay.dart' show MockSystemRelay, mockStagesOf;
+export 'mock_system_relay.dart'
+    show MockSystemRelay, mockStagesOf, mockWireHomes, mockWireMeasurement;
 export 'version.dart';

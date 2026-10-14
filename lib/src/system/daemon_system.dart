@@ -14,6 +14,7 @@ import 'daemon_auth.dart';
 import 'daemon_errors.dart';
 import 'daemon_profiles.dart';
 import 'daemon_runtime.dart';
+import 'daemon_storage.dart';
 import 'daemon_store.dart';
 import 'models.dart';
 import 'repositories.dart';
@@ -39,6 +40,10 @@ JobKind _jobKind(api.JobKind k) => switch (k) {
   api.JobKind.guestSet => JobKind.guest,
   api.JobKind.starterSet => JobKind.starterSet,
   api.JobKind.guestEnd => JobKind.guestEnd,
+  api.JobKind.storageMeasure => JobKind.storageMeasure,
+  api.JobKind.cleanupSystem => JobKind.cleanupSystem,
+  api.JobKind.cleanupProfiles => JobKind.cleanupProfiles,
+  api.JobKind.cleanupSet => JobKind.cleanupSet,
   // The v1 -> v2 apps migration (queued by the service itself).
   api.JobKind.migrateApps => JobKind.rebuild,
   api.JobKind.unknown => JobKind.rebuild,
@@ -55,6 +60,9 @@ JobStage? _stage(api.Stage? s) => switch (s) {
   api.Stage.finishing => JobStage.finishing,
   api.Stage.box => JobStage.box,
   api.Stage.apps => JobStage.apps,
+  api.Stage.measuring => JobStage.measuring,
+  api.Stage.cleaning => JobStage.cleaning,
+  api.Stage.collecting => JobStage.collecting,
   api.Stage.unknown || null => null,
 };
 
@@ -190,6 +198,9 @@ String _verb(JobStage s) => switch (s) {
   JobStage.building => 'building',
   JobStage.activating => 'switching over',
   JobStage.apps => 'updating the apps',
+  JobStage.measuring => 'measuring',
+  JobStage.cleaning => 'removing old versions',
+  JobStage.collecting => 'deleting unused files',
   JobStage.finishing => 'finishing',
 };
 
@@ -792,5 +803,6 @@ SystemServices daemonSystemServices(api.DaemonConnection connection) {
     store: DaemonStore(connection, jobs),
     auth: DaemonAuth(connection),
     profiles: DaemonProfiles(connection, jobs),
+    storage: DaemonStorage(connection, jobs),
   );
 }

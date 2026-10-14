@@ -10,8 +10,10 @@ library;
 
 import 'models.dart';
 import 'profiles.dart';
+import 'storage.dart';
 
 export 'profiles.dart';
+export 'storage.dart';
 
 /// Jobs (`jobs.get`, `job_started` / `job_progress` / `job_finished`).
 abstract class JobsRepository {
@@ -297,6 +299,7 @@ class SystemServices {
     required this.store,
     required this.auth,
     required this.profiles,
+    required this.storage,
   });
 
   final JobsRepository jobs;
@@ -311,4 +314,7 @@ class SystemServices {
   /// Profiles (M7): the current profile, switching, the sleep lock,
   /// Settings -> Profiles.
   final ProfilesRepository profiles;
+
+  /// Settings -> Storage (0.14): what uses the disk, the clean-ups.
+  final StorageRepository storage;
 }

@@ -157,6 +157,7 @@ class MockDaemon extends DaemonConnection {
       onTermsAccepted: (id) => setNeedsTerms(id, null),
     );
     system.checkAdminPin = profiles.checkBoxAdminPin;
+    system.currentOwner = () => profiles.current;
   }
 
   /// Profiles (session API 0.12): the current profile, the switch, the
