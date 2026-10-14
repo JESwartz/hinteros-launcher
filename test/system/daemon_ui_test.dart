@@ -17,7 +17,10 @@ Harness harness() {
     games: gamesWithArt(),
     now: fixedNow,
   );
-  return Harness(mock: mock, realServices: daemonSystemServices(mock));
+  return Harness(
+    mock: mock,
+    realServices: daemonSystemServices(mock, now: fixedNow),
+  );
 }
 
 /// The startup update check is a job on the service; the test ends it so
@@ -81,7 +84,7 @@ void main() {
       await press(t, [kEnter]);
       // authorized: the dialog is gone and the job's progress shows.
       expect(find.text('Admin password'), findsNothing);
-      expect(find.text('Changing remote access'), findsOneWidget);
+      expect(find.text('Turning on remote access'), findsOneWidget);
       h.mock.system.finishJob(h.mock.system.runningJobId!);
       await t.pumpAndSettle();
       await press(t, [kEnter]); // Close
@@ -133,7 +136,7 @@ void main() {
       await enterSettingsEntry(t, 'ssh');
       await press(t, [kEnter]);
       expect(find.text('Admin password'), findsNothing);
-      expect(find.text('Changing remote access'), findsOneWidget);
+      expect(find.text('Turning on remote access'), findsOneWidget);
       h.mock.system.finishJob(h.mock.system.runningJobId!);
       await t.pumpAndSettle();
       await press(t, [kEnter]); // Close
@@ -225,7 +228,7 @@ void main() {
           'channel.set',
           'channel.set',
         ]);
-        expect(find.text('Switching channel'), findsOneWidget);
+        expect(find.textContaining('Switching from'), findsOneWidget);
       },
     );
 

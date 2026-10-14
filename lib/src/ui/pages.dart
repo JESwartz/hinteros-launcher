@@ -10,6 +10,7 @@ import '../system/repositories.dart';
 import '../theme/hinter_theme.dart';
 import 'dialogs.dart';
 import 'focus_frame.dart';
+import 'jobs.dart';
 import 'modal_host.dart';
 import 'nav_focusable.dart';
 import 'session_ending.dart';
@@ -74,23 +75,38 @@ class FullPage extends StatelessWidget {
 
 // ------------------------------------------------------------------ progress
 
-/// Follows a job (`jobs.watch`) on a full-screen page: stages, a percentage
-/// where one is known, Cancel while that is allowed, the session-restart
-/// notice, and on failure what happened and that nothing changed. Resolves
-/// with the last snapshot once the user closes it.
+/// Follows a job (`jobs.watch`) on a full-screen page: what it does (for
+/// whom, which version), stages, while building the count and the name,
+/// a bar that always moves, the time it takes, Cancel while that is allowed,
+/// the session-restart notice, and on failure what happened. While the job
+/// runs the person can leave the page ("Hide" or Back): the job keeps
+/// running and the top bar shows it ([JobCenter]). Resolves with the last
+/// snapshot when the page closes: a running one when it was left.
+/// [name] names the job when the service does not (the app of a Store
+/// action); [initial] is what is known already (a page opened again).
 Future<JobSnapshot?> showJobProgress(
   BuildContext context,
   SystemServices services,
   JobHandle job, {
-  String? subtitle,
+  String? name,
+  JobSnapshot? initial,
 }) => ModalScope.of(context).show<JobSnapshot>(
   (context, modal) => JobProgressScreen(
     modal: modal,
     services: services,
     job: job,
-    subtitle: subtitle,
+    name: name,
+    initial: initial,
   ),
 );
+
+/// After this long without news of a running job the page says so (the
+/// service sends a heartbeat at least every 2 s).
+const jobQuietAfter = Duration(seconds: 20);
+
+/// After this long without output from the job's process the page says
+/// that some steps take long.
+const jobNoOutputAfter = Duration(minutes: 3);
 
 class JobProgressScreen extends StatefulWidget {
   const JobProgressScreen({
@@ -98,38 +114,52 @@ class JobProgressScreen extends StatefulWidget {
     required this.modal,
     required this.services,
     required this.job,
-    this.subtitle,
+    this.name,
+    this.initial,
   });
 
   final ModalHandle<JobSnapshot> modal;
   final SystemServices services;
   final JobHandle job;
-  final String? subtitle;
+  final String? name;
+  final JobSnapshot? initial;
 
   @override
   State<JobProgressScreen> createState() => _JobProgressScreenState();
 }
 
-class _JobProgressScreenState extends State<JobProgressScreen> {
-  late JobSnapshot _snap = JobSnapshot(
-    jobId: widget.job.jobId,
-    kind: widget.job.kind,
-  );
+class _JobProgressScreenState extends State<JobProgressScreen> with JobTicker {
+  late JobSnapshot _snap =
+      widget.initial ??
+      JobSnapshot(jobId: widget.job.jobId, kind: widget.job.kind);
+  late final DateTime _opened = widget.services.jobs.now();
   StreamSubscription<JobSnapshot>? _sub;
   String? _cancelNote;
+  JobCenter? _center;
 
   @override
   void initState() {
     super.initState();
-    widget.modal.canBack = () => _snap.finished;
+    widget.modal.canBack = () {
+      if (_snap.finished) {
+        _close();
+      } else if (_center != null) {
+        _close(hidden: true);
+      }
+      return false;
+    };
+    if (_snap.running) startTicking();
     _sub = widget.services.jobs
         .watch(widget.job.jobId)
         .listen(
           (s) {
-            if (mounted) setState(() => _snap = s);
+            if (!mounted) return;
+            setState(() => _snap = s);
+            if (s.finished) stopTicking();
           },
           onError: (Object e) {
             if (!mounted) return;
+            stopTicking();
             setState(
               () => _snap = _snap.copyWith(
                 finished: true,
@@ -146,9 +176,24 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_center == null) {
+      _center = JobCenterScope.maybeOf(context);
+      _center?.pageOpened(widget.job.jobId);
+    }
+  }
+
+  @override
   void dispose() {
     _sub?.cancel();
     super.dispose();
+  }
+
+  /// Closes the page; [hidden]: the person leaves it while the job runs.
+  void _close({bool hidden = false}) {
+    _center?.pageClosed(_snap, hidden: hidden, name: widget.name);
+    widget.modal.close(_snap);
   }
 
   Future<void> _cancel() async {
@@ -172,7 +217,7 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
       }
       return;
     }
-    widget.modal.close(_snap);
+    _close();
   }
 
   @override
@@ -180,16 +225,14 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
     final t = HinterTheme.of(context);
     final s = _snap;
     final region = widget.modal.region;
-    // The kind's usual stages, plus the one the service reports if it is not
-    // among them (the list is a guide, the service decides).
-    final stages = _stagesOf(s);
-    final current = stages.indexOf(s.stage);
     final restart = s.finished && s.ok && s.sessionRestartRequired;
-    region.setRows([NavRow('buttons', restart ? 2 : 1)]);
+    final canHide = !s.finished && _center != null;
+    region.setRows([NavRow('buttons', restart || canHide ? 2 : 1)]);
 
+    final title = jobTitle(s, name: widget.name);
     final String headline;
     if (!s.finished) {
-      headline = s.kind.title;
+      headline = title;
     } else if (s.ok) {
       headline = 'Done';
     } else if (s.cancelled) {
@@ -203,56 +246,38 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
         _ => 'Failed',
       };
     }
+    final sub = jobSubtitle(s);
+
+    final stages = _stages(context, s);
+    // Side by side on a TV, also with large text: the buttons stay on
+    // screen.
+    final wide = MediaQuery.sizeOf(context).width >= 1500;
 
     return FullPage(
       title: headline,
-      subtitle: widget.subtitle,
+      subtitle: s.finished ? title : sub,
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (var i = 0; i < stages.length; i++)
-              Padding(
-                padding: const EdgeInsets.only(bottom: HinterTokens.s1),
-                child: Row(
-                  children: [
-                    _StageMark(state: _stateOf(i, current, s, stages)),
-                    const SizedBox(width: HinterTokens.s2),
-                    Text(
-                      stages[i].label,
-                      style: i == current && !s.finished
-                          ? t.label
-                          : t.bodyDim.copyWith(
-                              fontWeight:
-                                  _stateOf(i, current, s, stages) ==
-                                      _MarkState.failed
-                                  ? FontWeight.w700
-                                  : FontWeight.w400,
-                            ),
-                    ),
-                    if (i == current && !s.finished && s.percent != null)
-                      Text('  ${s.percent}%', style: t.label),
-                  ],
-                ),
-              ),
-            const SizedBox(height: HinterTokens.s3),
-            if (!s.finished) ...[
-              SizedBox(
-                width: 900,
-                child: HBar(
-                  fraction: s.percent == null ? null : s.percent! / 100,
-                ),
-              ),
-              const SizedBox(height: HinterTokens.s1),
-              Text(
-                s.percent != null
-                    ? '${s.percent}%${s.detail == null ? '' : '  ${s.detail}'}'
-                    : (s.detail ?? 'Working…'),
-                style: t.bodyDim,
-              ),
+            if (!s.finished && wide)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: 640, child: stages),
+                  const SizedBox(width: HinterTokens.s5),
+                  Expanded(child: _now(context, s)),
+                ],
+              )
+            else ...[
+              stages,
+              if (!s.finished) ...[
+                const SizedBox(height: HinterTokens.s3),
+                _now(context, s),
+              ],
             ],
+            const SizedBox(height: HinterTokens.s3),
             if (!s.finished && s.kind.mayRestartSession) ...[
-              const SizedBox(height: HinterTokens.s3),
               const StatusLine(
                 'The session restarts when this finishes. Open games and apps '
                 'close.',
@@ -301,6 +326,8 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
                 region: region,
                 rowKey: 'buttons',
                 buttons: [
+                  if (canHide)
+                    btn('Hide', () => _close(hidden: true), primary: true),
                   btn(
                     s.canCancel ? 'Cancel' : "Can't cancel now",
                     s.canCancel ? _cancel : null,
@@ -314,22 +341,136 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
                 rowKey: 'buttons',
                 buttons: [
                   btn('Restart session', _restart, primary: true),
-                  btn('Later', () => widget.modal.close(s)),
+                  btn('Later', _close),
                 ],
               )
             else
               DialogButtons(
                 region: region,
                 rowKey: 'buttons',
-                buttons: [
-                  btn('Close', () => widget.modal.close(s), primary: true),
-                ],
+                buttons: [btn('Close', _close, primary: true)],
               ),
           ],
         ),
       ),
     );
   }
+
+  /// The kind's stages with a mark each.
+  Widget _stages(BuildContext context, JobSnapshot s) {
+    final t = HinterTheme.of(context);
+    // The kind's usual stages, plus the one the service reports if it is not
+    // among them (the list is a guide, the service decides).
+    final stages = _stagesOf(s);
+    final current = stages.indexOf(s.stage);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < stages.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: HinterTokens.s1),
+            child: Row(
+              children: [
+                _StageMark(state: _stateOf(i, current, s, stages)),
+                const SizedBox(width: HinterTokens.s2),
+                Flexible(
+                  child: Text(
+                    stages[i].label,
+                    style: i == current && !s.finished
+                        ? t.label
+                        : t.bodyDim.copyWith(
+                            fontWeight:
+                                _stateOf(i, current, s, stages) ==
+                                    _MarkState.failed
+                                ? FontWeight.w700
+                                : FontWeight.w400,
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// What happens now: the stage with its count or percentage (large),
+  /// what builds (small), the bar, the time, and a word when the job is
+  /// quiet.
+  Widget _now(BuildContext context, JobSnapshot s) {
+    final t = HinterTheme.of(context);
+    final building = s.stage == JobStage.building;
+    final count = building ? buildCount(s.build) : null;
+    final big = count ?? (s.percent == null ? null : '${s.percent}%');
+    final small = building ? buildName(s.build) : s.detail;
+    final now = widget.services.jobs.now();
+    final started = s.startedAt ?? _opened;
+    var heard = s.heardAt ?? _opened;
+    if (heard.isBefore(_opened)) heard = _opened;
+    final quiet = now.difference(heard);
+    final noOutput = s.lastActivityAt == null
+        ? Duration.zero
+        : now.difference(s.lastActivityAt!);
+    final under = [
+      if (count != null && s.percent != null) '${s.percent}% in all',
+      'Time: ${elapsedText(now.difference(started))}',
+    ];
+    return Column(
+      key: const ValueKey('job-now'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.end,
+          spacing: HinterTokens.s2,
+          children: [
+            Text(s.stage.label, style: t.title),
+            if (big != null)
+              Text(
+                big,
+                key: const ValueKey('job-count'),
+                style: t.headline.copyWith(color: t.accent, height: 1.05),
+              ),
+          ],
+        ),
+        if (small != null)
+          Text(
+            small,
+            key: const ValueKey('job-what'),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: t.bodyDim,
+          ),
+        const SizedBox(height: HinterTokens.s2),
+        JobBar(
+          fraction: s.percent == null ? null : s.percent! / 100,
+          tick: tick,
+        ),
+        const SizedBox(height: HinterTokens.s1),
+        Text(
+          under.join('    '),
+          key: const ValueKey('job-elapsed'),
+          style: t.bodyDim,
+        ),
+        if (quiet >= jobQuietAfter) ...[
+          const SizedBox(height: HinterTokens.s2),
+          StatusLine(
+            'No news for ${_ago(quiet)}. The job is still running.',
+            key: const ValueKey('job-quiet'),
+          ),
+        ] else if (noOutput >= jobNoOutputAfter) ...[
+          const SizedBox(height: HinterTokens.s2),
+          StatusLine(
+            'No new output for ${_ago(noOutput)}. Some steps take a long '
+            'time.',
+            key: const ValueKey('job-no-output'),
+          ),
+        ],
+      ],
+    );
+  }
+
+  static String _ago(Duration d) =>
+      d.inSeconds < 60 ? '${d.inSeconds} s' : '${d.inMinutes} min';
 
   /// What a job that finished well did: a clean-up says what it freed.
   static String _doneText(JobSnapshot s) {

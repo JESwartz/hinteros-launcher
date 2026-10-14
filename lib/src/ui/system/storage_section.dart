@@ -7,6 +7,7 @@ import '../../system/models.dart';
 import '../../system/repositories.dart';
 import '../../theme/hinter_theme.dart';
 import '../dialogs.dart';
+import '../jobs.dart' show JobCenterScope;
 import '../pages.dart' show showJobProgress;
 import '../modal_host.dart';
 import '../nav_focusable.dart';
@@ -307,11 +308,29 @@ class _StorageSectionState extends State<StorageSection> {
   }
 
   Future<void> _measure() async {
-    final ok = await runJob(context, env.services, _storage.measure);
-    if (!ok || !mounted) return;
+    final JobHandle h;
+    try {
+      h = await _storage.measure();
+    } on SystemException catch (e) {
+      if (mounted) {
+        await showMessage(context, title: "That didn't work", body: e.message);
+      }
+      return;
+    }
+    if (!mounted) return;
+    var r = await showJobProgress(context, env.services, h);
+    // Left while it runs: the numbers come when it is done.
+    if (r != null && r.running) r = await _whenDone(h.jobId);
+    if (!(r?.ok ?? false) || !mounted) return;
     _stale = false;
     await _load();
   }
+
+  /// The end of a job whose page the person left.
+  Future<JobSnapshot?> _whenDone(String jobId) => env.services.jobs
+      .watch(jobId)
+      .firstWhere((s) => s.finished)
+      .then<JobSnapshot?>((s) => s, onError: (Object _) => null);
 
   Future<void> _cleanup(CleanupTarget target) async {
     final m = _m;
@@ -350,7 +369,28 @@ class _StorageSectionState extends State<StorageSection> {
         onError: (Object _) => scan.complete(null),
       );
     }, onError: (Object _) => scan.isCompleted ? null : scan.complete(null));
+    final center = JobCenterScope.maybeOf(context);
     final r = await showJobProgress(context, env.services, job);
+    if (r != null && r.running) {
+      // Left while it runs: the scan starts when it is done and shows in
+      // the top bar; the numbers come when the scan is done.
+      final h = await scan.future;
+      unawaited(sub.cancel());
+      if (h == null) {
+        if (mounted) setState(() => _stale = true);
+        return;
+      }
+      center?.follow(JobSnapshot(jobId: h.jobId, kind: h.kind));
+      final done = await _whenDone(h.jobId);
+      if (!mounted) return;
+      if (done?.ok ?? false) {
+        _stale = false;
+        await _load();
+      } else {
+        setState(() => _stale = true);
+      }
+      return;
+    }
     // Not awaited: a cancel future can finish outside the test zone.
     unawaited(sub.cancel());
     if (!(r?.ok ?? false) || !mounted) return;

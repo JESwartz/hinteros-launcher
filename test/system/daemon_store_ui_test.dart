@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart' show ValueKey;
 // The Store screens and the Games tab's "Install Steam" on the real
 // repositories (DaemonStore and friends) over the mock daemon: install with
 // the vendor terms and the job's progress, remove with data deletion, and what
@@ -29,7 +30,10 @@ Harness harness({
     mock.apps.removeWhere((a) => a.id == 'steam');
   }
   mock.system.nextUpdate = update;
-  return Harness(mock: mock, realServices: daemonSystemServices(mock));
+  return Harness(
+    mock: mock,
+    realServices: daemonSystemServices(mock, now: fixedNow),
+  );
 }
 
 /// The startup update check holds the system job slot: end it.
@@ -104,7 +108,7 @@ void main() {
       expect(appsLog(h), ['apps.install:steam']);
       expect(h.mock.system.acceptances, ['steam=2026-09-10']);
       // The progress screen follows the job events.
-      expect(find.text('Installing'), findsOneWidget);
+      expect(find.text('Installing Steam'), findsOneWidget);
       final job = h.mock.system.runningJobId!;
       h.mock.system.progressJob(
         job,
@@ -136,7 +140,7 @@ void main() {
         {'reason': 'revision'},
       );
       await press(t, [kEnter, kRight, kEnter]); // Install, confirm
-      expect(find.text('Installing'), findsOneWidget);
+      expect(find.text('Installing Moonlight'), findsOneWidget);
       expect(appsLog(h), ['apps.install:moonlight', 'apps.install:moonlight']);
       expect(find.text("That didn't work"), findsNothing);
     });
@@ -173,7 +177,7 @@ void main() {
       await press(t, [kDown, kRight, kEnter]);
       expect(appsLog(h), ['apps.install:steam', 'apps.install:steam']);
       expect(h.mock.system.acceptances, ['steam=2026-10-01']);
-      expect(find.text('Installing'), findsOneWidget);
+      expect(find.text('Installing Steam'), findsOneWidget);
     });
 
     testWidgets('app_conflict says which app is in the way', (t) async {
@@ -225,13 +229,14 @@ void main() {
       await endStartupCheck(t, h);
       await openApp(t, 1); // Moonlight
       await press(t, [kEnter, kRight, kEnter]);
-      expect(find.text('Installing'), findsOneWidget);
-      // Close the progress page while it runs? Not allowed: Back is ignored.
+      expect(find.text('Installing Moonlight'), findsOneWidget);
+      // Back leaves the page; the card says Installing... meanwhile.
       await press(t, [kEscape]);
-      expect(find.text('Installing'), findsOneWidget);
+      expect(find.byKey(const ValueKey('job-indicator')), findsOneWidget);
+      expect(find.textContaining('Installing...'), findsWidgets);
       h.mock.system.finishJob(h.mock.system.runningJobId!);
       await t.pumpAndSettle();
-      await press(t, [kEnter]); // Close
+      expect(find.byKey(const ValueKey('job-indicator')), findsNothing);
       await press(t, [kEscape]); // detail page back to the list
       expect(find.text('Installed'), findsWidgets);
     });
@@ -255,7 +260,7 @@ void main() {
       expect(appsLog(h), isEmpty);
       await press(t, [kRight, kEnter]); // Delete data and remove
       expect(appsLog(h), ['apps.remove:steam:data=true']);
-      expect(find.text('Removing'), findsOneWidget);
+      expect(find.text('Removing Steam'), findsOneWidget);
       h.mock.system.finishJob(h.mock.system.runningJobId!);
       await t.pumpAndSettle();
       expect(find.text('Done'), findsOneWidget);
@@ -413,7 +418,7 @@ void main() {
       await press(t, [kDown, kRight, kEnter]);
       expect(appsLog(h), ['apps.install:steam']);
       expect(h.mock.system.acceptances, ['steam=2026-09-10']);
-      expect(find.text('Installing'), findsOneWidget);
+      expect(find.text('Installing Steam'), findsOneWidget);
       h.mock.system.finishJob(h.mock.system.runningJobId!);
       await t.pumpAndSettle();
       await press(t, [kEnter]); // Close

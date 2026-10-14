@@ -242,7 +242,11 @@ void main() {
       }
       await press(t, [kDown, kRight, kEnter]);
       expect(h.services.mockStore.log, ['install:steam:steam=2026-09-10']);
-      expect(find.text('Installing'), findsOneWidget, reason: 'progress page');
+      expect(
+        find.text('Installing Steam'),
+        findsOneWidget,
+        reason: 'progress page',
+      );
     });
 
     testWidgets('shows the library when Steam is installed', (t) async {

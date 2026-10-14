@@ -78,7 +78,7 @@ void main() {
       await enterPin(t, '2468');
       expect(find.text(_askPin), findsNothing);
       expect(h.services.mockJobs.started.single.kind, JobKind.update);
-      expect(find.text('Updating HinterOS'), findsOneWidget);
+      expect(find.textContaining('Updating to HinterOS'), findsOneWidget);
     });
 
     testWidgets('Settings: a wrong PIN asks again', (t) async {
@@ -94,7 +94,7 @@ void main() {
       final h = await settingsPad(t);
       await press(t, [kEscape]);
       expect(find.text(_askPin), findsNothing);
-      expect(find.text('Updating HinterOS'), findsNothing);
+      expect(find.textContaining('Updating to HinterOS'), findsNothing);
       expect(h.services.mockJobs.started, isEmpty);
     });
 
@@ -121,7 +121,7 @@ void main() {
       final h = await noticePad(t);
       await enterPin(t, '2468');
       expect(h.services.mockJobs.started.single.kind, JobKind.update);
-      expect(find.text('Updating HinterOS'), findsOneWidget);
+      expect(find.textContaining('Updating to HinterOS'), findsOneWidget);
     });
 
     testWidgets('security notice: a wrong PIN asks again', (t) async {
@@ -137,7 +137,7 @@ void main() {
       final h = await noticePad(t);
       await press(t, [kEscape]);
       expect(find.text(_askPin), findsNothing);
-      expect(find.text('Updating HinterOS'), findsNothing);
+      expect(find.textContaining('Updating to HinterOS'), findsNothing);
       expect(h.services.mockJobs.started, isEmpty);
     });
 
@@ -189,7 +189,7 @@ void main() {
       await enterPin(t, '2468');
       expect(find.text(_askPin), findsNothing);
       expect(h.services.mockJobs.started.single.kind, JobKind.rollback);
-      expect(find.text('Rolling back'), findsOneWidget);
+      expect(find.textContaining('Rolling back to generation'), findsOneWidget);
     });
 
     testWidgets('a wrong PIN asks again', (t) async {
@@ -206,7 +206,7 @@ void main() {
       final h = await toPad(t);
       await press(t, [kEscape]);
       expect(find.text(_askPin), findsNothing);
-      expect(find.text('Rolling back'), findsNothing);
+      expect(find.textContaining('Rolling back to generation'), findsNothing);
       expect(h.services.mockJobs.started, isEmpty);
     });
 

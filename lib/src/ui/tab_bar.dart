@@ -7,8 +7,10 @@ import 'focus_frame.dart';
 import 'nav_focusable.dart';
 import 'profiles/profile_ui.dart';
 import '../system/profiles.dart';
+import '../system/models.dart' show JobSnapshot;
+import 'jobs.dart';
 
-/// Top bar: wordmark, section tabs, clock. The tabs are one wrapping row in
+/// Top bar: wordmark, section tabs, a running job, the profile chip, clock. The tabs are one wrapping row in
 /// [region]; focusing a tab selects its section (like console UIs).
 class TopBar extends StatelessWidget {
   const TopBar({
@@ -20,7 +22,18 @@ class TopBar extends StatelessWidget {
     required this.time,
     this.profile,
     this.onProfile,
+    this.job,
+    this.jobName,
+    this.onJob,
   });
+
+  /// The job the person left running (or that ended unseen): a compact
+  /// indicator before the profile chip, in the tab row; null: none.
+  final JobSnapshot? job;
+  final String? jobName;
+
+  /// A on the indicator: the job's page again.
+  final VoidCallback? onJob;
 
   /// The profile chip (colour and initial) after the tabs, as the last item
   /// of the tab row; null: no chip (no profiles on this box).
@@ -55,7 +68,8 @@ class TopBar extends StatelessWidget {
           // the profile chip.
           if (MediaQuery.textScalerOf(context).scale(1) <= 1.0 &&
               labels.length <= 5 &&
-              profile == null) ...[
+              profile == null &&
+              job == null) ...[
             Text(
               'HinterOS',
               style: t.label.copyWith(color: t.accent, letterSpacing: 1),
@@ -78,12 +92,36 @@ class TopBar extends StatelessWidget {
               ),
             ),
           ],
-          const Spacer(),
+          if (job == null)
+            const Spacer()
+          else ...[
+            SizedBox(width: big ? HinterTokens.s2 : HinterTokens.s3),
+            // Takes the room left; its text gets shorter, never the tabs.
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: NavFocusable(
+                  region: region,
+                  rowKey: 'tabs',
+                  col: labels.length,
+                  onSelect: onJob,
+                  scrollIntoView: false,
+                  builder: (context, focused) => JobIndicator(
+                    job: job!,
+                    name: jobName,
+                    focused: focused,
+                    compact: big,
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(width: big ? HinterTokens.s2 : HinterTokens.s3),
+          ],
           if (profile != null) ...[
             NavFocusable(
               region: region,
               rowKey: 'tabs',
-              col: labels.length,
+              col: labels.length + (job == null ? 0 : 1),
               onSelect: onProfile,
               scrollIntoView: false,
               builder: (context, focused) =>

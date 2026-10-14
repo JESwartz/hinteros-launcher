@@ -86,6 +86,45 @@ flutter run -d linux --dart-entrypoint-args=--mock
 ./result/bin/hinteros-launcher --mock --windowed
 ```
 
+### Session API 0.15: job progress
+
+The job progress page (`JobProgressScreen` in `lib/src/ui/pages.dart`) and the jobs the person
+left running (`lib/src/ui/jobs.dart`), on the daemon's job progress of system API 0.7 / session
+API 0.15 (`job_started` / `job_progress` / `job_finished` with `subject`, `started_at`,
+`finished_at`, `last_activity_at`, builds in `detail`; `Job` with the same).
+
+- **What the job does**: the title names it from the job's `subject` (`jobTitle`): "Installing
+  Moonlight", "Updating to HinterOS 0.7.1.c6b69ce beta" (versions named like the update screens,
+  `releaseName`), "Removing Steam", "Rolling back to generation 10", "Switching from Beta to
+  Stable", "Cleaning up the system", "Scanning the disk", ... The line under it says for whom
+  ("For Sam."), from what ("Now on HinterOS 0.7.0 stable."), what else happens ("The app data is
+  deleted too.").
+- **Never stalled**: next to the stages, the stage now with its count large ("Building 3 of 12",
+  `builds_done + 1` capped at `builds_total`) or its percentage ("Downloading 40%"), what builds in
+  small text ("hinteros-daemon 0.7.1, compiling"; the bytes while downloading), a bar (filled to
+  the percentage with a light band that moves, or a block that moves from end to end without
+  one), the percentage in all while building, and the time it takes ("Time: 12 min"; no estimate
+  of the time left). The bar moves once a second (a 0.7 s move, still with reduced motion). The
+  service sends a heartbeat at least every 2 s: after 20 s without one the page says "No news for
+  30 s. The job is still running." (never that it failed); after 3 min without output from the job
+  "No new output for 4 min. Some steps take a long time."
+- **Leaving the page**: "Hide" (focused first) or B while the job runs. The job runs on; the top
+  bar shows a compact indicator before the profile chip (a ring with the percentage, or a turning
+  arc; the title and "Building 3 of 12" / "40%" / the stage; at large text the short part only).
+  A on it opens the page again. When the job ends while its page is not open: a short notice
+  ("Installing Moonlight: done." / ": failed." / ": cancelled."); a failed job stays in the top bar
+  as "Failed" until its page is opened and closed; a job that needs a new session asks
+  ("Restart session" / "Later"), and after "Later" the indicator says "Restart needed" and the
+  page offers "Restart session" too. One job at a time (the service runs one mutating job).
+- **Launcher restart**: at startup and after a reconnect the shell asks `system.jobs.list`; a
+  running job shows in the top bar and its page opens from there (`JobsRepository.running`).
+- `showJobProgress` resolves with the last snapshot when the page closes: a running one when the
+  person left it. Settings > Storage then waits for the end itself (the scan after a clean-up
+  shows in the top bar); the other callers treat it as not done yet.
+- The `--mock` jobs run a long build: twelve derivations with names and versions, four phases
+  each, the total growing from 9 to 12 half way, a heartbeat every 2 s. The mock daemon's relay has
+  `progressJob(buildsDone:, buildsTotal:, building:)` and `heartbeat`.
+
 ### Session API 0.14: Storage
 
 Design: `hinteros-docs/design/storage.md`. Settings > Storage
@@ -340,7 +379,8 @@ params/result schemas that are a `$ref` (the relayed `system.*` results; `displa
 - `test/system/daemon_runtime_test.dart` runs the real network, Bluetooth, display/audio and power repositories over the mock's runtime (mapping, events, the 4xxx errors). `test/system/runtime_ui_test.dart` is the same through the Settings screens: Wi-Fi with a wrong password then the right one, Bluetooth pairing with a passkey (Accept, Reject, the code shown for a device that shows none), the display keep or revert dialog with its 15 seconds (`display.keep` / `display.revert`), `can_set` false, power refused while an update is being applied, and one section unavailable while the others work.
 - `test/api/mock08_test.dart`: what the contract test's examples do not show about the 0.8 mock: the order of events and answers around the admin password prompt (`auth.respond` answers before the waiting `ssh.set`), three wrong passwords, cancel, who gets the events and may answer, the Store's states while an apps job runs, `store_changed`, dependencies and conflicts, `more_after_update`, `session.restart`.
 - `test/system/daemon_store_test.dart`: `DaemonStore` over `MockDaemon`: the listing (sorted, states, terms text from the daemon's file path, unfree without readable terms left out, `unavailable {catalog}`, `system_unavailable`, icons from `apps.list`, a slow older answer not overwriting a newer one), following jobs and `store_changed`, `accepted_terms`, `app_conflict`, `insufficient_resources`, `not_found`, `not_available`, `job_busy`, a stale revision retried once (and only once). `test/system/daemon_store_ui_test.dart`: the same through the screens: install with terms and progress, a stale revision, `terms_required` with a newer version, conflicts, no space, remove with delete data (two confirmations), a running app closed first, retired and going-away apps, the update's new and removed apps, the Games tab's "Install Steam", and the session restart offer (also on a desktop session).
-- `test/system/daemon_system_test.dart` runs the real repositories (`DaemonSystem`, `DaemonUpdates`, `DaemonJobs`) over `MockDaemon`'s relay: error mapping, jobs from events, cancel, downgrade acknowledgement, the update check and its cache, `settings.set` with a revision. `test/system/daemon_ui_test.dart` is the same through the Settings screens (SSH without a polkit agent, settings unavailable, About with the DEV badge, a security update through to "Restart session"). `test/osk/osk_auto_show_test.dart`: the keyboard opens and closes with the launcher's text fields.
+- `test/system/job_progress_test.dart`: the job page while building (count, name, time, the bar moving with no news), the heartbeat gap ("still running", never "failed") and no output for minutes, the title and line under it for every job kind, Hide and the top bar indicator (it follows the job, A opens the page, Back leaves it again), the notices when a hidden job ends (done, failed with the indicator kept, the session restart offered by the notice and by the page opened again), and a launcher restart during a job.
+- `test/system/daemon_system_test.dart` runs the real repositories (`DaemonSystem`, `DaemonUpdates`, `DaemonJobs`) over `MockDaemon`'s relay: error mapping, jobs from events, cancel, downgrade acknowledgement, the update check and its cache, `settings.set` with a revision. Since 0.15 also builds (count, name, phase), the subject with its release name, heartbeats, and the running job found with `jobs.list` by a new launcher. `test/system/daemon_ui_test.dart` is the same through the Settings screens (SSH without a polkit agent, settings unavailable, About with the DEV badge, a security update through to "Restart session"). `test/osk/osk_auto_show_test.dart`: the keyboard opens and closes with the launcher's text fields.
 - `test/installer/` covers the installer: `flow_test.dart` walks the screens with a fake backend (disk filtering, the one erase confirmation on the summary (A held 5 s on "Erase and install"; a shorter hold or Back erases nothing), password mismatch, SSH off by default, offline disabling the online-only apps, the plan JSON for several choices, progress, exit status 2 and 1 with their codes, typing with the pad on the in-app keyboard), `plan_test.dart`, `progress_test.dart`, `parsers_test.dart` (lsblk, nmcli; the catalog index is in `test/system/catalog_test.dart`, against `test/fixtures/catalog`, the real index with placeholder terms text), `process_backend_test.dart` (the real backend class against a stand-in script: the plan arrives on stdin, never in the arguments), `gamepad_test.dart` (the stick deadzone and hysteresis, key repeat, hotplug, disconnects and permission errors, all over synthetic evdev streams from `test/support/fake_pads.dart`; no real device is ever opened), `two_stage_test.dart` (the phase fields, the two progress sections, failed apps on Done), `keyboard_fallback_test.dart` (the evdev keyboard mapping incl. Shift symbols and key repeat, hotplug, and the focus gate: active only while unfocused, never doubled), `input_test.dart` (the installer driven by the keyboard alone and by the stick alone, from Welcome to the restart, and the text-field exceptions), `test/nav/key_map_test.dart`, `first_boot_test.dart`.
 - `test/osk/` drives the on-screen keyboard with the mock backend: layout, D-pad navigation, shift,
   pages, and the exact backend calls for typing `P@ss-w0rd!` with D-pad presses only.
@@ -673,7 +713,7 @@ the client handles by matching on the request id; `system.ssh.set` has a 340 s t
 | `SystemRepository` | `system.info`, `ssh.set`, `settings.get` / `set` (with `revision`), `power.capabilities` / `suspend` / `reboot` / `poweroff`, `session.restart` | About, Power, Remote access, session restart |
 | `AuthRepository` | `authentication_requested` / `authentication_finished`, `auth.respond`, `auth.cancel` | the admin password prompt (shell-wide) |
 | `UpdatesRepository` | `update.check`, `update.apply`, `generations.list`, `rollback`, `channel.set`, `base.set` | Updates, reminders |
-| `JobsRepository` | `jobs.get` / `jobs.cancel`, `job_started` / `job_progress` / `job_finished` | the progress page |
+| `JobsRepository` | `jobs.get` / `jobs.list` / `jobs.cancel`, `job_started` / `job_progress` / `job_finished` | the progress page |
 | `NetworkRepository` | `network.status`, `wifi.*`, `network_changed`, `wifi_list_changed` | Network |
 | `BluetoothRepository` | `bluetooth.*`, `bluetooth_changed`, `bluetooth_confirm` | Bluetooth |
 | `DisplayAudioRepository` | `display.modes` / `set_mode` / `keep` / `revert`, `audio.*`, `audio_changed` | Display, Audio |
@@ -704,10 +744,12 @@ through their stages by themselves.
   admin account). Key import and key-only login are in the backlog. The toggle just calls
   `ssh.set`; turning it on makes the daemon ask for the admin password, which shows as the prompt
   described in "Admin password and polkit".
-- **Progress page** (`pages.dart`): the stages of the job kind, a percentage where the job reports one,
-  Cancel until activation ("Can't cancel now" after), "your session will restart" while running,
-  "Restart session" when `session_restart_required`, and on failure or cancel what went wrong plus
-  "Nothing was changed". Back does not leave a running job's page. "Restart session" calls `session.restart`; the daemon answers and then ends the session (the launcher goes with it, greetd starts a new one). On a desktop session (not greetd) the daemon refuses and the page says "This is not a TV session, so it cannot be restarted from here".
+- **Progress page** (`pages.dart`, see "Session API 0.15: job progress"): what the job does, the
+  stages of the job kind, the count or percentage now, a bar that always moves, the time it takes,
+  Hide and Cancel until activation ("Can't cancel now" after), "your session will restart" while
+  running, "Restart session" when `session_restart_required`, and on failure or cancel what went
+  wrong plus "Nothing was changed". Back (or Hide) leaves a running job's page; the top bar shows
+  the job. "Restart session" calls `session.restart`; the daemon answers and then ends the session (the launcher goes with it, greetd starts a new one). On a desktop session (not greetd) the daemon refuses and the page says "This is not a TV session, so it cannot be restarted from here".
 - **Updates:** at startup the box checks once (`UpdateReminders`; the real check waits for the
   connection, and is tried again after 5, 15, 45 and 120 s while the system service is not up
   yet, since it can start after the session; the update check is a job whose result arrives with
@@ -777,7 +819,7 @@ Atkinson Hyperlegible Regular and Bold (`assets/fonts/`), SIL Open Font License 
 `test/golden/goldens/`. `test/golden/osk_test.dart` renders the on-screen keyboard at 1920x1080 over
 a checkerboard (so the transparent area and the panel's rounded corners show): letters, symbols with dots in the preview,
 the masked preview with its newest character readable, the preview with the setting on, high contrast at 1.6x with caps lock, and the bar focus marker with one-shot shift
-(`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. `test/golden/runtime_test.dart` covers the runtime settings on the real repositories over the mock daemon (`bt_pair_*` for the passkey modal, `wifi_wrong_password`, `settings_bt_unavailable`, `settings_display_cannot_set`, `display_keep_daemon`, `power_inhibited`, `settings_power_restricted`, `settings_net_no_internet`). `test/golden/system_test.dart` covers the system screens (`settings_sys_*`, `auth_prompt_*` (the admin password prompt: masked, and after a wrong password in high contrast at 1.6x; also over the real repositories), `ssh_cancelled`, `wifi_password`, `display_*`), the progress page (`progress_*`), the security notice (`security_notice_*`, also high contrast at 1.6x, locked and unlocked), the Home reminder, the Store (`store_*`; over the real repository: `store_retired_detail`, `store_install_conflict`, `store_installing_progress`, `store_no_space`, `store_more_apps_highcontrast_text160`), the terms page (`terms_*`, also high contrast at 1.6x, from the top and scrolled to the end), `games_steam_missing` and `installer_app_selection`. `test/golden/installer_test.dart` has `installer_*_1080p.png` for every installer screen (welcome, network, disk, the disk warning and the second confirmation, the warning in high contrast at 1.4x text, account, keyboard, options, apps offline and online, summary, progress with the system stage and with the apps stage, both failures, done, done with failed apps). Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
+(`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. `test/golden/runtime_test.dart` covers the runtime settings on the real repositories over the mock daemon (`bt_pair_*` for the passkey modal, `wifi_wrong_password`, `settings_bt_unavailable`, `settings_display_cannot_set`, `display_keep_daemon`, `power_inhibited`, `settings_power_restricted`, `settings_net_no_internet`). `test/golden/system_test.dart` covers the system screens (`settings_sys_*`, `auth_prompt_*` (the admin password prompt: masked, and after a wrong password in high contrast at 1.6x; also over the real repositories), `ssh_cancelled`, `wifi_password`, `display_*`), the progress page (`progress_*`: building with its count, name and time also in high contrast at 1.6x), the job left running (`topbar_job_indicator_*`, also high contrast at 1.6x), the notices when it ends (`job_notice_failed`, `job_notice_restart`), the security notice (`security_notice_*`, also high contrast at 1.6x, locked and unlocked), the Home reminder, the Store (`store_*`; over the real repository: `store_retired_detail`, `store_install_conflict`, `store_installing_progress`, `store_no_space`, `store_more_apps_highcontrast_text160`), the terms page (`terms_*`, also high contrast at 1.6x, from the top and scrolled to the end), `games_steam_missing` and `installer_app_selection`. `test/golden/installer_test.dart` has `installer_*_1080p.png` for every installer screen (welcome, network, disk, the disk warning and the second confirmation, the warning in high contrast at 1.4x text, account, keyboard, options, apps offline and online, summary, progress with the system stage and with the apps stage, both failures, done, done with failed apps). Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
 running game, the attention banner, the close confirm and the app tiles at text 1.3x/1.6x (also high
 contrast). Tests load the bundled font explicitly (`flutter_test_config.dart`, no
 Ahem), use a fixed clock, the in-process mock, the committed placeholder art

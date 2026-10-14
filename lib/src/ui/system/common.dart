@@ -145,7 +145,7 @@ Future<bool> runJob(
   BuildContext context,
   SystemServices services,
   Future<JobHandle> Function() start, {
-  String? subtitle,
+  String? name,
 }) async {
   final JobHandle h;
   try {
@@ -157,7 +157,7 @@ Future<bool> runJob(
     return false;
   }
   if (!context.mounted) return false;
-  final r = await showJobProgress(context, services, h, subtitle: subtitle);
+  final r = await showJobProgress(context, services, h, name: name);
   return r?.ok ?? false;
 }
 

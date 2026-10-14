@@ -134,7 +134,10 @@ void main() {
       await shot(
         t,
         'auth_prompt_daemon_1080p',
-        Harness(mock: mock, realServices: daemonSystemServices(mock)),
+        Harness(
+          mock: mock,
+          realServices: daemonSystemServices(mock, now: fixedNow),
+        ),
         run: (t) async {
           await enterSettingsEntry(t, 'ssh');
           await press(t, [kEnter]);
@@ -150,7 +153,10 @@ void main() {
       await shot(
         t,
         'ssh_cancelled_1080p',
-        Harness(mock: mock, realServices: daemonSystemServices(mock)),
+        Harness(
+          mock: mock,
+          realServices: daemonSystemServices(mock, now: fixedNow),
+        ),
         run: (t) async {
           await enterSettingsEntry(t, 'ssh');
           await press(t, [kEnter, kEscape]);
@@ -177,7 +183,10 @@ void main() {
       await shot(
         t,
         'settings_unavailable_1080p',
-        Harness(mock: mock, realServices: daemonSystemServices(mock)),
+        Harness(
+          mock: mock,
+          realServices: daemonSystemServices(mock, now: fixedNow),
+        ),
         run: (t) => enterSettingsEntry(t, 'about'),
       );
     });
@@ -226,6 +235,103 @@ void main() {
       await enterPin(t, '2468'); // the admin PIN
     }
 
+    /// The update builds the 3rd of 12, twelve minutes in.
+    Future<void> building(WidgetTester t, Harness h) async {
+      await startUpdate(t, h);
+      final jobs = h.services.mockJobs;
+      final id = jobs.started.single.jobId;
+      jobs.clock = () => fixedNow().add(const Duration(minutes: 12));
+      jobs.progress(
+        id,
+        JobStage.building,
+        percent: 41,
+        build: const BuildProgress(
+          done: 2,
+          total: 12,
+          running: 1,
+          name: 'hinteros-daemon',
+          version: '0.7.1',
+          phase: 'build',
+        ),
+      );
+      await t.pumpAndSettle();
+    }
+
+    testWidgets('building: count, name, time', (t) async {
+      final h = harness();
+      await shot(t, 'progress_building_1080p', h, run: (t) => building(t, h));
+    });
+    testWidgets('building, high contrast, text 1.6x', (t) async {
+      final h = harness(settings: hc160);
+      await shot(
+        t,
+        'progress_building_highcontrast_text160_1080p',
+        h,
+        run: (t) => building(t, h),
+      );
+    });
+    testWidgets('left running: the indicator in the top bar', (t) async {
+      final h = harness();
+      await shot(
+        t,
+        'topbar_job_indicator_1080p',
+        h,
+        run: (t) async {
+          await building(t, h);
+          await press(t, [kEnter]); // Hide
+        },
+      );
+    });
+    testWidgets('the indicator, high contrast, text 1.6x', (t) async {
+      final h = harness(settings: hc160);
+      await shot(
+        t,
+        'topbar_job_indicator_highcontrast_text160_1080p',
+        h,
+        run: (t) async {
+          await building(t, h);
+          await press(t, [kEnter]); // Hide
+        },
+      );
+    });
+    testWidgets('it failed while hidden: the notice', (t) async {
+      final h = harness();
+      await shot(
+        t,
+        'job_notice_failed_1080p',
+        h,
+        run: (t) async {
+          await building(t, h);
+          await press(t, [kEnter]); // Hide
+          h.services.mockJobs.finish(
+            h.services.mockJobs.started.single.jobId,
+            ok: false,
+            error: const JobError(
+              message: 'The build failed.',
+              stage: JobStage.building,
+            ),
+          );
+          await t.pumpAndSettle();
+        },
+      );
+    });
+    testWidgets('done while hidden, a new session needed: the notice', (
+      t,
+    ) async {
+      final h = harness();
+      h.services.mockJobs.restartNext = true;
+      await shot(
+        t,
+        'job_notice_restart_1080p',
+        h,
+        run: (t) async {
+          await building(t, h);
+          await press(t, [kEnter]); // Hide
+          h.services.mockJobs.finish(h.services.mockJobs.started.single.jobId);
+          await t.pumpAndSettle();
+        },
+      );
+    });
     testWidgets('downloading, 40 percent', (t) async {
       final h = harness();
       await shot(
@@ -487,7 +593,7 @@ void main() {
         return Harness(
           mock: mock,
           settings: settings,
-          realServices: daemonSystemServices(mock),
+          realServices: daemonSystemServices(mock, now: fixedNow),
         );
       }
 

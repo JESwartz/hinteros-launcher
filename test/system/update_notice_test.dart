@@ -127,7 +127,7 @@ void main() {
       await press(t, [kRight, kEnter]);
       await enterPin(t, '2468'); // the admin PIN
       expect(h.services.mockJobs.started.single.kind, JobKind.update);
-      expect(find.text('Updating HinterOS'), findsOneWidget);
+      expect(find.textContaining('Updating to HinterOS'), findsOneWidget);
     });
 
     testWidgets('a return to Home inside the interval does not repeat it', (

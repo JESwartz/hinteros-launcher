@@ -338,7 +338,7 @@ void main() {
       expect(find.text('Scanning the disk'), findsOneWidget);
       h.services.mockJobs.progress(scan.jobId, JobStage.measuring, percent: 60);
       await t.pumpAndSettle();
-      expect(find.text('  60%'), findsOneWidget);
+      expect(find.text('60%'), findsOneWidget);
       h.services.mockJobs.finish(scan.jobId);
       await t.pumpAndSettle();
       expect(find.text('Scan done.'), findsOneWidget);
@@ -529,7 +529,7 @@ void main() {
       expect(find.text('Scanning the disk'), findsOneWidget);
       h.services.mockJobs.progress(job.jobId, JobStage.measuring, percent: 40);
       await t.pumpAndSettle();
-      expect(find.text('  40%'), findsOneWidget);
+      expect(find.text('40%'), findsOneWidget);
       expect(find.text('Cancel'), findsOneWidget);
       h.services.mockJobs.finish(job.jobId);
       await t.pumpAndSettle();
@@ -547,7 +547,7 @@ void main() {
       expect(job.kind, JobKind.storageMeasure);
       h.services.mockJobs.progress(job.jobId, JobStage.measuring, percent: 10);
       await t.pumpAndSettle();
-      await press(t, [kEnter]); // Cancel
+      await press(t, [kRight, kEnter]); // Cancel (after Hide)
       expect(find.text('Cancelled'), findsOneWidget);
       await press(t, [kEnter]);
       expect(find.text('Scanned 2 hours ago.'), findsOneWidget);

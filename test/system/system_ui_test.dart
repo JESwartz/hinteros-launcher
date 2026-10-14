@@ -193,7 +193,7 @@ void main() {
       expect(find.text('Admin password'), findsNothing);
       expect(h.services.mockJobs.started, hasLength(1));
       // The apply job's progress page; finish it.
-      expect(find.text('Changing remote access'), findsOneWidget);
+      expect(find.text('Turning on remote access'), findsOneWidget);
       h.services.mockJobs.finish(h.services.mockJobs.started.single.jobId);
       await t.pumpAndSettle();
       await press(t, [kEnter]); // Close
@@ -312,7 +312,7 @@ void main() {
       await h.pump(t);
       await toUpdateNow(t, h);
       final job = h.services.mockJobs.started.single;
-      expect(find.text('Updating HinterOS'), findsOneWidget);
+      expect(find.textContaining('Updating to HinterOS'), findsOneWidget);
       expect(
         find.textContaining('The session restarts when this finishes'),
         findsOneWidget,
@@ -353,11 +353,12 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text("Can't cancel now"), findsOneWidget);
       expect(buttonEnabled(t, "Can't cancel now"), isFalse);
-      await press(t, [kEnter]);
+      await press(t, [kRight, kEnter]);
       expect(h.services.mockJobs.snapshot(job.jobId)!.finished, isFalse);
-      // Back does not close a running job's page either.
+      // Back leaves the page: the job runs on, the top bar shows it.
       await press(t, [kEscape]);
-      expect(find.text('Updating HinterOS'), findsOneWidget);
+      expect(find.byKey(const ValueKey('job-indicator')), findsOneWidget);
+      expect(h.services.mockJobs.snapshot(job.jobId)!.finished, isFalse);
     });
 
     testWidgets('a cancelled job says nothing changed', (t) async {
@@ -371,7 +372,7 @@ void main() {
         percent: 10,
       );
       await t.pumpAndSettle();
-      await press(t, [kEnter]); // Cancel
+      await press(t, [kRight, kEnter]); // Cancel (after Hide)
       expect(find.text('Cancelled'), findsOneWidget);
       expect(find.textContaining('Nothing changed'), findsOneWidget);
     });

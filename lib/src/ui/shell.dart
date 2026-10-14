@@ -18,13 +18,14 @@ import '../theme/hinter_theme.dart';
 import 'apps_screen.dart';
 import 'auth_prompt.dart';
 import 'common.dart';
-import 'dialogs.dart' show Choice, showChoice, showFailureOn;
+import 'dialogs.dart' show Choice, showChoice, showConfirm, showFailureOn;
 import 'profiles/first_launch_terms.dart';
 import 'profiles/profile_loading.dart';
 import 'profiles/profile_ui.dart' show withBoxAdminPin;
 import 'profiles/session_profile.dart';
 import 'games_screen.dart';
 import 'home_screen.dart';
+import 'jobs.dart';
 import 'modal_host.dart';
 import 'overlays.dart';
 import 'launching.dart';
@@ -32,6 +33,7 @@ import 'settings_screen.dart';
 import 'store_flows.dart';
 import 'store_screen.dart';
 import 'update_banner.dart';
+import 'widgets.dart' show StatusLine;
 import 'pages.dart';
 import 'session_ending.dart';
 import 'tab_bar.dart';
@@ -117,6 +119,11 @@ class _LauncherShellState extends State<LauncherShell> {
   // The admin password prompt: shown over whatever is on screen whenever
   // polkit asks (a relayed call such as ssh.set is waiting for it).
   late final AuthPrompter _authPrompts;
+
+  /// The job the person left running: the top bar shows it, a notice
+  /// says when it ends.
+  late final JobCenter _jobs = JobCenter(widget.services.jobs)
+    ..onFinished = _jobFinished;
   bool _bannerVisible = false;
   bool _updateBannerVisible = false;
   late final UpdateReminders _reminders = UpdateReminders(
@@ -234,10 +241,15 @@ class _LauncherShellState extends State<LauncherShell> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _checkLoading());
     }
     _profile.addListener(_onProfile);
+    _jobs.addListener(_onJobs);
     _ending.addListener(_onEnding);
     widget.settings.addListener(_mirrorAppearance);
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => unawaited(_profile.start()),
+    );
+    // A job that runs on the box (the launcher restarted during it).
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => unawaited(_jobs.reattach()),
     );
     _subs.add(
       d.connection.statusChanges.listen((s) {
@@ -247,6 +259,7 @@ class _LauncherShellState extends State<LauncherShell> {
         } else if (_profile.current == null && _ending.ending == null) {
           unawaited(_profile.start());
         }
+        if (s is Connected) unawaited(_jobs.reattach());
       }),
     );
     _subs.add(d.messages.listen(_toast));
@@ -427,11 +440,85 @@ class _LauncherShellState extends State<LauncherShell> {
   void _onProfile() {
     if (!mounted) return;
     _mirrorAppearance();
-    final n = _sections.length + (_profile.current == null ? 0 : 1);
-    if (_tabs.model.rows.firstOrNull?.length != n) {
-      _tabs.setRows([NavRow('tabs', n)]);
-    }
+    _syncTabRow();
     setState(() {});
+  }
+
+  /// The tab row: the sections, the job indicator, the profile chip.
+  void _syncTabRow() {
+    final job = _jobs.showsIndicator ? 1 : 0;
+    final n = _sections.length + job + (_profile.current == null ? 0 : 1);
+    if (_tabs.model.rows.firstOrNull?.length == n) return;
+    // The indicator went away under the focus: back to the tab of this
+    // section (moving to another tab would switch the section).
+    final onExtra = _tabs.model.col >= _sections.length;
+    _tabs.setRows([NavRow('tabs', n)]);
+    if (onExtra && job == 0) {
+      _tabs.model.goTo(0, _sections.indexOf(_section));
+      _tabs.changed();
+    }
+  }
+
+  void _onJobs() {
+    if (!mounted) return;
+    _syncTabRow();
+    setState(() {});
+  }
+
+  /// A on the indicator: the job's page again.
+  void _openJob() {
+    final bg = _jobs.background;
+    final c = _scopeContext;
+    if (bg == null || c == null) return;
+    unawaited(
+      showJobProgress(
+        c,
+        widget.services,
+        JobHandle(bg.jobId, bg.kind),
+        name: _jobs.backgroundName,
+        initial: bg,
+      ),
+    );
+  }
+
+  /// A job the person left ended: a short notice; an update that needs a
+  /// new session asks to restart it.
+  void _jobFinished(JobSnapshot s, String? name) {
+    if (!mounted || _ending.ending != null) return;
+    if (s.ok && s.sessionRestartRequired) {
+      unawaited(_offerRestart(s, name));
+      return;
+    }
+    _notice(
+      jobNotice(s, name: name),
+      ok: s.ok,
+      error: s.failed,
+    );
+  }
+
+  Future<void> _offerRestart(JobSnapshot s, String? name) async {
+    final c = _scopeContext;
+    if (c == null) return;
+    final r = await showConfirm(
+      c,
+      title: '${jobTitle(s, name: name)}: done',
+      body:
+          'Restart the session to use the change. Open games and apps '
+          'close.',
+      confirmLabel: 'Restart session',
+      cancelLabel: 'Later',
+    );
+    if (r == null || !mounted) return;
+    _jobs.clear();
+    try {
+      await endSessionWith(
+        _scopeContext ?? context,
+        const SessionEnding(title: 'Restarting the session…'),
+        widget.services.system.restartSession,
+      );
+    } on SystemException catch (e) {
+      _toast("Can't restart the session: ${e.message}");
+    }
   }
 
   (double, bool, bool)? _mirrored;
@@ -494,6 +581,8 @@ class _LauncherShellState extends State<LauncherShell> {
   @override
   void dispose() {
     _profile.removeListener(_onProfile);
+    _jobs.removeListener(_onJobs);
+    _jobs.dispose();
     _ending.removeListener(_onEnding);
     widget.settings.removeListener(_mirrorAppearance);
     _profile.dispose();
@@ -716,6 +805,20 @@ class _LauncherShellState extends State<LauncherShell> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// A short notice with a mark (OK, !): a job the person left ended.
+  void _notice(String message, {bool ok = false, bool error = false}) {
+    if (!mounted || _ending.ending != null) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          key: const ValueKey('job-notice'),
+          duration: const Duration(seconds: 6),
+          content: StatusLine(message, ok: ok, error: error),
+        ),
+      );
+  }
+
   Widget _content() => switch (_section) {
     Section.home => HomeScreen(data: widget.data, region: _home),
     Section.games => GamesScreen(
@@ -773,67 +876,73 @@ class _LauncherShellState extends State<LauncherShell> {
     );
   }
 
-  Widget _host() => ModalHost(
-    controller: _modals,
-    child: Stack(
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TopBar(
-              region: _tabs,
-              labels: [for (final s in _sections) s.label],
-              selected: _sections.indexOf(_section),
-              onFocusTab: (i) => _setSection(_sections[i]),
-              time: _time,
-              profile: _profile.current,
-              onProfile: () => unawaited(_profileMenu()),
-            ),
-            if (_updateBannerVisible && _reminders.update != null)
-              UpdateBanner(
-                update: _reminders.update!,
-                region: _updateBanner,
-                onOpen: _openUpdates,
+  Widget _host() => JobCenterScope(
+    center: _jobs,
+    child: ModalHost(
+      controller: _modals,
+      child: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TopBar(
+                region: _tabs,
+                labels: [for (final s in _sections) s.label],
+                selected: _sections.indexOf(_section),
+                onFocusTab: (i) => _setSection(_sections[i]),
+                time: _time,
+                profile: _profile.current,
+                onProfile: () => unawaited(_profileMenu()),
+                job: _jobs.showsIndicator ? _jobs.background : null,
+                jobName: _jobs.backgroundName,
+                onJob: _openJob,
               ),
-            if (_bannerVisible)
-              SteamBanner(
-                windows: widget.data.steamAttention,
-                region: _banner,
-                onOpen: () => unawaited(widget.data.focusSteam()),
-              ),
-            Expanded(child: _content()),
-          ],
-        ),
-        if (_dialogOpen && widget.data.closeRequest != null)
-          CloseConfirm(
-            id: widget.data.closeRequest!.id,
-            name: widget.data.closeRequest!.name,
-            iconPath: widget.data.closeRequest!.iconPath,
-            region: _dialog,
-            onCancel: widget.data.cancelClose,
-            onConfirm: () => unawaited(widget.data.confirmClose()),
+              if (_updateBannerVisible && _reminders.update != null)
+                UpdateBanner(
+                  update: _reminders.update!,
+                  region: _updateBanner,
+                  onOpen: _openUpdates,
+                ),
+              if (_bannerVisible)
+                SteamBanner(
+                  windows: widget.data.steamAttention,
+                  region: _banner,
+                  onOpen: () => unawaited(widget.data.focusSteam()),
+                ),
+              Expanded(child: _content()),
+            ],
           ),
-        if (widget.data.launching case final l?)
-          Positioned.fill(
-            child: LaunchingScreen(
-              key: ValueKey('launching-${l.id}'),
-              id: l.id,
-              name: l.name,
-              iconPath: l.iconPath,
+          if (_dialogOpen && widget.data.closeRequest != null)
+            CloseConfirm(
+              id: widget.data.closeRequest!.id,
+              name: widget.data.closeRequest!.name,
+              iconPath: widget.data.closeRequest!.iconPath,
+              region: _dialog,
+              onCancel: widget.data.cancelClose,
+              onConfirm: () => unawaited(widget.data.confirmClose()),
             ),
+          if (widget.data.launching case final l?)
+            Positioned.fill(
+              child: LaunchingScreen(
+                key: ValueKey('launching-${l.id}'),
+                id: l.id,
+                name: l.name,
+                iconPath: l.iconPath,
+              ),
+            ),
+          if (_loading || _hideConnection)
+            Positioned.fill(
+              child: ProfileLoadingPage(identity: _loadingIdentity()),
+            ),
+          if (widget.showFps) const FpsOverlay(),
+          Builder(
+            builder: (c) {
+              _scopeContext = c;
+              return const SizedBox.shrink();
+            },
           ),
-        if (_loading || _hideConnection)
-          Positioned.fill(
-            child: ProfileLoadingPage(identity: _loadingIdentity()),
-          ),
-        if (widget.showFps) const FpsOverlay(),
-        Builder(
-          builder: (c) {
-            _scopeContext = c;
-            return const SizedBox.shrink();
-          },
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }

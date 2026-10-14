@@ -84,7 +84,7 @@ Future<bool> installFlow(
     accepted,
   );
   if (job == null || !context.mounted) return false;
-  final r = await showJobProgress(context, services, job, subtitle: app.name);
+  final r = await showJobProgress(context, services, job, name: app.name);
   return r?.ok ?? false;
 }
 
@@ -271,6 +271,6 @@ Future<bool> removeFlow(
     return false;
   }
   if (!context.mounted) return false;
-  final r = await showJobProgress(context, services, job, subtitle: app.name);
+  final r = await showJobProgress(context, services, job, name: app.name);
   return r?.ok ?? false;
 }
