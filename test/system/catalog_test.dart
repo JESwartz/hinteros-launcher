@@ -13,7 +13,7 @@ void main() {
   const index = '$catalogFixtureDir/catalog.json';
   List<StoreApp> load() => loadCatalogIndex(index);
 
-  group('real catalog index (format 2)', () {
+  group('real catalog index (format 3)', () {
     test('every available app is read, in the order of the index', () {
       final apps = load();
       expect(
@@ -25,20 +25,21 @@ void main() {
           'moonlight',
           'plex-htpc',
           'steam',
+          'vacuum-tube',
           'youtube',
         ],
+        reason: 'jellyfin-server is a service, not an app',
       );
     });
 
-    test('the installer flags', () {
+    test('the installer flags come from `starter`', () {
       final by = {for (final a in load()) a.id: a};
       expect(
         [
           for (final a in by.values)
             if (a.installer) a.id,
-        ].length,
-        by.length,
-        reason: 'all of them are in the installer',
+        ],
+        ['firefox', 'jellyfin', 'plex-htpc', 'steam', 'vacuum-tube', 'youtube'],
       );
       expect(
         [
@@ -52,14 +53,14 @@ void main() {
           for (final a in by.values)
             if (a.onIso) a.id,
         ],
-        ['crunchyroll', 'firefox', 'jellyfin', 'youtube'],
+        ['firefox', 'jellyfin', 'youtube'],
       );
       expect(by['steam']!.onIso, isFalse);
       expect(by['steam']!.free, isFalse);
       expect(by['steam']!.buildsOnDevice, isFalse, reason: 'cache = true');
       expect(by['plex-htpc']!.buildsOnDevice, isTrue);
       expect(by['moonlight']!.isWeb, isFalse);
-      expect(by['youtube']!.isWeb, isTrue);
+      expect(by['youtube']!.isWeb, isTrue, reason: 'type web');
     });
 
     test('terms: title, version, url, retrieved, file and the text', () {
@@ -89,14 +90,15 @@ void main() {
 
     test('the fixture matches the schema\'s required fields', () {
       final j = jsonDecode(File(index).readAsStringSync()) as Map;
-      expect(j['indexVersion'], 2);
+      expect(j['indexVersion'], 3);
       for (final a in j['apps'] as List) {
         for (final k in [
           'id',
           'name',
-          'installer',
+          'kind',
+          'type',
+          'starter',
           'onIso',
-          'installerDefault',
           'terms',
           'free',
           'dataPaths',
@@ -185,6 +187,46 @@ void main() {
       expect(apps.single.category, StoreCategory.other);
     });
 
+    test('an index 2 (older systems) still reads', () {
+      final app = parseCatalogIndex(
+        one({'kind': 'web', 'installer': true, 'installerDefault': true}),
+        readTerms: noTerms,
+      ).single;
+      expect(app.isWeb, isTrue);
+      expect(app.installer, isTrue);
+      expect(app.installerDefault, isTrue);
+    });
+
+    test('index 3: starter, type, and no services', () {
+      String v3(Map<String, Object?> a) =>
+          one(a).replaceFirst('"indexVersion":2', '"indexVersion":3');
+      final offered = parseCatalogIndex(
+        v3({'kind': 'app', 'type': 'web', 'starter': 'offered'}),
+        readTerms: noTerms,
+      ).single;
+      expect(offered.isWeb, isTrue);
+      expect(offered.installer, isTrue);
+      expect(offered.installerDefault, isFalse);
+      final ticked = parseCatalogIndex(
+        v3({'kind': 'app', 'type': 'native', 'starter': 'ticked'}),
+        readTerms: noTerms,
+      ).single;
+      expect(ticked.isWeb, isFalse);
+      expect(ticked.installerDefault, isTrue);
+      final none = parseCatalogIndex(
+        v3({'kind': 'app', 'type': 'web', 'starter': null}),
+        readTerms: noTerms,
+      ).single;
+      expect(none.installer, isFalse);
+      expect(
+        parseCatalogIndex(
+          v3({'kind': 'service', 'type': 'service'}),
+          readTerms: noTerms,
+        ),
+        isEmpty,
+      );
+    });
+
     test('another index version is refused', () {
       expect(
         () => parseCatalogIndex(
@@ -213,10 +255,7 @@ void main() {
     'the fallback offers only what is on the ISO, preselecting defaults',
     () {
       final apps = fallbackCatalog();
-      expect(
-        [for (final a in apps) a.id],
-        ['jellyfin', 'youtube', 'crunchyroll', 'firefox'],
-      );
+      expect([for (final a in apps) a.id], ['jellyfin', 'youtube', 'firefox']);
       expect(apps.every((a) => a.onIso && !a.hasTerms), isTrue);
       expect(
         [

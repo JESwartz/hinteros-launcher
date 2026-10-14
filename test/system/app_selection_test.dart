@@ -65,10 +65,15 @@ void main() {
       t,
     ) async {
       await start(t);
-      // On the installer: Jellyfin, YouTube, Crunchyroll, Firefox.
-      expect(find.text('On the installer'), findsNWidgets(4));
+      // On the installer: Jellyfin, YouTube, Firefox.
+      expect(find.text('On the installer'), findsNWidgets(3));
       expect(find.text('Download, 1.0 GB'), findsOneWidget, reason: 'Steam');
       expect(find.text('Download, 300 MB'), findsOneWidget, reason: 'Plex');
+      expect(
+        find.text('Download, 450 MB'),
+        findsOneWidget,
+        reason: 'VacuumTube',
+      );
       expect(find.textContaining('Nothing to download'), findsOneWidget);
     });
 
