@@ -87,6 +87,15 @@ flutter run -d linux --dart-entrypoint-args=--mock
 ./result/bin/hinteros-launcher --mock --windowed
 ```
 
+### Session API 0.17: the admin PIN locks until a restart
+
+The daemon refuses the admin profile's PIN after 10 wrong tries a boot, the right one too, until
+the box restarts: `pin_required {reboot_required: true}` and `greeter_result {reboot_required:
+true}`. `PinRefusal.rebootRequired` / `LoginRefused.rebootRequired` carry it; every PIN pad
+(`PinEntryPage`: Settings, admin prompts, a switch to the admin profile, the picker) shows
+"Too many wrong PINs. Restart the box to try again." (`rebootPinText`) and takes no more digits
+(B still goes back). Both mocks count the same way (`reboot()` resets them).
+
 ### Session API 0.16: time zone
 
 Design: `hinteros-docs/design/time-zone.md`. The box's zone (`TimeZoneRepository` in
@@ -231,7 +240,8 @@ launcher's proposal until the daemon's M7 schema is vendored (see `m7/DECISIONS.
   Guest, Add profile (name with the launcher's own keyboard, colour, PIN twice, "Lock this
   profile", then "Getting things ready" for the create job), Power. A locked profile opens the
   PIN pad: D-pad and A, B deletes (B on an empty pad goes back), digits and Enter on a keyboard,
-  no auto-submit, "That PIN didn't match." and the backoff countdown. After a login greetd
+  no auto-submit, "That PIN didn't match." and the backoff countdown (the admin profile: no
+  countdown, but after 10 wrong tries "Too many wrong PINs. Restart the box to try again."). After a login greetd
   accepted, "Loading Sam…" (`profile_loading.dart`: avatar, name, spinner) until the picker
   exits; the console shows the same words on the VT (`hinteros-system pin splash`) and the
   session's launcher shows the page again on its first frames (name from

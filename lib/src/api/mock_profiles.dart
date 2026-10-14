@@ -170,6 +170,25 @@ class MockProfileSession {
         .toJson(),
   );
 
+  /// Wrong admin-PIN tries a boot.
+  static const adminTries = 10;
+
+  /// A restart of the box: the admin PIN may be tried again.
+  void reboot() {
+    for (final p in profiles.where((p) => p.admin)) {
+      p.failures = 0;
+    }
+  }
+
+  ApiException _rebootRequired(String which) => ApiException(
+    ApiErrorCode.pinRequired,
+    'too many wrong PINs: restart the box',
+    PinRequiredData(
+      pin: PinRequiredDataPin.fromJson(which),
+      rebootRequired: true,
+    ).toJson(),
+  );
+
   ApiException _pinRequired(String which, [int? retryMs]) => ApiException(
     ApiErrorCode.pinRequired,
     retryMs == null ? 'wrong PIN' : 'too many wrong PINs, try again later',
@@ -181,13 +200,19 @@ class MockProfileSession {
 
   /// The service's PIN check with its backoff: 3 free failures, then 30 s
   /// (the mock's first lock), doubling. The admin profile's PIN has no
-  /// backoff: wrong is only wrong.
+  /// backoff but 10 wrong tries a boot (session API 0.17): then every PIN is
+  /// refused with `reboot_required` until [reboot].
   void _check(MockWireProfile p, String? pin, String which) {
     if (p.admin) {
-      p
-        ..failures = 0
-        ..lockedUntil = null;
-      if (pin != null && pin == p.pin) return;
+      p.lockedUntil = null;
+      if (pin == null) throw _pinRequired(which);
+      if (p.failures >= adminTries) throw _rebootRequired(which);
+      if (pin == p.pin) {
+        p.failures = 0;
+        return;
+      }
+      p.failures++;
+      if (p.failures >= adminTries) throw _rebootRequired(which);
       throw _pinRequired(which);
     }
     final until = p.lockedUntil;
@@ -944,19 +969,26 @@ class MockProfileSession {
     _greeterPrompted = false;
     final x = _profile(id);
     int? locked;
+    bool? reboot;
     var ok = true;
     try {
       _check(x, pin, 'self');
     } on ApiException catch (e) {
       ok = false;
-      final ms = (e.data as Map?)?['retry_after_ms'] as int?;
+      final data = e.data as Map?;
+      final ms = data?['retry_after_ms'] as int?;
       if (ms != null) locked = (ms / 1000).ceil();
+      if (data?['reboot_required'] == true) reboot = true;
     }
     log.add('greeter_pin:$id:${ok ? 'ok' : 'refused'}');
     scheduleMicrotask(
       () => emit(
         'greeter_result',
-        GreeterResultEvent(ok: ok, lockedSeconds: locked).toJson(),
+        GreeterResultEvent(
+          ok: ok,
+          lockedSeconds: locked,
+          rebootRequired: reboot,
+        ).toJson(),
       ),
     );
     return const GreeterPinResult().toJson();

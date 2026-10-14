@@ -49,6 +49,24 @@ void main() {
         expect(PinRefusal.of(e!)!.retryAt, isNull);
       }
       await p.setLocked(true, '2468');
+      // But 10 wrong tries a boot: then even the right PIN is refused until
+      // the box restarts (session API 0.17).
+      Future<Object?> lock(String pin) => p
+          .setLocked(true, pin)
+          .then<Object?>((_) => null, onError: (Object e) => e);
+      for (var i = 0; i < 9; i++) {
+        expect(PinRefusal.of((await lock('0000'))!)!.rebootRequired, isFalse);
+      }
+      for (final pin in ['0000', '2468']) {
+        final e = await lock(pin);
+        expect(PinRefusal.of(e!)!.rebootRequired, isTrue, reason: pin);
+        expect(
+          (e as SystemException).message,
+          'Too many wrong PINs. Restart the box to try again.',
+        );
+      }
+      m.profiles.reboot();
+      await p.setLocked(true, '2468');
 
       // A locked target: its PIN before anything closes (a wrong one
       // starts nothing).
@@ -137,6 +155,25 @@ void main() {
         expect(m.profiles.log, contains('greeter_pin:p3:ok'));
       },
     );
+
+    test('the admin profile: ten wrong PINs, then a restart', () async {
+      final m = await connected();
+      m.profiles.greeterMode = true;
+      m.profiles.byId('p1')!.locked = true;
+      final g = DaemonGreeter(m, DaemonJobs(m));
+      await Future<void>.delayed(Duration.zero);
+      Future<LoginRefused> refused(String pin) async {
+        expect(await g.login('p1'), isA<LoginNeedsPin>());
+        return await g.login('p1', pin: pin) as LoginRefused;
+      }
+
+      for (var i = 0; i < 9; i++) {
+        final r = await refused('0000');
+        expect((r.retryAt, r.rebootRequired), (null, false));
+      }
+      expect((await refused('0000')).rebootRequired, isTrue);
+      expect((await refused('2468')).rebootRequired, isTrue);
+    });
 
     test('Add profile, then in with the one-time token', () async {
       final m = await connected();

@@ -97,13 +97,20 @@ class MockProfileBox {
   MockProfile get admin => profiles.firstWhere((p) => p.admin);
 
   /// Checks [pin] against profile [p] as the service does: 3 free failures,
-  /// then a lock that doubles; none for the admin profile's PIN. Throws
+  /// then a lock that doubles; none for the admin profile's PIN, which has 10
+  /// wrong tries a boot, then refuses every PIN until [reboot]. Throws
   /// `pin_required` naming [kind].
   void checkPin(MockProfile p, String? pin, PinKind kind) {
     if (p.admin) {
-      p.failures = 0;
       p.lockedUntil = null;
-      if (pin != null && pin == p.pin) return;
+      if (pin == null) throw _pinRequired(kind, null);
+      if (p.failures >= adminTries) throw _rebootRequired(kind);
+      if (pin == p.pin) {
+        p.failures = 0;
+        return;
+      }
+      p.failures++;
+      if (p.failures >= adminTries) throw _rebootRequired(kind);
       throw _pinRequired(kind, null);
     }
     final t = now();
@@ -148,6 +155,22 @@ class MockProfileBox {
     if (a.pin == null) return;
     checkPin(a, pin, PinKind.admin);
   }
+
+  /// Wrong admin-PIN tries a boot.
+  static const adminTries = 10;
+
+  /// A restart of the box: the admin PIN may be tried again.
+  void reboot() {
+    for (final p in profiles.where((p) => p.admin)) {
+      p.failures = 0;
+    }
+  }
+
+  static SystemException _rebootRequired(PinKind kind) => SystemException(
+    SystemErrorKind.pinRequired,
+    'Too many wrong PINs. Restart the box to try again.',
+    data: {'pin': kind.name, 'reboot_required': true},
+  );
 
   static SystemException _pinRequired(PinKind kind, Duration? wait) =>
       SystemException(
@@ -770,7 +793,11 @@ class MockGreeter implements GreeterRepository {
       box.checkPin(p, pin, PinKind.target);
     } on SystemException catch (e) {
       log.add('pin:$id:refused');
-      return LoginRefused(retryAt: PinRefusal.of(e, now: box.now)?.retryAt);
+      final r = PinRefusal.of(e, now: box.now);
+      return LoginRefused(
+        retryAt: r?.retryAt,
+        rebootRequired: r?.rebootRequired ?? false,
+      );
     }
     log.add('pin:$id:ok');
     entered = id;

@@ -581,11 +581,13 @@ class PinDots extends StatelessWidget {
 sealed class PinAttempt {
   const PinAttempt();
 
-  /// From what a call that took a PIN threw: a wrong PIN or the backoff
-  /// lock, else the message of another failure.
+  /// From what a call that took a PIN threw: a wrong PIN, the backoff lock or
+  /// the admin PIN's lock until a restart, else the message of another
+  /// failure.
   static PinAttempt fromError(Object e) {
     final r = PinRefusal.of(e);
     if (r != null) {
+      if (r.rebootRequired) return const PinRebootRequired();
       return r.retryAt == null ? const PinWrong() : PinLocked(r.retryAt!);
     }
     return PinFailed(
@@ -609,6 +611,15 @@ final class PinLocked extends PinAttempt {
   const PinLocked(this.until);
   final DateTime until;
 }
+
+/// The admin profile's PIN is refused until the box restarts ([rebootPinText]);
+/// the pad takes no more digits.
+final class PinRebootRequired extends PinAttempt {
+  const PinRebootRequired();
+}
+
+/// What the pad says while the admin PIN is refused until a restart.
+const rebootPinText = 'Too many wrong PINs. Restart the box to try again.';
 
 /// Something else went wrong (shown as is; the pad stays).
 final class PinFailed extends PinAttempt {
@@ -713,6 +724,7 @@ class _PinEntryPageState extends State<PinEntryPage> {
   String? _error;
   DateTime? _lockedUntil;
   Timer? _tick;
+  bool _reboot = false;
 
   DateTime _now() => (widget.now ?? DateTime.now)();
 
@@ -751,7 +763,7 @@ class _PinEntryPageState extends State<PinEntryPage> {
   }
 
   Future<void> _submit() async {
-    if (_busy || _locked) return;
+    if (_busy || _locked || _reboot) return;
     final pin = _pin.pin;
     setState(() {
       _busy = true;
@@ -771,6 +783,12 @@ class _PinEntryPageState extends State<PinEntryPage> {
         setState(() {
           _error = null;
           _lock(until);
+        });
+      case PinRebootRequired():
+        _pin.clear();
+        setState(() {
+          _error = null;
+          _reboot = true;
         });
       case PinFailed(:final message):
         _pin.clear();
@@ -802,7 +820,9 @@ class _PinEntryPageState extends State<PinEntryPage> {
                   widget.avatar!,
                   const SizedBox(height: HinterTokens.s3),
                 ],
-                if (until != null)
+                if (_reboot)
+                  const StatusLine(rebootPinText, error: true)
+                else if (until != null)
                   StatusLine(
                     'Too many tries. ${retryText(until.difference(_now()))}',
                     error: true,
@@ -838,7 +858,7 @@ class _PinEntryPageState extends State<PinEntryPage> {
               PinPad(
                 region: region,
                 controller: _pin,
-                enabled: !_busy && until == null,
+                enabled: !_busy && until == null && !_reboot,
                 submitLabel: widget.submitLabel,
                 holdToSubmit: widget.holdToSubmit,
                 onSubmit: () => unawaited(_submit()),

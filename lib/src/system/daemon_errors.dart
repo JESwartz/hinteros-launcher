@@ -127,7 +127,9 @@ SystemException systemExceptionFrom(Object e) {
       case api.ApiErrorCode.pinRequired:
         return SystemException(
           SystemErrorKind.pinRequired,
-          data['retry_after_ms'] != null
+          data['reboot_required'] == true
+              ? 'Too many wrong PINs. Restart the box to try again.'
+              : data['retry_after_ms'] != null
               ? 'Too many tries with that PIN.'
               : switch (data['pin']) {
                   'admin' => "This needs the admin profile's PIN.",

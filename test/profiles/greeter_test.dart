@@ -8,6 +8,8 @@ import 'package:hinteros_launcher/src/installer/gamepad.dart';
 import 'package:hinteros_launcher/src/installer/ui/text_entry.dart';
 import 'package:hinteros_launcher/src/system/mock_system.dart';
 import 'package:hinteros_launcher/src/ui/profiles/greeter_screen.dart';
+import 'package:hinteros_launcher/src/ui/profiles/profile_ui.dart'
+    show rebootPinText;
 
 import '../support/harness.dart';
 
@@ -170,6 +172,42 @@ void main() {
     expect(find.textContaining('Too many tries'), findsNothing);
     await p.typePin('1357', settle: false);
     expect(p.greeter.entered, 'p3');
+  });
+
+  testWidgets('the admin PIN: ten wrong tries, then a restart is needed', (
+    t,
+  ) async {
+    final p = Picker(t);
+    p.box.byId('p1')!.locked = true;
+    await p.pump();
+    await p.press(NavAction.accept);
+    expect(find.text("Type James's PIN."), findsOneWidget);
+    // No wait between tries.
+    for (var i = 0; i < 9; i++) {
+      await p.typePin('1111');
+      expect(find.text('Wrong PIN.'), findsOneWidget);
+      expect(find.textContaining('Too many tries'), findsNothing);
+    }
+    await p.typePin('1111');
+    expect(find.text(rebootPinText), findsOneWidget);
+    expect(find.text('Wrong PIN.'), findsNothing);
+    // The pad takes no more digits; the right PIN does not get in.
+    await p.typePin('2468');
+    expect(p.greeter.entered, isNull);
+    expect(find.text(rebootPinText), findsOneWidget);
+    // B still goes back to the picker.
+    await p.press(NavAction.back);
+    expect(find.text("Type James's PIN."), findsNothing);
+    // Asked again (a new pad): still refused, until the box restarts.
+    await p.press(NavAction.accept);
+    await p.typePin('2468');
+    expect(find.text(rebootPinText), findsOneWidget);
+    expect(p.greeter.entered, isNull);
+    await p.press(NavAction.back);
+    p.box.reboot();
+    await p.press(NavAction.accept);
+    await p.typePin('2468', settle: false);
+    expect(p.greeter.entered, 'p1');
   });
 
   testWidgets('B deletes a digit, then goes back to the picker', (t) async {

@@ -419,6 +419,7 @@ class DaemonGreeter implements GreeterRepository {
     final s = r.lockedSeconds;
     return LoginRefused(
       retryAt: s == null || s == 0 ? null : _now().add(Duration(seconds: s)),
+      rebootRequired: r.rebootRequired ?? false,
     );
   }
 

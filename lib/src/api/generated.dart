@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.16).
+// Source: schema/session-api.json (session API 0.17).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.16';
+const apiVersion = '0.17';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -272,7 +272,7 @@ abstract final class ApiErrorCode {
   /// profiles.create with the most profiles there may be (8; the guest does not count).
   static const profileLimit = 3015;
 
-  /// A PIN is missing or wrong: the caller's own (self), the admin profile's (admin) or the profile being entered (target). retry_after_ms while the backoff lock is on (3 free failures, then 1 s doubling to 5 min, per profile).
+  /// A PIN is missing or wrong: the caller's own (self), the admin profile's (admin) or the profile being entered (target). retry_after_ms while the backoff lock is on (3 free failures, then 1 s doubling to 5 min, per profile). The admin profile's PIN has no wait but 10 wrong tries a boot (counted from every path, the greeter's included): after them every check of it, also with the right PIN, is refused with reboot_required: true until the box restarts (since 0.17; a new PIN, the admin password's profiles.reset_pin or root's reset-pin clears it).
   static const pinRequired = 3016;
 
   /// apps.install: app id has vendor terms and accepted_terms does not name their current version (show the terms, then retry with it).
@@ -11325,12 +11325,17 @@ final class GreeterPromptEvent extends SessionEvent {
   String toString() => 'GreeterPromptEvent(${jsonEncode(toJson())})';
 }
 
-/// Greeter mode: the login ended: ok (the session starts, the greeter goes away) or not (wrong PIN; locked_seconds during the backoff: 'Too many tries. Try again in N seconds').
+/// Greeter mode: the login ended: ok (the session starts, the greeter goes away) or not (wrong PIN; locked_seconds during the backoff: 'Too many tries. Try again in N seconds'). 0.17: reboot_required: true when the admin profile's PIN is refused until the box restarts (10 wrong tries this boot).
 final class GreeterResultEvent extends SessionEvent {
-  const GreeterResultEvent({required this.ok, this.lockedSeconds});
+  const GreeterResultEvent({
+    required this.ok,
+    this.lockedSeconds,
+    this.rebootRequired,
+  });
 
   final bool ok;
   final int? lockedSeconds;
+  final bool? rebootRequired;
 
   factory GreeterResultEvent.fromJson(Map<String, dynamic> json) =>
       GreeterResultEvent(
@@ -11338,9 +11343,16 @@ final class GreeterResultEvent extends SessionEvent {
         lockedSeconds: json['locked_seconds'] == null
             ? null
             : json['locked_seconds'] as int,
+        rebootRequired: json['reboot_required'] == null
+            ? null
+            : json['reboot_required'] as bool,
       );
 
-  Map<String, dynamic> toJson() => {'ok': ok, 'locked_seconds': ?lockedSeconds};
+  Map<String, dynamic> toJson() => {
+    'ok': ok,
+    'locked_seconds': ?lockedSeconds,
+    'reboot_required': ?rebootRequired,
+  };
 
   @override
   String get name => 'greeter_result';
@@ -11839,10 +11851,15 @@ enum PinRequiredDataPin {
 }
 
 class PinRequiredData {
-  const PinRequiredData({required this.pin, this.retryAfterMs});
+  const PinRequiredData({
+    required this.pin,
+    this.retryAfterMs,
+    this.rebootRequired,
+  });
 
   final PinRequiredDataPin pin;
   final int? retryAfterMs;
+  final bool? rebootRequired;
 
   factory PinRequiredData.fromJson(Map<String, dynamic> json) =>
       PinRequiredData(
@@ -11850,11 +11867,15 @@ class PinRequiredData {
         retryAfterMs: json['retry_after_ms'] == null
             ? null
             : json['retry_after_ms'] as int,
+        rebootRequired: json['reboot_required'] == null
+            ? null
+            : json['reboot_required'] as bool,
       );
 
   Map<String, dynamic> toJson() => {
     'pin': pin.toJson(),
     'retry_after_ms': ?retryAfterMs,
+    'reboot_required': ?rebootRequired,
   };
 
   @override
@@ -12390,7 +12411,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's profiles.switch. Choose the next profile (0.4): writes the switch hint the greeter reads. A locked target needs its PIN here, before the caller's session closes anything.
   ///
-  /// id is a profile id or guest. A locked profile (with a PIN) other than the caller's own needs pin = the target's PIN: wrong or missing is pin_required {pin: target, retry_after_ms?} and nothing is written; right, the hint carries a one-time token for the target (single use, bound to its user, valid 60 s), so the greeter enters it without any UI. The same caller may call again without pin while its token is live to extend hint and token by 60 s (a switch waiting for apps to close). The admin profile's PIN has no backoff. For the caller's own id it issues a one-time resume token (session.restart). Unlocked profiles and the guest need no PIN. The session daemon then ends the session (session.switch_profile).
+  /// id is a profile id or guest. A locked profile (with a PIN) other than the caller's own needs pin = the target's PIN: wrong or missing is pin_required {pin: target, retry_after_ms?} and nothing is written; right, the hint carries a one-time token for the target (single use, bound to its user, valid 60 s), so the greeter enters it without any UI. The same caller may call again without pin while its token is live to extend hint and token by 60 s (a switch waiting for apps to close). The admin profile's PIN has no backoff wait, but 10 wrong tries a boot (then reboot_required). For the caller's own id it issues a one-time resume token (session.restart). Unlocked profiles and the guest need no PIN. The session daemon then ends the session (session.switch_profile).
   Future<SystemProfilesSwitchResult> systemProfilesSwitch(
     SystemProfilesSwitchParams params,
   ) async => SystemProfilesSwitchResult.fromJson(
