@@ -10,6 +10,7 @@ import 'package:hinteros_launcher/src/data/launcher_data.dart';
 import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
 import 'package:hinteros_launcher/src/system/mock_system.dart';
 import 'package:hinteros_launcher/src/system/repositories.dart';
+import 'package:hinteros_launcher/src/ui/time_zone/time_zone_map.dart';
 
 /// Directory of the committed placeholder artwork (tool/gen_mock_art.dart).
 String artDir() => '${Directory.current.path}/test/fixtures/art';
@@ -47,6 +48,7 @@ class Harness {
     MockSystemServices? services,
     this.showServer = false,
     this.realServices,
+    this.now = fixedNow,
   }) : services =
            services ?? MockSystemServices(iconDir: iconDir(), now: fixedNow),
        mock = mock ?? MockDaemon(apps: appsWithIcons(), games: gamesWithArt()),
@@ -66,17 +68,21 @@ class Harness {
   final bool showServer;
   late final LauncherData data;
 
+  /// The clock of the app (the top bar, job times).
+  final DateTime Function() now;
+
   Widget get app => LauncherApp(
     data: data,
     settings: settings,
     services: realServices ?? services,
-    now: fixedNow,
+    now: now,
     showServer: showServer,
   );
 
   /// Pumps the app and lets everything settle.
   Future<void> pump(WidgetTester tester) async {
     await precacheArt(tester);
+    loadTimeZoneMap();
     await precacheIcons(tester);
     await tester.pumpWidget(app);
     await tester.pumpAndSettle();
@@ -126,6 +132,12 @@ Future<void> loadIcons(WidgetTester tester, Iterable<String> paths) =>
         await AppIconCache.instance.load(p);
       }
     });
+
+/// Reads the committed map asset (sync file IO: the fake-async test zone
+/// has no real async), so the time zone map draws in the first frame.
+void loadTimeZoneMap() => TimeZoneMapData.cached ??= TimeZoneMapData.parse(
+  File(TimeZoneMapData.asset).readAsBytesSync(),
+);
 
 /// Logical [size] at [dpr] (4K is 1920x1080 logical at 2.0).
 void setView(

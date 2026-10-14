@@ -10,6 +10,7 @@ import 'system/hardware_sections.dart';
 import 'system/network_sections.dart';
 import 'system/storage_section.dart';
 import 'system/system_sections.dart';
+import 'system/time_zone_section.dart';
 import 'common.dart' show EdgeFade;
 import 'focus_frame.dart';
 import 'nav_focusable.dart';
@@ -43,6 +44,7 @@ const _items = [
   _Setting('display', 'Display'),
   _Setting('audio', 'Audio'),
   _Setting('power', 'Power'),
+  _Setting('time', 'Time zone'),
   _Setting('ssh', 'Remote access'),
   _Setting('updates', 'Updates'),
   _Setting('storage', 'Storage'),
@@ -487,6 +489,7 @@ const _systemIds = {
   'display',
   'audio',
   'power',
+  'time',
   'ssh',
   'updates',
   'storage',
@@ -499,6 +502,7 @@ Widget _systemSection(String id, SectionEnv env) => switch (id) {
   'display' => DisplaySection(env),
   'audio' => AudioSection(env),
   'power' => PowerSection(env),
+  'time' => TimeZoneSection(env),
   'ssh' => RemoteAccessSection(env),
   'updates' => UpdatesSection(env),
   'storage' => StorageSection(env),

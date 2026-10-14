@@ -13,11 +13,13 @@ import '../api/mock_store.dart' show mockCatalogDir;
 import 'catalog.dart';
 import 'mock_profiles.dart';
 import 'mock_storage.dart';
+import 'mock_time_zone.dart';
 import 'models.dart';
 import 'repositories.dart';
 
 export 'mock_profiles.dart';
 export 'mock_storage.dart';
+export 'mock_time_zone.dart';
 
 String _hex(int n, int len) => n.toRadixString(16).padLeft(len, '0');
 
@@ -1495,6 +1497,7 @@ class MockSystemServices extends SystemServices {
     required this.mockAuth,
     required this.mockProfiles,
     required this.mockStorage,
+    required this.mockTimeZone,
   }) : super(
          jobs: mockJobs,
          system: mockSystem,
@@ -1506,6 +1509,7 @@ class MockSystemServices extends SystemServices {
          auth: mockAuth,
          profiles: mockProfiles,
          storage: mockStorage,
+         timeZone: mockTimeZone,
        );
 
   /// [autoRunJobs]: jobs step through their stages by themselves (`--mock`);
@@ -1520,6 +1524,7 @@ class MockSystemServices extends SystemServices {
     bool setupRequired = false,
     List<StoreApp> extraApps = const [],
     bool storageMeasured = true,
+    String timeZone = 'UTC',
   }) {
     final jobs = MockJobs(autoRun: autoRunJobs, now: now);
     final box = profileBox ?? MockProfileBox(now: now);
@@ -1555,6 +1560,12 @@ class MockSystemServices extends SystemServices {
         now: now,
         measured: storageMeasured,
       ),
+      mockTimeZone: MockTimeZone(
+        box: box,
+        firstBoot: () =>
+            profiles.setupRequired || !box.profiles.any((p) => p.admin),
+        zone: timeZone,
+      ),
     );
   }
 
@@ -1568,6 +1579,7 @@ class MockSystemServices extends SystemServices {
   final MockAuth mockAuth;
   final MockProfiles mockProfiles;
   final MockStorage mockStorage;
+  final MockTimeZone mockTimeZone;
 
   void dispose() {
     mockJobs.dispose();

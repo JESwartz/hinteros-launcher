@@ -16,6 +16,7 @@ import 'daemon_profiles.dart';
 import 'daemon_runtime.dart';
 import 'daemon_storage.dart';
 import 'daemon_store.dart';
+import 'daemon_time_zone.dart';
 import 'models.dart';
 import 'repositories.dart';
 
@@ -923,5 +924,6 @@ SystemServices daemonSystemServices(
     auth: DaemonAuth(connection),
     profiles: DaemonProfiles(connection, jobs),
     storage: DaemonStorage(connection, jobs),
+    timeZone: DaemonTimeZone(connection),
   );
 }

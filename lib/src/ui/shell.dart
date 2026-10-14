@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../api/api.dart';
+import '../api/api.dart' hide TimeZoneInfo, TimeZoneEntry;
 import '../data/launcher_data.dart';
 import '../fps_overlay.dart';
 import '../nav/key_map.dart';
@@ -160,6 +160,14 @@ class _LauncherShellState extends State<LauncherShell> {
   Section _section = Section.home;
   late DateTime _time = (widget.now ?? DateTime.now)();
   Timer? _clock;
+
+  /// The box's zone (`time_zone.get`): the clock is UTC plus its offset,
+  /// not the process's own zone (glibc reads that once). Null until the
+  /// daemon answers: the process's zone meanwhile.
+  TimeZoneInfo? _zone;
+
+  /// Gets the zone again at its next offset change.
+  Timer? _zoneTimer;
   final _subs = <StreamSubscription<Object?>>[];
 
   NavRegion _contentOf(Section s) => switch (s) {
@@ -289,15 +297,56 @@ class _LauncherShellState extends State<LauncherShell> {
     _reminders.addListener(_onReminders);
     _reminders.onLateResult = _homeEntered;
     unawaited(_reminders.start().then((_) => _homeEntered()));
+    _subs.add(widget.services.timeZone.changes.listen(_setZone));
+    unawaited(_loadZone());
     if (widget.now == null) {
       _clock = Timer.periodic(const Duration(seconds: 20), (_) {
-        if (mounted) setState(() => _time = DateTime.now());
+        if (mounted) setState(() => _time = _clockTime());
       });
     }
     // First item focused, as soon as Home has items (the daemon answers later).
     _nav.fallback = () => _modals.topRegion ?? _contentOf(_section);
     _home.addListener(_initialFocus);
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialFocus());
+  }
+
+  DateTime _now() => (widget.now ?? DateTime.now)();
+
+  /// The time the top bar shows: UTC plus the box's offset.
+  DateTime _clockTime() {
+    final z = _zone;
+    return z == null ? _now() : z.wallClock(_now());
+  }
+
+  Future<void> _loadZone() async {
+    try {
+      _setZone(await widget.services.timeZone.get());
+    } on SystemException {
+      // No answer (yet): the clock stays as it is; a reconnect or
+      // `time_zone_changed` brings the zone.
+    }
+  }
+
+  void _setZone(TimeZoneInfo z) {
+    if (!mounted) return;
+    _zoneTimer?.cancel();
+    _zoneTimer = null;
+    final until = z.validUntil;
+    if (until != null) {
+      // Just after the change, the daemon has the new offset. A change
+      // that is past already (a clock that moved): ask again in a minute.
+      final left = until.difference(_now());
+      final wait = left.isNegative
+          ? const Duration(minutes: 1)
+          : left + const Duration(seconds: 1);
+      _zoneTimer = Timer(wait, () {
+        if (mounted) unawaited(_loadZone());
+      });
+    }
+    setState(() {
+      _zone = z;
+      _time = _clockTime();
+    });
   }
 
   /// Where up and down lead between the tab bar, the banners (Steam, update;
@@ -595,6 +644,7 @@ class _LauncherShellState extends State<LauncherShell> {
     _loadingCap?.cancel();
     _graceTimer?.cancel();
     _clock?.cancel();
+    _zoneTimer?.cancel();
     for (final s in _subs) {
       s.cancel();
     }

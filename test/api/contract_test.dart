@@ -205,6 +205,9 @@ Future<void> _prepareProfiles(
         ..profiles.removeWhere((x) => x.id != 'p1')
         ..byId('p1')!.locked = true
         ..switchTo = 'p1';
+    // 0.16: no admin profile yet, no PIN.
+    case ('system.time_zone.set', 'first boot (no PIN)'):
+      p.profiles.removeWhere((x) => x.admin);
     case ('system.profiles.setup_admin', _):
       p
         ..profiles.removeWhere((x) => x.admin)

@@ -1,9 +1,10 @@
 /// First-boot mode inside the session (profiles.md "First-boot mode"): when
 /// `profile.current` says `setup_required` (no admin profile exists; this
 /// session runs on the spare account), the launcher opens this wizard over
-/// Home: controllers, network, display, then the profile form for the admin
-/// profile (`profiles.setup_admin`: no rebuild, no network), and ends on Home
-/// in the new profile.
+/// Home: controllers, network, time zone (time-zone.md: it starts on the
+/// box's zone, UTC on a new box, and needs no PIN), display, then the
+/// profile form for the admin profile (`profiles.setup_admin`: no rebuild,
+/// no network), and ends on Home in the new profile.
 ///
 /// Every step between Welcome and All set is a choice: a step with nothing to
 /// choose is skipped (a display whose mode can't be set, or that has only one
@@ -22,6 +23,7 @@ import '../dialogs.dart';
 import '../modal_host.dart';
 import '../pages.dart' show FullPage;
 import '../system/hardware_sections.dart' show KeepDisplayDialog;
+import '../time_zone/time_zone_picker.dart';
 import '../widgets.dart';
 import 'profile_form.dart';
 import 'session_profile.dart' show sessionEditText;
@@ -30,6 +32,7 @@ enum FirstBootStep {
   welcome('Welcome'),
   controllers('Controllers'),
   network('Internet'),
+  timeZone('Time zone'),
   display('Display'),
   profile('Create your profile'),
   done('All set');
@@ -68,6 +71,9 @@ class _FirstBootPageState extends State<FirstBootPage> {
   List<BtDevice> _devices = const [];
   StreamSubscription<List<BtDevice>>? _bt;
   DisplayInfo? _display;
+  TimeZoneInfo? _zone;
+  List<TimeZoneEntry> _zones = const [];
+  bool _settingZone = false;
   bool _formOpen = false;
   String? _createdName;
 
@@ -123,6 +129,8 @@ class _FirstBootPageState extends State<FirstBootPage> {
     switch (s) {
       case FirstBootStep.network:
         unawaited(_loadNetwork());
+      case FirstBootStep.timeZone:
+        unawaited(_loadTimeZone());
       case FirstBootStep.controllers:
         unawaited(_loadControllers());
       case FirstBootStep.display:
@@ -168,6 +176,38 @@ class _FirstBootPageState extends State<FirstBootPage> {
       await _try(() => _s.network.connect(ap.ssid));
     }
     await _loadNetwork();
+  }
+
+  Future<void> _loadTimeZone() async {
+    final tz = _s.timeZone;
+    final info = await _try(tz.get);
+    final zones = await _try(tz.list);
+    if (!mounted) return;
+    setState(() {
+      _zone = info ?? _zone;
+      _zones = zones ?? _zones;
+    });
+    // The drop-down first (it was not there while loading).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _step != FirstBootStep.timeZone || _zone == null) return;
+      _region.model.goTo(0, 0);
+      _region.changed();
+      unawaited(_region.focusCurrent());
+    });
+  }
+
+  /// First-boot mode: no admin profile yet, so no PIN.
+  Future<void> _setZone(TimeZoneEntry z) async {
+    setState(() {
+      _settingZone = true;
+      _message = null;
+    });
+    final info = await _try(() => _s.timeZone.set(z.zone));
+    if (!mounted) return;
+    setState(() {
+      _settingZone = false;
+      if (info != null) _zone = info;
+    });
   }
 
   Future<void> _loadControllers() async {
@@ -321,6 +361,24 @@ class _FirstBootPageState extends State<FirstBootPage> {
               focused: f,
               leading: SignalBars(bars: ap.bars),
               trailing: ap.secured ? const LockMark() : null,
+            ),
+          );
+        }
+      case FirstBootStep.timeZone:
+        final z = _zone;
+        if (z == null) {
+          if (_message == null) p.add(const StatusLine('Loading...'));
+        } else {
+          p.row(
+            'zone',
+            1,
+            TimeZonePicker(
+              region: _region,
+              rowKey: 'zone',
+              zones: _zones,
+              current: z,
+              busy: _settingZone,
+              onChoose: (e) => unawaited(_setZone(e)),
             ),
           );
         }

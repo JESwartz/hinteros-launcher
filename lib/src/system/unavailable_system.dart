@@ -282,6 +282,18 @@ class _UnavailableStorage implements StorageRepository {
   }) => Future.error(_gone);
 }
 
+class _UnavailableTimeZone implements TimeZoneRepository {
+  @override
+  Future<TimeZoneInfo> get() => Future.error(_gone);
+  @override
+  Future<List<TimeZoneEntry>> list() => Future.error(_gone);
+  @override
+  Future<TimeZoneInfo> set(String zone, {String? adminPin}) =>
+      Future.error(_gone);
+  @override
+  Stream<TimeZoneInfo> get changes => const Stream.empty();
+}
+
 /// Every system call fails with `unavailable`.
 SystemServices unavailableSystemServices() => SystemServices(
   jobs: _UnavailableJobs(),
@@ -294,4 +306,5 @@ SystemServices unavailableSystemServices() => SystemServices(
   auth: _UnavailableAuth(),
   profiles: const UnavailableProfiles(),
   storage: _UnavailableStorage(),
+  timeZone: _UnavailableTimeZone(),
 );

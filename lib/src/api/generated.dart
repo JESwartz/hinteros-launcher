@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.15).
+// Source: schema/session-api.json (session API 0.16).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.15';
+const apiVersion = '0.16';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -70,6 +70,9 @@ const apiMethodNames = <String>[
   'system.storage.cleanup_profiles',
   'system.cleanup.get',
   'system.cleanup.set',
+  'system.time_zone.get',
+  'system.time_zone.list',
+  'system.time_zone.set',
   'system.jobs.get',
   'system.jobs.list',
   'system.jobs.cancel',
@@ -131,6 +134,7 @@ const apiEventNames = <String>[
   'apps_changed',
   'steam_attention',
   'osk_visibility',
+  'time_zone_changed',
   'job_started',
   'job_progress',
   'job_finished',
@@ -337,6 +341,12 @@ typedef AuthCookie = String;
 /// Generations to keep (the running, booted and current ones always stay).
 typedef Keep = int;
 
+/// An IANA time zone name (UTC, America/Chicago): '/'-separated parts that each start with an ASCII capital letter, followed by ASCII letters, digits, '_', '+' and '-' (the system repo's rule; it keeps out '..', absolute paths and tzdata's other files).
+typedef ZoneName = String;
+
+/// Seconds east of UTC.
+typedef OffsetSeconds = int;
+
 /// A profile id or guest.
 typedef StorageHomeId = String;
 
@@ -393,6 +403,7 @@ enum EventName {
   profilesChanged('profiles_changed'),
   greeterPrompt('greeter_prompt'),
   greeterResult('greeter_result'),
+  timeZoneChanged('time_zone_changed'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -2070,6 +2081,94 @@ enum CleanupFrequency {
   );
 
   String toJson() => value;
+}
+
+class TimeZoneInfo {
+  const TimeZoneInfo({
+    required this.zone,
+    required this.offsetSeconds,
+    required this.standardOffsetSeconds,
+    required this.offsetValidUntil,
+  });
+
+  /// An IANA time zone name (UTC, America/Chicago): '/'-separated parts that each start with an ASCII capital letter, followed by ASCII letters, digits, '_', '+' and '-' (the system repo's rule; it keeps out '..', absolute paths and tzdata's other files).
+  final String zone;
+
+  /// Seconds east of UTC.
+  final int offsetSeconds;
+
+  /// Seconds east of UTC.
+  final int standardOffsetSeconds;
+
+  /// Unix time of the next offset change; null when there is none.
+  final int? offsetValidUntil;
+
+  factory TimeZoneInfo.fromJson(Map<String, dynamic> json) => TimeZoneInfo(
+    zone: json['zone'] as String,
+    offsetSeconds: json['offset_seconds'] as int,
+    standardOffsetSeconds: json['standard_offset_seconds'] as int,
+    offsetValidUntil: json['offset_valid_until'] == null
+        ? null
+        : json['offset_valid_until'] as int,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'zone': zone,
+    'offset_seconds': offsetSeconds,
+    'standard_offset_seconds': standardOffsetSeconds,
+    'offset_valid_until': offsetValidUntil,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is TimeZoneInfo &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'TimeZoneInfo(${jsonEncode(toJson())})';
+}
+
+class TimeZoneEntry {
+  const TimeZoneEntry({
+    required this.zone,
+    required this.offsetSeconds,
+    required this.standardOffsetSeconds,
+  });
+
+  /// An IANA time zone name (UTC, America/Chicago): '/'-separated parts that each start with an ASCII capital letter, followed by ASCII letters, digits, '_', '+' and '-' (the system repo's rule; it keeps out '..', absolute paths and tzdata's other files).
+  final String zone;
+
+  /// Seconds east of UTC.
+  final int offsetSeconds;
+
+  /// Seconds east of UTC.
+  final int standardOffsetSeconds;
+
+  factory TimeZoneEntry.fromJson(Map<String, dynamic> json) => TimeZoneEntry(
+    zone: json['zone'] as String,
+    offsetSeconds: json['offset_seconds'] as int,
+    standardOffsetSeconds: json['standard_offset_seconds'] as int,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'zone': zone,
+    'offset_seconds': offsetSeconds,
+    'standard_offset_seconds': standardOffsetSeconds,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is TimeZoneEntry &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'TimeZoneEntry(${jsonEncode(toJson())})';
 }
 
 class CleanupSettings {
@@ -7079,6 +7178,205 @@ class SystemCleanupSetResult {
   String toString() => 'SystemCleanupSetResult(${jsonEncode(toJson())})';
 }
 
+class SystemTimeZoneGetParams {
+  const SystemTimeZoneGetParams();
+
+  factory SystemTimeZoneGetParams.fromJson(Map<String, dynamic> json) =>
+      SystemTimeZoneGetParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemTimeZoneGetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemTimeZoneGetParams(${jsonEncode(toJson())})';
+}
+
+class SystemTimeZoneGetResult {
+  const SystemTimeZoneGetResult({
+    required this.zone,
+    required this.offsetSeconds,
+    required this.standardOffsetSeconds,
+    required this.offsetValidUntil,
+  });
+
+  /// An IANA time zone name (UTC, America/Chicago): '/'-separated parts that each start with an ASCII capital letter, followed by ASCII letters, digits, '_', '+' and '-' (the system repo's rule; it keeps out '..', absolute paths and tzdata's other files).
+  final String zone;
+
+  /// Seconds east of UTC.
+  final int offsetSeconds;
+
+  /// Seconds east of UTC.
+  final int standardOffsetSeconds;
+
+  /// Unix time of the next offset change; null when there is none.
+  final int? offsetValidUntil;
+
+  factory SystemTimeZoneGetResult.fromJson(Map<String, dynamic> json) =>
+      SystemTimeZoneGetResult(
+        zone: json['zone'] as String,
+        offsetSeconds: json['offset_seconds'] as int,
+        standardOffsetSeconds: json['standard_offset_seconds'] as int,
+        offsetValidUntil: json['offset_valid_until'] == null
+            ? null
+            : json['offset_valid_until'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'zone': zone,
+    'offset_seconds': offsetSeconds,
+    'standard_offset_seconds': standardOffsetSeconds,
+    'offset_valid_until': offsetValidUntil,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemTimeZoneGetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemTimeZoneGetResult(${jsonEncode(toJson())})';
+}
+
+class SystemTimeZoneListParams {
+  const SystemTimeZoneListParams();
+
+  factory SystemTimeZoneListParams.fromJson(Map<String, dynamic> json) =>
+      SystemTimeZoneListParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemTimeZoneListParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemTimeZoneListParams(${jsonEncode(toJson())})';
+}
+
+class SystemTimeZoneListResult {
+  const SystemTimeZoneListResult({required this.zones});
+
+  final List<TimeZoneEntry> zones;
+
+  factory SystemTimeZoneListResult.fromJson(Map<String, dynamic> json) =>
+      SystemTimeZoneListResult(
+        zones: (json['zones'] as List)
+            .map(
+              (x) => TimeZoneEntry.fromJson((x as Map).cast<String, dynamic>()),
+            )
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'zones': zones.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemTimeZoneListResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemTimeZoneListResult(${jsonEncode(toJson())})';
+}
+
+class SystemTimeZoneSetParams {
+  const SystemTimeZoneSetParams({required this.zone, this.adminPin});
+
+  /// An IANA time zone name (UTC, America/Chicago): '/'-separated parts that each start with an ASCII capital letter, followed by ASCII letters, digits, '_', '+' and '-' (the system repo's rule; it keeps out '..', absolute paths and tzdata's other files).
+  final String zone;
+
+  /// 4 to 8 digits. Never logged.
+  final String? adminPin;
+
+  factory SystemTimeZoneSetParams.fromJson(Map<String, dynamic> json) =>
+      SystemTimeZoneSetParams(
+        zone: json['zone'] as String,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'zone': zone, 'admin_pin': ?adminPin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemTimeZoneSetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemTimeZoneSetParams(${jsonEncode(toJson())})';
+}
+
+class SystemTimeZoneSetResult {
+  const SystemTimeZoneSetResult({
+    required this.zone,
+    required this.offsetSeconds,
+    required this.standardOffsetSeconds,
+    required this.offsetValidUntil,
+  });
+
+  /// An IANA time zone name (UTC, America/Chicago): '/'-separated parts that each start with an ASCII capital letter, followed by ASCII letters, digits, '_', '+' and '-' (the system repo's rule; it keeps out '..', absolute paths and tzdata's other files).
+  final String zone;
+
+  /// Seconds east of UTC.
+  final int offsetSeconds;
+
+  /// Seconds east of UTC.
+  final int standardOffsetSeconds;
+
+  /// Unix time of the next offset change; null when there is none.
+  final int? offsetValidUntil;
+
+  factory SystemTimeZoneSetResult.fromJson(Map<String, dynamic> json) =>
+      SystemTimeZoneSetResult(
+        zone: json['zone'] as String,
+        offsetSeconds: json['offset_seconds'] as int,
+        standardOffsetSeconds: json['standard_offset_seconds'] as int,
+        offsetValidUntil: json['offset_valid_until'] == null
+            ? null
+            : json['offset_valid_until'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'zone': zone,
+    'offset_seconds': offsetSeconds,
+    'standard_offset_seconds': standardOffsetSeconds,
+    'offset_valid_until': offsetValidUntil,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemTimeZoneSetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemTimeZoneSetResult(${jsonEncode(toJson())})';
+}
+
 class SystemJobsGetParams {
   const SystemJobsGetParams({required this.jobId});
 
@@ -10139,6 +10437,62 @@ final class OskVisibilityEvent extends SessionEvent {
   String toString() => 'OskVisibilityEvent(${jsonEncode(toJson())})';
 }
 
+/// Relayed from the system service. The box's time zone changed (time_zone.set, or a rollback restored another zone): the new zone and its offsets, as time_zone.get.
+final class TimeZoneChangedEvent extends SessionEvent {
+  const TimeZoneChangedEvent({
+    required this.zone,
+    required this.offsetSeconds,
+    required this.standardOffsetSeconds,
+    required this.offsetValidUntil,
+  });
+
+  /// An IANA time zone name (UTC, America/Chicago): '/'-separated parts that each start with an ASCII capital letter, followed by ASCII letters, digits, '_', '+' and '-' (the system repo's rule; it keeps out '..', absolute paths and tzdata's other files).
+  final String zone;
+
+  /// Seconds east of UTC.
+  final int offsetSeconds;
+
+  /// Seconds east of UTC.
+  final int standardOffsetSeconds;
+
+  /// Unix time of the next offset change; null when there is none.
+  final int? offsetValidUntil;
+
+  factory TimeZoneChangedEvent.fromJson(Map<String, dynamic> json) =>
+      TimeZoneChangedEvent(
+        zone: json['zone'] as String,
+        offsetSeconds: json['offset_seconds'] as int,
+        standardOffsetSeconds: json['standard_offset_seconds'] as int,
+        offsetValidUntil: json['offset_valid_until'] == null
+            ? null
+            : json['offset_valid_until'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'zone': zone,
+    'offset_seconds': offsetSeconds,
+    'standard_offset_seconds': standardOffsetSeconds,
+    'offset_valid_until': offsetValidUntil,
+  };
+
+  @override
+  String get name => 'time_zone_changed';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is TimeZoneChangedEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'TimeZoneChangedEvent(${jsonEncode(toJson())})';
+}
+
 /// Relayed from the system service. A job was started (by any caller). 0.15 (system 0.7): subject (what the job is about) and started_at.
 final class JobStartedEvent extends SessionEvent {
   const JobStartedEvent({
@@ -12164,6 +12518,33 @@ mixin SessionApiMethods {
     await rpc('system.cleanup.set', params.toJson()),
   );
 
+  /// Relayed to the system service's time_zone.get. the box's time zone (state.json settings.timeZone; UTC when absent) and its offsets now. Read-only.
+  ///
+  /// Offsets come from the system's tzdata (/etc/zoneinfo), the same files /etc/localtime points into. offset_seconds: seconds east of UTC now (DST included). standard_offset_seconds: the zone's standard offset now: the lower of its two offsets while it observes DST (so tzdata's negative DST, e.g. Europe/Dublin, gives its winter offset, as the map's bands do), otherwise offset_seconds. offset_valid_until: Unix time of the next change of offset_seconds (the next DST change), null when the zone has none. The launcher's clock shows UTC plus offset_seconds and gets the zone again at offset_valid_until and on time_zone_changed. A zone in state.json that tzdata does not have (or a bad one) reads as UTC.
+  Future<SystemTimeZoneGetResult> systemTimeZoneGet([
+    SystemTimeZoneGetParams params = const SystemTimeZoneGetParams(),
+  ]) async => SystemTimeZoneGetResult.fromJson(
+    await rpc('system.time_zone.get', params.toJson()),
+  );
+
+  /// Relayed to the system service's time_zone.list. every zone the picker offers: tzdata's zone1970.tab zones plus UTC, sorted by name, each with its offsets now. Read-only.
+  ///
+  /// Offsets as in time_zone.get. A zone1970.tab entry whose file is missing or unreadable is left out (and logged).
+  Future<SystemTimeZoneListResult> systemTimeZoneList([
+    SystemTimeZoneListParams params = const SystemTimeZoneListParams(),
+  ]) async => SystemTimeZoneListResult.fromJson(
+    await rpc('system.time_zone.list', params.toJson()),
+  );
+
+  /// Relayed to the system service's time_zone.set. set the box's time zone at once (no job, no rebuild). Admin PIN, except in first-boot mode. Action org.hinteros.system.settings.
+  ///
+  /// zone: an IANA name that the system's tzdata has (a TZif file under /etc/zoneinfo; UTC always). A badly formed name is invalid_params {field: zone, reason: bad_format}; a well-formed name tzdata does not have is invalid_params {field: zone, reason: unknown}. The admin PIN is needed (pin_required {pin: admin} when it is missing or wrong) except in first-boot mode (no admin profile yet, the rule of profiles.setup_admin). Writes settings.timeZone to state.json (atomically; a running job's own state.json keeps the new zone) and points /etc/localtime at /etc/zoneinfo/&lt;zone&gt; (a new link renamed over the old one). Processes started later see the new zone. Then time_zone_changed. The result is the new zone and its offsets; setting the current zone again changes nothing and sends no event.
+  Future<SystemTimeZoneSetResult> systemTimeZoneSet(
+    SystemTimeZoneSetParams params,
+  ) async => SystemTimeZoneSetResult.fromJson(
+    await rpc('system.time_zone.set', params.toJson()),
+  );
+
   /// Relayed to the system service's jobs.get. One job: running or among the last 10 finished. Read-only.
   Future<SystemJobsGetResult> systemJobsGet(SystemJobsGetParams params) async =>
       SystemJobsGetResult.fromJson(
@@ -12528,6 +12909,7 @@ sealed class SessionEvent {
     'apps_changed' => AppsChangedEvent.fromJson(params),
     'steam_attention' => SteamAttentionEvent.fromJson(params),
     'osk_visibility' => OskVisibilityEvent.fromJson(params),
+    'time_zone_changed' => TimeZoneChangedEvent.fromJson(params),
     'job_started' => JobStartedEvent.fromJson(params),
     'job_progress' => JobProgressEvent.fromJson(params),
     'job_finished' => JobFinishedEvent.fromJson(params),

@@ -15,6 +15,7 @@ import 'dart:async';
 import 'errors.dart';
 import 'generated.dart';
 import 'mock_store.dart';
+import 'mock_time_zones.dart';
 
 /// What a building stage builds when a job runs by itself: (name, version).
 const List<(String, String?)> mockBuilds = [
@@ -235,6 +236,25 @@ class MockSystemRelay {
     final at = _nowSeconds();
     measurement = mockWireMeasurement(at);
     return MeasuredResult(measuredAt: at);
+  }
+
+  // ---- time zone (0.16)
+
+  /// The box's zone (`time_zone.get`); a new box is on UTC.
+  String timeZone = 'UTC';
+
+  /// First-boot mode (no admin profile yet): `time_zone.set` needs no PIN.
+  /// [MockDaemon] sets it to its profiles' state.
+  bool Function()? firstBoot;
+
+  Map<String, dynamic> _timeZoneInfo() {
+    final z = mockTimeZone(timeZone) ?? mockTimeZone('UTC')!;
+    return SystemTimeZoneGetResult(
+      zone: z.zone,
+      offsetSeconds: z.offset * 60,
+      standardOffsetSeconds: z.standard * 60,
+      offsetValidUntil: z.until,
+    ).toJson();
   }
 
   /// Ids the next jobs get (then random-looking ones).
@@ -659,6 +679,47 @@ class MockSystemRelay {
         );
         if (want == cleanup) return const JobRef(jobId: null).toJson();
         return _started(JobKind.cleanupSet, onSuccess: () => cleanup = want);
+      case 'system.time_zone.get':
+        _closed(p, const []);
+        return _timeZoneInfo();
+      case 'system.time_zone.list':
+        _closed(p, const []);
+        return SystemTimeZoneListResult(
+          zones: [
+            for (final z in mockTimeZones)
+              TimeZoneEntry(
+                zone: z.zone,
+                offsetSeconds: z.offset * 60,
+                standardOffsetSeconds: z.standard * 60,
+              ),
+          ],
+        ).toJson();
+      case 'system.time_zone.set':
+        _closed(p, const ['zone', 'admin_pin']);
+        final tp = SystemTimeZoneSetParams.fromJson(p);
+        final parts = tp.zone.split('/');
+        if (tp.zone.length > 64 ||
+            !RegExp(r'^[A-Za-z0-9._+-]+(/[A-Za-z0-9._+-]+)*$')
+                .hasMatch(tp.zone) ||
+            parts.any((s) => s == '.' || s == '..')) {
+          throw const ApiException(ApiErrorCode.invalidParams, 'bad zone', {
+            'field': 'zone',
+            'reason': 'bad_format',
+          });
+        }
+        _mutating('time_zone.set:${tp.zone}');
+        if (!(firstBoot?.call() ?? false)) checkAdminPin?.call(tp.adminPin);
+        if (mockTimeZone(tp.zone) == null) {
+          throw const ApiException(ApiErrorCode.invalidParams, 'unknown zone', {
+            'field': 'zone',
+            'reason': 'unknown',
+          });
+        }
+        final changed = tp.zone != timeZone;
+        timeZone = tp.zone;
+        final info = _timeZoneInfo();
+        if (changed) emit('time_zone_changed', info);
+        return info;
       case 'system.jobs.get':
         _closed(p, const ['job_id']);
         final j = _find(SystemJobsGetParams.fromJson(p).jobId);

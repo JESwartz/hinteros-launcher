@@ -55,6 +55,7 @@ launcher installed, or without those variables (`--mock`, development), it stays
 | `lib/src/osk/` | The on-screen keyboard: `OskBackend` (+ mock), layouts, state, UI |
 | `tool/gen_mock_art.dart` | Draws the placeholder cover art in `test/fixtures/art/` (committed; no network, no third-party pictures) |
 | `tool/gen_mock_icons.dart` | Draws the generic placeholder app icons in `test/fixtures/icons/` (plain shapes, PNG and one SVG; no logos, no network) |
+| `tool/gen_time_zone_map.dart` | Makes the time zone map asset `assets/maps/time_zones.bin` from Natural Earth data (see "Map data") |
 | `lib/src/data/app_icons.dart` | `AppIconCache`: loads, decodes (PNG, SVG via `flutter_svg`) and remembers app icons, computes their dominant colour |
 
 ### Mock daemon
@@ -85,6 +86,35 @@ Escape and Backspace work in every mode and are the same actions as `input_nav` 
 flutter run -d linux --dart-entrypoint-args=--mock
 ./result/bin/hinteros-launcher --mock --windowed
 ```
+
+### Session API 0.16: time zone
+
+Design: `hinteros-docs/design/time-zone.md`. The box's zone (`TimeZoneRepository` in
+`lib/src/system/time_zone.dart`, over the relayed `system.time_zone.get` / `list` / `set` and
+`time_zone_changed` in `daemon_time_zone.dart`, faked in `mock_time_zone.dart`).
+
+- **The picker** (`lib/src/ui/time_zone/time_zone_picker.dart`, `TimeZonePicker`): a drop-down
+  (`UTC−06:00  America/Chicago` and a down arrow) and under it the world map
+  (`time_zone_map.dart`, a `CustomPainter`, equirectangular) with every area of the zone's
+  standard offset highlighted (the band, not only the zone) over the land outlines. The map only
+  shows. A on the drop-down opens the list under it (or over it, where there is no room): every
+  zone grouped by region, each with its offset now, opening at the current zone (a filled disc
+  marks it). Up and down move, left and right (and L1/R1) go to the start of the previous or
+  next region, A chooses, B closes. No hint text.
+- **First boot**: a "Time zone" step after "Internet", on the box's zone (UTC on a new box);
+  a choice applies at once, with no PIN (no admin profile yet).
+- **Settings > Time zone** (`lib/src/ui/system/time_zone_section.dart`): the picker; a choice
+  asks for the admin PIN on the admin-PIN pad (`withBoxAdminPin`: a wrong PIN asks again, Back
+  changes nothing) and applies at once (no job). The zone it is on again asks nothing.
+- **The clock** in the top bar is UTC plus the daemon's `offset_seconds`, not the process's own
+  zone (glibc reads that once). The shell gets the zone again at `offset_valid_until` (the next
+  daylight saving time change), on `time_zone_changed`, and after a reconnect.
+- **Map asset**: `assets/maps/time_zones.bin` (76 KB) from Natural Earth, made by
+  `tool/gen_time_zone_map.dart` (see "Map data").
+- **Mock**: 75 zones of `zone1970.tab` plus UTC with the offsets of early October 2026
+  (`lib/src/api/mock_time_zones.dart`); a new box is on UTC (`MockSystemServices(timeZone:)`);
+  `set` checks the admin PIN except in first-boot mode; `changeElsewhere` sends
+  `time_zone_changed`. `MockDaemon.system` answers the three relayed methods the same way.
 
 ### Session API 0.15: job progress
 
@@ -624,8 +654,8 @@ UI. Focus on a tab selects its section (like console UIs); Down enters the secti
   text size (100/120/140/160%), high contrast, focus marker (ring/glow/bar), reduce motion.
   "Show typed passwords on the on-screen keyboard" (privacy; off = in password fields the keyboard's
   preview shows dots).
-  Below them the system sections (see "System screens"): Network, Bluetooth, Display, Audio, Power,
-  Remote access, Updates, About.
+  Below them the system sections (see "System screens"): Profiles, Network, Bluetooth, Display,
+  Audio, Power, Time zone, Remote access, Updates, Storage, About.
 - **Store:** see "Store". A top-level tab after Apps (see the placement note there).
 
 The layout is designed in 1920x1080 logical pixels. A 4K screen under native Wayland runs it at
@@ -718,6 +748,7 @@ the client handles by matching on the request id; `system.ssh.set` has a 340 s t
 | `BluetoothRepository` | `bluetooth.*`, `bluetooth_changed`, `bluetooth_confirm` | Bluetooth |
 | `DisplayAudioRepository` | `display.modes` / `set_mode` / `keep` / `revert`, `audio.*`, `audio_changed` | Display, Audio |
 | `StoreRepository` | `store.list`, `store_changed`, `system.apps.install` / `remove` (+ the job events) | Store, Games |
+| `TimeZoneRepository` | `system.time_zone.get` / `list` / `set`, `time_zone_changed` | Time zone, first boot, the top-bar clock |
 
 `MockJobs` behaves like the service: one mutating job at a time (`job_busy`), stages, progress,
 cancel until activation. Tests drive it by hand (`progress`, `finish`); `--mock` lets jobs run
@@ -806,6 +837,14 @@ The UI reads through `AppsRepository` (apps, running, launch, close, Steam atten
 `LauncherData`, which owns all daemon traffic and re-queries on connect and on events (the daemon
 does not replay them). The client speaks session API 0.11 (during 0.x the minor must match); the on-screen keyboard's connection too.
 
+### Map data
+
+The time zone map (`assets/maps/time_zones.bin`) is made from Natural Earth (public domain,
+<https://www.naturalearthdata.com>), release v5.1.2: `ne_10m_time_zones` for the bands and
+`ne_50m_land` for the land, as GeoJSON from
+<https://github.com/nvkelso/natural-earth-vector/tree/v5.1.2/geojson>. `tool/gen_time_zone_map.dart`
+simplifies and quantizes them (its header has the commands, the file hashes and the format).
+
 ### Fonts
 
 Atkinson Hyperlegible Regular and Bold (`assets/fonts/`), SIL Open Font License 1.1, licence text in
@@ -831,6 +870,8 @@ profile screens in a session (`profiles_*`: the chip menu, `profiles_switch_pick
 profile marked, `profiles_switch_pin` (a locked target's PIN in the session), not responding,
 the lock screen, Settings -> Profiles, `profiles_delete_pin_hold` (Delete half held),
 `profiles_startup_loading` for the first frames).
+`test/golden/time_zone_test.dart` covers the time zone picker (`time_zone_*`: Settings > Time zone, the
+open list, high contrast at 1.6x, the first-boot step).
 
 ```
 nix run .#update-goldens   # renders them in the Nix sandbox (same environment as the check), copies them in

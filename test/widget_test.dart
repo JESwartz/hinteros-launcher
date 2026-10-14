@@ -53,7 +53,11 @@ void main() {
       expect(find.text(s), findsWidgets);
     }
     expect(find.text('Server'), findsNothing);
-    expect(find.text('20:30'), findsOneWidget);
+    // The box is on UTC: the clock shows the fixed instant in UTC (20:30 when
+    // the tests run in UTC, as in the Nix sandbox).
+    final utc = fixedNow().toUtc();
+    String two(int n) => n.toString().padLeft(2, '0');
+    expect(find.text('${two(utc.hour)}:${two(utc.minute)}'), findsOneWidget);
     expect(focusLabel(), 'home/apps:0');
   });
 

@@ -11,9 +11,11 @@ library;
 import 'models.dart';
 import 'profiles.dart';
 import 'storage.dart';
+import 'time_zone.dart';
 
 export 'profiles.dart';
 export 'storage.dart';
+export 'time_zone.dart';
 
 /// Jobs (`jobs.get`, `job_started` / `job_progress` / `job_finished`).
 abstract class JobsRepository {
@@ -308,6 +310,7 @@ class SystemServices {
     required this.auth,
     required this.profiles,
     required this.storage,
+    required this.timeZone,
   });
 
   final JobsRepository jobs;
@@ -325,4 +328,7 @@ class SystemServices {
 
   /// Settings -> Storage (0.14): what uses the disk, the clean-ups.
   final StorageRepository storage;
+
+  /// The box's time zone (0.16): the clock, first boot, Settings.
+  final TimeZoneRepository timeZone;
 }
