@@ -240,8 +240,8 @@ class _SpinnerCaption extends StatelessWidget {
   }
 }
 
-/// "Building hinteros-launcher (3 of 12, 6 min)", built again every 15
-/// seconds so the minutes count up while the backend says nothing new.
+/// "Building hinteros-launcher (3 of 12). Time elapsed: 06:12", built again
+/// every second so the time counts up while the backend says nothing new.
 class _BuildLine extends StatefulWidget {
   const _BuildLine({required this.flow});
 
@@ -257,7 +257,7 @@ class _BuildLineState extends State<_BuildLine> {
   @override
   void initState() {
     super.initState();
-    _tick = Timer.periodic(const Duration(seconds: 15), (_) => setState(() {}));
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
   }
 
   @override

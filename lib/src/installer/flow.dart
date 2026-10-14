@@ -6,6 +6,7 @@ import '../log.dart';
 import '../system/daemon_system.dart' show releaseName;
 import '../system/models.dart' show UpdateChannel;
 import '../ui/app_selection.dart';
+import '../ui/jobs.dart' show elapsedText;
 import 'backend.dart';
 import 'plan.dart';
 import 'progress.dart';
@@ -755,21 +756,18 @@ class InstallerFlow extends ChangeNotifier {
     buildTotal = name == null ? null : e.buildTotal;
   }
 
-  /// "Building hinteros-launcher (3 of 12, 6 min)": the package being built,
-  /// with the whole minutes since it started (left out under 1 minute); null
-  /// when nothing is building.
+  /// "Building hinteros-launcher (3 of 12). Time elapsed: 06:12": the package
+  /// being built and the time since it started (mm:ss); null when nothing is
+  /// building.
   String? get buildLine {
     final name = buildName;
     if (name == null) return null;
     final since = buildSince;
-    final minutes = since == null ? 0 : clock().difference(since).inMinutes;
+    final elapsed = since == null ? Duration.zero : clock().difference(since);
     final i = buildIndex;
     final n = buildTotal;
-    final parts = [
-      if (i != null && n != null) '$i of $n',
-      if (minutes >= 1) '$minutes min',
-    ];
-    return 'Building $name${parts.isEmpty ? '' : ' (${parts.join(', ')})'}';
+    final count = i != null && n != null ? ' ($i of $n)' : '';
+    return 'Building $name$count. Time elapsed: ${elapsedText(elapsed)}';
   }
 
   /// Names of the apps that could not be installed.
