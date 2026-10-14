@@ -384,7 +384,7 @@ void main() {
       await press(t, [
         kRight, // Settings
         kDown,
-        ...List.filled(settingsEntryIds.indexOf('updates'), kDown),
+        ...List.filled(settingsGroupIndexOf('updates'), kDown),
         kRight,
       ]);
       expect(

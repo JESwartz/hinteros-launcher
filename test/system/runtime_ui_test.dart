@@ -392,7 +392,7 @@ void main() {
       await endStartupCheck(t, h);
       await enterSettingsEntry(t, 'net');
       expect(find.textContaining('Connected to Home'), findsOneWidget);
-      await press(t, [kLeft, kDown, kRight]);
+      // Bluetooth is under Network in the same pane.
       expect(
         find.text("Bluetooth isn't available on this box."),
         findsOneWidget,
@@ -400,14 +400,16 @@ void main() {
       expect(find.text('Try again'), findsOneWidget);
       await press(t, [kLeft, kDown, kRight]);
       expect(find.textContaining('Sony TV'), findsOneWidget);
-      await press(t, [kLeft, kDown, kRight]);
       expect(find.text('60%'), findsOneWidget);
       // Left and right change the volume there: Back leaves the pane.
-      await press(t, [kEscape, kDown, kRight]);
+      await downToSection(t, 'audio');
+      await press(t, [kEscape, kDown, kDown, kRight]);
       expect(find.text('Sleep'), findsOneWidget);
       // Bluetooth comes back: Try again recovers.
       h.mock.runtime.setUnavailable('bluez', gone: false);
-      await press(t, [kLeft, kUp, kUp, kUp, kRight, kEnter]);
+      await press(t, [kLeft, kUp, kUp, kUp, kRight]);
+      await downToSection(t, 'bt');
+      await press(t, [kEnter]);
       expect(find.text('Xbox Wireless Controller'), findsOneWidget);
     });
 
@@ -423,14 +425,13 @@ void main() {
       await endStartupCheck(t, h);
       await enterSettingsEntry(t, 'net');
       expect(find.text("Wi-Fi isn't available on this box."), findsOneWidget);
-      await press(t, [kLeft, kDown, kDown, kRight]);
+      await press(t, [kLeft, kDown, kRight]);
       expect(
         find.text("Display control isn't available on this box."),
         findsOneWidget,
       );
-      await press(t, [kLeft, kDown, kRight]);
       expect(find.text("Audio isn't available on this box."), findsOneWidget);
-      await press(t, [kLeft, kDown, kRight]);
+      await press(t, [kLeft, kDown, kDown, kRight]);
       expect(
         find.text("Power control isn't available on this box."),
         findsOneWidget,

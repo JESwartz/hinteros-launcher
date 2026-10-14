@@ -6,6 +6,7 @@ import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
 import 'package:hinteros_launcher/src/theme/hinter_theme.dart';
 
 import 'support/harness.dart';
+import 'support/nav_helpers.dart';
 
 void main() {
   test('defaults and JSON round trip', () {
@@ -83,23 +84,10 @@ void main() {
     setView(t);
     final h = Harness();
     await h.pump(t);
-    // Settings > Text size > 160%
-    for (final k in [
-      LogicalKeyboardKey.arrowUp,
-      LogicalKeyboardKey.arrowRight,
-      LogicalKeyboardKey.arrowRight,
-      LogicalKeyboardKey.arrowRight,
-      LogicalKeyboardKey.arrowRight,
-      LogicalKeyboardKey.arrowDown,
-      LogicalKeyboardKey.arrowRight,
-      LogicalKeyboardKey.arrowDown,
-      LogicalKeyboardKey.arrowDown,
-      LogicalKeyboardKey.arrowDown,
-      LogicalKeyboardKey.enter,
-    ]) {
-      await t.sendKeyEvent(k);
-      await t.pumpAndSettle();
-    }
+    // Settings > Accessibility > Text size > 160%
+    await press(t, [kUp, kRight, kRight, kRight, kRight, kDown]);
+    await press(t, [...List.filled(5, kDown), kRight, kDown, kDown, kDown]);
+    await press(t, [kEnter]);
     expect(h.settings.value.textScale, 1.6);
     expect(h.storage.value.textScale, 1.6, reason: 'saved');
   });
@@ -111,25 +99,14 @@ void main() {
       final h = Harness();
       await h.pump(t);
       expect(h.settings.value.showTypedOnOsk, false);
-      // Settings > the fifth entry (on-screen keyboard text) > On
-      for (final k in [
-        LogicalKeyboardKey.arrowUp,
-        LogicalKeyboardKey.arrowRight,
-        LogicalKeyboardKey.arrowRight,
-        LogicalKeyboardKey.arrowRight,
-        LogicalKeyboardKey.arrowRight,
-        LogicalKeyboardKey.arrowDown,
-        LogicalKeyboardKey.arrowDown,
-        LogicalKeyboardKey.arrowDown,
-        LogicalKeyboardKey.arrowDown,
-        LogicalKeyboardKey.arrowDown,
-        LogicalKeyboardKey.arrowRight,
-        LogicalKeyboardKey.arrowDown,
-        LogicalKeyboardKey.enter,
-      ]) {
-        await t.sendKeyEvent(k);
-        await t.pumpAndSettle();
-      }
+      // Settings > Accessibility > the last section (on-screen keyboard
+      // text) > On
+      await enterSettingsEntry(t, 'osk_text');
+      expect(
+        find.text('Show typed passwords on the on-screen keyboard'),
+        findsOneWidget,
+      );
+      await press(t, [kDown, kEnter]);
       expect(h.settings.value.showTypedOnOsk, true);
       expect(h.storage.value.showTypedOnOsk, true, reason: "saved");
     },

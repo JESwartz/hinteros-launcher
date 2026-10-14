@@ -650,12 +650,29 @@ UI. Focus on a tab selects its section (like console UIs); Down enters the secti
   being cut off; grids have a fixed section header and scroll by whole rows, so a focused row is
   never half hidden. App tiles lay out Running mark, initial and name in a column: they cannot
   overlap at any text size (the initial gives way when there is no room).
-- **Settings:** list left, options of the highlighted entry right (list-detail). Local settings:
-  text size (100/120/140/160%), high contrast, focus marker (ring/glow/bar), reduce motion.
-  "Show typed passwords on the on-screen keyboard" (privacy; off = in password fields the keyboard's
-  preview shows dots).
-  Below them the system sections (see "System screens"): Profiles, Network, Bluetooth, Display,
-  Audio, Power, Time zone, Remote access, Updates, Storage, About.
+- **Settings:** groups left, the settings of the highlighted group right (list-detail), in this
+  order:
+  1. Profiles
+  2. Updates
+  3. Storage
+  4. Network: Network, Bluetooth
+  5. Display and sound: Display, Audio
+  6. Accessibility: Text size (100/120/140/160%), High contrast, Focus marker (ring/glow/bar),
+     Reduce motion, "Show typed passwords on the on-screen keyboard" (privacy; off = in password
+     fields the keyboard's preview shows dots)
+  7. System: Time zone, Power, Remote access, About
+
+  A group of several settings shows them in one scrolling pane, one under the other, each under
+  its heading; Up and Down walk through the rows of all of them, the pane scrolls with the focus,
+  Left or Back returns to the list (and Right returns to where focus was in the pane). The system
+  sections are described under "System screens". Code: `lib/src/ui/settings_screen.dart`. Each
+  section keeps its own `NavRegion` (rows, move and Back handlers, as when it had the pane to
+  itself); `SettingsRegions` gives the first section the shell's `settings-detail` region and the
+  others `settings-detail-1`, `-2`, ..., linked up and down (`NavRegion.onEnter` puts focus on the
+  first or last row of the section it enters, `passWhenEmpty` skips one that is still loading).
+  Deep links (`SettingsRegions.select`): the update banner opens the Updates group, Profile
+  settings the Profiles group (focus on the list entry); a setting inside a group (for example
+  `time`) opens its group with focus on that section.
 - **Store:** see "Store". A top-level tab after Apps (see the placement note there).
 
 The layout is designed in 1920x1080 logical pixels. A 4K screen under native Wayland runs it at
@@ -676,7 +693,7 @@ Code: `lib/src/nav/` (pure rules in `nav_model.dart`, binding to Flutter `FocusN
 - Rows of unequal items (the on-screen keyboard) give `NavRow` per-item `spans`; up/down then go to
   the item under the position you aimed for, kept across rows.
 - First item focused on start (as soon as Home has items).
-- **Back** goes up one level: settings detail to its list, section content (or the tab bar) to the
+- **Back** goes up one level: settings pane (any of its stacked sections) to its list, section content (or the tab bar) to the
   Home tab with Home focus restored; on Home it does nothing.
 - **Home button** always goes to the Home tab with the first item of the first non-empty row
   focused (Continue if something runs, else Apps) and column memory reset, also when another tab
@@ -770,7 +787,7 @@ through their stages by themselves.
   it and that typing Y or X is text, not a button press. (Checked in widget tests only; the key
   injection itself is the daemon's, and the real chain, uinput to gamescope to GTK to the field,
   is on the hardware checklist.) "Hold Guide, press Y" is no longer printed in the dialogs; it is
-  kept in Settings, under "Typed text on keyboard", as the way to open the keyboard anywhere else.
+  kept in Settings > Accessibility, under "Show typed passwords on the on-screen keyboard", as the way to open the keyboard anywhere else.
 - **Remote access:** one SSH toggle. SSH is plain username and password for now (you log in as the
   admin account). Key import and key-only login are in the backlog. The toggle just calls
   `ssh.set`; turning it on makes the daemon ask for the admin password, which shows as the prompt
@@ -855,7 +872,9 @@ Atkinson Hyperlegible Regular and Bold (`assets/fonts/`), SIL Open Font License 
 
 `test/golden/screens_test.dart` captures every screen at 1920x1080 and Home and Games at 3840x2160
 (1920x1080 logical at DPR 2), plus Home in high contrast at 1.6x text, into
-`test/golden/goldens/`. `test/golden/osk_test.dart` renders the on-screen keyboard at 1920x1080 over
+`test/golden/goldens/`; for Settings each of the seven groups (`settings_group_*_1080p.png`),
+Focus marker in the Accessibility pane with the glow style (`settings_focus_detail`) and that pane
+scrolled to its last setting (`settings_osk_text`). `test/golden/osk_test.dart` renders the on-screen keyboard at 1920x1080 over
 a checkerboard (so the transparent area and the panel's rounded corners show): letters, symbols with dots in the preview,
 the masked preview with its newest character readable, the preview with the setting on, high contrast at 1.6x with caps lock, and the bar focus marker with one-shot shift
 (`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. `test/golden/runtime_test.dart` covers the runtime settings on the real repositories over the mock daemon (`bt_pair_*` for the passkey modal, `wifi_wrong_password`, `settings_bt_unavailable`, `settings_display_cannot_set`, `display_keep_daemon`, `power_inhibited`, `settings_power_restricted`, `settings_net_no_internet`). `test/golden/system_test.dart` covers the system screens (`settings_sys_*`, `auth_prompt_*` (the admin password prompt: masked, and after a wrong password in high contrast at 1.6x; also over the real repositories), `ssh_cancelled`, `wifi_password`, `display_*`), the progress page (`progress_*`: building with its count, name and time also in high contrast at 1.6x), the job left running (`topbar_job_indicator_*`, also high contrast at 1.6x), the notices when it ends (`job_notice_failed`, `job_notice_restart`), the security notice (`security_notice_*`, also high contrast at 1.6x, locked and unlocked), the Home reminder, the Store (`store_*`; over the real repository: `store_retired_detail`, `store_install_conflict`, `store_installing_progress`, `store_no_space`, `store_more_apps_highcontrast_text160`), the terms page (`terms_*`, also high contrast at 1.6x, from the top and scrolled to the end), `games_steam_missing` and `installer_app_selection`. `test/golden/installer_test.dart` has `installer_*_1080p.png` for every installer screen (welcome, network, disk, the disk warning and the second confirmation, the warning in high contrast at 1.4x text, account, keyboard, options, apps offline and online, summary, progress with the system stage and with the apps stage, both failures, done, done with failed apps). Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a

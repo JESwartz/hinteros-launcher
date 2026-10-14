@@ -30,6 +30,15 @@ class NavRegion extends ChangeNotifier {
   /// Region to move to when a move leaves this region in that direction.
   final Map<NavDir, NavRegion> neighbors = {};
 
+  /// Called when a move from a neighbour (see [neighbors]) brings focus
+  /// here, with the direction of that move, before focus lands: a region
+  /// stacked under another can put its position on its first or last row.
+  void Function(NavDir dir)? onEnter;
+
+  /// A move into this region while it has no items goes on to this region's
+  /// own neighbour in the same direction (stacked panes still loading).
+  bool passWhenEmpty = false;
+
   /// Region Back moves to, if any. If null, Back falls through to
   /// [NavController.onBack].
   NavRegion? backTarget;
@@ -246,8 +255,15 @@ class NavController {
           region.changed();
           unawaited(region.focusCurrent());
         } else {
-          final n = region.neighbors[dir];
-          if (n != null && n.hasItems) focusRegion(n);
+          var n = region.neighbors[dir];
+          for (var hops = 0; hops < 16; hops++) {
+            if (n == null || n.hasItems || !n.passWhenEmpty) break;
+            n = n.neighbors[dir];
+          }
+          if (n != null && n.hasItems) {
+            n.onEnter?.call(dir);
+            focusRegion(n);
+          }
         }
         return true;
       case NavAction.accept:
