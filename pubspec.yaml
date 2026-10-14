@@ -20,6 +20,10 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
+  assets:
+    # The time zone map (Natural Earth, public domain; tool/gen_time_zone_map.dart).
+    - assets/maps/time_zones.bin
+
   fonts:
     # Atkinson Hyperlegible (OFL-1.1, licence in assets/fonts/OFL.txt).
     - family: AtkinsonHyperlegible
