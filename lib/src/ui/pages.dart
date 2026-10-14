@@ -262,7 +262,8 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
               StatusLine(
                 restart
                     ? 'Restart the session to use the change.'
-                    : 'Change applied.',
+                    : _doneText(s),
+                key: const ValueKey('job-done'),
                 ok: true,
               ),
             ],
@@ -281,6 +282,11 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
                     : s.kind == JobKind.rollback &&
                           s.error?.stage == JobStage.box
                     ? 'The rollback is done. Some apps may not work.'
+                    // A clean-up can stop after it removed some versions.
+                    : (s.kind == JobKind.cleanupSystem ||
+                              s.kind == JobKind.cleanupProfiles) &&
+                          s.error?.stage != JobStage.preparing
+                    ? 'Some old versions may be gone. Try again.'
                     : 'Nothing changed. Try again.',
                 style: t.body,
               ),
@@ -323,6 +329,21 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
         ),
       ),
     );
+  }
+
+  /// What a job that finished well did: a clean-up says what it freed.
+  static String _doneText(JobSnapshot s) {
+    switch (s.kind) {
+      case JobKind.cleanupSystem || JobKind.cleanupProfiles:
+        final f = cleanupFreed(s);
+        return f == null
+            ? 'Clean-up done.'
+            : 'Freed ${storageSize(f.freedBytes)}.';
+      case JobKind.storageMeasure:
+        return 'Measured.';
+      default:
+        return 'Change applied.';
+    }
   }
 
   /// A rollback that turned box features back on (`features_readded`).

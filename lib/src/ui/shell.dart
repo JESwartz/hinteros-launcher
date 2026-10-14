@@ -738,6 +738,7 @@ class _LauncherShellState extends State<LauncherShell> {
       detail: _settingsDetail,
       onEnterDetail: () => _nav.focusRegion(_settingsDetail),
       profileSession: _profile,
+      now: widget.now,
     ),
     // Phase 2.
     Section.server => const Notice(

@@ -8,6 +8,7 @@ import '../system/repositories.dart';
 import 'system/common.dart';
 import 'system/hardware_sections.dart';
 import 'system/network_sections.dart';
+import 'system/storage_section.dart';
 import 'system/system_sections.dart';
 import 'common.dart' show EdgeFade;
 import 'focus_frame.dart';
@@ -44,6 +45,7 @@ const _items = [
   _Setting('power', 'Power'),
   _Setting('ssh', 'Remote access'),
   _Setting('updates', 'Updates'),
+  _Setting('storage', 'Storage'),
   _Setting('about', 'About'),
 ];
 
@@ -140,7 +142,11 @@ class SettingsScreen extends StatelessWidget {
     required this.detail,
     required this.onEnterDetail,
     this.profileSession,
+    this.now,
   });
+
+  /// The clock of the sections ("measured 2 hours ago"); fixed in tests.
+  final DateTime Function()? now;
 
   /// The shell's profile session (Settings -> Profiles switches with it).
   final ProfileSession? profileSession;
@@ -218,6 +224,7 @@ class SettingsScreen extends StatelessWidget {
                   settings: settings,
                   services: services,
                   profileSession: profileSession,
+                  now: now ?? DateTime.now,
                 ),
               ),
             ],
@@ -290,9 +297,11 @@ class _Detail extends StatelessWidget {
     required this.settings,
     required this.services,
     this.profileSession,
+    this.now = DateTime.now,
   });
 
   final ProfileSession? profileSession;
+  final DateTime Function() now;
   final _Setting setting;
   final List<_Option> options;
   final NavRegion region;
@@ -322,12 +331,20 @@ class _Detail extends StatelessWidget {
                 key: ValueKey(setting.id),
                 child: setting.id == 'profiles'
                     ? ProfilesSection(
-                        SectionEnv(services: services, region: region),
+                        SectionEnv(
+                          services: services,
+                          region: region,
+                          now: now,
+                        ),
                         session: profileSession,
                       )
                     : _systemSection(
                         setting.id,
-                        SectionEnv(services: services, region: region),
+                        SectionEnv(
+                          services: services,
+                          region: region,
+                          now: now,
+                        ),
                       ),
               )
             else ...[
@@ -472,6 +489,7 @@ const _systemIds = {
   'power',
   'ssh',
   'updates',
+  'storage',
   'about',
 };
 
@@ -483,6 +501,7 @@ Widget _systemSection(String id, SectionEnv env) => switch (id) {
   'power' => PowerSection(env),
   'ssh' => RemoteAccessSection(env),
   'updates' => UpdatesSection(env),
+  'storage' => StorageSection(env),
   _ => AboutSection(env),
 };
 
