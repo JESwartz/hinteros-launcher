@@ -113,10 +113,11 @@ void main() {
     expect(focusLabel(), 'tabs/tabs:2');
     await keys(t, [LogicalKeyboardKey.backspace]);
     expect(focusLabel(), 'home/apps:0');
-    await keys(t, [up, right, right, right, right, down, right]);
+    await keys(t, [up, right, right, right, right, down]);
+    await keys(t, [...List.filled(5, down), right]); // Accessibility
     expect(focusLabel(), 'settings-detail/o0:0');
     await keys(t, [LogicalKeyboardKey.backspace]); // detail -> list
-    expect(focusLabel(), 'settings-list/text:0');
+    expect(focusLabel(), 'settings-list/accessibility:0');
     await keys(t, [LogicalKeyboardKey.backspace]); // section -> Home
     expect(focusLabel(), startsWith('home/'));
   });
@@ -134,15 +135,16 @@ void main() {
   ) async {
     final h = await start(t);
     await keys(t, [up, right, right, right, right, down]);
-    expect(focusLabel(), 'settings-list/text:0');
+    await keys(t, List.filled(5, down)); // Accessibility
+    expect(focusLabel(), 'settings-list/accessibility:0');
     await keys(t, [right]);
     expect(focusLabel(), 'settings-detail/o0:0');
     await keys(t, [down, enter]); // 120%
     expect(h.settings.value.textScale, 1.2);
     await keys(t, [left]);
-    expect(focusLabel(), 'settings-list/text:0');
+    expect(focusLabel(), 'settings-list/accessibility:0');
     await keys(t, [right, escape]); // detail -> list
-    expect(focusLabel(), 'settings-list/text:0');
+    expect(focusLabel(), 'settings-list/accessibility:0');
     await keys(t, [escape]); // section -> Home
     expect(focusLabel(), startsWith('home/'));
   });
@@ -152,15 +154,61 @@ void main() {
   ) async {
     await start(t);
     await keys(t, [up, right, right, right, right, down]);
-    await keys(
-      t,
-      List.filled(6, down),
-    ); // text, contrast, focus, motion, osk, profiles, then Network
-    expect(focusLabel(), 'settings-list/net:0');
+    await keys(t, List.filled(3, down)); // Profiles, Updates, Storage, Network
+    expect(focusLabel(), 'settings-list/network:0');
     await keys(t, [right]);
     expect(focusLabel(), 'settings-detail/wifi:0');
     await keys(t, [escape]);
-    expect(focusLabel(), 'settings-list/net:0');
+    expect(focusLabel(), 'settings-list/network:0');
+  });
+
+  testWidgets('settings: Up and Down walk through the stacked sections of a '
+      'group; Left and Back return to the list', (t) async {
+    await start(t);
+    await keys(t, [up, right, right, right, right, down]);
+    await keys(t, List.filled(3, down));
+    await keys(t, [right]);
+    expect(focusLabel(), 'settings-detail/wifi:0');
+    // Down through Network into Bluetooth, then Up back into Network.
+    final labels = <String>[];
+    for (var i = 0; i < 20; i++) {
+      await keys(t, [down]);
+      labels.add(focusLabel()!);
+      if (focusLabel()!.startsWith('settings-detail-1/')) break;
+    }
+    expect(focusLabel(), startsWith('settings-detail-1/'));
+    final lastNetworkRow = labels[labels.length - 2];
+    expect(lastNetworkRow, startsWith('settings-detail/'));
+    await keys(t, [up]);
+    expect(focusLabel(), lastNetworkRow);
+    await keys(t, [down]);
+    expect(focusLabel(), startsWith('settings-detail-1/'));
+    // Left from the second section goes to the list; Right returns there.
+    final inBluetooth = focusLabel();
+    await keys(t, [left]);
+    expect(focusLabel(), 'settings-list/network:0');
+    await keys(t, [right]);
+    expect(focusLabel(), inBluetooth);
+    await keys(t, [escape]);
+    expect(focusLabel(), 'settings-list/network:0');
+    // Down at the end of the last section stays there.
+    await keys(t, [right, ...List.filled(30, down)]);
+    expect(focusLabel(), startsWith('settings-detail-1/'));
+    // Up at the top of the first section goes to the tab bar.
+    await keys(t, List.filled(40, up));
+    expect(focusLabel(), startsWith('tabs/'));
+  });
+
+  testWidgets('settings: another group starts at the top of its pane', (
+    t,
+  ) async {
+    await start(t);
+    await keys(t, [up, right, right, right, right, down]);
+    await keys(t, List.filled(5, down)); // Accessibility
+    await keys(t, [right, down, down, down, down]); // Text size, then
+    expect(focusLabel(), 'settings-detail-1/o0:0'); // High contrast Off
+    await keys(t, [left, up, right]); // Display and sound
+    expect(focusLabel(), startsWith('settings-detail/'));
   });
 
   testWidgets('page right/left switch tabs from anywhere', (t) async {

@@ -44,7 +44,7 @@ void main() {
       // Up twice: the update banner, then the tabs.
       await press(t, [kUp, kUp, kRight, kRight, kRight, kRight, kDown]);
       await press(t, [
-        ...List.filled(settingsEntryIds.indexOf('updates'), kDown),
+        ...List.filled(settingsGroupIndexOf('updates'), kDown),
         kRight, // into the pane
         kDown, kEnter, // check, apply
       ]);
@@ -107,6 +107,7 @@ void main() {
       await press(t, [kUp]);
       expect(focusLabel(), 'update-banner/update-banner:0');
       await press(t, [kEnter]); // See update: Settings > Updates
+      expect(focusLabel(), 'settings-list/updates:0');
       await press(t, [kRight, kDown, kEnter, kRight, kEnter]);
       expect(find.text(_askPin), findsOneWidget);
       expect(h.services.mockJobs.started, isEmpty);

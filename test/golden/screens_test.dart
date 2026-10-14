@@ -319,28 +319,54 @@ void main() {
   testWidgets('settings 1080p', (t) async {
     await shot(t, 'settings_1080p', keys: [...toSettings, down, down]);
   });
-  testWidgets('settings detail, glow focus style', (t) async {
+  // Settings list: Profiles, Updates, Storage, Network, Display and sound,
+  // Accessibility (5 down), System.
+  final toAccessibility = [...toSettings, for (var i = 0; i < 5; i++) down];
+  testWidgets('settings: Focus marker in Accessibility, glow focus style', (
+    t,
+  ) async {
     await shot(
       t,
       'settings_focus_detail_1080p',
       h: Harness(settings: const LauncherSettings(focusStyle: FocusStyle.glow)),
-      keys: [...toSettings, down, down, right, down],
+      // Text size 4 options, High contrast 2, then Focus marker: Glow.
+      keys: [...toAccessibility, right, for (var i = 0; i < 7; i++) down],
     );
   });
-  testWidgets('settings: show typed text on the on-screen keyboard', (t) async {
+  testWidgets('settings: show typed text on the on-screen keyboard, the '
+      'Accessibility pane scrolled to its end', (t) async {
     await shot(
       t,
       'settings_osk_text_1080p',
-      keys: [...toSettings, down, down, down, down],
+      // Text size 4, High contrast 2, Focus marker 3, Reduce motion 2: On.
+      keys: [...toAccessibility, right, for (var i = 0; i < 12; i++) down],
     );
   });
-  testWidgets('settings, first system entry (Network)', (t) async {
+  testWidgets('settings, the Network group', (t) async {
     await shot(
       t,
       'settings_system_1080p',
-      keys: [...toSettings, down, down, down, down, down],
+      keys: [...toSettings, down, down, down],
     );
   });
+  const groups = [
+    'profiles',
+    'updates',
+    'storage',
+    'network',
+    'display_sound',
+    'accessibility',
+    'system',
+  ];
+  for (final (i, id) in groups.indexed) {
+    testWidgets('settings group $id', (t) async {
+      await shot(
+        t,
+        'settings_group_${id}_1080p',
+        keys: [...toSettings, for (var j = 0; j < i; j++) down],
+      );
+    });
+  }
   testWidgets('daemon unreachable', (t) async {
     await shot(
       t,

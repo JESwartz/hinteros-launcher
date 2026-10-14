@@ -112,6 +112,11 @@ class _LauncherShellState extends State<LauncherShell> {
   final _updateBanner = NavRegion('update-banner', rememberPerRow: false);
   final _settingsList = NavRegion('settings-list');
   final _settingsDetail = NavRegion('settings-detail');
+  late final _settingsRegions = SettingsRegions(
+    _nav,
+    list: _settingsList,
+    detail: _settingsDetail,
+  );
   final _server = NavRegion('server');
   final _banner = NavRegion('banner', rememberPerRow: false);
   final _dialog = NavRegion('dialog', rememberPerRow: false);
@@ -203,9 +208,8 @@ class _LauncherShellState extends State<LauncherShell> {
     _store.neighbors[NavDir.right] = _storeGrid;
     _storeGrid.neighbors[NavDir.left] = _store;
     _storeGrid.backTarget = _store;
-    _settingsList.neighbors[NavDir.right] = _settingsDetail;
-    _settingsDetail.neighbors[NavDir.left] = _settingsList;
-    _settingsDetail.backTarget = _settingsList;
+    // Links the list and the stacked sections of the pane.
+    _settingsRegions.reset();
     _dialog.onBack = () {
       widget.data.cancelClose();
       return true;
@@ -618,13 +622,14 @@ class _LauncherShellState extends State<LauncherShell> {
   }
 
   /// Settings, on the Profiles entry.
-  void _openProfileSettings() => _openSection(
+  void _openProfileSettings() => _openSettings('profiles');
+
+  /// Settings at [id], a list entry or a setting in one (see
+  /// [SettingsRegions.select]).
+  void _openSettings(String id) => _openSection(
     Section.settings,
     _settingsList,
-    prepare: () {
-      _settingsList.model.goTo(settingsEntryIds.indexOf('profiles'), 0);
-      _settingsList.changed();
-    },
+    prepare: () => _settingsRegions.select(id),
   );
 
   @override
@@ -639,6 +644,7 @@ class _LauncherShellState extends State<LauncherShell> {
     _reminders.removeListener(_onReminders);
     _authPrompts.dispose();
     _reminders.dispose();
+    _settingsRegions.dispose();
     widget.data.removeListener(_onData);
     widget.data.removeListener(_checkLoading);
     _loadingCap?.cancel();
@@ -766,14 +772,7 @@ class _LauncherShellState extends State<LauncherShell> {
   }
 
   /// Banner "See update": Settings, on the Updates entry.
-  void _openUpdates() => _openSection(
-    Section.settings,
-    _settingsList,
-    prepare: () {
-      _settingsList.model.goTo(settingsEntryIds.indexOf('updates'), 0);
-      _settingsList.changed();
-    },
-  );
+  void _openUpdates() => _openSettings('updates');
 
   /// Switches the visible section (tab focus, L1/R1, Back, Home).
   void _setSection(Section s) {
@@ -809,8 +808,7 @@ class _LauncherShellState extends State<LauncherShell> {
     if (reset) {
       if (!onHome) _home.setRows(const []);
       _home.reset();
-      _settingsList.reset();
-      _settingsDetail.reset();
+      _settingsRegions.reset();
     }
     _tabs.changed();
     _nav.focusRegion(_home);
@@ -887,9 +885,7 @@ class _LauncherShellState extends State<LauncherShell> {
     Section.settings => SettingsScreen(
       settings: widget.settings,
       services: widget.services,
-      list: _settingsList,
-      detail: _settingsDetail,
-      onEnterDetail: () => _nav.focusRegion(_settingsDetail),
+      regions: _settingsRegions,
       profileSession: _profile,
       now: widget.now,
     ),

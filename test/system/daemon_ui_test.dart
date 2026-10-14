@@ -156,12 +156,21 @@ void main() {
       h.mock.system.unavailable = api.SystemUnavailableDataReason.down;
       await h.pump(t);
       await enterSettingsEntry(t, 'about');
-      expect(find.textContaining('Settings are unavailable'), findsOneWidget);
-      expect(find.textContaining('not running'), findsOneWidget);
+      expect(
+        inSection('about', find.textContaining('Settings are unavailable')),
+        findsOneWidget,
+      );
+      expect(
+        inSection('about', find.textContaining('not running')),
+        findsOneWidget,
+      );
       h.mock.system.unavailable = null;
       await press(t, [kEnter]); // Try again
       expect(find.text('0.1.0 stable'), findsOneWidget);
-      expect(find.textContaining('Settings are unavailable'), findsNothing);
+      expect(
+        inSection('about', find.textContaining('Settings are unavailable')),
+        findsNothing,
+      );
     });
 
     testWidgets('version_mismatch mentions the session restart', (t) async {
@@ -171,7 +180,10 @@ void main() {
           api.SystemUnavailableDataReason.versionMismatch;
       await h.pump(t);
       await enterSettingsEntry(t, 'ssh');
-      expect(find.textContaining('Restart the session'), findsOneWidget);
+      expect(
+        inSection('ssh', find.textContaining('Restart the session')),
+        findsOneWidget,
+      );
     });
   });
 
