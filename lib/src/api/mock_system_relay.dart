@@ -16,6 +16,14 @@ import 'errors.dart';
 import 'generated.dart';
 import 'mock_store.dart';
 
+/// What a building stage builds when a job runs by itself: (name, version).
+const List<(String, String?)> mockBuilds = [
+  ('hinteros-daemon', '0.7.1'),
+  ('hinteros-launcher', '0.7.1'),
+  ('system-units', null),
+  ('etc', null),
+];
+
 /// Wire stages of each kind of job (system-api.md "Job model").
 List<Stage> mockStagesOf(JobKind kind) => switch (kind) {
   JobKind.updateCheck => const [
@@ -65,6 +73,10 @@ class _Job {
   final int createdAt;
   final void Function()? onSuccess;
   JobState state = JobState.running;
+  JobSubject subject = const JobSubject();
+  int? percent;
+  ProgressDetail? detail;
+  int? lastActivityAt;
   Stage stage = Stage.preparing;
   int? finishedAt;
   ErrorObject? error;
@@ -215,6 +227,9 @@ class MockSystemRelay {
   /// PIN. [MockDaemon] sets it to its profiles' current one.
   String Function()? currentOwner;
 
+  /// A profile's display name (a job's subject); null: the id.
+  String? Function(String id)? profileName;
+
   /// A `storage_measure` job finished: the measurement is new.
   MeasuredResult _measured() {
     final at = _nowSeconds();
@@ -363,6 +378,7 @@ class MockSystemRelay {
         if (enable == sshEnabled) return const JobRef(jobId: null).toJson();
         return _started(
           JobKind.ssh,
+          subject: JobSubject(enabled: enable),
           onSuccess: () {
             sshEnabled = enable;
             _bumpRevision();
@@ -412,6 +428,10 @@ class MockSystemRelay {
         }
         final id = _start(
           JobKind.rollback,
+          subject: JobSubject(
+            generation: target.generation,
+            fromGeneration: cur.generation,
+          ),
           onSuccess: () {
             generation = target.generation;
             rev = target.rev;
@@ -466,6 +486,13 @@ class MockSystemRelay {
         }
         return _started(
           JobKind.updateApply,
+          subject: JobSubject(
+            rev: a.rev,
+            version: a.version,
+            channel: channel,
+            fromRev: rev,
+            fromVersion: version,
+          ),
           onSuccess: () {
             generation = (generation ?? 0) + 1;
             rev = a.rev;
@@ -506,7 +533,16 @@ class MockSystemRelay {
             'switching from beta to stable is a downgrade',
           );
         }
-        return _started(JobKind.channel, onSuccess: () => channel = c.channel);
+        return _started(
+          JobKind.channel,
+          subject: JobSubject(
+            channel: c.channel,
+            fromChannel: channel,
+            fromRev: rev,
+            fromVersion: version,
+          ),
+          onSuccess: () => channel = c.channel,
+        );
       case 'system.base.set':
         _closed(p, const ['base', 'acknowledge_downgrade', 'admin_pin']);
         final b = SystemBaseSetParams.fromJson(p);
@@ -526,6 +562,7 @@ class MockSystemRelay {
         }
         return _started(
           JobKind.base,
+          subject: JobSubject(base: b.base, fromBase: base),
           onSuccess: () {
             base = b.base;
             _bumpRevision();
@@ -582,6 +619,7 @@ class MockSystemRelay {
         checkAdminPin?.call(pin);
         final id = _start(
           system ? JobKind.cleanupSystem : JobKind.cleanupProfiles,
+          subject: JobSubject(keep: keep),
         );
         _jobs[id]!.cleaned = CleanedResult(
           freedBytes: keep < 3 ? 3000000000 : 1200000000,
@@ -807,6 +845,7 @@ class MockSystemRelay {
     return _started(
       JobKind.appsInstall,
       apps: want,
+      subject: _appsSubject(want),
       onSuccess: () {
         installedApps.addAll(want);
         onAppsInstalled?.call([for (final id in want) _catalogApp(id)]);
@@ -838,11 +877,31 @@ class MockSystemRelay {
     return _started(
       JobKind.appsRemove,
       apps: List.of(p.ids),
+      subject: _appsSubject(p.ids, deleteData: p.deleteData),
       onSuccess: () {
         installedApps.removeWhere(p.ids.contains);
         onAppsRemoved?.call(List.of(p.ids));
         _bumpRevision();
       },
+    );
+  }
+
+  /// An apps job's subject: whose apps, which ones (catalog names).
+  JobSubject _appsSubject(List<String> ids, {bool? deleteData}) {
+    final owner = currentOwner?.call();
+    return JobSubject(
+      owner: owner,
+      profile: owner == null || owner == 'guest'
+          ? null
+          : SubjectProfile(id: owner, name: profileName?.call(owner) ?? owner),
+      apps: [
+        for (final id in ids)
+          CatalogApp(
+            id: id,
+            name: catalog.where((a) => a.id == id).firstOrNull?.name ?? id,
+          ),
+      ],
+      deleteData: deleteData,
     );
   }
 
@@ -867,19 +926,24 @@ class MockSystemRelay {
     JobKind kind, {
     void Function()? onSuccess,
     List<String> apps = const [],
+    JobSubject subject = const JobSubject(),
   }) => JobRef(
-    jobId: _start(kind, onSuccess: onSuccess, apps: apps),
+    jobId: _start(kind, onSuccess: onSuccess, apps: apps, subject: subject),
   ).toJson();
 
   /// Starts a job of [kind] (one at a time: `job_busy`), for the other
   /// mocks whose methods run jobs (profiles, guest, starter set).
-  String startJob(JobKind kind, {void Function()? onSuccess}) =>
-      _start(kind, onSuccess: onSuccess);
+  String startJob(
+    JobKind kind, {
+    void Function()? onSuccess,
+    JobSubject subject = const JobSubject(),
+  }) => _start(kind, onSuccess: onSuccess, subject: subject);
 
   String _start(
     JobKind kind, {
     void Function()? onSuccess,
     List<String> apps = const [],
+    JobSubject subject = const JobSubject(),
   }) {
     final running = runningJobId;
     if (running != null) {
@@ -894,12 +958,19 @@ class MockSystemRelay {
         : (0x3f9a0c2b7e4d1a65 + ++_n * 7919).toRadixString(16).padLeft(16, '0');
     final j = _Job(id, kind, _nowSeconds(), onSuccess: onSuccess)
       ..restart = restartNext
-      ..apps = apps;
+      ..apps = apps
+      ..subject = subject;
     restartNext = false;
     _jobs[id] = j;
     emit(
       'job_started',
-      JobStartedEvent(jobId: id, kind: kind, uid: 1000).toJson(),
+      JobStartedEvent(
+        jobId: id,
+        kind: kind,
+        uid: 1000,
+        subject: subject,
+        startedAt: j.createdAt,
+      ).toJson(),
     );
     if (kind == JobKind.appsInstall || kind == JobKind.appsRemove) {
       emit('store_changed', const {});
@@ -912,6 +983,7 @@ class MockSystemRelay {
     final stages = mockStagesOf(j.kind);
     var i = 0;
     var pct = 0;
+    var built = 0;
     void step() {
       if (j.state != JobState.running) return;
       final s = stages[i];
@@ -922,6 +994,20 @@ class MockSystemRelay {
           j.timer = Timer(stepDelay!, step);
           return;
         }
+      } else if (s == Stage.building && built < mockBuilds.length) {
+        // A few derivations, one at a time, like nix reports them.
+        final (name, version) = mockBuilds[built];
+        progressJob(
+          j.id,
+          s,
+          percent: built * 100 ~/ mockBuilds.length,
+          buildsDone: built,
+          buildsTotal: mockBuilds.length,
+          building: Building(name: name, version: version, phase: 'build'),
+        );
+        built++;
+        j.timer = Timer(stepDelay!, step);
+        return;
       } else {
         progressJob(j.id, s);
       }
@@ -934,26 +1020,58 @@ class MockSystemRelay {
     j.timer = Timer(stepDelay!, step);
   }
 
-  /// `job_progress` for a running job.
-  void progressJob(String id, Stage stage, {int? percent, int? bytesTotal}) {
+  /// `job_progress` for a running job (a stage, a percent, what builds).
+  void progressJob(
+    String id,
+    Stage stage, {
+    int? percent,
+    int? bytesTotal,
+    int? buildsDone,
+    int? buildsTotal,
+    Building? building,
+  }) {
     final j = _find(id);
     if (j.state != JobState.running) return;
     j.stage = stage;
-    emit(
-      'job_progress',
-      JobProgressEvent(
-        jobId: id,
-        stage: stage,
-        percent: percent,
-        detail: bytesTotal == null
-            ? null
-            : ProgressDetail(
-                bytesDone: percent == null ? null : bytesTotal * percent ~/ 100,
-                bytesTotal: bytesTotal,
-              ),
-      ).toJson(),
-    );
+    j.percent = percent;
+    j.lastActivityAt = _nowSeconds();
+    final builds =
+        buildsDone != null || buildsTotal != null || building != null;
+    j.detail = bytesTotal == null && !builds
+        ? null
+        : ProgressDetail(
+            bytesDone: bytesTotal == null || percent == null
+                ? null
+                : bytesTotal * percent ~/ 100,
+            bytesTotal: bytesTotal,
+            buildsDone: buildsDone,
+            buildsTotal: buildsTotal,
+            buildsRunning: building == null ? null : 1,
+            building: building,
+          );
+    _progress(j);
   }
+
+  /// The heartbeat: the latest state again, with nothing new (the service
+  /// sends one at least every 2 s while a job runs).
+  void heartbeat(String id) {
+    final j = _find(id);
+    if (j.state != JobState.running) return;
+    _progress(j);
+  }
+
+  void _progress(_Job j) => emit(
+    'job_progress',
+    JobProgressEvent(
+      jobId: j.id,
+      kind: j.kind,
+      stage: j.stage,
+      percent: j.percent,
+      detail: j.detail,
+      startedAt: j.createdAt,
+      lastActivityAt: j.lastActivityAt,
+    ).toJson(),
+  );
 
   /// `job_finished`. A failure carries `job_failed` with the stage reached;
   /// [cancelled] is how `jobs.cancel` ends a job.
@@ -1008,6 +1126,9 @@ class MockSystemRelay {
         error: j.error,
         result: j.result,
         sessionRestartRequired: restart,
+        subject: j.subject,
+        startedAt: j.createdAt,
+        finishedAt: j.finishedAt!,
       ).toJson(),
     );
     final more = _moreAfterUpdate;
@@ -1031,6 +1152,11 @@ class MockSystemRelay {
     error: j.error,
     result: j.result,
     sessionRestartRequired: j.restart,
+    subject: j.subject,
+    startedAt: j.createdAt,
+    percent: j.state == JobState.running ? j.percent : null,
+    detail: j.state == JobState.running ? j.detail : null,
+    lastActivityAt: j.state == JobState.running ? j.lastActivityAt : null,
   );
 
   void dispose() {

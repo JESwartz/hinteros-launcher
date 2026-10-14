@@ -329,6 +329,7 @@ class MockProfiles implements ProfilesRepository {
     log.add('create:$id:${name.trim()}');
     final h = jobs.start(
       JobKind.profileCreate,
+      subject: JobSubject(profileId: id, profileName: name.trim()),
       onSuccess: () {
         box.profiles.add(
           MockProfile(
@@ -467,6 +468,7 @@ class MockProfiles implements ProfilesRepository {
     log.add('remove:$id');
     return jobs.start(
       JobKind.profileRemove,
+      subject: JobSubject(profileId: id, profileName: p.name),
       onSuccess: () {
         box.profiles.remove(p);
         _changed();
@@ -482,6 +484,7 @@ class MockProfiles implements ProfilesRepository {
     log.add('guest:$enabled');
     return jobs.start(
       JobKind.guest,
+      subject: JobSubject(enabled: enabled),
       onSuccess: () {
         box.guestEnabled = enabled;
         _changed();
@@ -512,6 +515,10 @@ class MockProfiles implements ProfilesRepository {
     log.add('starter:${sorted.join(',')}');
     return jobs.start(
       JobKind.starterSet,
+      subject: JobSubject(
+        owner: 'starter',
+        apps: [for (final id in sorted) (id: id, name: id)],
+      ),
       onSuccess: () => starter = StarterSet(sorted, updatedAt: box.now()),
     );
   }
@@ -791,6 +798,7 @@ class MockGreeter implements GreeterRepository {
     log.add('create:$id');
     final h = jobs.start(
       JobKind.profileCreate,
+      subject: JobSubject(profileId: id, profileName: name.trim()),
       onSuccess: () {
         box.profiles.add(
           MockProfile(

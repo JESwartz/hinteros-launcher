@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.14).
+// Source: schema/session-api.json (session API 0.15).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.14';
+const apiVersion = '0.15';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -2452,12 +2452,47 @@ class CleanedResult {
   String toString() => 'CleanedResult(${jsonEncode(toJson())})';
 }
 
+/// 0.7: the most recently started derivation that is still building. name and version from the .drv name (nix's rule: the version starts at the first dash followed by a non-letter); phase is nix's build phase without the Phase suffix (unpack, patch, configure, build, check, install, fixup, ...), absent until nix reports one.
+class Building {
+  const Building({required this.name, this.version, this.phase});
+
+  final String name;
+  final String? version;
+  final String? phase;
+
+  factory Building.fromJson(Map<String, dynamic> json) => Building(
+    name: json['name'] as String,
+    version: json['version'] == null ? null : json['version'] as String,
+    phase: json['phase'] == null ? null : json['phase'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'version': ?version,
+    'phase': ?phase,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is Building && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'Building(${jsonEncode(toJson())})';
+}
+
 class ProgressDetail {
   const ProgressDetail({
     this.pathsDone,
     this.pathsTotal,
     this.bytesDone,
     this.bytesTotal,
+    this.buildsDone,
+    this.buildsTotal,
+    this.buildsRunning,
+    this.building,
   });
 
   final int? pathsDone;
@@ -2465,11 +2500,33 @@ class ProgressDetail {
   final int? bytesDone;
   final int? bytesTotal;
 
+  /// 0.7: derivations built so far in this nix run.
+  final int? buildsDone;
+
+  /// 0.7: derivations nix expects to build (may grow while nix discovers more).
+  final int? buildsTotal;
+
+  /// 0.7: derivations building at once.
+  final int? buildsRunning;
+
+  /// 0.7: the most recently started derivation that is still building. name and version from the .drv name (nix's rule: the version starts at the first dash followed by a non-letter); phase is nix's build phase without the Phase suffix (unpack, patch, configure, build, check, install, fixup, ...), absent until nix reports one.
+  final Building? building;
+
   factory ProgressDetail.fromJson(Map<String, dynamic> json) => ProgressDetail(
     pathsDone: json['paths_done'] == null ? null : json['paths_done'] as int,
     pathsTotal: json['paths_total'] == null ? null : json['paths_total'] as int,
     bytesDone: json['bytes_done'] == null ? null : json['bytes_done'] as int,
     bytesTotal: json['bytes_total'] == null ? null : json['bytes_total'] as int,
+    buildsDone: json['builds_done'] == null ? null : json['builds_done'] as int,
+    buildsTotal: json['builds_total'] == null
+        ? null
+        : json['builds_total'] as int,
+    buildsRunning: json['builds_running'] == null
+        ? null
+        : json['builds_running'] as int,
+    building: json['building'] == null
+        ? null
+        : Building.fromJson((json['building'] as Map).cast<String, dynamic>()),
   );
 
   Map<String, dynamic> toJson() => {
@@ -2477,6 +2534,10 @@ class ProgressDetail {
     'paths_total': ?pathsTotal,
     'bytes_done': ?bytesDone,
     'bytes_total': ?bytesTotal,
+    'builds_done': ?buildsDone,
+    'builds_total': ?buildsTotal,
+    'builds_running': ?buildsRunning,
+    if (building != null) 'building': building!.toJson(),
   };
 
   @override
@@ -2489,6 +2550,178 @@ class ProgressDetail {
 
   @override
   String toString() => 'ProgressDetail(${jsonEncode(toJson())})';
+}
+
+/// 0.7: a profile a job is for, with its display name when the job started (the id when it has none).
+class SubjectProfile {
+  const SubjectProfile({required this.id, required this.name});
+
+  final String id;
+  final String name;
+
+  factory SubjectProfile.fromJson(Map<String, dynamic> json) =>
+      SubjectProfile(id: json['id'] as String, name: json['name'] as String);
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SubjectProfile &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SubjectProfile(${jsonEncode(toJson())})';
+}
+
+/// 0.7: what a job is about. Every field optional; which ones each kind sets: README, What a job is about.
+class JobSubject {
+  const JobSubject({
+    this.owner,
+    this.profile,
+    this.apps,
+    this.deleteData,
+    this.fromOwner,
+    this.generation,
+    this.fromGeneration,
+    this.rev,
+    this.version,
+    this.channel,
+    this.fromChannel,
+    this.fromRev,
+    this.fromVersion,
+    this.base,
+    this.fromBase,
+    this.enabled,
+    this.keep,
+    this.frequency,
+    this.keepSystem,
+    this.keepProfiles,
+  });
+
+  /// Apps jobs: whose apps (a profile id, guest or starter).
+  final String? owner;
+
+  /// 0.7: a profile a job is for, with its display name when the job started (the id when it has none).
+  final SubjectProfile? profile;
+
+  /// Apps installed (the new ones), removed, the new starter set or the migrated apps; names from the running catalog.
+  final List<CatalogApp>? apps;
+  final bool? deleteData;
+
+  /// An app env copied from another owner (starter).
+  final String? fromOwner;
+
+  /// Rollbacks: the target generation.
+  final int? generation;
+  final int? fromGeneration;
+
+  /// A full git commit id.
+  final String? rev;
+
+  /// The target's release version (AvailableUpdate.version rule).
+  final String? version;
+  final Channel? channel;
+  final Channel? fromChannel;
+
+  /// A full git commit id.
+  final String? fromRev;
+  final String? fromVersion;
+  final Base? base;
+  final Base? fromBase;
+
+  /// The new on/off value (ssh, guest_set, cleanup_set).
+  final bool? enabled;
+
+  /// Clean-ups: generations kept.
+  final int? keep;
+  final CleanupFrequency? frequency;
+  final int? keepSystem;
+  final int? keepProfiles;
+
+  factory JobSubject.fromJson(Map<String, dynamic> json) => JobSubject(
+    owner: json['owner'] == null ? null : json['owner'] as String,
+    profile: json['profile'] == null
+        ? null
+        : SubjectProfile.fromJson(
+            (json['profile'] as Map).cast<String, dynamic>(),
+          ),
+    apps: json['apps'] == null
+        ? null
+        : (json['apps'] as List)
+              .map(
+                (x) => CatalogApp.fromJson((x as Map).cast<String, dynamic>()),
+              )
+              .toList(),
+    deleteData: json['delete_data'] == null
+        ? null
+        : json['delete_data'] as bool,
+    fromOwner: json['from_owner'] == null ? null : json['from_owner'] as String,
+    generation: json['generation'] == null ? null : json['generation'] as int,
+    fromGeneration: json['from_generation'] == null
+        ? null
+        : json['from_generation'] as int,
+    rev: json['rev'] == null ? null : json['rev'] as String,
+    version: json['version'] == null ? null : json['version'] as String,
+    channel: json['channel'] == null
+        ? null
+        : Channel.fromJson(json['channel'] as String),
+    fromChannel: json['from_channel'] == null
+        ? null
+        : Channel.fromJson(json['from_channel'] as String),
+    fromRev: json['from_rev'] == null ? null : json['from_rev'] as String,
+    fromVersion: json['from_version'] == null
+        ? null
+        : json['from_version'] as String,
+    base: json['base'] == null ? null : Base.fromJson(json['base'] as String),
+    fromBase: json['from_base'] == null
+        ? null
+        : Base.fromJson(json['from_base'] as String),
+    enabled: json['enabled'] == null ? null : json['enabled'] as bool,
+    keep: json['keep'] == null ? null : json['keep'] as int,
+    frequency: json['frequency'] == null
+        ? null
+        : CleanupFrequency.fromJson(json['frequency'] as String),
+    keepSystem: json['keep_system'] == null ? null : json['keep_system'] as int,
+    keepProfiles: json['keep_profiles'] == null
+        ? null
+        : json['keep_profiles'] as int,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'owner': ?owner,
+    if (profile != null) 'profile': profile!.toJson(),
+    if (apps != null) 'apps': apps!.map((x) => x.toJson()).toList(),
+    'delete_data': ?deleteData,
+    'from_owner': ?fromOwner,
+    'generation': ?generation,
+    'from_generation': ?fromGeneration,
+    'rev': ?rev,
+    'version': ?version,
+    if (channel != null) 'channel': channel!.toJson(),
+    if (fromChannel != null) 'from_channel': fromChannel!.toJson(),
+    'from_rev': ?fromRev,
+    'from_version': ?fromVersion,
+    if (base != null) 'base': base!.toJson(),
+    if (fromBase != null) 'from_base': fromBase!.toJson(),
+    'enabled': ?enabled,
+    'keep': ?keep,
+    if (frequency != null) 'frequency': frequency!.toJson(),
+    'keep_system': ?keepSystem,
+    'keep_profiles': ?keepProfiles,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is JobSubject && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'JobSubject(${jsonEncode(toJson())})';
 }
 
 /// A JSON-RPC error object (codes from this document's errors).
@@ -2535,6 +2768,11 @@ class Job {
     required this.error,
     required this.result,
     required this.sessionRestartRequired,
+    required this.subject,
+    required this.startedAt,
+    required this.percent,
+    required this.detail,
+    required this.lastActivityAt,
   });
 
   /// Server-issued job id.
@@ -2553,6 +2791,21 @@ class Job {
   final Object? result;
   final bool sessionRestartRequired;
 
+  /// 0.7: what a job is about. Every field optional; which ones each kind sets: README, What a job is about.
+  final JobSubject subject;
+
+  /// 0.7: when the job was started (equals created_at).
+  final int startedAt;
+
+  /// 0.7: the latest percent of a running job (null when finished or unknown).
+  final int? percent;
+
+  /// 0.7: the latest progress detail of a running job.
+  final ProgressDetail? detail;
+
+  /// 0.7: the last time a running job's process printed anything.
+  final int? lastActivityAt;
+
   factory Job.fromJson(Map<String, dynamic> json) => Job(
     jobId: json['job_id'] as String,
     kind: JobKind.fromJson(json['kind'] as String),
@@ -2568,6 +2821,19 @@ class Job {
         : ErrorObject.fromJson((json['error'] as Map).cast<String, dynamic>()),
     result: json['result'] == null ? null : json['result'],
     sessionRestartRequired: json['session_restart_required'] as bool,
+    subject: JobSubject.fromJson(
+      (json['subject'] as Map).cast<String, dynamic>(),
+    ),
+    startedAt: json['started_at'] as int,
+    percent: json['percent'] == null ? null : json['percent'] as int,
+    detail: json['detail'] == null
+        ? null
+        : ProgressDetail.fromJson(
+            (json['detail'] as Map).cast<String, dynamic>(),
+          ),
+    lastActivityAt: json['last_activity_at'] == null
+        ? null
+        : json['last_activity_at'] as int,
   );
 
   Map<String, dynamic> toJson() => {
@@ -2581,6 +2847,11 @@ class Job {
     'error': error == null ? null : error!.toJson(),
     'result': result,
     'session_restart_required': sessionRestartRequired,
+    'subject': subject.toJson(),
+    'started_at': startedAt,
+    'percent': percent,
+    'detail': detail == null ? null : detail!.toJson(),
+    'last_activity_at': lastActivityAt,
   };
 
   @override
@@ -9868,12 +10139,14 @@ final class OskVisibilityEvent extends SessionEvent {
   String toString() => 'OskVisibilityEvent(${jsonEncode(toJson())})';
 }
 
-/// Relayed from the system service. A job was started (by any caller).
+/// Relayed from the system service. A job was started (by any caller). 0.15 (system 0.7): subject (what the job is about) and started_at.
 final class JobStartedEvent extends SessionEvent {
   const JobStartedEvent({
     required this.jobId,
     required this.kind,
     required this.uid,
+    required this.subject,
+    required this.startedAt,
   });
 
   /// Server-issued job id.
@@ -9881,17 +10154,27 @@ final class JobStartedEvent extends SessionEvent {
   final JobKind kind;
   final int uid;
 
+  /// 0.7: what a job is about. Every field optional; which ones each kind sets: README, What a job is about.
+  final JobSubject subject;
+  final int startedAt;
+
   factory JobStartedEvent.fromJson(Map<String, dynamic> json) =>
       JobStartedEvent(
         jobId: json['job_id'] as String,
         kind: JobKind.fromJson(json['kind'] as String),
         uid: json['uid'] as int,
+        subject: JobSubject.fromJson(
+          (json['subject'] as Map).cast<String, dynamic>(),
+        ),
+        startedAt: json['started_at'] as int,
       );
 
   Map<String, dynamic> toJson() => {
     'job_id': jobId,
     'kind': kind.toJson(),
     'uid': uid,
+    'subject': subject.toJson(),
+    'started_at': startedAt,
   };
 
   @override
@@ -9912,24 +10195,35 @@ final class JobStartedEvent extends SessionEvent {
   String toString() => 'JobStartedEvent(${jsonEncode(toJson())})';
 }
 
-/// Relayed from the system service. A job reached a stage or made progress (at most 4 per second). percent only where meaningful (downloading).
+/// Relayed from the system service. A job reached a stage or made progress (at most 4 per second), and 0.15 (system 0.7): at least every 2 s while the job runs (a heartbeat repeats the latest values). percent where meaningful: downloading and building (0.15; never goes back within a stage run, below 100 while nix runs), measuring. last_activity_at: the last time the job's process printed anything (nix log lines included). subject only when it changed during the job (it replaces the one from job_started).
 final class JobProgressEvent extends SessionEvent {
   const JobProgressEvent({
     required this.jobId,
+    required this.kind,
     required this.stage,
     this.percent,
     this.detail,
+    required this.startedAt,
+    this.lastActivityAt,
+    this.subject,
   });
 
   /// Server-issued job id.
   final String jobId;
+  final JobKind kind;
   final Stage stage;
   final int? percent;
   final ProgressDetail? detail;
+  final int startedAt;
+  final int? lastActivityAt;
+
+  /// 0.7: what a job is about. Every field optional; which ones each kind sets: README, What a job is about.
+  final JobSubject? subject;
 
   factory JobProgressEvent.fromJson(Map<String, dynamic> json) =>
       JobProgressEvent(
         jobId: json['job_id'] as String,
+        kind: JobKind.fromJson(json['kind'] as String),
         stage: Stage.fromJson(json['stage'] as String),
         percent: json['percent'] == null ? null : json['percent'] as int,
         detail: json['detail'] == null
@@ -9937,13 +10231,26 @@ final class JobProgressEvent extends SessionEvent {
             : ProgressDetail.fromJson(
                 (json['detail'] as Map).cast<String, dynamic>(),
               ),
+        startedAt: json['started_at'] as int,
+        lastActivityAt: json['last_activity_at'] == null
+            ? null
+            : json['last_activity_at'] as int,
+        subject: json['subject'] == null
+            ? null
+            : JobSubject.fromJson(
+                (json['subject'] as Map).cast<String, dynamic>(),
+              ),
       );
 
   Map<String, dynamic> toJson() => {
     'job_id': jobId,
+    'kind': kind.toJson(),
     'stage': stage.toJson(),
     'percent': ?percent,
     if (detail != null) 'detail': detail!.toJson(),
+    'started_at': startedAt,
+    'last_activity_at': ?lastActivityAt,
+    if (subject != null) 'subject': subject!.toJson(),
   };
 
   @override
@@ -9964,7 +10271,7 @@ final class JobProgressEvent extends SessionEvent {
   String toString() => 'JobProgressEvent(${jsonEncode(toJson())})';
 }
 
-/// Relayed from the system service. A job ended. session_restart_required: the switch replaced the system service's API or the session daemon, so the launcher should offer a session restart.
+/// Relayed from the system service. A job ended. session_restart_required: the switch replaced the system service's API or the session daemon, so the launcher should offer a session restart. 0.15 (system 0.7): subject (as the job last knew it), started_at, finished_at.
 final class JobFinishedEvent extends SessionEvent {
   const JobFinishedEvent({
     required this.jobId,
@@ -9973,6 +10280,9 @@ final class JobFinishedEvent extends SessionEvent {
     this.error,
     this.result,
     required this.sessionRestartRequired,
+    required this.subject,
+    required this.startedAt,
+    required this.finishedAt,
   });
 
   /// Server-issued job id.
@@ -9987,6 +10297,11 @@ final class JobFinishedEvent extends SessionEvent {
   final Object? result;
   final bool sessionRestartRequired;
 
+  /// 0.7: what a job is about. Every field optional; which ones each kind sets: README, What a job is about.
+  final JobSubject subject;
+  final int startedAt;
+  final int finishedAt;
+
   factory JobFinishedEvent.fromJson(Map<String, dynamic> json) =>
       JobFinishedEvent(
         jobId: json['job_id'] as String,
@@ -9999,6 +10314,11 @@ final class JobFinishedEvent extends SessionEvent {
               ),
         result: json['result'] == null ? null : json['result'],
         sessionRestartRequired: json['session_restart_required'] as bool,
+        subject: JobSubject.fromJson(
+          (json['subject'] as Map).cast<String, dynamic>(),
+        ),
+        startedAt: json['started_at'] as int,
+        finishedAt: json['finished_at'] as int,
       );
 
   Map<String, dynamic> toJson() => {
@@ -10008,6 +10328,9 @@ final class JobFinishedEvent extends SessionEvent {
     if (error != null) 'error': error!.toJson(),
     'result': ?result,
     'session_restart_required': sessionRestartRequired,
+    'subject': subject.toJson(),
+    'started_at': startedAt,
+    'finished_at': finishedAt,
   };
 
   @override

@@ -158,6 +158,8 @@ class MockDaemon extends DaemonConnection {
     );
     system.checkAdminPin = profiles.checkBoxAdminPin;
     system.currentOwner = () => profiles.current;
+    system.profileName = (id) =>
+        profiles.profiles.where((p) => p.id == id).firstOrNull?.name;
   }
 
   /// Profiles (session API 0.12): the current profile, the switch, the

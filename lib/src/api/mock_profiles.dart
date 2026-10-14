@@ -515,6 +515,9 @@ class MockProfileSession {
         return JobRef(
           jobId: relay.startJob(
             JobKind.profilesRemove,
+            subject: JobSubject(
+              profile: SubjectProfile(id: x.id, name: x.name),
+            ),
             onSuccess: () {
               profiles.remove(x);
               _changed();
@@ -537,7 +540,12 @@ class MockProfileSession {
           );
         }
         log.add('guest_end');
-        return JobRef(jobId: relay.startJob(JobKind.guestEnd)).toJson();
+        return JobRef(
+          jobId: relay.startJob(
+            JobKind.guestEnd,
+            subject: const JobSubject(owner: 'guest'),
+          ),
+        ).toJson();
       case 'system.guest.set':
         final c = SystemGuestSetParams.fromJson(p);
         _check(admin, c.adminPin, 'admin');
@@ -548,6 +556,7 @@ class MockProfileSession {
         return JobRef(
           jobId: relay.startJob(
             JobKind.guestSet,
+            subject: JobSubject(enabled: c.enabled),
             onSuccess: () => guestEnabled = c.enabled,
           ),
         ).toJson();
@@ -604,6 +613,11 @@ class MockProfileSession {
         return JobRef(
           jobId: relay.startJob(
             JobKind.appsRollback,
+            subject: JobSubject(
+              owner: current,
+              generation: g,
+              fromGeneration: appGeneration,
+            ),
             onSuccess: () {
               appGenerations[appGeneration] = [...relay.installedApps];
               appGeneration++;
@@ -682,6 +696,21 @@ class MockProfileSession {
         return JobRef(
           jobId: relay.startJob(
             JobKind.starterSet,
+            subject: JobSubject(
+              owner: 'starter',
+              apps: [
+                for (final id in want)
+                  CatalogApp(
+                    id: id,
+                    name:
+                        relay.catalog
+                            .where((a) => a.id == id)
+                            .firstOrNull
+                            ?.name ??
+                        id,
+                  ),
+              ],
+            ),
             onSuccess: () => starter = want,
           ),
         ).toJson();
@@ -748,6 +777,9 @@ class MockProfileSession {
     log.add('create:$id');
     final job = relay.startJob(
       JobKind.profilesCreate,
+      subject: JobSubject(
+        profile: SubjectProfile(id: id, name: name.trim()),
+      ),
       onSuccess: () {
         profiles.add(
           MockWireProfile(

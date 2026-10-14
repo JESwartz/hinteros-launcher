@@ -141,6 +141,70 @@ String? _progressText(api.ProgressDetail? d) {
   return null;
 }
 
+/// `subject` (0.15): what a job is about.
+JobSubject _subject(api.JobSubject? s) {
+  if (s == null) return const JobSubject();
+  return JobSubject(
+    owner: s.owner,
+    profileId: s.profile?.id,
+    profileName: _oneLine(s.profile?.name),
+    apps: [
+      for (final a in s.apps ?? const <api.CatalogApp>[])
+        (id: a.id, name: _oneLine(a.name) ?? a.id),
+    ],
+    deleteData: s.deleteData ?? false,
+    fromOwner: s.fromOwner,
+    generation: s.generation,
+    fromGeneration: s.fromGeneration,
+    rev: s.rev,
+    // Named the way the update screens name releases.
+    version: s.version == null
+        ? null
+        : releaseName(s.version!, s.rev, _channel(s.channel)),
+    channel: _channel(s.channel),
+    fromChannel: _channel(s.fromChannel),
+    fromRev: s.fromRev,
+    fromVersion: s.fromVersion == null
+        ? null
+        : releaseName(
+            s.fromVersion!,
+            s.fromRev,
+            _channel(s.fromChannel ?? s.channel),
+          ),
+    base: s.base == null || s.base == api.Base.unknown ? null : _base(s.base!),
+    fromBase: s.fromBase == null || s.fromBase == api.Base.unknown
+        ? null
+        : _base(s.fromBase!),
+    enabled: s.enabled,
+    keep: s.keep,
+    frequency: switch (s.frequency) {
+      api.CleanupFrequency.daily => CleanupFrequency.daily,
+      api.CleanupFrequency.weekly => CleanupFrequency.weekly,
+      api.CleanupFrequency.monthly => CleanupFrequency.monthly,
+      _ => null,
+    },
+    keepSystem: s.keepSystem,
+    keepProfiles: s.keepProfiles,
+  );
+}
+
+/// `detail.builds_*` and `building` (0.15); null when nix builds nothing.
+BuildProgress? _build(api.ProgressDetail? d) {
+  if (d == null) return null;
+  final b = d.building;
+  if (d.buildsTotal == null && d.buildsDone == null && b == null) return null;
+  return BuildProgress(
+    done: d.buildsDone,
+    total: d.buildsTotal,
+    running: d.buildsRunning,
+    name: _oneLine(b?.name),
+    version: _oneLine(b?.version),
+    phase: _oneLine(b?.phase),
+  );
+}
+
+DateTime? _unixOrNull(int? seconds) => seconds == null ? null : _unix(seconds);
+
 /// `job_finished.error` / `jobs.get`'s error as the progress page shows it.
 JobError _jobError(api.ErrorObject e) {
   final data = e.data is Map
@@ -232,7 +296,8 @@ class _Entry {
 /// `jobs.get` to catch up (a job that began before the launcher looked, or
 /// events missed while disconnected).
 class DaemonJobs implements JobsRepository {
-  DaemonJobs(this._conn) {
+  DaemonJobs(this._conn, {DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now {
     _events = _conn.events.listen(_onEvent);
     _status = _conn.statusChanges.listen((s) {
       if (s is api.Connected) unawaited(_resync());
@@ -249,6 +314,7 @@ class DaemonJobs implements JobsRepository {
   }
 
   final api.DaemonConnection _conn;
+  final DateTime Function() _clock;
   late final StreamSubscription<api.SessionEvent> _events;
   late final StreamSubscription<api.ConnectionStatus> _status;
   final _jobs = <String, _Entry>{};
@@ -306,21 +372,39 @@ class DaemonJobs implements JobsRepository {
     switch (ev) {
       case api.JobStartedEvent():
         final e = _entry(ev.jobId, kind: _jobKind(ev.kind));
-        if (!e.kindKnown || e.snap.kind != _jobKind(ev.kind)) {
-          e.kindKnown = true;
-          _set(e, e.snap.copyWith(kind: _jobKind(ev.kind)));
-        }
-      case api.JobProgressEvent():
-        final e = _entry(ev.jobId);
-        if (e.snap.finished) return;
-        final stage = _stage(ev.stage) ?? e.snap.stage;
+        e.kindKnown = true;
         _set(
           e,
           e.snap.copyWith(
+            kind: _jobKind(ev.kind),
+            subject: _subject(ev.subject),
+            startedAt: _unix(ev.startedAt),
+            heardAt: now(),
+          ),
+        );
+      case api.JobProgressEvent():
+        final e = _entry(ev.jobId, kind: _jobKind(ev.kind));
+        if (e.snap.finished) return;
+        final stage = _stage(ev.stage) ?? e.snap.stage;
+        final known = e.kindKnown;
+        e.kindKnown = true;
+        // Also a heartbeat (at least every 2 s, maybe with nothing new):
+        // it says the job is alive.
+        _set(
+          e,
+          e.snap.copyWith(
+            kind: known ? null : _jobKind(ev.kind),
             stage: stage,
             percent: ev.percent,
             clearPercent: ev.percent == null,
             detail: _progressText(ev.detail),
+            clearDetail: _progressText(ev.detail) == null,
+            build: _build(ev.detail),
+            clearBuild: _build(ev.detail) == null,
+            subject: ev.subject == null ? null : _subject(ev.subject),
+            startedAt: _unix(ev.startedAt),
+            lastActivityAt: _unixOrNull(ev.lastActivityAt),
+            heardAt: now(),
           ),
         );
       case api.JobFinishedEvent():
@@ -348,6 +432,12 @@ class DaemonJobs implements JobsRepository {
                 : _jobError(ev.error!),
             sessionRestartRequired: ev.sessionRestartRequired,
             result: _asMap(ev.result),
+            subject: _subject(ev.subject),
+            startedAt: _unix(ev.startedAt),
+            finishedAt: _unix(ev.finishedAt),
+            heardAt: now(),
+            clearPercent: true,
+            clearBuild: true,
           ),
         );
       default:
@@ -363,8 +453,9 @@ class DaemonJobs implements JobsRepository {
       jobId: j.jobId,
       kind: _jobKind(j.kind),
       stage: _stage(j.stage) ?? old?.stage ?? JobStage.preparing,
-      percent: finished ? null : old?.percent,
-      detail: finished ? null : old?.detail,
+      percent: finished ? null : j.percent,
+      detail: finished ? null : _progressText(j.detail),
+      build: finished ? null : _build(j.detail),
       finished: finished,
       ok: j.state == api.JobState.succeeded,
       cancelled: cancelled,
@@ -373,6 +464,11 @@ class DaemonJobs implements JobsRepository {
           : null,
       sessionRestartRequired: j.sessionRestartRequired,
       result: _asMap(j.result),
+      subject: _subject(j.subject),
+      startedAt: _unix(j.startedAt),
+      finishedAt: _unixOrNull(j.finishedAt),
+      lastActivityAt: _unixOrNull(j.lastActivityAt),
+      heardAt: now(),
     );
   }
 
@@ -396,8 +492,7 @@ class DaemonJobs implements JobsRepository {
     }
     e.refreshed = true;
     if (e.snap.finished) return;
-    final s = _fromJob(job, e.snap);
-    if (s.finished || s.stage != e.snap.stage) _set(e, s);
+    _set(e, _fromJob(job, e.snap));
   }
 
   /// After a reconnect: events may have been missed, so look at every job
@@ -466,6 +561,26 @@ class DaemonJobs implements JobsRepository {
   Future<void> cancel(String jobId) => guardCall(
     () => _conn.systemJobsCancel(api.SystemJobsCancelParams(jobId: jobId)),
   ).then((_) {});
+
+  @override
+  DateTime now() => _clock();
+
+  @override
+  Future<JobSnapshot?> running() async {
+    final api.SystemJobsListResult r;
+    try {
+      r = await _conn.systemJobsList();
+    } catch (_) {
+      return null;
+    }
+    // The running job, if any, comes first.
+    final j = r.jobs.where((j) => j.state == api.JobState.running).firstOrNull;
+    if (j == null) return null;
+    final e = _entry(j.jobId, kind: _jobKind(j.kind));
+    e.refreshed = true;
+    if (!e.snap.finished) _set(e, _fromJob(j, e.snap));
+    return e.snap;
+  }
 
   /// Waits for the job to finish and returns its final state.
   Future<JobSnapshot> finished(String jobId) =>
@@ -791,8 +906,12 @@ class DaemonSystem implements SystemRepository {
 /// The services over a daemon connection (session API 0.8): system info, SSH,
 /// updates, jobs, power, Wi-Fi, Bluetooth, display, audio, the admin password
 /// prompt, session restart and the Store.
-SystemServices daemonSystemServices(api.DaemonConnection connection) {
-  final jobs = DaemonJobs(connection);
+/// [now]: the box clock (tests give the mock daemon's).
+SystemServices daemonSystemServices(
+  api.DaemonConnection connection, {
+  DateTime Function()? now,
+}) {
+  final jobs = DaemonJobs(connection, clock: now);
   return SystemServices(
     jobs: jobs,
     system: DaemonSystem(connection, jobs),

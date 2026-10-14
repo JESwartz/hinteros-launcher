@@ -385,6 +385,85 @@ void main() {
       await jobs2.dispose();
     });
 
+    test('building: the count, the name, the subject, heartbeats', () async {
+      final (mock, s) = await _setup();
+      mock.system.channel = api.Channel.beta;
+      mock.system.nextUpdate = _update(version: '0.7.0');
+      final check = s.updates.check();
+      await pumpEventQueue();
+      mock.system.finishJob(mock.system.runningJobId!);
+      await check;
+      final h = await s.updates.apply(_rev, adminPin: _pin);
+      final all = s.jobs.watch(h.jobId).toList();
+      await pumpEventQueue();
+      mock.system.progressJob(
+        h.jobId,
+        api.Stage.building,
+        percent: 20,
+        buildsDone: 2,
+        buildsTotal: 12,
+        building: const api.Building(
+          name: 'hinteros-daemon',
+          version: '0.7.1',
+          phase: 'build',
+        ),
+      );
+      await pumpEventQueue();
+      mock.system.heartbeat(h.jobId);
+      await pumpEventQueue();
+      mock.system.finishJob(h.jobId);
+      final seen = await all;
+      final b = seen.firstWhere((x) => x.build != null);
+      expect(b.stage, JobStage.building);
+      expect(b.percent, 20);
+      expect(b.build!.current, 3);
+      expect(b.build!.total, 12);
+      expect(b.build!.name, 'hinteros-daemon');
+      expect(b.build!.version, '0.7.1');
+      expect(b.build!.phase, 'build');
+      expect(b.startedAt, isNotNull);
+      expect(b.lastActivityAt, isNotNull);
+      // Named like the update screens name it.
+      expect(b.subject.version, '0.7.1.9a8b7c6 beta');
+      expect(b.subject.channel, UpdateChannel.beta);
+      // The heartbeat repeats the state: one more snapshot, the same build.
+      expect(seen.where((x) => x.build?.current == 3), hasLength(2));
+      expect(seen.last.finished, isTrue);
+      expect(seen.last.build, isNull);
+      expect(seen.last.finishedAt, isNotNull);
+    });
+
+    test(
+      'after a launcher restart the running job is found (jobs.list)',
+      () async {
+        final (mock, s) = await _setup();
+        await mock.rpc('system.apps.install', {
+          'ids': ['moonlight'],
+          'revision': mock.system.revision,
+        });
+        final id = mock.system.runningJobId!;
+        mock.system.progressJob(
+          id,
+          api.Stage.building,
+          percent: 50,
+          buildsDone: 1,
+          buildsTotal: 2,
+        );
+        // A new launcher: nothing known yet.
+        final jobs2 = DaemonJobs(mock);
+        final r = await jobs2.running();
+        expect(r, isNotNull);
+        expect(r!.jobId, id);
+        expect(r.kind, JobKind.install);
+        expect(r.percent, 50);
+        expect(r.build!.current, 2);
+        expect(r.subject.apps.single.name, 'Moonlight');
+        mock.system.finishJob(id);
+        expect(await jobs2.running(), isNull);
+        await jobs2.dispose();
+      },
+    );
+
     test('an unknown job is not_found', () async {
       final (_, s) = await _setup();
       await expectLater(

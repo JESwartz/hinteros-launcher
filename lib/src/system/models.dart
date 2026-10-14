@@ -9,6 +9,8 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import 'storage.dart' show CleanupFrequency;
+
 // ---------------------------------------------------------------- errors
 
 enum SystemErrorKind {
@@ -240,6 +242,107 @@ enum JobStage {
   bool get cancellable => index < activating.index;
 }
 
+/// What a job is about (session API 0.15 `subject`): which apps, whose,
+/// which version, from what to what. Every field is optional; which ones a
+/// kind sets is in JOB-PROGRESS-API "JobSubject".
+@immutable
+class JobSubject {
+  const JobSubject({
+    this.owner,
+    this.profileId,
+    this.profileName,
+    this.apps = const [],
+    this.deleteData = false,
+    this.fromOwner,
+    this.generation,
+    this.fromGeneration,
+    this.rev,
+    this.version,
+    this.channel,
+    this.fromChannel,
+    this.fromRev,
+    this.fromVersion,
+    this.base,
+    this.fromBase,
+    this.enabled,
+    this.keep,
+    this.frequency,
+    this.keepSystem,
+    this.keepProfiles,
+  });
+
+  /// Apps jobs: a profile id, `guest` or `starter`.
+  final String? owner;
+  final String? profileId;
+
+  /// The profile's name when the job started.
+  final String? profileName;
+
+  /// Display names of the apps installed, removed or set (id, name).
+  final List<({String id, String name})> apps;
+  final bool deleteData;
+
+  /// `starter`: an app set copied from the starter apps.
+  final String? fromOwner;
+  final int? generation;
+  final int? fromGeneration;
+  final String? rev;
+
+  /// The target release as the update screens name it
+  /// (`0.7.1.c6b69ce beta`), and the one before.
+  final String? version;
+  final UpdateChannel? channel;
+  final UpdateChannel? fromChannel;
+  final String? fromRev;
+  final String? fromVersion;
+  final NixBase? base;
+  final NixBase? fromBase;
+
+  /// The new on/off value (remote access, Guest, automatic clean-up).
+  final bool? enabled;
+
+  /// Clean-ups: versions kept.
+  final int? keep;
+  final CleanupFrequency? frequency;
+  final int? keepSystem;
+  final int? keepProfiles;
+}
+
+/// What nix builds now (session API 0.15 `detail.builds_*`, `building`).
+@immutable
+class BuildProgress {
+  const BuildProgress({
+    this.done,
+    this.total,
+    this.running,
+    this.name,
+    this.version,
+    this.phase,
+  });
+
+  /// Derivations built so far.
+  final int? done;
+
+  /// Derivations nix expects to build (can grow).
+  final int? total;
+
+  /// How many build at once.
+  final int? running;
+
+  /// The latest one that still builds (`hinteros-daemon`), its version
+  /// and nix's phase (`configure`, `build`, `install`, ...).
+  final String? name;
+  final String? version;
+  final String? phase;
+
+  /// The one that builds now as "n of m": done + 1, never above the total.
+  int? get current {
+    final t = total;
+    if (t == null || t <= 0) return null;
+    return ((done ?? 0) + 1).clamp(1, t);
+  }
+}
+
 /// What `jobs.get` / `job_*` events add up to for one job.
 @immutable
 class JobSnapshot {
@@ -255,14 +358,22 @@ class JobSnapshot {
     this.error,
     this.sessionRestartRequired = false,
     this.result,
+    this.subject = const JobSubject(),
+    this.build,
+    this.startedAt,
+    this.finishedAt,
+    this.lastActivityAt,
+    this.heardAt,
   });
 
   final String jobId;
   final JobKind kind;
   final JobStage stage;
 
-  /// Only where it means something (downloading).
+  /// Where it means something (downloading, building, scanning).
   final int? percent;
+
+  /// What is counted, as text ("120 MB of 300 MB").
   final String? detail;
   final bool finished;
   final bool ok;
@@ -272,6 +383,23 @@ class JobSnapshot {
 
   /// `job_finished.result` (an `update_check` job: the check result as JSON).
   final Map<String, dynamic>? result;
+
+  /// What the job is about.
+  final JobSubject subject;
+
+  /// While building: the count and the name.
+  final BuildProgress? build;
+
+  /// When the job's process started, and ended (box clock).
+  final DateTime? startedAt;
+  final DateTime? finishedAt;
+
+  /// The last time the job's process wrote output.
+  final DateTime? lastActivityAt;
+
+  /// When this launcher last heard of the job (an event or `jobs.get`; the
+  /// service sends a heartbeat at least every 2 s while it runs).
+  final DateTime? heardAt;
 
   bool get running => !finished;
   bool get failed => finished && !ok && !cancelled;
@@ -283,18 +411,26 @@ class JobSnapshot {
     int? percent,
     bool clearPercent = false,
     String? detail,
+    bool clearDetail = false,
     bool? finished,
     bool? ok,
     bool? cancelled,
     JobError? error,
     bool? sessionRestartRequired,
     Map<String, dynamic>? result,
+    JobSubject? subject,
+    BuildProgress? build,
+    bool clearBuild = false,
+    DateTime? startedAt,
+    DateTime? finishedAt,
+    DateTime? lastActivityAt,
+    DateTime? heardAt,
   }) => JobSnapshot(
     jobId: jobId,
     kind: kind ?? this.kind,
     stage: stage ?? this.stage,
     percent: clearPercent ? null : (percent ?? this.percent),
-    detail: detail ?? this.detail,
+    detail: clearDetail ? null : (detail ?? this.detail),
     finished: finished ?? this.finished,
     ok: ok ?? this.ok,
     cancelled: cancelled ?? this.cancelled,
@@ -302,6 +438,12 @@ class JobSnapshot {
     sessionRestartRequired:
         sessionRestartRequired ?? this.sessionRestartRequired,
     result: result ?? this.result,
+    subject: subject ?? this.subject,
+    build: clearBuild ? null : (build ?? this.build),
+    startedAt: startedAt ?? this.startedAt,
+    finishedAt: finishedAt ?? this.finishedAt,
+    lastActivityAt: lastActivityAt ?? this.lastActivityAt,
+    heardAt: heardAt ?? this.heardAt,
   );
 }
 

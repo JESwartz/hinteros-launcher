@@ -34,19 +34,48 @@ class _Job {
   /// `job_finished.result` when it finishes well.
   Map<String, dynamic>? result;
   Timer? timer;
+  Timer? beat;
 }
+
+/// What a scripted build builds (`--mock`): name, version. Nix finds the
+/// last three late (the total grows), as it can.
+const mockBuildScript = <(String, String?)>[
+  ('hinteros-daemon', '0.7.1'),
+  ('hinteros-launcher', '0.7.1'),
+  ('hinteros-system', '0.7.1'),
+  ('moonlight-qt', '6.1.0'),
+  ('mesa', '25.2.3'),
+  ('linux-firmware', '20260910'),
+  ('gamescope', '3.16.4'),
+  ('system-units', null),
+  ('etc', null),
+  ('hinteros-session', '0.7.1'),
+  ('dbus-1', null),
+  ('nixos-system-hinteros', '0.7.1'),
+];
+
+/// Nix's phases, in order, as a scripted build goes through them.
+const _phases = ['unpack', 'configure', 'build', 'install'];
 
 /// Jobs the way the privileged service reports them: one mutating job at a
 /// time, stages, progress, cancel until activation.
 class MockJobs implements JobsRepository {
-  MockJobs({this.stepDelay = const Duration(milliseconds: 700), this.autoRun});
+  MockJobs({
+    this.stepDelay = const Duration(milliseconds: 700),
+    this.autoRun,
+    DateTime Function()? now,
+  }) : clock = now ?? DateTime.now;
 
   /// Time between stages when a job runs by itself.
   Duration stepDelay;
 
-  /// Jobs run through their stages on their own (`--mock`, the dev window).
-  /// Tests leave this off and drive jobs with [progress] and [finish].
+  /// Jobs run through their stages on their own (`--mock`, the dev window):
+  /// a long build of twelve, with names, phases and heartbeats. Tests leave
+  /// this off and drive jobs with [progress], [heartbeat] and [finish].
   bool? autoRun;
+
+  /// The box clock (tests move it on).
+  DateTime Function() clock;
 
   final _jobs = <String, _Job>{};
   int _n = 0;
@@ -64,22 +93,32 @@ class MockJobs implements JobsRepository {
   JobSnapshot? snapshot(String jobId) => _jobs[jobId]?.snap;
 
   /// The running job, if any.
-  JobHandle? get running {
+  JobHandle? get runningJob {
     for (final j in _jobs.values) {
       if (j.snap.running) return JobHandle(j.snap.jobId, j.snap.kind);
     }
     return null;
   }
 
+  @override
+  DateTime now() => clock();
+
+  @override
+  Future<JobSnapshot?> running() async {
+    final r = runningJob;
+    return r == null ? null : _jobs[r.jobId]!.snap;
+  }
+
   /// Starts a job. [onSuccess] is the side effect on the mock's state when it
-  /// finishes well.
+  /// finishes well; [subject] says what it is about.
   JobHandle start(
     JobKind kind, {
     void Function()? onSuccess,
     void Function()? onFinish,
     Map<String, dynamic>? result,
+    JobSubject subject = const JobSubject(),
   }) {
-    final r = running;
+    final r = runningJob;
     if (r != null) {
       throw SystemException(
         SystemErrorKind.jobBusy,
@@ -88,10 +127,20 @@ class MockJobs implements JobsRepository {
       );
     }
     final id = _hex(++_n * 7919 + 0xabc0de, 16);
-    final job = _Job(JobSnapshot(jobId: id, kind: kind))
-      ..onSuccess = onSuccess
-      ..onFinish = onFinish
-      ..result = result;
+    final at = clock();
+    final job =
+        _Job(
+            JobSnapshot(
+              jobId: id,
+              kind: kind,
+              subject: subject,
+              startedAt: at,
+              heardAt: at,
+            ),
+          )
+          ..onSuccess = onSuccess
+          ..onFinish = onFinish
+          ..result = result;
     _jobs[id] = job;
     final h = JobHandle(id, kind);
     started.add(h);
@@ -116,6 +165,13 @@ class MockJobs implements JobsRepository {
     final stages = job.snap.kind.stages;
     var i = 0;
     var pct = 0;
+    var built = 0;
+    var phase = 0;
+    // The heartbeat: every 2 s, also when nothing changed.
+    job.beat = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => heartbeat(job.snap.jobId),
+    );
     void step() {
       if (job.snap.finished) return;
       final s = stages[i];
@@ -128,13 +184,36 @@ class MockJobs implements JobsRepository {
           job.snap.jobId,
           s,
           percent: pct,
-          detail: s == JobStage.downloading ? '$pct% of the files' : null,
+          detail: s == JobStage.downloading ? '${pct * 3} MB of 300 MB' : null,
         );
         pct += 25;
         if (pct <= 100) {
           job.timer = Timer(stepDelay, step);
           return;
         }
+      } else if (s == JobStage.building && built < mockBuildScript.length) {
+        // Nix knows of nine at first and finds three more half way.
+        final total = built < 5 ? 9 : mockBuildScript.length;
+        final (name, version) = mockBuildScript[built];
+        progress(
+          job.snap.jobId,
+          s,
+          percent: built * 100 ~/ total,
+          build: BuildProgress(
+            done: built,
+            total: total,
+            running: 1,
+            name: name,
+            version: version,
+            phase: _phases[phase],
+          ),
+        );
+        if (++phase == _phases.length) {
+          phase = 0;
+          built++;
+        }
+        job.timer = Timer(stepDelay, step);
+        return;
       } else {
         progress(job.snap.jobId, s);
       }
@@ -149,14 +228,34 @@ class MockJobs implements JobsRepository {
     job.timer = Timer(stepDelay, step);
   }
 
-  void progress(String jobId, JobStage stage, {int? percent, String? detail}) {
+  void progress(
+    String jobId,
+    JobStage stage, {
+    int? percent,
+    String? detail,
+    BuildProgress? build,
+  }) {
     final j = _jobs[jobId]!;
+    final at = clock();
     j.snap = j.snap.copyWith(
       stage: stage,
       percent: percent,
       clearPercent: percent == null,
       detail: detail,
+      clearDetail: detail == null,
+      build: build,
+      clearBuild: build == null,
+      lastActivityAt: at,
+      heardAt: at,
     );
+    j.changes.add(j.snap);
+  }
+
+  /// A heartbeat (`job_progress` with nothing new): the job is alive.
+  void heartbeat(String jobId) {
+    final j = _jobs[jobId]!;
+    if (j.snap.finished) return;
+    j.snap = j.snap.copyWith(heardAt: clock());
     j.changes.add(j.snap);
   }
 
@@ -171,6 +270,8 @@ class MockJobs implements JobsRepository {
     final j = _jobs[jobId]!;
     if (j.snap.finished) return;
     j.timer?.cancel();
+    j.beat?.cancel();
+    final at = clock();
     j.snap = j.snap.copyWith(
       finished: true,
       ok: ok,
@@ -182,6 +283,10 @@ class MockJobs implements JobsRepository {
           (ok &&
               j.snap.kind.mayRestartSession &&
               j.snap.sessionRestartRequired),
+      clearPercent: true,
+      clearBuild: true,
+      finishedAt: at,
+      heardAt: at,
     );
     if (ok) j.onSuccess?.call();
     j.onFinish?.call();
@@ -229,6 +334,7 @@ class MockJobs implements JobsRepository {
   void dispose() {
     for (final j in _jobs.values) {
       j.timer?.cancel();
+      j.beat?.cancel();
     }
   }
 }
@@ -330,6 +436,13 @@ class MockUpdates implements UpdatesRepository {
     }
     return jobs.start(
       JobKind.update,
+      subject: JobSubject(
+        rev: a.rev,
+        version: a.version,
+        channel: channel,
+        fromRev: _status.currentRev,
+        fromVersion: _status.currentVersion,
+      ),
       onSuccess: () {
         _generations = [
           Generation(
@@ -379,6 +492,10 @@ class MockUpdates implements UpdatesRepository {
     }
     return jobs.start(
       JobKind.rollback,
+      subject: JobSubject(
+        generation: target.generation,
+        fromGeneration: cur.generation,
+      ),
       result: target.readdsFeatures.isEmpty
           ? null
           : {'features_readded': target.readdsFeatures},
@@ -420,7 +537,11 @@ class MockUpdates implements UpdatesRepository {
         'Stable may be older than what this box runs now.',
       );
     }
-    return jobs.start(JobKind.channel, onSuccess: () => channel = c);
+    return jobs.start(
+      JobKind.channel,
+      subject: JobSubject(channel: c, fromChannel: channel),
+      onSuccess: () => channel = c,
+    );
   }
 
   @override
@@ -438,7 +559,11 @@ class MockUpdates implements UpdatesRepository {
         'Switching to the stable base downgrades software.',
       );
     }
-    return jobs.start(JobKind.base, onSuccess: () => base = b);
+    return jobs.start(
+      JobKind.base,
+      subject: JobSubject(base: b, fromBase: base),
+      onSuccess: () => base = b,
+    );
   }
 }
 
@@ -572,7 +697,11 @@ class MockSystem implements SystemRepository {
       }
     }
     log.add('ssh:${enable ? 'on' : 'off'}');
-    return jobs.start(JobKind.ssh, onSuccess: () => _enabled = enable);
+    return jobs.start(
+      JobKind.ssh,
+      subject: JobSubject(enabled: enable),
+      onSuccess: () => _enabled = enable,
+    );
   }
 }
 
@@ -1217,6 +1346,7 @@ class MockStore implements StoreRepository {
     log.add('rollback_apps:$generation');
     return jobs.start(
       JobKind.appsRollback,
+      subject: JobSubject(generation: generation, fromGeneration: _generation),
       onSuccess: () {
         final before = AppGeneration(
           generation: _generation,
@@ -1314,6 +1444,9 @@ class MockStore implements StoreRepository {
     _changes.add(null);
     return jobs.start(
       JobKind.install,
+      subject: JobSubject(
+        apps: [for (final w in want) (id: w.id, name: w.name)],
+      ),
       onSuccess: () => _installed.addAll(want.map((w) => w.id)),
       onFinish: () {
         for (final w in want) {
@@ -1334,6 +1467,10 @@ class MockStore implements StoreRepository {
     _changes.add(null);
     return jobs.start(
       JobKind.remove,
+      subject: JobSubject(
+        apps: [(id: id, name: _app(id).name)],
+        deleteData: deleteData,
+      ),
       onSuccess: () => _installed.remove(id),
       onFinish: () {
         _busy.remove(id);
@@ -1384,7 +1521,7 @@ class MockSystemServices extends SystemServices {
     List<StoreApp> extraApps = const [],
     bool storageMeasured = true,
   }) {
-    final jobs = MockJobs(autoRun: autoRunJobs);
+    final jobs = MockJobs(autoRun: autoRunJobs, now: now);
     final box = profileBox ?? MockProfileBox(now: now);
     final updates = MockUpdates(jobs, status: status, now: now, box: box);
     final auth = MockAuth();

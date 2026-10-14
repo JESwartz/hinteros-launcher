@@ -17,6 +17,10 @@ class _UnavailableJobs implements JobsRepository {
   Stream<JobSnapshot> watch(String jobId) => Stream.error(_gone);
   @override
   Future<void> cancel(String jobId) => Future.error(_gone);
+  @override
+  Future<JobSnapshot?> running() async => null;
+  @override
+  DateTime now() => DateTime.now();
 }
 
 class _UnavailableSystem implements SystemRepository {

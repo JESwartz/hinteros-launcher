@@ -283,7 +283,7 @@ class MockStorage implements StorageRepository {
   @override
   Future<JobHandle> measure() async {
     _fail();
-    final r = jobs.running;
+    final r = jobs.runningJob;
     if (r != null && r.kind == JobKind.storageMeasure) return r;
     final at = _now();
     return jobs.start(
@@ -324,6 +324,7 @@ class MockStorage implements StorageRepository {
       target == CleanupTarget.system
           ? JobKind.cleanupSystem
           : JobKind.cleanupProfiles,
+      subject: JobSubject(keep: keep),
       // A little less than the estimate, like the real thing.
       result: {
         'freed_bytes': ((e?.bytes ?? 0) * 0.94).round(),
@@ -358,6 +359,15 @@ class MockStorage implements StorageRepository {
         'Nothing to change.',
       );
     }
-    return jobs.start(JobKind.cleanupSet, onSuccess: () => settings = s);
+    return jobs.start(
+      JobKind.cleanupSet,
+      subject: JobSubject(
+        enabled: s.enable,
+        frequency: s.frequency,
+        keepSystem: s.keepSystem,
+        keepProfiles: s.keepProfiles,
+      ),
+      onSuccess: () => settings = s,
+    );
   }
 }

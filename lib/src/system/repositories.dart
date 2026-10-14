@@ -23,6 +23,14 @@ abstract class JobsRepository {
 
   /// `jobs.cancel`: [SystemErrorKind.jobBusy] once activation has started.
   Future<void> cancel(String jobId);
+
+  /// The job that runs on the box now, if any (`jobs.list`): after a
+  /// launcher restart its progress shows again.
+  Future<JobSnapshot?> running();
+
+  /// The clock the job times are on (the box clock): the time a job has
+  /// taken, and how long ago the launcher last heard of it.
+  DateTime now();
 }
 
 /// `system.info`, power, SSH.
