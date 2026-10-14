@@ -101,21 +101,25 @@ Design: `hinteros-docs/design/storage.md`. Settings > Storage
   while the ring has the focus, carries the focus marker of the person's focus style (ring,
   glow or bar); all of it is drawn inside the ring's square, so it is never cut off and never
   covers the text beside it. Every segment gets at least 5 degrees, so small ones can be seen
-  and selected. Beside the ring: the selected segment's name, size and share of the level (a
-  generation's date, current, started with), and the disk's total, used and free.
+  and selected. A segment that opens carries an upright chevron (where it is wide enough), and
+  the selected one's name has the same chevron in a ring; one that does not open has none. No
+  hint text: the screen shows it. Beside the ring: the selected segment's name, size and share
+  of the level (a generation's date, current, started with), and the disk's total, used and
+  free.
 - **Who sees what**: `storage.get` has no names; the own home (or the guest's own) opens with
   `storage.tree` directly, another profile's or the guest's asks for the admin PIN on the
   admin-PIN pad (`withBoxAdminPin`: a wrong PIN asks again, Back opens nothing). Other
   profiles' trees are not kept: each visit asks again.
 - **Read-only**: nothing on the screen deletes a file, removes an app or uninstalls a game.
-- **Measuring**: "Measure again" (with the measurement's age; "Measure the disk" before the
-  first one) runs `storage.measure` on the job page (stage `measuring` with a percentage,
-  Cancel keeps the old measurement), then reloads.
-- **Clean up the system / Clean up profiles**: a dialog with "Versions to keep" (left and
-  right, 1 to 10, starting at the automatic clean-up's number), the estimate from the
-  measurement ("Frees about 6.2 GB. Removes 5 versions."), a warning below 2 (no rollback for
+- **Scanning**: "Scan now" (beside the age, "Scanned 2 hours ago."; also before the first
+  scan) runs `storage.measure` on the job page (stage `measuring`, shown as "Scanning", with a
+  percentage; Cancel keeps the old result), then reloads.
+- **Clean up the system / Clean up profiles**: a dialog with "Versions to keep" (arrows on
+  both sides: the one pressed lights up for a moment, none past 1 or 10; starting at the
+  automatic clean-up's number), the estimate from the measurement ("Frees about 6.2 GB. Removes 5 versions."), a warning below 2 (no rollback for
   that part), then the admin PIN, the job page, and what it freed ("Freed 5.8 GB.", from the
-  job's `freed_bytes`). Afterwards the screen says the numbers are from before the clean-up.
+  job's `freed_bytes`). When the clean-up is done a scan starts by itself and its page follows,
+  so the numbers are new; only if that scan does not finish does the screen say they are old.
 - **Automatic clean-up**: on or off, how often (every day, week, month), system and app
   versions to keep; Save asks for the admin PIN and runs `cleanup.set` (a rebuild job) like
   the other box settings. Nothing changed: no PIN, no job.

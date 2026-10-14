@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/system/mock_system.dart';
 import 'package:hinteros_launcher/src/system/models.dart';
 import 'package:hinteros_launcher/src/system/storage.dart';
+import 'package:hinteros_launcher/src/ui/system/storage_ring.dart';
 import 'package:hinteros_launcher/src/ui/system/storage_section.dart';
 import 'package:hinteros_launcher/src/ui/widgets.dart';
 
@@ -123,7 +124,46 @@ void main() {
       expect(find.text(storageSize(m.disk.totalBytes)), findsWidgets);
       expect(find.text(storageSize(m.disk.usedBytes)), findsOneWidget);
       expect(find.text(storageSize(m.disk.freeBytes)), findsWidgets);
-      expect(find.text('Measured 2 hours ago.'), findsOneWidget);
+      expect(find.text('Scanned 2 hours ago.'), findsOneWidget);
+    });
+
+    testWidgets('a segment that opens carries a cue, others none', (t) async {
+      await openStorage(t);
+      const cue = ValueKey('storage-open-cue');
+      final ring = t.widget<StorageRing>(
+        find.byKey(const ValueKey('storage-ring')),
+      );
+      expect(
+        [for (final s in ring.segments) s.openable],
+        [
+          true, // System
+          true, // Apps
+          true, // James
+          true, // Sam
+          true, // Robin
+          true, // Guest
+          false, // Other
+          false, // Free space
+        ],
+      );
+      expect(find.byKey(cue), findsOneWidget);
+      await press(t, [kLeft]);
+      expect(selectedName, 'Free space');
+      expect(find.byKey(cue), findsNothing);
+      await press(t, [kLeft]);
+      expect(find.byKey(cue), findsNothing);
+      await press(t, [kRight, kRight, kEnter]);
+      expect(selectedName, 'Generation 12');
+      expect(find.byKey(cue), findsNothing);
+    });
+
+    testWidgets('no hint lines: the screen shows, it does not explain', (
+      t,
+    ) async {
+      await openStorage(t);
+      for (final s in ['A opens', 'B goes back', 'Left and right']) {
+        expect(find.textContaining(s), findsNothing);
+      }
     });
 
     testWidgets('nothing on the screen deletes or removes', (t) async {
@@ -290,12 +330,67 @@ void main() {
       await t.pumpAndSettle();
       final freed = (m.estimate(CleanupTarget.system, 1)!.bytes * 0.94).round();
       expect(find.text('Freed ${storageSize(freed)}.'), findsOneWidget);
+      // The clean-up done, a scan started by itself; its page follows.
+      expect(h.services.mockJobs.started, hasLength(2));
+      final scan = h.services.mockJobs.started.last;
+      expect(scan.kind, JobKind.storageMeasure);
+      await press(t, [kEnter]);
+      expect(find.text('Scanning the disk'), findsOneWidget);
+      h.services.mockJobs.progress(scan.jobId, JobStage.measuring, percent: 60);
+      await t.pumpAndSettle();
+      expect(find.text('  60%'), findsOneWidget);
+      h.services.mockJobs.finish(scan.jobId);
+      await t.pumpAndSettle();
+      expect(find.text('Scan done.'), findsOneWidget);
+      await press(t, [kEnter]);
+      expect(find.textContaining('before the clean-up'), findsNothing);
+      expect(find.text('Scanned just now.'), findsOneWidget);
+    });
+
+    testWidgets('a scan that does not finish leaves a note', (t) async {
+      final h = await openStorage(t);
+      await openCleanup(t, CleanupTarget.system);
+      await press(t, [kDown, kRight, kEnter]);
+      await enterPin(t, '2468');
+      h.services.mockJobs.finish(h.services.mockJobs.started.single.jobId);
+      await t.pumpAndSettle();
+      await press(t, [kEnter]);
+      final scan = h.services.mockJobs.started.last;
+      h.services.mockJobs.finish(scan.jobId, ok: false, cancelled: true);
+      await t.pumpAndSettle();
       await press(t, [kEnter]);
       expect(
-        find.text('These numbers are from before the clean-up. Measure again.'),
+        find.text('These numbers are from before the clean-up. Scan now.'),
         findsOneWidget,
       );
+      expect(find.text('Scanned 2 hours ago.'), findsOneWidget);
     });
+
+    testWidgets(
+      'the picker arrows: the pressed one lights, none past the ends',
+      (t) async {
+        await openStorage(t);
+        await openCleanup(t, CleanupTarget.system);
+        StepperMark mark() =>
+            t.widget<StepperMark>(find.byKey(const ValueKey('keep-value')));
+        expect(find.textContaining('Removes old versions'), findsNothing);
+        expect(find.textContaining('Left and right'), findsNothing);
+        expect((mark().canDown, mark().canUp, mark().pulse), (true, true, 0));
+        await press(t, [kLeft]);
+        expect((mark().pulse, mark().pulseSide), (1, -1));
+        await press(t, [kRight]);
+        expect((mark().pulse, mark().pulseSide), (2, 1));
+        await press(t, List.filled(9, kLeft));
+        expect(mark().label, '1');
+        expect(mark().canDown, isFalse);
+        final pulses = mark().pulse;
+        // At the end nothing moves and nothing lights.
+        await press(t, [kLeft]);
+        expect(mark().pulse, pulses);
+        await press(t, List.filled(12, kRight));
+        expect((mark().label, mark().canUp), ('10', false));
+      },
+    );
 
     testWidgets('Back on the PIN pad starts nothing', (t) async {
       final h = await openStorage(t);
@@ -336,6 +431,7 @@ void main() {
           .round();
       expect(find.text('Freed ${storageSize(freed)}.'), findsOneWidget);
       expect(h.services.mockStorage.appGenerations, 1);
+      expect(h.services.mockJobs.started.last.kind, JobKind.storageMeasure);
     });
   });
 
@@ -424,28 +520,28 @@ void main() {
       t,
     ) async {
       final h = await openStorage(t, measured: false);
-      expect(find.text('The disk is not measured yet.'), findsOneWidget);
+      expect(find.text('Not scanned yet.'), findsOneWidget);
       expect(find.byKey(const ValueKey('storage-ring')), findsNothing);
       expect(focusLabel(), 'settings-detail/measure:0');
       await press(t, [kEnter]);
       final job = h.services.mockJobs.started.single;
       expect(job.kind, JobKind.storageMeasure);
-      expect(find.text('Measuring the disk'), findsOneWidget);
+      expect(find.text('Scanning the disk'), findsOneWidget);
       h.services.mockJobs.progress(job.jobId, JobStage.measuring, percent: 40);
       await t.pumpAndSettle();
       expect(find.text('  40%'), findsOneWidget);
       expect(find.text('Cancel'), findsOneWidget);
       h.services.mockJobs.finish(job.jobId);
       await t.pumpAndSettle();
-      expect(find.text('Measured.'), findsOneWidget);
+      expect(find.text('Scan done.'), findsOneWidget);
       await press(t, [kEnter]);
       expect(find.byKey(const ValueKey('storage-ring')), findsOneWidget);
-      expect(find.text('Measured just now.'), findsOneWidget);
+      expect(find.text('Scanned just now.'), findsOneWidget);
     });
 
     testWidgets('measure again: a job; cancelled keeps the old one', (t) async {
       final h = await openStorage(t);
-      expect(find.text('Measured 2 hours ago.'), findsOneWidget);
+      expect(find.text('Scanned 2 hours ago.'), findsOneWidget);
       await press(t, [kDown, kEnter]);
       final job = h.services.mockJobs.started.single;
       expect(job.kind, JobKind.storageMeasure);
@@ -454,18 +550,18 @@ void main() {
       await press(t, [kEnter]); // Cancel
       expect(find.text('Cancelled'), findsOneWidget);
       await press(t, [kEnter]);
-      expect(find.text('Measured 2 hours ago.'), findsOneWidget);
+      expect(find.text('Scanned 2 hours ago.'), findsOneWidget);
     });
 
     test('the age of a measurement', () {
       final now = DateTime(2026, 10, 6, 20, 30);
       String ago(Duration d) => measuredAgo(now.subtract(d), now);
-      expect(ago(const Duration(seconds: 20)), 'Measured just now.');
-      expect(ago(const Duration(minutes: 1)), 'Measured 1 minute ago.');
-      expect(ago(const Duration(minutes: 59)), 'Measured 59 minutes ago.');
-      expect(ago(const Duration(hours: 5)), 'Measured 5 hours ago.');
-      expect(ago(const Duration(days: 1, hours: 2)), 'Measured 1 day ago.');
-      expect(ago(const Duration(days: 9)), 'Measured 9 days ago.');
+      expect(ago(const Duration(seconds: 20)), 'Scanned just now.');
+      expect(ago(const Duration(minutes: 1)), 'Scanned 1 minute ago.');
+      expect(ago(const Duration(minutes: 59)), 'Scanned 59 minutes ago.');
+      expect(ago(const Duration(hours: 5)), 'Scanned 5 hours ago.');
+      expect(ago(const Duration(days: 1, hours: 2)), 'Scanned 1 day ago.');
+      expect(ago(const Duration(days: 9)), 'Scanned 9 days ago.');
     });
 
     test('sizes', () {

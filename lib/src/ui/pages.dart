@@ -340,7 +340,7 @@ class _JobProgressScreenState extends State<JobProgressScreen> {
             ? 'Clean-up done.'
             : 'Freed ${storageSize(f.freedBytes)}.';
       case JobKind.storageMeasure:
-        return 'Measured.';
+        return 'Scan done.';
       default:
         return 'Change applied.';
     }

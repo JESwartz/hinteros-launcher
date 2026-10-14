@@ -7,6 +7,7 @@ import '../../system/models.dart';
 import '../../system/repositories.dart';
 import '../../theme/hinter_theme.dart';
 import '../dialogs.dart';
+import '../pages.dart' show showJobProgress;
 import '../modal_host.dart';
 import '../nav_focusable.dart';
 import '../profiles/profile_ui.dart' show profileColor, withBoxAdminPin;
@@ -54,14 +55,14 @@ String _date(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2, '0')}-'
     '${d.day.toString().padLeft(2, '0')}';
 
-/// "Measured 2 hours ago."
+/// "Scanned 2 hours ago."
 String measuredAgo(DateTime at, DateTime now) {
   final d = now.difference(at);
   String n(int v, String unit) => '$v $unit${v == 1 ? '' : 's'}';
-  if (d.inMinutes < 1) return 'Measured just now.';
-  if (d.inHours < 1) return 'Measured ${n(d.inMinutes, 'minute')} ago.';
-  if (d.inDays < 1) return 'Measured ${n(d.inHours, 'hour')} ago.';
-  return 'Measured ${n(d.inDays, 'day')} ago.';
+  if (d.inMinutes < 1) return 'Scanned just now.';
+  if (d.inHours < 1) return 'Scanned ${n(d.inMinutes, 'minute')} ago.';
+  if (d.inDays < 1) return 'Scanned ${n(d.inHours, 'hour')} ago.';
+  return 'Scanned ${n(d.inDays, 'day')} ago.';
 }
 
 // ------------------------------------------------------------------ colours
@@ -291,7 +292,7 @@ class _StorageSectionState extends State<StorageSection> {
       if (mounted) {
         setState(
           () => _note = e.kind == SystemErrorKind.notFound
-              ? 'This is not measured yet. Measure again.'
+              ? 'Not scanned yet. Scan now.'
               : e.message,
         );
       }
@@ -321,15 +322,54 @@ class _StorageSectionState extends State<StorageSection> {
       keep: (_auto ?? const CleanupSettings()).keep(target),
     );
     if (keep == null || !mounted) return;
-    final ok = await runAdminJob(
-      context,
-      env.services,
-      title: target == CleanupTarget.system
-          ? 'Clean up the system'
-          : 'Clean up profiles',
-      start: (pin) => _storage.cleanup(target, keep, adminPin: pin),
-    );
-    if (ok && mounted) setState(() => _stale = true);
+    final JobHandle? job;
+    try {
+      job = await withBoxAdminPin(
+        context,
+        env.services.profiles,
+        title: target == CleanupTarget.system
+            ? 'Clean up the system'
+            : 'Clean up profiles',
+        action: (pin) => _storage.cleanup(target, keep, adminPin: pin),
+      );
+    } on SystemException catch (e) {
+      if (mounted) {
+        await showMessage(context, title: "That didn't work", body: e.message);
+      }
+      return;
+    }
+    if (job == null || !mounted) return;
+    // When the clean-up is done, a scan starts at once: the numbers on
+    // the screen are then new, not the ones from before.
+    final scan = Completer<JobHandle?>();
+    final sub = env.services.jobs.watch(job.jobId).listen((s) {
+      if (!s.finished || scan.isCompleted) return;
+      if (!s.ok) return scan.complete(null);
+      _storage.measure().then(
+        scan.complete,
+        onError: (Object _) => scan.complete(null),
+      );
+    }, onError: (Object _) => scan.isCompleted ? null : scan.complete(null));
+    final r = await showJobProgress(context, env.services, job);
+    // Not awaited: a cancel future can finish outside the test zone.
+    unawaited(sub.cancel());
+    if (!(r?.ok ?? false) || !mounted) return;
+    // The page closes only once the job is over: by then the scan was
+    // asked for (or the clean-up failed).
+    final h = scan.isCompleted ? await scan.future : null;
+    if (!mounted) return;
+    if (h == null) {
+      setState(() => _stale = true);
+      return;
+    }
+    final done = await showJobProgress(context, env.services, h);
+    if (!mounted) return;
+    if (done?.ok ?? false) {
+      _stale = false;
+      await _load();
+    } else {
+      setState(() => _stale = true);
+    }
   }
 
   Future<void> _automatic() async {
@@ -377,11 +417,11 @@ class _StorageSectionState extends State<StorageSection> {
     final p = Pane(env.region);
     final m = _m;
     if (m == null) {
-      p.add(const StatusLine('The disk is not measured yet.'));
+      p.add(const StatusLine('Not scanned yet.'));
       p.item(
         'measure',
         onSelect: _measure,
-        builder: (f) => SettingRow(title: 'Measure the disk', focused: f),
+        builder: (f) => SettingRow(title: 'Scan now', focused: f),
         gap: HinterTokens.s3,
       );
     } else {
@@ -390,7 +430,7 @@ class _StorageSectionState extends State<StorageSection> {
       if (_stale) {
         p.add(
           const StatusLine(
-            'These numbers are from before the clean-up. Measure again.',
+            'These numbers are from before the clean-up. Scan now.',
           ),
         );
       }
@@ -398,7 +438,7 @@ class _StorageSectionState extends State<StorageSection> {
         'measure',
         onSelect: _measure,
         builder: (f) => SettingRow(
-          title: 'Measure again',
+          title: 'Scan now',
           focused: f,
           trailing: Text(
             measuredAgo(m.measuredAt, env.now()),
@@ -445,6 +485,7 @@ class _StorageSectionState extends State<StorageSection> {
           angles[i].$1,
           angles[i].$2,
           storageColor(kids[i], i, _who, t, base: l.color),
+          openable: kids[i].canOpen,
         ),
     ];
     final node = sel < 0 ? null : kids[sel];
@@ -484,12 +525,23 @@ class _StorageSectionState extends State<StorageSection> {
       final pct = total <= 0 ? 0 : (n.bytes * 100 / total);
       lines
         ..add(
-          Text(
-            storageName(n, _who),
-            key: const ValueKey('storage-selected-name'),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: t.title,
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  storageName(n, _who),
+                  key: const ValueKey('storage-selected-name'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.title,
+                ),
+              ),
+              // It opens: the same mark as on its segment.
+              if (n.canOpen) ...[
+                const SizedBox(width: HinterTokens.s2),
+                const OpenCue(key: ValueKey('storage-open-cue')),
+              ],
+            ],
           ),
         )
         ..add(
@@ -517,15 +569,6 @@ class _StorageSectionState extends State<StorageSection> {
             style: t.bodyDim,
           ),
         );
-      }
-      final hint = [
-        if (n.canOpen) 'A opens it.',
-        if (_stack.length > 1) 'B goes back.',
-      ].join(' ');
-      if (hint.isNotEmpty) {
-        lines
-          ..add(const SizedBox(height: HinterTokens.s1))
-          ..add(Text(hint, style: t.caption));
       }
     }
     TableRow figure(String label, int bytes) => TableRow(
@@ -559,71 +602,132 @@ class _StorageSectionState extends State<StorageSection> {
 
 // ------------------------------------------------------------------ steppers
 
-/// A number or choice that left and right change: arrows either side,
-/// dimmed at the ends (shape and words, not only colour).
-class StepperMark extends StatelessWidget {
+/// A number or choice that left and right change, with an arrow on each
+/// side that shows it can be pressed: the arrow of the side just pressed
+/// lights up for a moment, an arrow at the end of the range is not drawn.
+class StepperMark extends StatefulWidget {
   const StepperMark({
     super.key,
     required this.label,
     this.canDown = true,
     this.canUp = true,
+    this.pulse = 0,
+    this.pulseSide = 0,
   });
 
   final String label;
   final bool canDown;
   final bool canUp;
 
+  /// Goes up with every press; [pulseSide] says which: -1 left, 1 right.
+  final int pulse;
+  final int pulseSide;
+
+  @override
+  State<StepperMark> createState() => _StepperMarkState();
+}
+
+class _StepperMarkState extends State<StepperMark>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _lit = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 320),
+    value: 1,
+  );
+
+  @override
+  void didUpdateWidget(StepperMark old) {
+    super.didUpdateWidget(old);
+    if (widget.pulse != old.pulse && widget.pulseSide != 0) {
+      _lit.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _lit.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
-    Widget arrow(bool left, bool on) => CustomPaint(
-      size: const Size(20, 28),
-      painter: _ArrowPainter(
-        left,
-        on ? t.text : t.textDim.withValues(alpha: 0.35),
-      ),
+    Widget arrow(bool left, bool on) => AnimatedBuilder(
+      animation: _lit,
+      builder: (_, _) {
+        final side = left ? -1 : 1;
+        final glow = on && widget.pulseSide == side ? 1 - _lit.value : 0.0;
+        return CustomPaint(
+          key: ValueKey(left ? 'stepper-left' : 'stepper-right'),
+          size: const Size(40, 40),
+          painter: _ArrowPainter(
+            left: left,
+            visible: on,
+            color: Color.lerp(t.text, t.onAccent, glow)!,
+            lit: t.accent.withValues(alpha: glow),
+          ),
+        );
+      },
     );
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        arrow(true, canDown),
-        const SizedBox(width: HinterTokens.s2),
+        arrow(true, widget.canDown),
+        const SizedBox(width: HinterTokens.s1),
         ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 48),
-          child: Text(label, textAlign: TextAlign.center, style: t.label),
+          child: Text(
+            widget.label,
+            textAlign: TextAlign.center,
+            style: t.label,
+          ),
         ),
-        const SizedBox(width: HinterTokens.s2),
-        arrow(false, canUp),
+        const SizedBox(width: HinterTokens.s1),
+        arrow(false, widget.canUp),
       ],
     );
   }
 }
 
 class _ArrowPainter extends CustomPainter {
-  _ArrowPainter(this.left, this.color);
+  _ArrowPainter({
+    required this.left,
+    required this.visible,
+    required this.color,
+    required this.lit,
+  });
 
   final bool left;
+  final bool visible;
   final Color color;
+
+  /// The disc behind a just-pressed arrow (transparent when not lit).
+  final Color lit;
 
   @override
   void paint(Canvas canvas, Size s) {
-    final p = Path();
-    if (left) {
-      p
-        ..moveTo(s.width, 0)
-        ..lineTo(0, s.height / 2)
-        ..lineTo(s.width, s.height);
-    } else {
-      p
-        ..moveTo(0, 0)
-        ..lineTo(s.width, s.height / 2)
-        ..lineTo(0, s.height);
-    }
+    if (!visible) return;
+    final c = s.center(Offset.zero);
+    if (lit.a > 0) canvas.drawCircle(c, s.width / 2, Paint()..color = lit);
+    const w = 10.0, h = 14.0;
+    final p = left
+        ? (Path()
+            ..moveTo(c.dx + w / 2, c.dy - h)
+            ..lineTo(c.dx - w / 2 - 2, c.dy)
+            ..lineTo(c.dx + w / 2, c.dy + h))
+        : (Path()
+            ..moveTo(c.dx - w / 2, c.dy - h)
+            ..lineTo(c.dx + w / 2 + 2, c.dy)
+            ..lineTo(c.dx - w / 2, c.dy + h));
     canvas.drawPath(p..close(), Paint()..color = color);
   }
 
   @override
-  bool shouldRepaint(_ArrowPainter o) => o.left != left || o.color != color;
+  bool shouldRepaint(_ArrowPainter o) =>
+      o.left != left ||
+      o.visible != visible ||
+      o.color != color ||
+      o.lit != lit;
 }
 
 /// The warning a keep of 1 needs: no rollback for that part.
@@ -673,6 +777,8 @@ class CleanupDialog extends StatefulWidget {
 
 class _CleanupDialogState extends State<CleanupDialog> {
   late int _keep = widget.keep.clamp(minKeep, maxKeep);
+  int _pulse = 0;
+  int _side = 0;
 
   @override
   void initState() {
@@ -683,8 +789,15 @@ class _CleanupDialogState extends State<CleanupDialog> {
   bool _onMove(NavDir dir) {
     if (widget.modal.region.model.currentRow?.key != 'keep') return false;
     if (dir != NavDir.left && dir != NavDir.right) return false;
-    final k = (_keep + (dir == NavDir.right ? 1 : -1)).clamp(minKeep, maxKeep);
-    if (k != _keep) setState(() => _keep = k);
+    final d = dir == NavDir.right ? 1 : -1;
+    final k = (_keep + d).clamp(minKeep, maxKeep);
+    if (k != _keep) {
+      setState(() {
+        _keep = k;
+        _pulse++;
+        _side = d;
+      });
+    }
     return true;
   }
 
@@ -699,15 +812,7 @@ class _CleanupDialogState extends State<CleanupDialog> {
     return DialogCard(
       title: system ? 'Clean up the system' : 'Clean up profiles',
       children: [
-        Text(
-          system
-              ? 'Removes old versions of HinterOS and the files that nothing '
-                    'uses.'
-              : 'Removes old versions of the apps of every profile and the '
-                    'files that nothing uses.',
-          style: t.bodyDim,
-        ),
-        const SizedBox(height: HinterTokens.s3),
+        const SizedBox(height: HinterTokens.s2),
         NavFocusable(
           region: region,
           rowKey: 'keep',
@@ -715,11 +820,12 @@ class _CleanupDialogState extends State<CleanupDialog> {
           scrollIntoView: false,
           builder: (_, f) => SettingRow(
             title: 'Versions to keep',
-            subtitle: 'Left and right change it.',
             focused: f,
             trailing: StepperMark(
               key: const ValueKey('keep-value'),
               label: '$_keep',
+              pulse: _pulse,
+              pulseSide: _side,
               canDown: _keep > minKeep,
               canUp: _keep < maxKeep,
             ),
@@ -728,7 +834,7 @@ class _CleanupDialogState extends State<CleanupDialog> {
         const SizedBox(height: HinterTokens.s3),
         Text(
           e == null
-              ? 'Measure the disk to see what this frees.'
+              ? 'Scan the disk to see what this frees.'
               : 'Frees about ${storageSize(e.bytes)}. '
                     'Removes ${e.generations} '
                     '${e.generations == 1 ? 'version' : 'versions'}.',
@@ -793,6 +899,9 @@ class AutomaticCleanupDialog extends StatefulWidget {
 class _AutomaticCleanupState extends State<AutomaticCleanupDialog> {
   late CleanupSettings _s = widget.initial;
 
+  /// Presses per row and the side of the last one (the arrow lights up).
+  final _pulse = <String, (int, int)>{};
+
   @override
   void initState() {
     super.initState();
@@ -805,6 +914,7 @@ class _AutomaticCleanupState extends State<AutomaticCleanupDialog> {
     int keep(int v) => (v + d).clamp(minKeep, maxKeep);
     final f = CleanupFrequency.values;
     setState(() {
+      final before = _s;
       _s = switch (row) {
         'enable' => _s.copyWith(enable: d > 0),
         'frequency' => _s.copyWith(
@@ -814,6 +924,9 @@ class _AutomaticCleanupState extends State<AutomaticCleanupDialog> {
         'keep_profiles' => _s.copyWith(keepProfiles: keep(_s.keepProfiles)),
         _ => _s,
       };
+      if (_s != before && row != null) {
+        _pulse[row] = ((_pulse[row]?.$1 ?? 0) + 1, d);
+      }
     });
   }
 
@@ -874,6 +987,8 @@ class _AutomaticCleanupState extends State<AutomaticCleanupDialog> {
           'How often',
           StepperMark(
             key: const ValueKey('auto-frequency'),
+            pulse: _pulse['frequency']?.$1 ?? 0,
+            pulseSide: _pulse['frequency']?.$2 ?? 0,
             label: s.frequency.label,
             canDown: s.frequency.index > 0,
             canUp: s.frequency.index < f.length - 1,
@@ -884,6 +999,8 @@ class _AutomaticCleanupState extends State<AutomaticCleanupDialog> {
           'System versions to keep',
           StepperMark(
             key: const ValueKey('auto-keep-system'),
+            pulse: _pulse['keep_system']?.$1 ?? 0,
+            pulseSide: _pulse['keep_system']?.$2 ?? 0,
             label: '${s.keepSystem}',
             canDown: s.keepSystem > minKeep,
             canUp: s.keepSystem < maxKeep,
@@ -894,6 +1011,8 @@ class _AutomaticCleanupState extends State<AutomaticCleanupDialog> {
           'App versions to keep',
           StepperMark(
             key: const ValueKey('auto-keep-profiles'),
+            pulse: _pulse['keep_profiles']?.$1 ?? 0,
+            pulseSide: _pulse['keep_profiles']?.$2 ?? 0,
             label: '${s.keepProfiles}',
             canDown: s.keepProfiles > minKeep,
             canUp: s.keepProfiles < maxKeep,

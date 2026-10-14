@@ -117,8 +117,8 @@ enum JobKind {
   starterSet('Saving the starter apps'),
   guestEnd('Ending the guest session'),
 
-  /// 0.14: measuring what uses the disk (Settings -> Storage).
-  storageMeasure('Measuring the disk'),
+  /// 0.14: scanning what uses the disk (Settings -> Storage).
+  storageMeasure('Scanning the disk'),
 
   /// 0.14: old system generations removed, then unused files deleted.
   cleanupSystem('Cleaning up the system'),
@@ -216,8 +216,8 @@ enum JobStage {
   /// (32-bit graphics for Steam).
   box('Preparing the box'),
 
-  /// 0.14: measuring the disk (with a percentage).
-  measuring('Measuring'),
+  /// 0.14: scanning the disk (with a percentage).
+  measuring('Scanning'),
   evaluating('Evaluating changes'),
   downloading('Downloading'),
   building('Building'),

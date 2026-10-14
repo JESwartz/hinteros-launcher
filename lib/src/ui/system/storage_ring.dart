@@ -8,11 +8,19 @@ import '../../theme/hinter_theme.dart';
 /// One segment of the ring as drawn: where it starts and how far it goes
 /// (radians, clockwise from the top), and its colour.
 class RingSegment {
-  const RingSegment(this.start, this.sweep, this.color);
+  const RingSegment(
+    this.start,
+    this.sweep,
+    this.color, {
+    this.openable = false,
+  });
 
   final double start;
   final double sweep;
   final Color color;
+
+  /// A opens it: it carries a chevron.
+  final bool openable;
 
   double get mid => start + sweep / 2;
 }
@@ -196,6 +204,29 @@ class RingPainter extends CustomPainter {
       ..close();
   }
 
+  /// A segment that opens: an upright chevron in it (the mark beside the
+  /// selected name), where the segment is wide enough to hold it.
+  void _cue(Canvas canvas, Offset c, RingSegment s, double r) {
+    if (!s.openable || s.sweep * r < 40) return;
+    const h = 9.0;
+    final m = c + Offset(math.cos(s.mid), math.sin(s.mid)) * r;
+    final ink = s.color.computeLuminance() > 0.35
+        ? const Color(0xFF101418)
+        : const Color(0xFFFFFFFF);
+    canvas.drawPath(
+      Path()
+        ..moveTo(m.dx - h * 0.45, m.dy - h)
+        ..lineTo(m.dx + h * 0.55, m.dy)
+        ..lineTo(m.dx - h * 0.45, m.dy + h),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..color = dim ? ink.withValues(alpha: 0.4) : ink,
+    );
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final c = size.center(Offset.zero);
@@ -218,6 +249,7 @@ class RingPainter extends CustomPainter {
         Paint()..color = dim ? s.color.withValues(alpha: 0.4) : s.color,
       );
       canvas.drawPath(p, sep);
+      _cue(canvas, c, s, (r0 + r1) / 2);
     }
     if (selected < 0 || selected >= segments.length) return;
     final s = segments[selected];
@@ -225,6 +257,7 @@ class RingPainter extends CustomPainter {
     final p = _arc(c, r0, rSel, s.start, s.sweep);
     canvas.drawPath(p, Paint()..color = s.color);
     canvas.drawPath(p, sep);
+    _cue(canvas, c, s, (r0 + rSel) / 2);
     if (!focused) {
       // Without focus: a thin outline on the raised shape.
       canvas.drawPath(
@@ -300,4 +333,57 @@ class RingPainter extends CustomPainter {
       o.focusRing != focusRing ||
       o.dim != dim ||
       o.highContrast != highContrast;
+}
+
+/// "This opens": a chevron in a ring, beside the selected segment's name
+/// (the same mark its segment carries).
+class OpenCue extends StatelessWidget {
+  const OpenCue({super.key, this.size = 40});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HinterTheme.of(context);
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _CuePainter(t.accent, t.text),
+    );
+  }
+}
+
+class _CuePainter extends CustomPainter {
+  _CuePainter(this.ring, this.ink);
+
+  final Color ring;
+  final Color ink;
+
+  @override
+  void paint(Canvas canvas, Size s) {
+    final c = s.center(Offset.zero);
+    canvas.drawCircle(
+      c,
+      s.width / 2 - 2,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..color = ring,
+    );
+    final h = s.width * 0.18;
+    canvas.drawPath(
+      Path()
+        ..moveTo(c.dx - h * 0.5, c.dy - h)
+        ..lineTo(c.dx + h * 0.6, c.dy)
+        ..lineTo(c.dx - h * 0.5, c.dy + h),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..color = ink,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CuePainter o) => o.ring != ring || o.ink != ink;
 }
