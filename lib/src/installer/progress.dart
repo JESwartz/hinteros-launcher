@@ -2,7 +2,7 @@
 /// `{stage, percent, level, message, code?}` plus, all optional: `phase`
 /// (`system`|`apps`), `step_percent` (0..100 of the current stage or app
 /// alone; absent = unmeasurable), `app`, `app_index`, `app_total`, `build`,
-/// `build_index`, `build_total`; and what its exit status means
+/// `build_index`, `build_total`, `build_percent`; and what its exit status means
 /// (0 done, 2 refused before anything was touched, 1 failed part-way).
 library;
 
@@ -36,6 +36,7 @@ class InstallEvent {
     this.build,
     this.buildIndex,
     this.buildTotal,
+    this.buildPercent,
   });
 
   final String stage;
@@ -74,6 +75,11 @@ class InstallEvent {
   final String? build;
   final int? buildIndex;
   final int? buildTotal;
+
+  /// With [build]: how far that package alone is, 0..99, from its build
+  /// phase; null when the backend cannot tell (no phase yet, or a builder
+  /// without phases).
+  final int? buildPercent;
 
   bool get isError => level == InstallLevel.error;
   bool get isWarning => level == InstallLevel.warn;
@@ -117,6 +123,7 @@ InstallEvent? parseProgressLine(String line) {
   final build = j['build'];
   final bi = whole(j['build_index']);
   final bt = whole(j['build_total']);
+  final bp = whole(j['build_percent']);
   return InstallEvent(
     phase: j['phase'] == 'apps' ? InstallSection.apps : InstallSection.system,
     app: app is String && app.isNotEmpty ? app : null,
@@ -129,6 +136,7 @@ InstallEvent? parseProgressLine(String line) {
     build: build is String && build.isNotEmpty ? build : null,
     buildIndex: bi != null && bi > 0 ? bi : null,
     buildTotal: bt != null && bt > 0 ? bt : null,
+    buildPercent: build is String && build.isNotEmpty ? bp?.clamp(0, 99) : null,
     stage: stage,
     percent: percent,
     level: level,

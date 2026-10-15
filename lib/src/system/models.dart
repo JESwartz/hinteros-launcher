@@ -321,6 +321,7 @@ class BuildProgress {
     this.name,
     this.version,
     this.phase,
+    this.percent,
   });
 
   /// Derivations built so far.
@@ -337,6 +338,10 @@ class BuildProgress {
   final String? name;
   final String? version;
   final String? phase;
+
+  /// How far that one is, 0..99, from its build phase (session API 0.18);
+  /// null when nix gives none (no phase yet, or a builder without phases).
+  final int? percent;
 
   /// The one that builds now as "n of m": done + 1, never above the total.
   int? get current {
