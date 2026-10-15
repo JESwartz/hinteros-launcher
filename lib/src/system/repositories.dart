@@ -55,6 +55,14 @@ abstract class SystemRepository {
   /// [SystemErrorKind.unavailable] without logind.
   Future<Set<PowerAction>> powerAllowed();
 
+  /// `apps.displays.get` (0.18): how many apps can run at once, for this
+  /// profile.
+  Future<AppDisplaySetting> appDisplays();
+
+  /// `apps.displays.set {count}`: saved for the next session start (see
+  /// [AppDisplaySetting.restartNeeded]).
+  Future<AppDisplaySetting> setAppDisplays(int count);
+
   Future<SshState> ssh();
 
   /// Turns SSH on or off (`ssh.set`). SSH is plain username and password:

@@ -651,6 +651,42 @@ class Generation {
 
 // ---------------------------------------------------------------- system
 
+/// How many apps can run at once (session API 0.18 `apps.displays.*`): each
+/// app gets an X display of its own, and the compositor makes them when the
+/// session starts.
+@immutable
+class AppDisplaySetting {
+  const AppDisplaySetting({
+    required this.count,
+    required this.active,
+    this.min = 1,
+    this.max = 8,
+  });
+
+  /// The setting: what the next session starts with.
+  final int count;
+
+  /// What this session has; null when apps do not get displays of their own
+  /// (then nothing limits them and the setting does nothing yet).
+  final int? active;
+  final int min;
+  final int max;
+
+  /// The setting differs from this session: it applies after a restart.
+  bool get restartNeeded => active != null && active != count;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppDisplaySetting &&
+      other.count == count &&
+      other.active == active &&
+      other.min == min &&
+      other.max == max;
+
+  @override
+  int get hashCode => Object.hash(count, active, min, max);
+}
+
 enum PowerAction {
   sleep('Sleep'),
   restart('Restart'),

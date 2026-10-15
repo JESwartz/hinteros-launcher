@@ -33,6 +33,10 @@ class _UnavailableSystem implements SystemRepository {
   @override
   Future<Set<PowerAction>> powerAllowed() => Future.error(_gone);
   @override
+  Future<AppDisplaySetting> appDisplays() => Future.error(_gone);
+  @override
+  Future<AppDisplaySetting> setAppDisplays(int count) => Future.error(_gone);
+  @override
   Future<SshState> ssh() => Future.error(_gone);
   @override
   Future<JobHandle?> applySettings() => Future.error(_gone);

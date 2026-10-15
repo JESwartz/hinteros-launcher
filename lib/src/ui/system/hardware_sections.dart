@@ -644,3 +644,107 @@ class PowerSection extends StatelessWidget {
     );
   }
 }
+
+// ------------------------------------------------------------------ apps open at once
+
+/// How many apps can run at once (session API 0.18 `apps.displays.*`), for
+/// this profile. The session makes one display per app when it starts, so a
+/// change applies after a session restart, which the section offers.
+class AppDisplaysSection extends StatelessWidget {
+  const AppDisplaysSection(this.env, {super.key});
+
+  final SectionEnv env;
+
+  static String _label(int n) => n == 1 ? '1 app' : '$n apps';
+
+  @override
+  Widget build(BuildContext context) {
+    final sys = env.services.system;
+    return Loaded<AppDisplaySetting>(
+      region: env.region,
+      load: sys.appDisplays,
+      builder: (context, s, reload) {
+        final t = HinterTheme.of(context);
+        final p = Pane(env.region);
+        if (s.active == null) {
+          p.add(const StatusLine('Not available on this box.'));
+          return p.build();
+        }
+        p.row(
+          'count',
+          1,
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: DropDown<int>(
+              region: env.region,
+              rowKey: 'count',
+              listKey: const ValueKey('app-displays-list'),
+              field: Text(_label(s.count), style: t.label),
+              groups: () => [
+                DropDownGroup(null, [
+                  for (var n = s.min; n <= s.max; n++)
+                    DropDownChoice(
+                      value: n,
+                      current: n == s.count,
+                      build: (_) => Text(_label(n), style: t.label),
+                    ),
+                ]),
+              ],
+              onChoose: (n) => unawaited(_set(context, n, reload)),
+            ),
+          ),
+        );
+        if (s.restartNeeded) {
+          p.add(
+            const StatusLine('Restart the session to apply this.'),
+            gap: HinterTokens.s2,
+          );
+          p.buttons('restart', [
+            btn('Restart session', () => unawaited(_restart(context))),
+          ]);
+        }
+        return p.build();
+      },
+    );
+  }
+
+  Future<void> _set(
+    BuildContext context,
+    int count,
+    Future<void> Function() reload,
+  ) async {
+    final AppDisplaySetting s;
+    try {
+      s = await env.services.system.setAppDisplays(count);
+    } on SystemException catch (e) {
+      if (context.mounted) {
+        await showMessage(context, title: refusalTitle(e), body: e.message);
+      }
+      return;
+    }
+    await reload();
+    if (!s.restartNeeded || !context.mounted) return;
+    final r = await showConfirm(
+      context,
+      title: 'Restart the session now?',
+      body: 'All running apps close.',
+      confirmLabel: 'Restart',
+      cancelLabel: 'Later',
+    );
+    if (r != null && context.mounted) await _restart(context);
+  }
+
+  Future<void> _restart(BuildContext context) async {
+    try {
+      await endSessionWith(
+        context,
+        const SessionEnding(title: 'Restarting the session…'),
+        env.services.system.restartSession,
+      );
+    } on SystemException catch (e) {
+      if (context.mounted) {
+        await showMessage(context, title: refusalTitle(e), body: e.message);
+      }
+    }
+  }
+}

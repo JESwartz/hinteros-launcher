@@ -37,7 +37,8 @@ void main() {
   /// least two zones; all of the map is on the screen, over the field.
   void expectListUnderField(WidgetTester t, {double textScale = 1}) {
     final map = t.getRect(find.byKey(const ValueKey('time-zone-map')));
-    final field = t.getRect(find.byType(DropDownField));
+    // The first drop-down of the System group (Apps open at once has one too).
+    final field = t.getRect(find.byType(DropDownField).first);
     // The list's box (the follower moves it; its own rect does not).
     final list = t.getRect(
       find

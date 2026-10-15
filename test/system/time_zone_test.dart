@@ -258,7 +258,8 @@ void main() {
       await harness(zone: 'Asia/Kolkata').pump(t);
       await enterSettingsEntry(t, 'time');
       final map = t.getRect(find.byKey(const ValueKey('time-zone-map')));
-      final field = t.getRect(find.byType(DropDownField));
+      // The first drop-down of the System group (Apps open at once has one too).
+      final field = t.getRect(find.byType(DropDownField).first);
       expect(map.bottom, lessThanOrEqualTo(field.top));
       expect(focusLabel(), 'settings-detail/zone:0');
     });

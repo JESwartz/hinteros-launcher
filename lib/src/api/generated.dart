@@ -17,6 +17,8 @@ const apiMethodNames = <String>[
   'unsubscribe',
   'apps.list',
   'apps.set_permission',
+  'apps.displays.get',
+  'apps.displays.set',
   'games.list',
   'steam.attention',
   'steam.focus',
@@ -174,6 +176,7 @@ const apiErrorCodesByName = <String, int>{
   'unknown_app': 2006,
   'unknown_permission': 2007,
   'permission_required': 2008,
+  'no_app_display': 2009,
   'permission_denied': 3002,
   'job_failed': 3003,
   'insufficient_resources': 3004,
@@ -246,6 +249,9 @@ abstract final class ApiErrorCode {
 
   /// apps.set_permission: a required permission cannot be denied.
   static const permissionRequired = 2008;
+
+  /// apps.launch: every app display is in use (apps.displays.get). apps: the running apps that hold one; closing one frees it once it has exited (app_exited).
+  static const noAppDisplay = 2009;
 
   /// Not allowed: the caller does not own seat0's active session (seat), polkit said no (polkit), or the peer cannot be identified safely (peer: no SO_PEERPIDFD, or the process is gone).
   static const permissionDenied = 3002;
@@ -749,6 +755,49 @@ class App {
 
   @override
   String toString() => 'App(${jsonEncode(toJson())})';
+}
+
+/// 0.18: how many apps can run at once (apps.displays.get).
+class AppDisplays {
+  const AppDisplays({
+    required this.count,
+    required this.active,
+    required this.min,
+    required this.max,
+  });
+
+  /// The setting: what the next session starts with.
+  final int count;
+
+  /// What this session has; null: apps do not get displays of their own.
+  final int? active;
+  final int min;
+  final int max;
+
+  factory AppDisplays.fromJson(Map<String, dynamic> json) => AppDisplays(
+    count: json['count'] as int,
+    active: json['active'] == null ? null : json['active'] as int,
+    min: json['min'] as int,
+    max: json['max'] as int,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'count': count,
+    'active': active,
+    'min': min,
+    'max': max,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppDisplays &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppDisplays(${jsonEncode(toJson())})';
 }
 
 /// A game's install state, from its manifest's StateFlags: 'installed' (ready), 'update_required' (installed; Steam updates it before it starts, launching works), 'updating' (installed; an update is downloading or being applied), 'installing' (not fully installed yet: first download in progress or paused), 'uninstalling'. Clients must treat unknown values like 'updating' (installed, but maybe not launchable right now).
@@ -4000,6 +4049,136 @@ class AppsSetPermissionResult {
 
   @override
   String toString() => 'AppsSetPermissionResult(${jsonEncode(toJson())})';
+}
+
+class AppsDisplaysGetParams {
+  const AppsDisplaysGetParams();
+
+  factory AppsDisplaysGetParams.fromJson(Map<String, dynamic> json) =>
+      AppsDisplaysGetParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppsDisplaysGetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppsDisplaysGetParams(${jsonEncode(toJson())})';
+}
+
+/// 0.18: how many apps can run at once (apps.displays.get).
+class AppsDisplaysGetResult {
+  const AppsDisplaysGetResult({
+    required this.count,
+    required this.active,
+    required this.min,
+    required this.max,
+  });
+
+  /// The setting: what the next session starts with.
+  final int count;
+
+  /// What this session has; null: apps do not get displays of their own.
+  final int? active;
+  final int min;
+  final int max;
+
+  factory AppsDisplaysGetResult.fromJson(Map<String, dynamic> json) =>
+      AppsDisplaysGetResult(
+        count: json['count'] as int,
+        active: json['active'] == null ? null : json['active'] as int,
+        min: json['min'] as int,
+        max: json['max'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'count': count,
+    'active': active,
+    'min': min,
+    'max': max,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppsDisplaysGetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppsDisplaysGetResult(${jsonEncode(toJson())})';
+}
+
+class AppsDisplaysSetParams {
+  const AppsDisplaysSetParams({required this.count});
+
+  final int count;
+
+  factory AppsDisplaysSetParams.fromJson(Map<String, dynamic> json) =>
+      AppsDisplaysSetParams(count: json['count'] as int);
+
+  Map<String, dynamic> toJson() => {'count': count};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppsDisplaysSetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppsDisplaysSetParams(${jsonEncode(toJson())})';
+}
+
+/// 0.18: how many apps can run at once (apps.displays.get).
+class AppsDisplaysSetResult {
+  const AppsDisplaysSetResult({
+    required this.count,
+    required this.active,
+    required this.min,
+    required this.max,
+  });
+
+  /// The setting: what the next session starts with.
+  final int count;
+
+  /// What this session has; null: apps do not get displays of their own.
+  final int? active;
+  final int min;
+  final int max;
+
+  factory AppsDisplaysSetResult.fromJson(Map<String, dynamic> json) =>
+      AppsDisplaysSetResult(
+        count: json['count'] as int,
+        active: json['active'] == null ? null : json['active'] as int,
+        min: json['min'] as int,
+        max: json['max'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'count': count,
+    'active': active,
+    'min': min,
+    'max': max,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppsDisplaysSetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppsDisplaysSetResult(${jsonEncode(toJson())})';
 }
 
 class GamesListParams {
@@ -11720,6 +11899,34 @@ class VersionMismatchData {
   String toString() => 'VersionMismatchData(${jsonEncode(toJson())})';
 }
 
+class NoAppDisplayData {
+  const NoAppDisplayData({required this.apps});
+
+  final List<RunningApp> apps;
+
+  factory NoAppDisplayData.fromJson(Map<String, dynamic> json) =>
+      NoAppDisplayData(
+        apps: (json['apps'] as List)
+            .map((x) => RunningApp.fromJson((x as Map).cast<String, dynamic>()))
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'apps': apps.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is NoAppDisplayData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'NoAppDisplayData(${jsonEncode(toJson())})';
+}
+
 enum PermissionDeniedDataReason {
   seat('seat'),
   polkit('polkit'),
@@ -12356,6 +12563,24 @@ mixin SessionApiMethods {
     await rpc('apps.set_permission', params.toJson()),
   );
 
+  /// 0.18: how many apps can run at once. Each app the daemon starts gets an X display of its own, from a fixed set.
+  ///
+  /// count: the setting, which the next session starts with (kept per profile in $XDG_STATE_HOME/hinteros/app-displays; default 4). active: the number this session started with (gamescope makes its Xwaylands at start only), null when apps do not get displays of their own (no gamescope; then nothing limits them). Steam and its games never use one. A display is free again once every process of its app has ended. apps.launch answers no_app_display while all are in use.
+  Future<AppsDisplaysGetResult> appsDisplaysGet([
+    AppsDisplaysGetParams params = const AppsDisplaysGetParams(),
+  ]) async => AppsDisplaysGetResult.fromJson(
+    await rpc('apps.displays.get', params.toJson()),
+  );
+
+  /// 0.18: set how many apps can run at once. Applies at the next session start (session.restart).
+  ///
+  /// Saves count for this profile and answers with apps.displays.get's result: active stays what this session started with, so count != active means a session restart is needed. invalid_params for a count outside min..max.
+  Future<AppsDisplaysSetResult> appsDisplaysSet(
+    AppsDisplaysSetParams params,
+  ) async => AppsDisplaysSetResult.fromJson(
+    await rpc('apps.displays.set', params.toJson()),
+  );
+
   /// Installed Steam games of the session user, read from Steam's library on disk.
   ///
   /// Read from the Steam directory (~/.local/share/Steam, else ~/.steam/steam; configurable): every library in steamapps/libraryfolders.vdf and its steamapps/appmanifest_&lt;appid&gt;.acf files. Steam tools (Proton, Steam Linux Runtime, Steamworks Common Redistributables, ...) are left out. Empty when Steam is not installed. Sorted by name. Launch a game with apps.launch {url: 'steam://rungameid/&lt;appid&gt;'}. games_changed says when to query again.
@@ -12383,7 +12608,7 @@ mixin SessionApiMethods {
 
   /// Start an app and give it focus. Returns once it is spawned, before it shows a window.
   ///
-  /// Exactly one of: 'id' (an app from apps.list), 'command' (argv, run as the session user), or 'url' (a Steam game, handed to the running Steam client; use it for games.list entries). If the app is already running it is focused instead and the result describes the running instance. Its windows are shown as soon as they appear; until then the launcher stays visible. Progress is reported through app_started, focus_changed and app_exited. The built-in id 'steam' opens Steam's Big Picture mode (steam://open/bigpicture, or 'steam -gamepadui' when Steam is not running) and shows Steam's own windows; it runs as the app 'steam' with source 'steam_client'. A Steam game's name comes from its Steam library manifest when it is installed.
+  /// Exactly one of: 'id' (an app from apps.list), 'command' (argv, run as the session user), or 'url' (a Steam game, handed to the running Steam client; use it for games.list entries). If the app is already running it is focused instead and the result describes the running instance. Its windows are shown as soon as they appear; until then the launcher stays visible. Progress is reported through app_started, focus_changed and app_exited. The built-in id 'steam' opens Steam's Big Picture mode (steam://open/bigpicture, or 'steam -gamepadui' when Steam is not running) and shows Steam's own windows; it runs as the app 'steam' with source 'steam_client'. A Steam game's name comes from its Steam library manifest when it is installed. 0.18: an app the daemon starts itself (from apps.list, or a command) gets an X display of its own (apps.displays.get); while all are in use it is not started: no_app_display names the running apps that hold one (close one with apps.close, wait for its app_exited, then launch again).
   Future<AppsLaunchResult> appsLaunch([
     AppsLaunchParams params = const AppsLaunchParams(),
   ]) async =>
