@@ -1175,7 +1175,12 @@ class MockSystemRelay {
           percent: built * 100 ~/ mockBuilds.length,
           buildsDone: built,
           buildsTotal: mockBuilds.length,
-          building: Building(name: name, version: version, phase: 'build'),
+          building: Building(
+            name: name,
+            version: version,
+            phase: 'build',
+            percent: 20,
+          ),
         );
         built++;
         j.timer = Timer(stepDelay!, step);

@@ -195,6 +195,7 @@ BuildProgress? _build(api.ProgressDetail? d) {
     name: _oneLine(b?.name),
     version: _oneLine(b?.version),
     phase: _oneLine(b?.phase),
+    percent: b?.percent?.clamp(0, 99),
   );
 }
 

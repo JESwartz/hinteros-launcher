@@ -156,12 +156,14 @@ String? buildCount(BuildProgress? b) {
   return n == null ? null : '$n of ${b!.total}';
 }
 
-/// What builds now, in small text: "hinteros-daemon 0.7.1, compiling".
+/// What builds now, in small text: "hinteros-daemon 0.7.1: 20%, compiling"
+/// (the percent of that one alone, when nix gives it).
 String? buildName(BuildProgress? b) {
   if (b == null || b.name == null) return null;
   final more = (b.running ?? 1) - 1;
   return [
     b.version == null ? b.name! : '${b.name} ${b.version}',
+    if (b.percent != null) ': ${b.percent}%',
     if (b.phase != null) ', ${phaseText(b.phase!)}',
     if (more > 0) ' (and $more more)',
   ].join();

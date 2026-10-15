@@ -752,6 +752,9 @@ class InstallerFlow extends ChangeNotifier {
   int? buildIndex;
   int? buildTotal;
 
+  /// How far [buildName] alone is (0..99), when the backend says.
+  int? buildPercent;
+
   /// When [buildName] was first seen.
   DateTime? buildSince;
 
@@ -763,11 +766,12 @@ class InstallerFlow extends ChangeNotifier {
     buildName = name;
     buildIndex = name == null ? null : e.buildIndex;
     buildTotal = name == null ? null : e.buildTotal;
+    buildPercent = name == null ? null : e.buildPercent;
   }
 
-  /// "Building hinteros-launcher (3 of 12). Time elapsed: 06:12": the package
-  /// being built and the time since it started (mm:ss); null when nothing is
-  /// building.
+  /// "Building hinteros-launcher (3 of 12): 20%. Time elapsed: 06:12": the
+  /// package being built, how far it is (when known) and the time since it
+  /// started (mm:ss); null when nothing is building.
   String? get buildLine {
     final name = buildName;
     if (name == null) return null;
@@ -776,7 +780,10 @@ class InstallerFlow extends ChangeNotifier {
     final i = buildIndex;
     final n = buildTotal;
     final count = i != null && n != null ? ' ($i of $n)' : '';
-    return 'Building $name$count. Time elapsed: ${elapsedText(elapsed)}';
+    final p = buildPercent;
+    final percent = p == null ? '' : ': $p%';
+    return 'Building $name$count$percent. '
+        'Time elapsed: ${elapsedText(elapsed)}';
   }
 
   /// Names of the apps that could not be installed.
@@ -866,6 +873,7 @@ class InstallerFlow extends ChangeNotifier {
     buildName = null;
     buildIndex = null;
     buildTotal = null;
+    buildPercent = null;
     buildSince = null;
     phase = InstallPhase.validating;
     notifyListeners();

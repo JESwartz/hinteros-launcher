@@ -432,27 +432,44 @@ void main() {
       find.textContaining('Step 7 of 10 · Building HinterOS'),
       findsOneWidget,
     );
-    expect(line(), 'Building hinteros-daemon (1 of 12). Time elapsed: 00:00');
+    expect(
+      line(),
+      'Building hinteros-daemon (1 of 12). Time elapsed: 00:00',
+      reason: 'no percent from the backend yet',
+    );
     // The same package again: its start time stays.
     now = now.add(const Duration(minutes: 2));
     for (var i = 0; i < 60 && h.flow.percent < 50; i++) {
       await t.pump(const Duration(seconds: 1));
     }
     expect(h.flow.buildName, 'hinteros-daemon');
-    expect(line(), 'Building hinteros-daemon (1 of 12). Time elapsed: 02:00');
+    // Its percent (from its build phase) when the backend gives one.
+    expect(
+      line(),
+      'Building hinteros-daemon (1 of 12): 20%. Time elapsed: 02:00',
+    );
 
     // The next package starts its own count.
     for (var i = 0; i < 60 && h.flow.buildIndex == 1; i++) {
       await t.pump(const Duration(seconds: 1));
     }
-    expect(line(), 'Building hinteros-launcher (3 of 12). Time elapsed: 00:00');
+    expect(
+      line(),
+      'Building hinteros-launcher (3 of 12): 88%. Time elapsed: 00:00',
+    );
     // Minutes and seconds, from the first second; the line counts up by itself.
     now = now.add(const Duration(seconds: 50));
     await t.pump(const Duration(seconds: 1));
-    expect(line(), 'Building hinteros-launcher (3 of 12). Time elapsed: 00:50');
+    expect(
+      line(),
+      'Building hinteros-launcher (3 of 12): 88%. Time elapsed: 00:50',
+    );
     now = now.add(const Duration(minutes: 6));
     await t.pump(const Duration(seconds: 1));
-    expect(line(), 'Building hinteros-launcher (3 of 12). Time elapsed: 06:50');
+    expect(
+      line(),
+      'Building hinteros-launcher (3 of 12): 88%. Time elapsed: 06:50',
+    );
 
     // Nothing is building: the backend's words again.
     for (var i = 0; i < 60 && h.flow.buildName != null; i++) {

@@ -59,6 +59,9 @@ const mockBuildScript = <(String, String?)>[
 /// Nix's phases, in order, as a scripted build goes through them.
 const _phases = ['unpack', 'configure', 'build', 'install'];
 
+/// What the daemon gives for [_phases] (the build's own percent).
+const _phasePercents = [0, 10, 20, 88];
+
 /// Jobs the way the privileged service reports them: one mutating job at a
 /// time, stages, progress, cancel until activation.
 class MockJobs implements JobsRepository {
@@ -208,6 +211,7 @@ class MockJobs implements JobsRepository {
             name: name,
             version: version,
             phase: _phases[phase],
+            percent: _phasePercents[phase],
           ),
         );
         if (++phase == _phases.length) {

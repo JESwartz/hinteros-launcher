@@ -276,6 +276,7 @@ void main() {
           name: 'hinteros-daemon',
           version: '0.7.1',
           phase: 'build',
+          percent: 20,
         ),
       );
       await t.pumpAndSettle();

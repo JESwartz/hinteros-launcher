@@ -181,7 +181,8 @@ API 0.15 (`job_started` / `job_progress` / `job_finished` with `subject`, `start
   deleted too.").
 - **Never stalled**: next to the stages, the stage now with its count large ("Building 3 of 12",
   `builds_done + 1` capped at `builds_total`) or its percentage ("Downloading 40%"), what builds in
-  small text ("hinteros-daemon 0.7.1, compiling"; the bytes while downloading), a bar (filled to
+  small text ("hinteros-daemon 0.7.1: 20%, compiling", the percent of that build alone from its
+  phase when the daemon gives `building.percent`, session API 0.18; the bytes while downloading), a bar (filled to
   the percentage with a light band that moves, or a block that moves from end to end without
   one), the percentage in all while building, and the time it has taken ("Time elapsed: 12:05", mm:ss, h:mm:ss after an hour; no estimate
   of the time left). The bar moves once a second (a 0.7 s move, still with reduced motion). The

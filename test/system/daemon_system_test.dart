@@ -406,6 +406,7 @@ void main() {
           name: 'hinteros-daemon',
           version: '0.7.1',
           phase: 'build',
+          percent: 20,
         ),
       );
       await pumpEventQueue();
@@ -421,6 +422,8 @@ void main() {
       expect(b.build!.name, 'hinteros-daemon');
       expect(b.build!.version, '0.7.1');
       expect(b.build!.phase, 'build');
+      // Session API 0.18: that build's own percent.
+      expect(b.build!.percent, 20);
       expect(b.startedAt, isNotNull);
       expect(b.lastActivityAt, isNotNull);
       // Named like the update screens name it.

@@ -31,15 +31,20 @@ Future<void> toUpdateNow(WidgetTester t, Harness h) async {
   await enterPin(t, '2468'); // the admin PIN
 }
 
-BuildProgress build(int done, {int total = 12, String? phase = 'build'}) =>
-    BuildProgress(
-      done: done,
-      total: total,
-      running: 1,
-      name: 'hinteros-daemon',
-      version: '0.7.1',
-      phase: phase,
-    );
+BuildProgress build(
+  int done, {
+  int total = 12,
+  String? phase = 'build',
+  int? percent,
+}) => BuildProgress(
+  done: done,
+  total: total,
+  running: 1,
+  name: 'hinteros-daemon',
+  version: '0.7.1',
+  phase: phase,
+  percent: percent,
+);
 
 Alignment barAlignment(WidgetTester t) => t
     .widget<AnimatedAlign>(
@@ -109,6 +114,19 @@ void main() {
       expect(find.text('4 of 12'), findsOneWidget);
       expect(find.text('hinteros-daemon 0.7.1, installing'), findsOneWidget);
       expect(find.textContaining('Time elapsed: 12:0'), findsOneWidget);
+      // Session API 0.18: the build's own percent from its phase.
+      h.services.mockJobs.progress(
+        job.jobId,
+        JobStage.building,
+        percent: 32,
+        build: build(3, phase: 'install', percent: 88),
+      );
+      await t.pumpAndSettle();
+      expect(
+        find.text('hinteros-daemon 0.7.1: 88%, installing'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('32% in all'), findsOneWidget);
       // No estimate of the time left.
       expect(find.textContaining('left'), findsNothing);
     });
@@ -339,6 +357,14 @@ void main() {
           const BuildProgress(name: 'mesa', version: '25.2.3', running: 3),
         ),
         'mesa 25.2.3 (and 2 more)',
+      );
+      expect(
+        buildName(build(2, percent: 20)),
+        'hinteros-daemon 0.7.1: 20%, compiling',
+      );
+      expect(
+        buildName(const BuildProgress(name: 'etc', percent: 0)),
+        'etc: 0%',
       );
     });
   });

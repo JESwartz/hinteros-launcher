@@ -2684,22 +2684,27 @@ class CleanedResult {
 
 /// 0.7: the most recently started derivation that is still building. name and version from the .drv name (nix's rule: the version starts at the first dash followed by a non-letter); phase is nix's build phase without the Phase suffix (unpack, patch, configure, build, check, install, fixup, ...), absent until nix reports one.
 class Building {
-  const Building({required this.name, this.version, this.phase});
+  const Building({required this.name, this.version, this.phase, this.percent});
 
   final String name;
   final String? version;
   final String? phase;
 
+  /// System API 0.10, session API 0.18: how far this derivation is, from the last standard stdenv phase it started (unpack 0, patch 5, updateAutotoolsGnuConfigScripts 8, configure 10, build 20, check 80, install 88, fixup 94, installCheck 98, dist 99; other phases keep the value); never goes back; below 100. Absent before the first standard phase and for builders without phases.
+  final int? percent;
+
   factory Building.fromJson(Map<String, dynamic> json) => Building(
     name: json['name'] as String,
     version: json['version'] == null ? null : json['version'] as String,
     phase: json['phase'] == null ? null : json['phase'] as String,
+    percent: json['percent'] == null ? null : json['percent'] as int,
   );
 
   Map<String, dynamic> toJson() => {
     'name': name,
     'version': ?version,
     'phase': ?phase,
+    'percent': ?percent,
   };
 
   @override
