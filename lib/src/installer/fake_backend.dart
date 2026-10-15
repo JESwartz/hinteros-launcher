@@ -582,8 +582,8 @@ List<StoreApp> mockInstallerCatalog() => [
     if (a.installer) a,
 ];
 
-/// Newer releases on both channels: a stable 0.7.1, and a beta that still
-/// says 0.7.0 (a beta keeps the stable version it builds on).
+/// Newer releases on both channels: a stable 0.7.1 and a beta 0.7.2 (each
+/// release has its own version).
 Map<InstallChannel, HinterRelease> mockNewer() => {
   InstallChannel.stable: const HinterRelease(
     rev: '9f8e7d6c5b4a39281706f5e4d3c2b1a098765432',
@@ -591,6 +591,6 @@ Map<InstallChannel, HinterRelease> mockNewer() => {
   ),
   InstallChannel.beta: const HinterRelease(
     rev: '5e4d3c2b1a0918273645f5e4d3c2b1a098765abc',
-    version: '0.7.0',
+    version: '0.7.2',
   ),
 };

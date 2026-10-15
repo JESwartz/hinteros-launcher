@@ -388,7 +388,7 @@ void main() {
     test('building: the count, the name, the subject, heartbeats', () async {
       final (mock, s) = await _setup();
       mock.system.channel = api.Channel.beta;
-      mock.system.nextUpdate = _update(version: '0.7.0');
+      mock.system.nextUpdate = _update(version: '0.7.1');
       final check = s.updates.check();
       await pumpEventQueue();
       mock.system.finishJob(mock.system.runningJobId!);
@@ -551,20 +551,23 @@ void main() {
       }
     });
 
-    test('releaseName: a beta is the next patch plus its commit', () {
+    test('releaseName: a beta is its version plus its commit', () {
       const rev = '9a8b7c6d5e4f30211a2b3c4d5e6f708192a3b4c5';
+      // release/version is the release's own version: no patch is added.
       expect(
-        releaseName('0.7.0', rev, UpdateChannel.beta),
-        '0.7.1.9a8b7c6 beta',
+        releaseName('0.7.2', rev, UpdateChannel.beta),
+        '0.7.2.9a8b7c6 beta',
       );
-      expect(releaseName('0.7.0', rev, UpdateChannel.stable), '0.7.0 stable');
+      expect(releaseName('0.7.2', rev, UpdateChannel.stable), '0.7.2 stable');
       expect(releaseName('0.7.0', rev, null), '0.7.0');
       // A beta without a usable revision, and names that are not versions.
       expect(releaseName('0.7.0', null, UpdateChannel.beta), '0.7.0');
       expect(releaseName('0.7.0', 'xyz', UpdateChannel.beta), '0.7.0');
       expect(releaseName('unknown', rev, UpdateChannel.stable), 'unknown');
-      expect(nextPatch('0.9.9'), '0.9.10');
-      expect(nextPatch('0.7.0-rc.1'), '0.7.0-rc.1');
+      expect(
+        releaseName('0.8.0-rc.1', rev, UpdateChannel.beta),
+        '0.8.0-rc.1.9a8b7c6 beta',
+      );
     });
 
     test(
@@ -573,9 +576,9 @@ void main() {
         final (mock, s) = await _setup();
         mock.system
           ..channel = api.Channel.beta
-          ..version = '0.7.0'
+          ..version = '0.7.1'
           ..rev = '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d';
-        mock.system.nextUpdate = _update(version: '0.7.0');
+        mock.system.nextUpdate = _update(version: '0.7.1');
         final f = s.updates.check();
         await pumpEventQueue();
         mock.system.finishJob(mock.system.runningJobId!);
