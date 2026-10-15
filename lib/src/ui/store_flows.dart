@@ -67,6 +67,14 @@ Future<bool> installFlow(
         StatusLine(
           'Also installs: ${[for (final d in deps) '${d.name} (${_sizeLabel(d.sizeMiB)})'].join(', ')}.',
         ),
+      // Steam and other apps without the sandbox can reach everything.
+      for (final a in [app, ...deps])
+        if (a.fullAccess)
+          StatusLine(
+            '${a.name} has full access. It can use all data and devices of '
+            'this profile.',
+            error: true,
+          ),
       for (final a in withTerms)
         StatusLine('${a.terms!.title} applies. Read and accept it next.'),
     ],

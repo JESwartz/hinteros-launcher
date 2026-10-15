@@ -518,6 +518,18 @@ void main() {
         },
       );
     });
+    testWidgets('install confirm with full access (Steam)', (t) async {
+      await shot(
+        t,
+        'store_install_full_access_1080p',
+        harness(installed: {'jellyfin'}),
+        run: (t) async {
+          await openStore(t);
+          // Games: Steam (Moonlight comes first), Install.
+          await press(t, [kDown, kRight, kRight, kEnter, kEnter]);
+        },
+      );
+    });
     testWidgets('app page with permissions, running', (t) async {
       final h = harness(installed: {'jellyfin', 'mpv'});
       h.mock.apps.add(

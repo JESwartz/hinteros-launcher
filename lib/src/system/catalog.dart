@@ -142,6 +142,8 @@ StoreApp? _parseApp(Map<String, Object?> a, TermsReader readTerms) {
         for (final e in perms.entries)
           AppPermission(name: e.key, required: e.value == 'required'),
     ],
+    // Index 3 (optional, apps): `sandbox`, missing = true.
+    fullAccess: a['sandbox'] == false,
     removeDataWarning: removeDataWarningFor(dataPaths),
   );
 }

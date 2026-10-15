@@ -1561,6 +1561,7 @@ class StoreApp {
     required this.statusReason,
     required this.state,
     required this.permissions,
+    required this.fullAccess,
   });
 
   /// Catalog app id (state.json apps).
@@ -1605,6 +1606,9 @@ class StoreApp {
   /// 0.18: what the app may use in its sandbox, in catalog order. Not installed: the stored choice for its install (default granted). Empty for Steam, apps without a sandbox and tombstones.
   final List<AppPermission> permissions;
 
+  /// 0.18: runs without the app sandbox (Steam, apps with sandbox = false, or every app while the sandbox is off on this box): it can use everything the profile can. The install sheet warns. False for tombstones.
+  final bool fullAccess;
+
   factory StoreApp.fromJson(Map<String, dynamic> json) => StoreApp(
     id: json['id'] as String,
     name: json['name'] as String,
@@ -1638,6 +1642,7 @@ class StoreApp {
     permissions: (json['permissions'] as List)
         .map((x) => AppPermission.fromJson((x as Map).cast<String, dynamic>()))
         .toList(),
+    fullAccess: json['full_access'] as bool,
   );
 
   Map<String, dynamic> toJson() => {
@@ -1665,6 +1670,7 @@ class StoreApp {
     'status_reason': statusReason,
     'state': state.toJson(),
     'permissions': permissions.map((x) => x.toJson()).toList(),
+    'full_access': fullAccess,
   };
 
   @override

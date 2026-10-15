@@ -45,6 +45,7 @@ StoreApp mockStoreApp({
   AppKind kind = AppKind.native,
   StoreAppIcon icon = const StoreAppIcon(firefoxProfile: false),
   List<AppPermission> permissions = const [],
+  bool fullAccess = false,
 }) => StoreApp(
   id: id,
   name: name,
@@ -70,6 +71,7 @@ StoreApp mockStoreApp({
   statusReason: statusReason,
   state: StoreState.available,
   permissions: permissions,
+  fullAccess: fullAccess,
 );
 
 /// The fixture index (camelCase) as wire apps (snake_case), the
@@ -141,6 +143,7 @@ List<StoreApp> _fixtureApps(String? dir) {
                 granted: true,
               ),
           ],
+          fullAccess: a['sandbox'] == false,
         ),
   ];
 }

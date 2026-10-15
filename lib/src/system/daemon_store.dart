@@ -185,6 +185,7 @@ class DaemonStore implements StoreRepository {
         for (final p in a.permissions)
           AppPermission(name: p.name, required: p.required, granted: p.granted),
       ],
+      fullAccess: a.fullAccess,
       // Services are not in the store yet (M10): store.list carries no
       // missing_services, so nothing is greyed out for one.
     );

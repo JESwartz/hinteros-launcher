@@ -96,6 +96,7 @@ void main() {
       await press(t, [kEnter]); // Install
       expect(find.text('Install Steam for this profile?'), findsOneWidget);
       expect(find.textContaining('Read and accept it next'), findsOneWidget);
+      expect(find.textContaining('Steam has full access'), findsOneWidget);
       await press(t, [kRight, kEnter]); // Continue
       expect(find.text('Terms for Steam'), findsOneWidget);
     }
@@ -286,6 +287,11 @@ void main() {
       expect(find.text('Downloads folder'), findsOneWidget);
       expect(find.text('Required'), findsOneWidget);
       expect(find.text('On'), findsNWidgets(2));
+      expect(
+        find.textContaining('full access'),
+        findsNothing,
+        reason: 'sandboxed',
+      );
       expect(find.text('Cancel'), findsOneWidget);
       expect(find.text('Accept'), findsOneWidget);
       // Focus starts on the first switch; a locked one does not move.

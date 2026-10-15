@@ -1336,6 +1336,7 @@ class MockStore implements StoreRepository {
           for (final p in a.permissions)
             p.copyWith(granted: !(denied[a.id]?.contains(p.name) ?? false)),
         ],
+        fullAccess: a.fullAccess,
       ),
   ];
 

@@ -1072,6 +1072,7 @@ class StoreApp {
     this.conflicts = const [],
     this.missingServices = const [],
     this.permissions = const [],
+    this.fullAccess = false,
   });
 
   final String id;
@@ -1128,6 +1129,11 @@ class StoreApp {
   /// What its sandbox may reach (0.18), in catalog order, with this
   /// profile's choices. Empty: it declares none.
   final List<AppPermission> permissions;
+
+  /// Runs without the app sandbox (0.18: Steam, `sandbox = false`, or the
+  /// sandbox is off on this box): it can use everything the profile can. The
+  /// install sheet warns.
+  final bool fullAccess;
 
   bool get hasTerms => terms != null;
 

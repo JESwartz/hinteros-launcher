@@ -234,6 +234,7 @@
       "needsServices": [],
       "onIso": false,
       "redistributable": true,
+      "sandbox": false,
       "sizeMiB": 1000,
       "starter": "offered",
       "status": "available",
