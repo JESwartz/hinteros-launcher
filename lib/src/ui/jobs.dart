@@ -130,12 +130,12 @@ String jobNotice(JobSnapshot s, {String? name}) {
   return s.cancelled ? '$title: cancelled.' : '$title: failed.';
 }
 
-/// How long a job runs: "Less than 1 min", "12 min", "1 h 5 min".
+/// How long a job has run: "00:40", "12:05", "1:05:00" (an hour or more).
 String elapsedText(Duration d) {
-  final m = d.inMinutes;
-  if (m < 1) return 'Less than 1 min';
-  if (m < 60) return '$m min';
-  return '${m ~/ 60} h ${m % 60} min';
+  final s = d.isNegative ? 0 : d.inSeconds;
+  String two(int n) => n.toString().padLeft(2, '0');
+  final mmss = '${two(s ~/ 60 % 60)}:${two(s % 60)}';
+  return s < 3600 ? mmss : '${s ~/ 3600}:$mmss';
 }
 
 /// Nix's build phase in words.

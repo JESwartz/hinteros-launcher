@@ -401,7 +401,7 @@ void main() {
     await shot(
       t,
       'progress_build',
-      // Slow lines: the minutes count up between them.
+      // Slow lines: the time counts up between them.
       backend: FakeInstallerBackend(
         state: wired,
         newer: mockNewer(),
@@ -421,7 +421,9 @@ void main() {
         // The build line counts up by itself; a fixed spinner frame.
         await t.pump(const Duration(seconds: 15));
         expect(
-          find.text('Building hinteros-launcher (3 of 12, 6 min)'),
+          find.text(
+            'Building hinteros-launcher (3 of 12). Time elapsed: 06:00',
+          ),
           findsOneWidget,
         );
       },

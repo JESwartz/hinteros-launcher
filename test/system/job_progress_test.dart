@@ -1,7 +1,7 @@
 // The job progress page and the jobs the person left running: building
 // with count, name and time, the bar that moves, the heartbeat gap, titles
 // per kind, the top bar indicator, the notice when a job ends, the session
-// restart offer, and a launcher restart during a job.
+// restart offer with its countdown, and a launcher restart during a job.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/system/mock_system.dart';
@@ -89,7 +89,7 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('3 of 12'), findsOneWidget);
       expect(find.text('hinteros-daemon 0.7.1, compiling'), findsOneWidget);
-      expect(find.textContaining('Time: Less than 1 min'), findsOneWidget);
+      expect(find.textContaining('Time elapsed: 00:0'), findsOneWidget);
       expect(find.textContaining('20% in all'), findsOneWidget);
       // Nothing new from the job for a second: the bar moves anyway.
       final before = barAlignment(t);
@@ -108,7 +108,7 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('4 of 12'), findsOneWidget);
       expect(find.text('hinteros-daemon 0.7.1, installing'), findsOneWidget);
-      expect(find.textContaining('Time: 12 min'), findsOneWidget);
+      expect(find.textContaining('Time elapsed: 12:0'), findsOneWidget);
       // No estimate of the time left.
       expect(find.textContaining('left'), findsNothing);
     });
@@ -327,9 +327,10 @@ void main() {
     });
 
     test('the elapsed time and the build phases in words', () {
-      expect(elapsedText(const Duration(seconds: 40)), 'Less than 1 min');
-      expect(elapsedText(const Duration(minutes: 12)), '12 min');
-      expect(elapsedText(const Duration(minutes: 65)), '1 h 5 min');
+      expect(elapsedText(const Duration(seconds: 40)), '00:40');
+      expect(elapsedText(const Duration(minutes: 12, seconds: 5)), '12:05');
+      expect(elapsedText(const Duration(minutes: 65)), '1:05:00');
+      expect(elapsedText(const Duration(seconds: -3)), '00:00');
       expect(buildCount(build(11)), '12 of 12');
       // Nix found more than it said: the count never passes the total.
       expect(buildCount(build(12)), '12 of 12');
@@ -499,6 +500,163 @@ void main() {
       await t.pump();
       await t.pump();
       expect(h.services.mockSystem.log, ['session:restart']);
+    });
+  });
+
+  group('restart countdown', () {
+    Finder restartsIn(int n) => find.text(
+      'The session restarts in $n ${n == 1 ? 'second' : 'seconds'}.',
+    );
+    final countdown = find.byKey(const ValueKey('restart-countdown'));
+
+    /// An update that needs a new session, its page open; [hide]: the
+    /// person left the page before it ended.
+    Future<Harness> updateNeedsRestart(
+      WidgetTester t, {
+      bool hide = false,
+    }) async {
+      setView(t);
+      final (h, _) = harness();
+      await h.pump(t);
+      h.services.mockJobs.restartNext = true;
+      await toUpdateNow(t, h);
+      if (hide) await press(t, [kEnter]); // Hide
+      return h;
+    }
+
+    Future<void> finish(WidgetTester t, Harness h) async {
+      h.services.mockJobs.finish(h.services.mockJobs.started.single.jobId);
+      await t.pumpAndSettle();
+    }
+
+    group('the page', () {
+      testWidgets('counts down and restarts at 0', (t) async {
+        final h = await updateNeedsRestart(t);
+        await finish(t, h);
+        expect(restartsIn(30), findsOneWidget);
+        await press(t, [kRight]); // focus moves to Later: it goes on
+        await t.pump(const Duration(seconds: 1));
+        expect(restartsIn(29), findsOneWidget);
+        await t.pump(const Duration(seconds: 28));
+        expect(restartsIn(1), findsOneWidget);
+        expect(h.services.mockSystem.log, isEmpty);
+        await t.pump(const Duration(seconds: 1));
+        await t.pump();
+        expect(h.services.mockSystem.log, ['session:restart']);
+        expect(find.text('Restarting the session…'), findsOneWidget);
+      });
+
+      testWidgets('Later stops it', (t) async {
+        final h = await updateNeedsRestart(t);
+        await finish(t, h);
+        await t.pump(const Duration(seconds: 5));
+        await press(t, [kRight, kEnter]); // Later
+        expect(find.text('Done'), findsNothing);
+        await t.pump(const Duration(seconds: 40));
+        expect(h.services.mockSystem.log, isEmpty);
+      });
+
+      testWidgets('Restart session restarts at once, one time', (t) async {
+        final h = await updateNeedsRestart(t);
+        await finish(t, h);
+        await t.sendKeyEvent(kEnter); // Restart session (focused first)
+        await t.pump();
+        await t.pump();
+        expect(h.services.mockSystem.log, ['session:restart']);
+        await t.pump(const Duration(seconds: 40));
+        expect(h.services.mockSystem.log, ['session:restart']);
+      });
+
+      testWidgets('it waits while an app is in front', (t) async {
+        final h = await updateNeedsRestart(t);
+        await h.launch(t, 'jellyfin');
+        await finish(t, h);
+        expect(find.text('Done'), findsOneWidget);
+        expect(countdown, findsNothing);
+        await t.pump(const Duration(minutes: 2));
+        expect(h.services.mockSystem.log, isEmpty);
+        // Home: it starts.
+        h.mock.pressHome();
+        await t.pumpAndSettle();
+        expect(restartsIn(30), findsOneWidget);
+        await t.pump(const Duration(seconds: 10));
+        expect(restartsIn(20), findsOneWidget);
+        // An app in front again: it stops, and starts again from 30.
+        await h.launch(t, 'jellyfin');
+        expect(countdown, findsNothing);
+        await t.pump(const Duration(minutes: 1));
+        expect(h.services.mockSystem.log, isEmpty);
+        h.mock.pressHome();
+        await t.pumpAndSettle();
+        expect(restartsIn(30), findsOneWidget);
+        await t.pump(const Duration(seconds: 30));
+        await t.pump();
+        expect(h.services.mockSystem.log, ['session:restart']);
+      });
+    });
+
+    group('the notice of a job that was left', () {
+      testWidgets('counts down and restarts at 0', (t) async {
+        final h = await updateNeedsRestart(t, hide: true);
+        await finish(t, h);
+        expect(find.text('Updating to HinterOS 0.6.1: done'), findsOneWidget);
+        expect(restartsIn(30), findsOneWidget);
+        await press(t, [kRight]); // focus moves to Restart session
+        await t.pump(const Duration(seconds: 1));
+        expect(restartsIn(29), findsOneWidget);
+        await t.pump(const Duration(seconds: 28));
+        expect(restartsIn(1), findsOneWidget);
+        expect(h.services.mockSystem.log, isEmpty);
+        await t.pump(const Duration(seconds: 1));
+        await t.pump();
+        await t.pump();
+        expect(h.services.mockSystem.log, ['session:restart']);
+        expect(find.text('Restarting the session…'), findsOneWidget);
+      });
+
+      testWidgets('Later stops it', (t) async {
+        final h = await updateNeedsRestart(t, hide: true);
+        await finish(t, h);
+        await t.pump(const Duration(seconds: 5));
+        await press(t, [kEnter]); // Later (focused first)
+        expect(countdown, findsNothing);
+        expect(
+          find.descendant(of: indicator, matching: find.text('Restart needed')),
+          findsOneWidget,
+        );
+        await t.pump(const Duration(seconds: 40));
+        expect(h.services.mockSystem.log, isEmpty);
+      });
+
+      testWidgets('Restart session restarts at once, one time', (t) async {
+        final h = await updateNeedsRestart(t, hide: true);
+        await finish(t, h);
+        await press(t, [kRight]);
+        await t.sendKeyEvent(kEnter); // Restart session
+        await t.pump();
+        await t.pump();
+        expect(h.services.mockSystem.log, ['session:restart']);
+        await t.pump(const Duration(seconds: 40));
+        expect(h.services.mockSystem.log, ['session:restart']);
+      });
+
+      testWidgets('it waits while an app is in front', (t) async {
+        final h = await updateNeedsRestart(t, hide: true);
+        await h.launch(t, 'jellyfin');
+        await finish(t, h);
+        expect(countdown, findsNothing);
+        await t.pump(const Duration(minutes: 2));
+        expect(h.services.mockSystem.log, isEmpty);
+        // Home: the notice is there and counts.
+        h.mock.pressHome();
+        await t.pumpAndSettle();
+        expect(find.text('Updating to HinterOS 0.6.1: done'), findsOneWidget);
+        expect(restartsIn(30), findsOneWidget);
+        await t.pump(const Duration(seconds: 30));
+        await t.pump();
+        await t.pump();
+        expect(h.services.mockSystem.log, ['session:restart']);
+      });
     });
   });
 

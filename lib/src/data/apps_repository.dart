@@ -12,6 +12,12 @@ class AppsRepository {
   Future<List<RunningApp>> running() async =>
       (await connection.appsRunning()).apps;
 
+  /// The running apps and the one with focus (null: the launcher).
+  Future<({List<RunningApp> apps, String? focused})> runningAndFocus() async {
+    final r = await connection.appsRunning();
+    return (apps: r.apps, focused: r.focused);
+  }
+
   /// Starts [app], or focuses it if it already runs.
   Future<RunningApp> launch(String id) async =>
       (await connection.appsLaunch(AppsLaunchParams(id: id))).app;
