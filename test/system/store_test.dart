@@ -425,7 +425,8 @@ void main() {
       expect(permissionLabel('gamepad'), 'Controller');
       expect(permissionLabel('mic'), 'Microphone');
       expect(permissionLabel('downloads'), 'Downloads folder');
-      expect(permissionLabel('lan'), 'lan');
+      expect(permissionLabel('lan'), 'Local network');
+      expect(permissionLabel('camera'), 'camera');
     });
   });
 }
