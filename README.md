@@ -105,6 +105,22 @@ one line says "Restart the app to apply.". Errors: `unknown_app` and `unknown_pe
 `MockDaemon.system.deniedPermissions`; the mock Video player declares a required controller, a
 microphone and the Downloads folder).
 
+**App displays.** Each app the daemon starts runs on an X display of its own, from a fixed set
+the session makes at start. `apps.launch` answers `no_app_display` (2009,
+`NoAppDisplayData.apps`: the running apps that hold one) when all are in use: `LauncherData`
+asks `chooseAppToClose` (the shell: "Close an app to open <Name>", the apps, Cancel). A pick
+calls `apps.close`, waits for that app's `app_exited` (up to 30 s; "Starting <Name>…" shows
+meanwhile) and launches again; Cancel or Back open nothing. Nothing closes on its own. Settings >
+System > "Apps open at once": `apps.displays.get` / `apps.displays.set` (`AppDisplaySetting`,
+`SystemRepository.appDisplays` / `setAppDisplays`), a drop-down of 1 to 8 apps. A new number
+applies at the next session start: the launcher asks "Restart the session now?" (Restart, Later)
+and, until then, shows "Restart the session to apply this." with a Restart session button.
+`active: null` (no app displays): "Not available on this box.". `MockDaemon.appDisplays`
+(default 4, null: none) and `appDisplaysSetting`; `MockSystem.appDisplaySetting`.
+`test/app_displays_test.dart` covers the dialog (pick, Cancel, Back, a running app or Steam
+needs no display) and the setting; goldens `close_to_open_1080p`,
+`settings_app_displays_restart_1080p`.
+
 ### Session API 0.17: the admin PIN locks until a restart
 
 The daemon refuses the admin profile's PIN after 10 wrong tries a boot, the right one too, until
