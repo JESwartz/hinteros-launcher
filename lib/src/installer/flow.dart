@@ -11,7 +11,7 @@ import 'plan.dart';
 import 'progress.dart';
 
 /// "HinterOS 0.7.0 stable (1a2b3c4)": a release named the way the launcher
-/// names it on a box of [channel] (a beta is the next patch plus the
+/// names it on a box of [channel] (a beta is its version plus the
 /// commit, "HinterOS 0.7.1.1a2b3c4 beta"), with the short commit unless
 /// the name already has it.
 String installVersionLabel(String version, String rev, InstallChannel channel) {

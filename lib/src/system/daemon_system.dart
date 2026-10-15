@@ -93,25 +93,18 @@ String? releaseVersion(String? v) =>
 
 final _semver = RegExp(r'^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$');
 
-/// How a release is named on screen. `release/version` is the stable release
-/// a commit is built on; a beta is named as the next patch of it plus its
-/// commit: `0.7.1.1a2b3c4 beta` on top of `0.7.0 stable`. Anything else (no
+/// How a release is named on screen. `release/version` is the release's own
+/// version (promote writes it into every beta and stable release); a beta
+/// adds its commit: `0.7.2.1a2b3c4 beta`, `0.7.2 stable`. Anything else (no
 /// channel, the date fallback, no revision) is shown as it is.
 String releaseName(String version, String? rev, UpdateChannel? channel) {
   if (releaseVersion(version) == null) return version;
   return switch (channel) {
     UpdateChannel.beta when rev != null && _hexRev.hasMatch(rev) =>
-      '${nextPatch(version)}.${rev.substring(0, 7)} beta',
+      '$version.${rev.substring(0, 7)} beta',
     UpdateChannel.stable => '$version stable',
     _ => version,
   };
-}
-
-/// `0.7.0` -> `0.7.1`; a pre-release (`0.7.0-rc.1`) is kept as it is.
-String nextPatch(String version) {
-  final m = RegExp(r'^(\d+)\.(\d+)\.(\d+)$').firstMatch(version);
-  if (m == null) return version;
-  return '${m[1]}.${m[2]}.${int.parse(m[3]!) + 1}';
 }
 
 final _hexRev = RegExp(r'^[0-9a-f]{7,}$');

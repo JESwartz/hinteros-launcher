@@ -105,7 +105,7 @@ void main() {
   });
 
   group('offline: the version and channel from --info', () {
-    const betaLabel = 'HinterOS 0.7.1.1a2b3c4 beta';
+    const betaLabel = 'HinterOS 0.7.0.1a2b3c4 beta';
 
     testWidgets('a beta installer starts on Beta and names its version', (
       t,
@@ -240,11 +240,11 @@ void main() {
       final h = await pastNetwork(t, b);
       expect(h.flow.channel, InstallChannel.beta);
       expect(
-        find.text('Install HinterOS 0.7.1.1a2b3c4 beta'),
+        find.text('Install HinterOS 0.7.0.1a2b3c4 beta'),
         findsOneWidget,
-        reason: 'beta: the next patch plus the commit, as on a box',
+        reason: 'beta: its version plus the commit, as on a box',
       );
-      expect(find.text('Install HinterOS 0.7.1.5e4d3c2 beta'), findsOneWidget);
+      expect(find.text('Install HinterOS 0.7.2.5e4d3c2 beta'), findsOneWidget);
     });
 
     testWidgets('a channel change checks again and asks again', (t) async {
@@ -269,7 +269,7 @@ void main() {
         'checkNewer:beta',
       );
       expect(h.flow.step, InstallerStep.version);
-      expect(find.text('Install HinterOS 0.7.1.5e4d3c2 beta'), findsOneWidget);
+      expect(find.text('Install HinterOS 0.7.2.5e4d3c2 beta'), findsOneWidget);
       await h.back(t);
       expect(h.flow.step, InstallerStep.options);
       await h.choose(t, 'actions');
@@ -522,8 +522,8 @@ void main() {
         'HinterOS 0.7.0 stable (1a2b3c4)',
       );
       expect(
-        installVersionLabel('0.7.0', rev, InstallChannel.beta),
-        'HinterOS 0.7.1.1a2b3c4 beta',
+        installVersionLabel('0.7.2', rev, InstallChannel.beta),
+        'HinterOS 0.7.2.1a2b3c4 beta',
       );
     });
   });
