@@ -13,6 +13,7 @@ import 'focus_frame.dart';
 import 'jobs.dart';
 import 'modal_host.dart';
 import 'nav_focusable.dart';
+import 'restart_countdown.dart';
 import 'session_ending.dart';
 import 'widgets.dart';
 
@@ -137,6 +138,10 @@ class _JobProgressScreenState extends State<JobProgressScreen> with JobTicker {
   String? _cancelNote;
   JobCenter? _center;
 
+  /// The countdown to the session restart runs (until a restart is tried).
+  bool _autoRestart = true;
+  bool _restarting = false;
+
   @override
   void initState() {
     super.initState();
@@ -205,6 +210,11 @@ class _JobProgressScreenState extends State<JobProgressScreen> with JobTicker {
   }
 
   Future<void> _restart() async {
+    if (_restarting) return;
+    setState(() {
+      _restarting = true;
+      _autoRestart = false;
+    });
     try {
       await endSessionWith(
         context,
@@ -213,7 +223,10 @@ class _JobProgressScreenState extends State<JobProgressScreen> with JobTicker {
       );
     } on SystemException catch (e) {
       if (mounted) {
-        setState(() => _cancelNote = "Can't restart the session: ${e.message}");
+        setState(() {
+          _restarting = false;
+          _cancelNote = "Can't restart the session: ${e.message}";
+        });
       }
       return;
     }
@@ -291,6 +304,10 @@ class _JobProgressScreenState extends State<JobProgressScreen> with JobTicker {
                 key: const ValueKey('job-done'),
                 ok: true,
               ),
+              if (restart && _autoRestart) ...[
+                const SizedBox(height: HinterTokens.s1),
+                RestartCountdown(onEnd: _restart),
+              ],
             ],
             if (s.finished && s.ok && _readded(s)) ...[
               const SizedBox(height: HinterTokens.s1),

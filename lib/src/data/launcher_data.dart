@@ -79,6 +79,13 @@ class LauncherData extends ChangeNotifier {
   /// "Starting ..." view shows while this is set.
   ({String id, String name, String? iconPath})? launching;
 
+  /// The running app that has focus (`focus_changed`, `apps.running`);
+  /// null: the launcher.
+  String? focusedApp;
+
+  /// The launcher is in front: no app has focus and no app is starting.
+  bool get inFront => focusedApp == null && launching == null;
+
   /// Apps that got `focus_changed` since the current launch began (the event
   /// can arrive before the answer to `apps.launch`).
   final Set<String> _focusedSince = {};
@@ -158,6 +165,8 @@ class LauncherData extends ChangeNotifier {
         if (!oskVisible) _nav.add(e);
       case FocusChangedEvent():
         final id = e.app;
+        focusedApp = id;
+        notifyListeners();
         if (id != null) _focusedSince.add(id);
         if (id != null && launching?.id == id) _endLaunching();
         unawaited(refreshRunning());
@@ -233,9 +242,10 @@ class LauncherData extends ChangeNotifier {
 
   Future<void> refreshRunning() async {
     try {
-      final r = await apps.running();
+      final r = await apps.runningAndFocus();
       if (_disposed) return;
-      running = r;
+      running = r.apps;
+      focusedApp = r.focused;
       if (closeRequest != null && !isRunning(closeRequest!.id)) {
         closeRequest = null; // it ended by itself
       }

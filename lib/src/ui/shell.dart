@@ -18,7 +18,7 @@ import '../theme/hinter_theme.dart';
 import 'apps_screen.dart';
 import 'auth_prompt.dart';
 import 'common.dart';
-import 'dialogs.dart' show Choice, showChoice, showConfirm, showFailureOn;
+import 'dialogs.dart' show Choice, showChoice, showFailureOn;
 import 'profiles/first_launch_terms.dart';
 import 'profiles/profile_loading.dart';
 import 'profiles/profile_ui.dart' show withBoxAdminPin;
@@ -35,6 +35,7 @@ import 'store_screen.dart';
 import 'update_banner.dart';
 import 'widgets.dart' show StatusLine;
 import 'pages.dart';
+import 'restart_countdown.dart';
 import 'session_ending.dart';
 import 'tab_bar.dart';
 
@@ -129,6 +130,9 @@ class _LauncherShellState extends State<LauncherShell> {
   /// says when it ends.
   late final JobCenter _jobs = JobCenter(widget.services.jobs)
     ..onFinished = _jobFinished;
+
+  /// The launcher is in front: a restart offer counts down only then.
+  late final _front = ValueNotifier<bool>(widget.data.inFront);
   bool _bannerVisible = false;
   bool _updateBannerVisible = false;
   late final UpdateReminders _reminders = UpdateReminders(
@@ -388,6 +392,7 @@ class _LauncherShellState extends State<LauncherShell> {
   void _onData() {
     if (!mounted) return;
     final d = widget.data;
+    _front.value = d.inFront;
     if (_hideConnection != _hidingConnection) {
       _hidingConnection = _hideConnection;
       setState(() {});
@@ -552,16 +557,12 @@ class _LauncherShellState extends State<LauncherShell> {
   Future<void> _offerRestart(JobSnapshot s, String? name) async {
     final c = _scopeContext;
     if (c == null) return;
-    final r = await showConfirm(
+    // Shown at once; it counts down only while the launcher is in front.
+    final r = await showRestartOffer(
       c,
       title: '${jobTitle(s, name: name)}: done',
-      body:
-          'Restart the session to use the change. Open games and apps '
-          'close.',
-      confirmLabel: 'Restart session',
-      cancelLabel: 'Later',
     );
-    if (r == null || !mounted) return;
+    if (!r || !mounted) return;
     _jobs.clear();
     try {
       await endSessionWith(
@@ -647,6 +648,7 @@ class _LauncherShellState extends State<LauncherShell> {
     _settingsRegions.dispose();
     widget.data.removeListener(_onData);
     widget.data.removeListener(_checkLoading);
+    _front.dispose();
     _loadingCap?.cancel();
     _graceTimer?.cancel();
     _clock?.cancel();
@@ -922,72 +924,75 @@ class _LauncherShellState extends State<LauncherShell> {
     );
   }
 
-  Widget _host() => JobCenterScope(
-    center: _jobs,
-    child: ModalHost(
-      controller: _modals,
-      child: Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TopBar(
-                region: _tabs,
-                labels: [for (final s in _sections) s.label],
-                selected: _sections.indexOf(_section),
-                onFocusTab: (i) => _setSection(_sections[i]),
-                time: _time,
-                profile: _profile.current,
-                onProfile: () => unawaited(_profileMenu()),
-                job: _jobs.showsIndicator ? _jobs.background : null,
-                jobName: _jobs.backgroundName,
-                onJob: _openJob,
-              ),
-              if (_updateBannerVisible && _reminders.update != null)
-                UpdateBanner(
-                  update: _reminders.update!,
-                  region: _updateBanner,
-                  onOpen: _openUpdates,
+  Widget _host() => FrontScope(
+    inFront: _front,
+    child: JobCenterScope(
+      center: _jobs,
+      child: ModalHost(
+        controller: _modals,
+        child: Stack(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TopBar(
+                  region: _tabs,
+                  labels: [for (final s in _sections) s.label],
+                  selected: _sections.indexOf(_section),
+                  onFocusTab: (i) => _setSection(_sections[i]),
+                  time: _time,
+                  profile: _profile.current,
+                  onProfile: () => unawaited(_profileMenu()),
+                  job: _jobs.showsIndicator ? _jobs.background : null,
+                  jobName: _jobs.backgroundName,
+                  onJob: _openJob,
                 ),
-              if (_bannerVisible)
-                SteamBanner(
-                  windows: widget.data.steamAttention,
-                  region: _banner,
-                  onOpen: () => unawaited(widget.data.focusSteam()),
-                ),
-              Expanded(child: _content()),
-            ],
-          ),
-          if (_dialogOpen && widget.data.closeRequest != null)
-            CloseConfirm(
-              id: widget.data.closeRequest!.id,
-              name: widget.data.closeRequest!.name,
-              iconPath: widget.data.closeRequest!.iconPath,
-              region: _dialog,
-              onCancel: widget.data.cancelClose,
-              onConfirm: () => unawaited(widget.data.confirmClose()),
+                if (_updateBannerVisible && _reminders.update != null)
+                  UpdateBanner(
+                    update: _reminders.update!,
+                    region: _updateBanner,
+                    onOpen: _openUpdates,
+                  ),
+                if (_bannerVisible)
+                  SteamBanner(
+                    windows: widget.data.steamAttention,
+                    region: _banner,
+                    onOpen: () => unawaited(widget.data.focusSteam()),
+                  ),
+                Expanded(child: _content()),
+              ],
             ),
-          if (widget.data.launching case final l?)
-            Positioned.fill(
-              child: LaunchingScreen(
-                key: ValueKey('launching-${l.id}'),
-                id: l.id,
-                name: l.name,
-                iconPath: l.iconPath,
+            if (_dialogOpen && widget.data.closeRequest != null)
+              CloseConfirm(
+                id: widget.data.closeRequest!.id,
+                name: widget.data.closeRequest!.name,
+                iconPath: widget.data.closeRequest!.iconPath,
+                region: _dialog,
+                onCancel: widget.data.cancelClose,
+                onConfirm: () => unawaited(widget.data.confirmClose()),
               ),
+            if (widget.data.launching case final l?)
+              Positioned.fill(
+                child: LaunchingScreen(
+                  key: ValueKey('launching-${l.id}'),
+                  id: l.id,
+                  name: l.name,
+                  iconPath: l.iconPath,
+                ),
+              ),
+            if (_loading || _hideConnection)
+              Positioned.fill(
+                child: ProfileLoadingPage(identity: _loadingIdentity()),
+              ),
+            if (widget.showFps) const FpsOverlay(),
+            Builder(
+              builder: (c) {
+                _scopeContext = c;
+                return const SizedBox.shrink();
+              },
             ),
-          if (_loading || _hideConnection)
-            Positioned.fill(
-              child: ProfileLoadingPage(identity: _loadingIdentity()),
-            ),
-          if (widget.showFps) const FpsOverlay(),
-          Builder(
-            builder: (c) {
-              _scopeContext = c;
-              return const SizedBox.shrink();
-            },
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );
