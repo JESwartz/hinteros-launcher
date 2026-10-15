@@ -41,7 +41,7 @@ bool listOpen() =>
 
 /// The zone of the focused list row (`modal-N/zK:0`), in list order.
 String? focusedZone(List<TimeZoneEntry> zones) {
-  final m = RegExp(r'/z(\d+):0$').firstMatch(focusLabel() ?? '');
+  final m = RegExp(r'/c(\d+):0$').firstMatch(focusLabel() ?? '');
   if (m == null) return null;
   final ordered = [for (final (_, list) in groupTimeZones(zones)) ...list];
   return ordered[int.parse(m[1]!)].zone;
@@ -65,14 +65,36 @@ void main() {
       expect(formatUtcOffset(Duration.zero), 'UTC+00:00');
     });
 
-    test('grouped by region in the design order, each by name', () {
+    test('grouped by offset, highest first, each by name', () {
       final g = groupTimeZones(all.reversed);
-      expect([for (final (r, _) in g) r], timeZoneRegions);
-      final america = g.firstWhere((x) => x.$1 == 'America').$2;
-      expect(america.first.zone, 'America/Anchorage');
-      expect([
-        for (final z in america) z.zone,
-      ], [for (final z in america) z.zone]..sort());
+      final offsets = [for (final (o, _) in g) o];
+      expect(offsets.first, const Duration(hours: 14));
+      expect(offsets.last, const Duration(hours: -11));
+      expect(offsets.toSet(), hasLength(offsets.length));
+      expect(offsets, [...offsets]..sort((a, b) => b.compareTo(a)));
+      // UTC+00:00 in the middle: every UTC+n over it, every UTC−n under it.
+      final zero = offsets.indexOf(Duration.zero);
+      expect(offsets.take(zero).every((o) => o > Duration.zero), isTrue);
+      expect(offsets.skip(zero + 1).every((o) => o < Duration.zero), isTrue);
+      expect(
+        [for (final z in g[zero].$2) z.zone],
+        ['Africa/Abidjan', 'Atlantic/Azores', 'UTC'],
+      );
+      // The same offset: by name.
+      final minus3 = g.firstWhere((x) => x.$1 == const Duration(hours: -3));
+      expect(
+        [for (final z in minus3.$2) z.zone],
+        [
+          'America/Argentina/Buenos_Aires',
+          'America/Halifax',
+          'America/Santiago',
+          'America/Sao_Paulo',
+        ],
+      );
+      final flat = [for (final (_, l) in g) ...l];
+      expect(flat, hasLength(all.length));
+      expect(flat.first.zone, 'Pacific/Kiritimati');
+      expect(flat.last.zone, 'Pacific/Pago_Pago');
     });
 
     test('the wall clock is UTC plus the offset', () {
@@ -127,15 +149,20 @@ void main() {
       await press(t, [kDown]);
       expect(focusedZone(all), 'Europe/Rome');
       await press(t, [kUp, kUp]);
-      expect(focusedZone(all), 'Europe/Moscow');
-      // Right: the next region; left: this region's start, then the one
-      // before.
+      expect(focusedZone(all), 'Europe/Madrid');
+      // Right: the next offset (lower); left: this offset's start, then the
+      // one before (higher).
       await press(t, [kRight]);
-      expect(focusedZone(all), 'Indian/Chagos');
+      expect(focusedZone(all), 'Africa/Lagos');
       await press(t, [kDown, kLeft]);
-      expect(focusedZone(all), 'Indian/Chagos');
+      expect(focusedZone(all), 'Africa/Lagos');
       await press(t, [kLeft]);
-      expect(focusedZone(all), 'Europe/Berlin');
+      expect(focusedZone(all), 'Africa/Johannesburg');
+      // L1 and R1 do the same.
+      await press(t, [kPageDown]);
+      expect(focusedZone(all), 'Africa/Lagos');
+      await press(t, [kPageUp]);
+      expect(focusedZone(all), 'Africa/Johannesburg');
       await press(t, [kEscape]);
       expect(listOpen(), isFalse);
       expect(focusLabel(), 'settings-detail/zone:0');
@@ -152,10 +179,10 @@ void main() {
       expect(mapBand(t), Duration.zero);
       await press(t, [kEnter]);
       expect(focusedZone(all), 'UTC');
-      // UTC is last: left goes back region by region to America.
-      await press(t, List.filled(8, kLeft));
-      expect(focusedZone(all), 'America/Anchorage');
-      await press(t, List.filled(4, kDown));
+      // Right goes down offset by offset to UTC−05:00.
+      await press(t, List.filled(6, kRight));
+      expect(focusedZone(all), 'America/Bogota');
+      await press(t, [kDown]);
       expect(focusedZone(all), 'America/Chicago');
       await press(t, [kEnter]);
       expect(listOpen(), isFalse);
@@ -177,13 +204,36 @@ void main() {
       final h = harness();
       await h.pump(t);
       await enterSettingsEntry(t, 'time');
-      await press(t, [kEnter, kLeft, kEnter]); // Pacific/Auckland
+      await press(t, [kEnter, kLeft, kEnter]); // Africa/Abidjan
       expect(find.text(_askPin), findsOneWidget);
       await press(t, [kEscape]);
       expect(find.text(_askPin), findsNothing);
       expect(h.services.mockTimeZone.zone, 'UTC');
       expect(find.text('UTC+00:00'), findsOneWidget);
       expect(mapBand(t), Duration.zero);
+    });
+
+    testWidgets('UTC+14:00 at the top, the lowest offset at the bottom', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness(zone: 'Asia/Kolkata');
+      await h.pump(t);
+      await enterSettingsEntry(t, 'time');
+      await press(t, [kEnter]);
+      expect(focusedZone(all), 'Asia/Kolkata');
+      await press(t, List.filled(40, kLeft));
+      expect(focusedZone(all), 'Pacific/Kiritimati');
+      await press(t, [kUp]);
+      expect(focusedZone(all), 'Pacific/Kiritimati');
+      expect(find.text('UTC+14:00'), findsWidgets);
+      await press(t, List.filled(40, kRight));
+      expect(focusedZone(all), 'Pacific/Pago_Pago');
+      await press(t, [kDown]);
+      expect(focusedZone(all), 'Pacific/Pago_Pago');
+      expect(find.text('UTC−11:00'), findsWidgets);
+      await press(t, [kEscape]);
+      expect(h.services.mockTimeZone.log, isEmpty);
     });
 
     testWidgets('choosing the zone it is on asks nothing', (t) async {
@@ -221,7 +271,8 @@ void main() {
       expect(find.text('UTC+00:00'), findsOneWidget);
       expect(mapBand(t), Duration.zero);
       expect(focusLabel(), endsWith('/zone:0'));
-      await press(t, [kEnter, kLeft, kLeft, kLeft, kEnter]); // Europe/Berlin
+      // UTC+00:00, UTC+01:00, UTC+02:00, then down to Europe/Berlin.
+      await press(t, [kEnter, kLeft, kLeft, kLeft, kDown, kDown, kEnter]);
       expect(find.text(_askPin), findsNothing);
       expect(h.services.mockTimeZone.log, ['Europe/Berlin']);
       expect(find.text('Europe/Berlin'), findsOneWidget);

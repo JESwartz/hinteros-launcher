@@ -220,9 +220,10 @@ void main() {
   });
 
   group('display', () {
-    /// guide, then the modes: 4K60 (current), 1440p120, 1080p120, 1080p60.
+    /// guide, then the drop-down; its list opens at the current mode, the
+    /// first: 4K60 (current), 1440p120, 1080p120, 1080p60.
     Future<void> pick(WidgetTester t, int mode) =>
-        press(t, [for (var i = 0; i <= mode; i++) kDown, kEnter]);
+        press(t, [kDown, kEnter, for (var i = 0; i < mode; i++) kDown, kEnter]);
 
     testWidgets('not kept in 15 seconds: display.revert, not display.keep', (
       t,
@@ -243,8 +244,8 @@ void main() {
       expect(find.textContaining('Keep 2560'), findsNothing);
       expect(_changes(r), ['display.set_mode', 'display.revert']);
       expect(r.displayMode.width, 3840);
-      // The screen shows the old mode as current again.
-      expect(find.text('Current'), findsOneWidget);
+      // The drop-down shows the old mode again.
+      expect(find.text('3840 x 2160 at 60 Hz'), findsOneWidget);
     });
 
     testWidgets('Keep calls display.keep and the mode stays', (t) async {

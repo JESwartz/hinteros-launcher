@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../nav/nav_controller.dart';
 import '../../nav/nav_model.dart';
 import '../../system/models.dart';
 import '../../system/repositories.dart';
 import '../../theme/hinter_theme.dart';
 import '../dialogs.dart';
+import '../drop_down.dart';
 import '../modal_host.dart';
 import '../session_ending.dart';
 import '../widgets.dart';
@@ -56,17 +58,15 @@ class DisplaySection extends StatelessWidget {
           ),
           gap: HinterTokens.s2,
         );
-        for (var i = 0; i < info.modes.length; i++) {
-          final m = info.modes[i];
-          p.item(
-            'm$i',
-            onSelect: () => _apply(context, info, m, reload),
-            builder: (f) => SettingRow(
-              title: m.label,
-              focused: f,
-              subtitle: [m.name, if (m.preferred) 'recommended'].join(', '),
-              trailing: Text(m.current ? 'Current' : '', style: t.bodyDim),
-              leading: _Radio(selected: m.current),
+        if (info.modes.isNotEmpty) {
+          p.row(
+            'mode',
+            1,
+            DisplayModeDropDown(
+              region: env.region,
+              rowKey: 'mode',
+              modes: info.modes,
+              onChoose: (m) => unawaited(_apply(context, info, m, reload)),
             ),
           );
         }
@@ -115,6 +115,92 @@ class DisplaySection extends StatelessWidget {
       if (context.mounted) await say(e);
     }
     await reload();
+  }
+}
+
+/// The display modes as a drop-down (Settings > Display, the first-boot
+/// display step): the field shows the current mode, A opens the list of
+/// every mode at it. One item, at [rowKey]:0 of [region]; put it in a pane
+/// with `Pane.row(rowKey, 1, DisplayModeDropDown(...))`.
+class DisplayModeDropDown extends StatelessWidget {
+  const DisplayModeDropDown({
+    super.key,
+    required this.region,
+    required this.rowKey,
+    required this.modes,
+    required this.onChoose,
+    this.maxWidth = 1100,
+  });
+
+  final NavRegion region;
+  final String rowKey;
+  final List<DisplayMode> modes;
+
+  /// A mode other than the current one was chosen.
+  final void Function(DisplayMode mode) onChoose;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = modes.where((m) => m.current).firstOrNull;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: DropDown<DisplayMode>(
+        region: region,
+        rowKey: rowKey,
+        listKey: const ValueKey('display-mode-list'),
+        field: current == null
+            ? const SizedBox(height: 36)
+            : _ModeLine(current, field: true),
+        groups: () => [
+          DropDownGroup(null, [
+            for (final m in modes)
+              DropDownChoice(
+                value: m,
+                current: m.current,
+                build: (_) => _ModeLine(m),
+              ),
+          ]),
+        ],
+        onChoose: onChoose,
+      ),
+    );
+  }
+}
+
+/// `3840 x 2160 at 60 Hz`, then `4K, recommended` dim.
+class _ModeLine extends StatelessWidget {
+  const _ModeLine(this.mode, {this.field = false});
+
+  final DisplayMode mode;
+
+  /// In the closed field (else a line of the list).
+  final bool field;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = HinterTheme.of(context);
+    final style = field
+        ? t.label
+        : t.body.copyWith(
+            fontWeight: mode.current ? FontWeight.w700 : FontWeight.w400,
+          );
+    // The mode first; the name gives way on a narrow line.
+    return Row(
+      children: [
+        Text(mode.label, maxLines: 1, style: style),
+        const SizedBox(width: HinterTokens.s2),
+        Expanded(
+          child: Text(
+            [mode.name, if (mode.preferred) 'recommended'].join(', '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: t.bodyDim,
+          ),
+        ),
+      ],
+    );
   }
 }
 

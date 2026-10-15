@@ -41,7 +41,6 @@ void main() {
     final chicago = list.firstWhere((e) => e.zone == 'America/Chicago');
     expect(chicago.offset, const Duration(hours: -5));
     expect(chicago.standardOffset, const Duration(hours: -6));
-    expect(chicago.region, 'America');
   });
 
   test('set: the admin PIN, then the zone at once and the event', () async {

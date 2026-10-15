@@ -80,6 +80,39 @@ void main() {
       expect(h.services.mockBluetooth.log.last, 'forget:BB:00:33');
     });
 
+    bool modeListOpen() =>
+        find.byKey(const ValueKey('display-mode-list')).evaluate().isNotEmpty;
+
+    testWidgets('Display: a drop-down; its list opens at the current mode', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await enterSettingsEntry(t, 'display');
+      // The closed field shows the current mode only.
+      expect(find.text('1920 x 1080 at 60 Hz'), findsOneWidget);
+      expect(find.text('3840 x 2160 at 60 Hz'), findsNothing);
+      await press(t, [kDown]);
+      expect(focusLabel(), 'settings-detail/mode:0');
+      await press(t, [kEnter]);
+      expect(modeListOpen(), isTrue);
+      expect(find.text('3840 x 2160 at 60 Hz'), findsOneWidget);
+      // 3840x2160@60, @30, 2560x1440, 1920x1080@120, @60 (current), 1280x720.
+      expect(focusLabel(), endsWith('/c4:0'));
+      // B closes it and changes nothing.
+      await press(t, [kUp, kEscape]);
+      expect(modeListOpen(), isFalse);
+      expect(focusLabel(), 'settings-detail/mode:0');
+      expect(find.text('1920 x 1080 at 60 Hz'), findsOneWidget);
+      expect(h.services.mockDisplayAudio.log, isEmpty);
+      // The current mode again: no change, no dialog.
+      await press(t, [kEnter, kEnter]);
+      expect(modeListOpen(), isFalse);
+      expect(find.textContaining('Keep '), findsNothing);
+      expect(h.services.mockDisplayAudio.log, isEmpty);
+    });
+
     testWidgets('Display: a mode applies, and reverts when not kept in time', (
       t,
     ) async {
@@ -87,8 +120,9 @@ void main() {
       final h = harness();
       await h.pump(t);
       await enterSettingsEntry(t, 'display');
-      // guide, then 3840x2160@60 first
-      await press(t, [kDown, kEnter]);
+      // guide, the drop-down; up from the current mode to 3840x2160@60
+      await press(t, [kDown, kEnter, kUp, kUp, kUp, kUp, kEnter]);
+      expect(modeListOpen(), isFalse);
       expect(find.textContaining('Keep 3840 x 2160'), findsOneWidget);
       await t.pump(const Duration(seconds: 16));
       await t.pumpAndSettle();
@@ -96,6 +130,7 @@ void main() {
       final log = h.services.mockDisplayAudio.log;
       expect(log.first, startsWith('mode:3840x2160@60'));
       expect(log.last, 'revert', reason: 'went back');
+      expect(find.text('1920 x 1080 at 60 Hz'), findsOneWidget);
     });
 
     testWidgets('Display: keeping a mode', (t) async {
@@ -103,9 +138,12 @@ void main() {
       final h = harness();
       await h.pump(t);
       await enterSettingsEntry(t, 'display');
-      await press(t, [kDown, kEnter, kRight, kEnter]);
+      await press(t, [kDown, kEnter, kDown, kEnter]); // 1280x720
+      expect(find.textContaining('Keep 1280 x 720'), findsOneWidget);
+      await press(t, [kRight, kEnter]);
       expect(h.services.mockDisplayAudio.log.last, 'keep');
       expect(h.services.mockDisplayAudio.log, hasLength(2));
+      expect(find.text('1280 x 720 at 60 Hz'), findsOneWidget);
     });
 
     testWidgets('Audio: left and right change the volume on its row', (

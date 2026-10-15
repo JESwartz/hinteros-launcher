@@ -22,7 +22,8 @@ import '../../theme/hinter_theme.dart';
 import '../dialogs.dart';
 import '../modal_host.dart';
 import '../pages.dart' show FullPage;
-import '../system/hardware_sections.dart' show KeepDisplayDialog;
+import '../system/hardware_sections.dart'
+    show DisplayModeDropDown, KeepDisplayDialog;
 import '../time_zone/time_zone_picker.dart';
 import '../widgets.dart';
 import 'profile_form.dart';
@@ -393,17 +394,15 @@ class _FirstBootPageState extends State<FirstBootPage> {
             style: t.bodyDim,
           ),
         );
-        final modes = d?.modes ?? const <DisplayMode>[];
-        for (var i = 0; i < modes.length; i++) {
-          final m = modes[i];
-          p.item(
-            'm$i',
-            onSelect: () => unawaited(_setMode(m)),
-            builder: (f) => SettingRow(
-              title: m.label,
-              focused: f,
-              subtitle: [m.name, if (m.preferred) 'recommended'].join(', '),
-              trailing: Text(m.current ? 'Current' : '', style: t.bodyDim),
+        if (d != null) {
+          p.row(
+            'mode',
+            1,
+            DisplayModeDropDown(
+              region: _region,
+              rowKey: 'mode',
+              modes: d.modes,
+              onChoose: (m) => unawaited(_setMode(m)),
             ),
           );
         }

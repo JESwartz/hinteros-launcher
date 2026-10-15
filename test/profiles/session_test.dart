@@ -241,6 +241,46 @@ void main() {
     expect(box.admin.pin, '2468');
   });
 
+  testWidgets('first-boot mode: the display modes are a drop-down', (t) async {
+    setView(t);
+    final box = MockProfileBox(profiles: [], now: fixedNow);
+    final h = harness(current: 'p1', setupRequired: true, box: box);
+    await h.pump(t);
+    await keys(t, [enter]); // Start
+    for (final title in ['Internet', 'Display']) {
+      for (var i = 0; i < 20 && find.text(title).evaluate().isEmpty; i++) {
+        await keys(t, [down]);
+        if (focusLabel()?.endsWith('/actions:0') ?? false) {
+          await keys(t, [enter]);
+        }
+      }
+      expect(find.text(title), findsWidgets, reason: title);
+    }
+    bool listOpen() =>
+        find.byKey(const ValueKey('display-mode-list')).evaluate().isNotEmpty;
+    expect(find.text('1920 x 1080 at 60 Hz'), findsOneWidget);
+    expect(find.text('3840 x 2160 at 60 Hz'), findsNothing);
+    expect(focusLabel(), endsWith('/mode:0'));
+    // B closes the list; the step stays.
+    await keys(t, [enter]);
+    expect(listOpen(), isTrue);
+    expect(focusLabel(), endsWith('/c4:0'));
+    await keys(t, [escape]);
+    expect(listOpen(), isFalse);
+    expect(find.text('Display'), findsOneWidget);
+    expect(h.services.mockDisplayAudio.log, isEmpty);
+    // A chooses: the keep-or-go-back countdown, as in Settings.
+    await keys(t, [enter, up, up, up, up, enter]);
+    expect(listOpen(), isFalse);
+    expect(find.textContaining('Keep 3840 x 2160'), findsOneWidget);
+    await keys(t, [right, enter]); // Keep
+    expect(h.services.mockDisplayAudio.log, [
+      startsWith('mode:3840x2160@60'),
+      'keep',
+    ]);
+    expect(find.text('3840 x 2160 at 60 Hz'), findsOneWidget);
+  });
+
   testWidgets('a migrated profile without a PIN sets one first', (t) async {
     setView(t);
     final box = MockProfileBox(now: fixedNow);

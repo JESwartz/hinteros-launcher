@@ -64,10 +64,6 @@ class TimeZoneEntry {
   final Duration offset;
   final Duration standardOffset;
 
-  /// The group in the list: the part before the first `/` (`America`), or
-  /// the name itself (`UTC`).
-  String get region => regionOf(zone);
-
   /// `UTC−06:00  America/Chicago` without the gap: the parts of a list row.
   String get label => '${formatUtcOffset(offset)}  $zone';
 
@@ -85,25 +81,6 @@ class TimeZoneEntry {
   String toString() => 'TimeZoneEntry($label)';
 }
 
-/// The regions of the list, in this order; anything else after them.
-const timeZoneRegions = [
-  'Africa',
-  'America',
-  'Antarctica',
-  'Asia',
-  'Atlantic',
-  'Australia',
-  'Europe',
-  'Indian',
-  'Pacific',
-  'UTC',
-];
-
-String regionOf(String zone) {
-  final i = zone.indexOf('/');
-  return i < 0 ? zone : zone.substring(0, i);
-}
-
 /// `UTC+05:30`, `UTC−06:00` (a real minus sign), `UTC+00:00`.
 String formatUtcOffset(Duration d) {
   final m = d.inMinutes;
@@ -114,28 +91,20 @@ String formatUtcOffset(Duration d) {
   return 'UTC$sign$hh:$mm';
 }
 
-/// The zones grouped by region ([timeZoneRegions] order), each group sorted
+/// The zones grouped by their offset now, highest first (UTC+14:00 at the
+/// top, UTC+00:00 in the middle, UTC−12:00 at the bottom), each group sorted
 /// by name.
-List<(String region, List<TimeZoneEntry> zones)> groupTimeZones(
+List<(Duration offset, List<TimeZoneEntry> zones)> groupTimeZones(
   Iterable<TimeZoneEntry> zones,
 ) {
-  final by = <String, List<TimeZoneEntry>>{};
+  final by = <Duration, List<TimeZoneEntry>>{};
   for (final z in zones) {
-    by.putIfAbsent(z.region, () => []).add(z);
+    by.putIfAbsent(z.offset, () => []).add(z);
   }
-  int rank(String r) {
-    final i = timeZoneRegions.indexOf(r);
-    return i < 0 ? timeZoneRegions.length : i;
-  }
-
-  final regions = by.keys.toList()
-    ..sort((a, b) {
-      final c = rank(a).compareTo(rank(b));
-      return c != 0 ? c : a.compareTo(b);
-    });
+  final offsets = by.keys.toList()..sort((a, b) => b.compareTo(a));
   return [
-    for (final r in regions)
-      (r, by[r]!..sort((a, b) => a.zone.compareTo(b.zone))),
+    for (final o in offsets)
+      (o, by[o]!..sort((a, b) => a.zone.compareTo(b.zone))),
   ];
 }
 
