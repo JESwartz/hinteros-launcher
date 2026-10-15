@@ -206,6 +206,25 @@ SystemException systemExceptionFrom(Object e) {
           },
           data: data,
         );
+      // apps.set_permission (0.18).
+      case api.ApiErrorCode.unknownApp:
+        return SystemException(
+          SystemErrorKind.notFound,
+          'That app is not there any more.',
+          data: data,
+        );
+      case api.ApiErrorCode.unknownPermission:
+        return SystemException(
+          SystemErrorKind.notFound,
+          'This app does not use that permission.',
+          data: data,
+        );
+      case api.ApiErrorCode.permissionRequired:
+        return SystemException(
+          SystemErrorKind.invalidParams,
+          'This app needs that permission.',
+          data: data,
+        );
       case api.ApiErrorCode.methodNotFound:
         return const SystemException(
           SystemErrorKind.unavailable,

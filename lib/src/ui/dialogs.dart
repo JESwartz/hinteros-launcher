@@ -112,14 +112,28 @@ class DialogButtons extends StatelessWidget {
 // ------------------------------------------------------------------ confirm
 
 /// The answer of a confirmed [showConfirm]: whether the optional check box was
-/// ticked.
+/// ticked, and the final state of its switches.
 class ConfirmResult {
-  const ConfirmResult({this.checked = false});
+  const ConfirmResult({this.checked = false, this.switches = const []});
   final bool checked;
+
+  /// One per [showConfirm]'s `switches`, in order.
+  final List<bool> switches;
+}
+
+/// One on/off row of [showConfirm] (an app's permissions at install). It
+/// starts on; a [locked] one stays on and shows [lockedLabel].
+class ConfirmSwitch {
+  const ConfirmSwitch(this.label, {this.locked = false, this.lockedLabel});
+
+  final String label;
+  final bool locked;
+  final String? lockedLabel;
 }
 
 /// Asks to confirm something. Null: cancelled (the safe choice is focused
 /// first and Back cancels). With [checkbox], an option to tick comes first.
+/// With [switches], on/off rows under [switchesTitle] come first, all on.
 Future<ConfirmResult?> showConfirm(
   BuildContext context, {
   required String title,
@@ -131,6 +145,8 @@ Future<ConfirmResult?> showConfirm(
   bool showCancel = true,
   String? checkbox,
   String? checkboxHint,
+  String? switchesTitle,
+  List<ConfirmSwitch> switches = const [],
 }) => ModalScope.of(context).show<ConfirmResult>(
   (context, modal) => _ConfirmDialog(
     modal: modal,
@@ -143,6 +159,8 @@ Future<ConfirmResult?> showConfirm(
     showCancel: showCancel,
     checkbox: checkbox,
     checkboxHint: checkboxHint,
+    switchesTitle: switchesTitle,
+    switches: switches,
   ),
 );
 
@@ -158,6 +176,8 @@ class _ConfirmDialog extends StatefulWidget {
     required this.showCancel,
     required this.checkbox,
     required this.checkboxHint,
+    required this.switchesTitle,
+    required this.switches,
   });
 
   final ModalHandle<ConfirmResult> modal;
@@ -170,6 +190,8 @@ class _ConfirmDialog extends StatefulWidget {
   final bool showCancel;
   final String? checkbox;
   final String? checkboxHint;
+  final String? switchesTitle;
+  final List<ConfirmSwitch> switches;
 
   @override
   State<_ConfirmDialog> createState() => _ConfirmDialogState();
@@ -177,12 +199,14 @@ class _ConfirmDialog extends StatefulWidget {
 
 class _ConfirmDialogState extends State<_ConfirmDialog> {
   bool _checked = false;
+  late final List<bool> _on = [for (final _ in widget.switches) true];
 
   @override
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
     final region = widget.modal.region;
     region.setRows([
+      for (var i = 0; i < widget.switches.length; i++) NavRow('switch$i', 1),
       if (widget.checkbox != null) const NavRow('check', 1),
       NavRow('buttons', widget.showCancel ? 2 : 1),
     ]);
@@ -193,6 +217,36 @@ class _ConfirmDialogState extends State<_ConfirmDialog> {
         for (final e in widget.extra) ...[
           const SizedBox(height: HinterTokens.s2),
           e,
+        ],
+        if (widget.switches.isNotEmpty) ...[
+          const SizedBox(height: HinterTokens.s3),
+          if (widget.switchesTitle != null) ...[
+            Text(widget.switchesTitle!, style: t.label),
+            const SizedBox(height: HinterTokens.s1),
+          ],
+          for (var i = 0; i < widget.switches.length; i++) ...[
+            if (i > 0) const SizedBox(height: HinterTokens.s1),
+            NavFocusable(
+              region: region,
+              rowKey: 'switch$i',
+              col: 0,
+              scrollIntoView: false,
+              onSelect: widget.switches[i].locked
+                  ? null
+                  : () => setState(() => _on[i] = !_on[i]),
+              builder: (_, f) => SettingRow(
+                title: widget.switches[i].label,
+                focused: f,
+                trailing: ToggleMark(
+                  on: _on[i],
+                  locked: widget.switches[i].locked,
+                  label: widget.switches[i].locked
+                      ? widget.switches[i].lockedLabel
+                      : null,
+                ),
+              ),
+            ),
+          ],
         ],
         if (widget.checkbox != null) ...[
           const SizedBox(height: HinterTokens.s3),
@@ -218,7 +272,9 @@ class _ConfirmDialogState extends State<_ConfirmDialog> {
             if (widget.showCancel) btn(widget.cancelLabel, widget.modal.close),
             btn(
               widget.confirmLabel,
-              () => widget.modal.close(ConfirmResult(checked: _checked)),
+              () => widget.modal.close(
+                ConfirmResult(checked: _checked, switches: [..._on]),
+              ),
               primary: true,
               danger: widget.danger,
             ),
@@ -634,6 +690,8 @@ Future<void> showFailureOn(
       showCancel: false,
       checkbox: null,
       checkboxHint: null,
+      switchesTitle: null,
+      switches: const [],
     ),
   );
 }

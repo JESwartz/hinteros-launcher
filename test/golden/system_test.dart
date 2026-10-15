@@ -504,6 +504,44 @@ void main() {
         },
       );
     });
+    testWidgets('install confirm with permissions', (t) async {
+      await shot(
+        t,
+        'store_install_permissions_1080p',
+        harness(installed: {'jellyfin'}),
+        run: (t) async {
+          await openStore(t);
+          // Video: the Video player (third row, second column), Install.
+          await press(t, [kDown, kDown, kRight, kRight, kDown, kDown]);
+          await press(t, [kEnter, kEnter]);
+        },
+      );
+    });
+    testWidgets('app page with permissions, running', (t) async {
+      final h = harness(installed: {'jellyfin', 'mpv'});
+      h.mock.apps.add(
+        const App(
+          id: 'mpv',
+          name: 'Video player',
+          kind: AppKind.native,
+          permissions: [],
+        ),
+      );
+      await h.services.mockStore.setPermission('mpv', 'mic', false);
+      await shot(
+        t,
+        'store_app_permissions_1080p',
+        h,
+        run: (t) async {
+          await h.launch(t, 'mpv');
+          h.mock.pressHome();
+          await t.pumpAndSettle();
+          await openStore(t);
+          await press(t, [kDown, kDown, kRight, kRight, kDown, kDown]);
+          await press(t, [kEnter, kDown, kDown]); // focus on Microphone
+        },
+      );
+    });
     testWidgets('terms of an app', (t) async {
       await shot(
         t,

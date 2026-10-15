@@ -37,6 +37,25 @@ final _hello = HelloParams(
   client: const Peer(name: 'contract-test', version: '0'),
 ).toJson();
 
+/// The `apps.set_permission` examples (0.18): YouTube declares an optional
+/// mic, Jellyfin a required gamepad.
+void _preparePermissions(MockDaemon mock) {
+  void declare(String id, List<AppPermission> perms) {
+    final i = mock.system.catalog.indexWhere((a) => a.id == id);
+    mock.system.catalog[i] = StoreApp.fromJson({
+      ...mock.system.catalog[i].toJson(),
+      'permissions': [for (final p in perms) p.toJson()],
+    });
+  }
+
+  declare('youtube', const [
+    AppPermission(name: 'mic', required: false, granted: true),
+  ]);
+  declare('jellyfin', const [
+    AppPermission(name: 'gamepad', required: true, granted: true),
+  ]);
+}
+
 /// Puts the mock's system relay into the situation a `system.*` example
 /// describes (the examples are written against particular states of the
 /// service and use fixed job ids).
@@ -456,6 +475,7 @@ void main() {
           if (method == 'store.list') {
             await _prepareSystem(mock, method, ex);
           }
+          if (method == 'apps.set_permission') _preparePermissions(mock);
           if (MockRuntime.handles(method)) {
             await _prepareRuntime(mock, method, ex);
           }
@@ -563,10 +583,28 @@ void main() {
       bool valid(Map<String, dynamic> app) => _validator(schema).validate({
         'apps': [app],
       }).isValid;
-      expect(valid({'id': 'ok', 'name': 'x', 'kind': 'web'}), isTrue);
-      expect(valid({'id': 'Bad Id', 'name': 'x', 'kind': 'web'}), isFalse);
-      expect(valid({'id': 'ok', 'name': 'x', 'kind': 'other'}), isFalse);
-      expect(valid({'id': 'ok', 'name': 'x', 'kind': 'web', 'z': 1}), isFalse);
+      expect(
+        valid({'id': 'ok', 'name': 'x', 'kind': 'web', 'permissions': []}),
+        isTrue,
+      );
+      expect(
+        valid({'id': 'Bad Id', 'name': 'x', 'kind': 'web', 'permissions': []}),
+        isFalse,
+      );
+      expect(
+        valid({'id': 'ok', 'name': 'x', 'kind': 'other', 'permissions': []}),
+        isFalse,
+      );
+      expect(
+        valid({
+          'id': 'ok',
+          'name': 'x',
+          'kind': 'web',
+          'permissions': [],
+          'z': 1,
+        }),
+        isFalse,
+      );
     });
 
     test('requests before hello get handshake_required', () async {

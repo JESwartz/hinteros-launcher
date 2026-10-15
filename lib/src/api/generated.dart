@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.17).
+// Source: schema/session-api.json (session API 0.18).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.17';
+const apiVersion = '0.18';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -16,6 +16,7 @@ const apiMethodNames = <String>[
   'subscribe',
   'unsubscribe',
   'apps.list',
+  'apps.set_permission',
   'games.list',
   'steam.attention',
   'steam.focus',
@@ -170,6 +171,9 @@ const apiErrorCodesByName = <String, int>{
   'steam_no_windows': 2003,
   'keyboard_unavailable': 2004,
   'osk_unavailable': 2005,
+  'unknown_app': 2006,
+  'unknown_permission': 2007,
+  'permission_required': 2008,
   'permission_denied': 3002,
   'job_failed': 3003,
   'insufficient_resources': 3004,
@@ -233,6 +237,15 @@ abstract final class ApiErrorCode {
 
   /// osk.show: the on-screen keyboard is disabled in the daemon's config.
   static const oskUnavailable = 2005;
+
+  /// apps.set_permission: the app is not installed and not in the catalog.
+  static const unknownApp = 2006;
+
+  /// apps.set_permission: the app does not declare this permission (or it is not enforced on this box).
+  static const unknownPermission = 2007;
+
+  /// apps.set_permission: a required permission cannot be denied.
+  static const permissionRequired = 2008;
 
   /// Not allowed: the caller does not own seat0's active session (seat), polkit said no (polkit), or the peer cannot be identified safely (peer: no SO_PEERPIDFD, or the process is gone).
   static const permissionDenied = 3002;
@@ -306,6 +319,9 @@ typedef AppId = String;
 
 /// A running app's id, or null for the launcher.
 typedef FocusTarget = String;
+
+/// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder). More may come; show unknown names as they are.
+typedef PermissionName = String;
 
 /// Absolute path of an image file in Steam's library cache (readable by the session user), or null if Steam has not cached it.
 typedef ArtworkPath = String;
@@ -631,6 +647,47 @@ class AppNeedsTerms {
   String toString() => 'AppNeedsTerms(${jsonEncode(toJson())})';
 }
 
+/// 0.18: a permission the app declares in the catalog, and this profile's choice. Only permissions this box enforces are listed.
+class AppPermission {
+  const AppPermission({
+    required this.name,
+    required this.required,
+    required this.granted,
+  });
+
+  /// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder). More may come; show unknown names as they are.
+  final String name;
+
+  /// Cannot be switched off (no switch).
+  final bool required;
+
+  /// The app gets it the next time it starts. Always true when required.
+  final bool granted;
+
+  factory AppPermission.fromJson(Map<String, dynamic> json) => AppPermission(
+    name: json['name'] as String,
+    required: json['required'] as bool,
+    granted: json['granted'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'required': required,
+    'granted': granted,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppPermission &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppPermission(${jsonEncode(toJson())})';
+}
+
 class App {
   const App({
     required this.id,
@@ -638,6 +695,7 @@ class App {
     required this.kind,
     this.icon,
     this.needsTerms,
+    required this.permissions,
   });
 
   /// Stable identifier, used by apps.launch.
@@ -655,6 +713,9 @@ class App {
   /// 0.12: the app came with the starter set and this profile has not accepted its vendor terms yet. Show the full text (file) on first launch; accept with system.apps.accept_terms {id, version}, decline leaves it installed and unlaunched (offer Remove). apps.launch refuses it with terms_required meanwhile.
   final AppNeedsTerms? needsTerms;
 
+  /// 0.18: what the app may use in its sandbox, in catalog order. Empty for Steam and for apps that run without a sandbox.
+  final List<AppPermission> permissions;
+
   factory App.fromJson(Map<String, dynamic> json) => App(
     id: json['id'] as String,
     name: json['name'] as String,
@@ -665,6 +726,9 @@ class App {
         : AppNeedsTerms.fromJson(
             (json['needs_terms'] as Map).cast<String, dynamic>(),
           ),
+    permissions: (json['permissions'] as List)
+        .map((x) => AppPermission.fromJson((x as Map).cast<String, dynamic>()))
+        .toList(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -673,6 +737,7 @@ class App {
     'kind': kind.toJson(),
     'icon': ?icon,
     if (needsTerms != null) 'needs_terms': needsTerms!.toJson(),
+    'permissions': permissions.map((x) => x.toJson()).toList(),
   };
 
   @override
@@ -1495,6 +1560,7 @@ class StoreApp {
     required this.status,
     required this.statusReason,
     required this.state,
+    required this.permissions,
   });
 
   /// Catalog app id (state.json apps).
@@ -1536,6 +1602,9 @@ class StoreApp {
   final String? statusReason;
   final StoreState state;
 
+  /// 0.18: what the app may use in its sandbox, in catalog order. Not installed: the stored choice for its install (default granted). Empty for Steam, apps without a sandbox and tombstones.
+  final List<AppPermission> permissions;
+
   factory StoreApp.fromJson(Map<String, dynamic> json) => StoreApp(
     id: json['id'] as String,
     name: json['name'] as String,
@@ -1566,6 +1635,9 @@ class StoreApp {
         ? null
         : json['status_reason'] as String,
     state: StoreState.fromJson(json['state'] as String),
+    permissions: (json['permissions'] as List)
+        .map((x) => AppPermission.fromJson((x as Map).cast<String, dynamic>()))
+        .toList(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -1592,6 +1664,7 @@ class StoreApp {
     'status': status.toJson(),
     'status_reason': statusReason,
     'state': state.toJson(),
+    'permissions': permissions.map((x) => x.toJson()).toList(),
   };
 
   @override
@@ -3857,6 +3930,65 @@ class AppsListResult {
 
   @override
   String toString() => 'AppsListResult(${jsonEncode(toJson())})';
+}
+
+class AppsSetPermissionParams {
+  const AppsSetPermissionParams({
+    required this.id,
+    required this.permission,
+    required this.granted,
+  });
+
+  /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'. 'steam' is Steam itself (Big Picture and its other windows).
+  final String id;
+
+  /// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder). More may come; show unknown names as they are.
+  final String permission;
+  final bool granted;
+
+  factory AppsSetPermissionParams.fromJson(Map<String, dynamic> json) =>
+      AppsSetPermissionParams(
+        id: json['id'] as String,
+        permission: json['permission'] as String,
+        granted: json['granted'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'permission': permission,
+    'granted': granted,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppsSetPermissionParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppsSetPermissionParams(${jsonEncode(toJson())})';
+}
+
+class AppsSetPermissionResult {
+  const AppsSetPermissionResult();
+
+  factory AppsSetPermissionResult.fromJson(Map<String, dynamic> json) =>
+      AppsSetPermissionResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppsSetPermissionResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppsSetPermissionResult(${jsonEncode(toJson())})';
 }
 
 class GamesListParams {
@@ -10445,7 +10577,7 @@ final class GamesChangedEvent extends SessionEvent {
   String toString() => 'GamesChangedEvent(${jsonEncode(toJson())})';
 }
 
-/// The apps.list result changed: an app's resolved icon became available or changed (for example a web app's icon finished downloading), or (0.9) the daemon reloaded its app list after a switch installed or removed apps. Call apps.list again.
+/// The apps.list result changed: an app's resolved icon became available or changed (for example a web app's icon finished downloading), or (0.9) the daemon reloaded its app list after a switch installed or removed apps, or (0.18) apps.set_permission changed a permission. Call apps.list again.
 final class AppsChangedEvent extends SessionEvent {
   const AppsChangedEvent();
 
@@ -11199,7 +11331,7 @@ final class AuthenticationFinishedEvent extends SessionEvent {
   String toString() => 'AuthenticationFinishedEvent(${jsonEncode(toJson())})';
 }
 
-/// What store.list returns may have changed: an apps job started or finished, any other job that switched the system finished, or an update check changed more_after_update, or (0.9) a catalog app's icon was resolved (icon.path). Query store.list again.
+/// What store.list returns may have changed: an apps job started or finished, any other job that switched the system finished, or an update check changed more_after_update, or (0.9) a catalog app's icon was resolved (icon.path), or (0.18) apps.set_permission changed a permission. Query store.list again.
 final class StoreChangedEvent extends SessionEvent {
   const StoreChangedEvent();
 
@@ -12203,6 +12335,15 @@ mixin SessionApiMethods {
   Future<AppsListResult> appsList([
     AppsListParams params = const AppsListParams(),
   ]) async => AppsListResult.fromJson(await rpc('apps.list', params.toJson()));
+
+  /// 0.18: grant or deny one optional permission of an app, for this profile. Applies the next time the app starts.
+  ///
+  /// id: an installed app (apps.list) or a catalog app that is not installed yet (store.list): the launcher calls this for each permission switched off on the install sheet, then system.apps.install. The choice is kept per profile ($XDG_STATE_HOME/hinteros/permissions.json); only denials are stored, so an app without a stored choice has every permission. Emits apps_changed and store_changed. Errors: unknown_app (not installed and not in the catalog), unknown_permission (the app does not declare it, or it is not enforced on this box), permission_required (granted false for a required one). Granting a required one is accepted and changes nothing.
+  Future<AppsSetPermissionResult> appsSetPermission(
+    AppsSetPermissionParams params,
+  ) async => AppsSetPermissionResult.fromJson(
+    await rpc('apps.set_permission', params.toJson()),
+  );
 
   /// Installed Steam games of the session user, read from Steam's library on disk.
   ///

@@ -13,12 +13,17 @@ import 'version.dart';
 /// The default fake app list: what a fresh HinterOS has (the built-in Steam
 /// entry first, then the default apps; Plex is a Store app).
 const mockApps = <App>[
-  App(id: 'steam', name: 'Steam', kind: AppKind.native),
-  App(id: 'jellyfin', name: 'Jellyfin', kind: AppKind.native),
-  App(id: 'youtube', name: 'YouTube', kind: AppKind.web),
-  App(id: 'crunchyroll', name: 'Crunchyroll', kind: AppKind.web),
-  App(id: 'firefox', name: 'Firefox', kind: AppKind.native),
-  App(id: 'plex', name: 'Plex', kind: AppKind.native),
+  App(id: 'steam', name: 'Steam', kind: AppKind.native, permissions: []),
+  App(id: 'jellyfin', name: 'Jellyfin', kind: AppKind.native, permissions: []),
+  App(id: 'youtube', name: 'YouTube', kind: AppKind.web, permissions: []),
+  App(
+    id: 'crunchyroll',
+    name: 'Crunchyroll',
+    kind: AppKind.web,
+    permissions: [],
+  ),
+  App(id: 'firefox', name: 'Firefox', kind: AppKind.native, permissions: []),
+  App(id: 'plex', name: 'Plex', kind: AppKind.native, permissions: []),
 ];
 
 /// The default apps with local icons from [iconDir] (holding `<app-id>.png` or
@@ -39,6 +44,7 @@ List<App> mockAppsWithIcons(String iconDir, {Set<String> without = const {}}) {
         name: a.name,
         kind: a.kind,
         icon: without.contains(a.id) ? null : find(a.id),
+        permissions: a.permissions,
       ),
   ];
 }
@@ -137,7 +143,9 @@ class MockDaemon extends DaemonConnection {
         var changed = false;
         for (final a in added) {
           if (this.apps.any((x) => x.id == a.id)) continue;
-          this.apps.add(App(id: a.id, name: a.name, kind: a.kind));
+          this.apps.add(
+            App(id: a.id, name: a.name, kind: a.kind, permissions: const []),
+          );
           changed = true;
         }
         if (changed) emitRaw('apps_changed');
@@ -349,7 +357,12 @@ class MockDaemon extends DaemonConnection {
         _subscribed.removeWhere(_eventNames(params).contains);
         return {'events': List<String>.of(_subscribed)};
       case 'apps.list':
-        return AppsListResult(apps: List.of(apps)).toJson();
+        return AppsListResult(apps: [for (final a in apps) _withPermissions(a)])
+            .toJson();
+      case 'apps.set_permission':
+        system.setPermission(AppsSetPermissionParams.fromJson(params));
+        emitRaw('apps_changed');
+        return const AppsSetPermissionResult().toJson();
       case 'games.list':
         return GamesListResult(games: List.of(_games)).toJson();
       case 'steam.attention':
@@ -622,6 +635,21 @@ class MockDaemon extends DaemonConnection {
     }
   }
 
+  /// [a] with its permissions (0.18) and this profile's choices, from the
+  /// catalog (the session daemon reads them from the app-env manifest); an
+  /// app the catalog does not know keeps its own.
+  App _withPermissions(App a) => App(
+    id: a.id,
+    name: a.name,
+    kind: a.kind,
+    icon: a.icon,
+    needsTerms: a.needsTerms,
+    permissions: switch (system.permissionsOf(a.id)) {
+      [] => a.permissions,
+      final p => p,
+    },
+  );
+
   /// Emits the event if this connection subscribed to [name] (like the daemon).
   void emitRaw(String name, [Map<String, dynamic> params = const {}]) {
     if (_closed || !_subscribed.contains(name)) return;
@@ -641,6 +669,7 @@ class MockDaemon extends DaemonConnection {
       kind: a.kind,
       icon: icon,
       needsTerms: a.needsTerms,
+      permissions: a.permissions,
     );
     emitRaw('apps_changed');
   }
@@ -658,6 +687,7 @@ class MockDaemon extends DaemonConnection {
       kind: a.kind,
       icon: a.icon,
       needsTerms: terms,
+      permissions: a.permissions,
     );
     emitRaw('apps_changed');
   }

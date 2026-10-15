@@ -44,6 +44,7 @@ StoreApp mockStoreApp({
   String? statusReason,
   AppKind kind = AppKind.native,
   StoreAppIcon icon = const StoreAppIcon(firefoxProfile: false),
+  List<AppPermission> permissions = const [],
 }) => StoreApp(
   id: id,
   name: name,
@@ -68,6 +69,7 @@ StoreApp mockStoreApp({
   status: status,
   statusReason: statusReason,
   state: StoreState.available,
+  permissions: permissions,
 );
 
 /// The fixture index (camelCase) as wire apps (snake_case), the
@@ -130,12 +132,21 @@ List<StoreApp> _fixtureApps(String? dir) {
           status: CatalogStatus.fromJson(a['status'] as String? ?? 'available'),
           statusReason: a['statusReason'] as String?,
           state: StoreState.available,
+          // Index 3 (optional): name -> "required" / "optional".
+          permissions: [
+            for (final e in ((a['permissions'] as Map?) ?? const {}).entries)
+              AppPermission(
+                name: e.key as String,
+                required: e.value == 'required',
+                granted: true,
+              ),
+          ],
         ),
   ];
 }
 
 /// The mock daemon's catalog: the fixture, RetroArch with the cores it
-/// depends on, a video player, Kodi (conflicts with Jellyfin) and a retired
+/// depends on, a video player (with permissions), Kodi (conflicts with Jellyfin) and a retired
 /// app.
 List<StoreApp> mockStoreCatalog({String? dir}) => [
   ..._fixtureApps(dir ?? mockCatalogDir()),
@@ -164,6 +175,11 @@ List<StoreApp> mockStoreCatalog({String? dir}) => [
     summary: 'Plays files from USB drives and shares.',
     category: 'video',
     sizeMib: 60,
+    permissions: const [
+      AppPermission(name: 'gamepad', required: true, granted: true),
+      AppPermission(name: 'mic', required: false, granted: true),
+      AppPermission(name: 'downloads', required: false, granted: true),
+    ],
   ),
   mockStoreApp(
     id: 'kodi',

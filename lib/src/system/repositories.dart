@@ -296,6 +296,13 @@ abstract class StoreRepository {
   /// an app it got with the starter set.
   Future<void> acceptTerms(String id, String version);
 
+  /// `apps.set_permission {id, permission, granted}` (0.18): this profile's
+  /// choice for one optional permission of app [id], installed or not (an
+  /// install with opt-outs sets them first). Applies the next time the app
+  /// starts; [changes] follows. [SystemErrorKind.notFound] for an unknown app
+  /// or permission, [SystemErrorKind.invalidParams] to deny a required one.
+  Future<void> setPermission(String id, String permission, bool granted);
+
   /// `apps.generations`: this profile's app generations, newest first.
   /// [SystemErrorKind.unavailable] on a box that still has box-wide apps.
   Future<List<AppGeneration>> appGenerations();

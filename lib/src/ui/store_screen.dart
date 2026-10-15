@@ -10,6 +10,7 @@ import '../system/repositories.dart';
 import '../theme/hinter_theme.dart';
 import 'app_icon_view.dart';
 import 'common.dart';
+import 'dialogs.dart';
 import 'focus_frame.dart';
 import 'modal_host.dart';
 import 'nav_focusable.dart';
@@ -440,7 +441,7 @@ class StoreCard extends StatelessWidget {
 }
 
 /// An app's detail page: what it is, size, what it brings along, terms, and
-/// Install or Remove.
+/// Install or Remove; for an installed app, its permissions as switches.
 class AppDetailPage extends StatefulWidget {
   const AppDetailPage({
     super.key,
@@ -472,19 +473,40 @@ class _AppDetailPageState extends State<AppDetailPage> {
     _sub = widget.services.store.changes.listen((_) {
       if (mounted) setState(() {});
     });
+    widget.data?.addListener(_rebuild);
   }
 
   @override
   void dispose() {
     _sub?.cancel();
+    widget.data?.removeListener(_rebuild);
     super.dispose();
+  }
+
+  /// Which apps run changed ("Restart the app to apply.").
+  void _rebuild() {
+    if (mounted) setState(() {});
+  }
+
+  /// Turns optional permission [p] of [app] on or off for this profile.
+  Future<void> _togglePermission(StoreApp app, AppPermission p) async {
+    try {
+      await widget.services.store.setPermission(app.id, p.name, !p.granted);
+    } on SystemException catch (e) {
+      if (mounted) {
+        await showMessage(context, title: refusalTitle(e), body: e.message);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
-    final app = widget.app;
     final store = widget.services.store;
+    // The listing follows `store_changed` (a permission changed, for one).
+    final app =
+        store.apps.where((a) => a.id == widget.app.id).firstOrNull ??
+        widget.app;
     final state = store.stateOf(app.id);
     final installed = state.isInstalled;
     final deps = missingDependencies(app, widget.catalog, store.installed);
@@ -574,6 +596,27 @@ class _AppDetailPageState extends State<AppDetailPage> {
         btn('Back', widget.modal.close),
       ],
     ], gap: HinterTokens.s3);
+    if (installed && !state.busy && app.permissions.isNotEmpty) {
+      p.add(Text('Permissions', style: t.label), gap: HinterTokens.s4);
+      if (widget.data?.isRunning(app.id) ?? false) {
+        p.add(Text('Restart the app to apply.', style: t.bodyDim));
+      }
+      for (final perm in app.permissions) {
+        p.item(
+          'perm-${perm.name}',
+          onSelect: perm.required ? null : () => _togglePermission(app, perm),
+          builder: (f) => SettingRow(
+            title: perm.label,
+            focused: f,
+            trailing: ToggleMark(
+              on: perm.granted,
+              locked: perm.required,
+              label: perm.required ? 'Required' : null,
+            ),
+          ),
+        );
+      }
+    }
     return FullPage(
       title: app.name,
       subtitle: app.summary.isEmpty

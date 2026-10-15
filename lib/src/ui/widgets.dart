@@ -148,38 +148,46 @@ class SettingRow extends StatelessWidget {
   }
 }
 
-/// On/off shown as a switch plus the word, so it never relies on colour.
+/// On/off shown as a switch plus the word, so it never relies on colour. A
+/// [locked] one (cannot be changed) is drawn faded.
 class ToggleMark extends StatelessWidget {
-  const ToggleMark({super.key, required this.on, this.label});
+  const ToggleMark({
+    super.key,
+    required this.on,
+    this.label,
+    this.locked = false,
+  });
 
   final bool on;
   final String? label;
+  final bool locked;
 
   @override
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
+    final knob = Container(
+      width: 64,
+      height: 36,
+      padding: const EdgeInsets.all(4),
+      alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+      decoration: BoxDecoration(
+        color: on ? t.accent : t.surfaceHigh,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: on ? t.accent : t.textDim, width: 2),
+      ),
+      child: Container(
+        width: 26,
+        height: 26,
+        decoration: BoxDecoration(
+          color: on ? t.onAccent : t.textDim,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 64,
-          height: 36,
-          padding: const EdgeInsets.all(4),
-          alignment: on ? Alignment.centerRight : Alignment.centerLeft,
-          decoration: BoxDecoration(
-            color: on ? t.accent : t.surfaceHigh,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: on ? t.accent : t.textDim, width: 2),
-          ),
-          child: Container(
-            width: 26,
-            height: 26,
-            decoration: BoxDecoration(
-              color: on ? t.onAccent : t.textDim,
-              shape: BoxShape.circle,
-            ),
-          ),
-        ),
+        if (locked) Opacity(opacity: 0.5, child: knob) else knob,
         const SizedBox(width: HinterTokens.s1),
         Text(label ?? (on ? 'On' : 'Off'), style: t.bodyDim),
       ],

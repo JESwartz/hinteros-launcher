@@ -1,4 +1,5 @@
-/// The Store over session API 0.8 and 0.9 (icons): `store.list` (the running
+/// The Store over session API 0.8, 0.9 (icons) and 0.18 (permissions,
+/// `apps.set_permission`): `store.list` (the running
 /// generation's catalog merged with what is installed), `store_changed`, and the relayed
 /// `system.apps.install` / `system.apps.remove` with their job events.
 library;
@@ -180,6 +181,10 @@ class DaemonStore implements StoreRepository {
       removeDataWarning: removeDataWarningFor(a.dataPaths),
       state: state,
       statusReason: a.statusReason,
+      permissions: [
+        for (final p in a.permissions)
+          AppPermission(name: p.name, required: p.required, granted: p.granted),
+      ],
       // Services are not in the store yet (M10): store.list carries no
       // missing_services, so nothing is greyed out for one.
     );
@@ -250,6 +255,19 @@ class DaemonStore implements StoreRepository {
     _needsTerms = {..._needsTerms}..remove(id);
     _changes.add(null);
   }
+
+  /// `apps.set_permission`; `store_changed` refreshes the listing.
+  @override
+  Future<void> setPermission(String id, String permission, bool granted) =>
+      guardCall(
+        () => _conn.appsSetPermission(
+          api.AppsSetPermissionParams(
+            id: id,
+            permission: permission,
+            granted: granted,
+          ),
+        ),
+      );
 
   @override
   Future<List<AppGeneration>> appGenerations() => guardCall(() async {

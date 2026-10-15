@@ -1215,6 +1215,11 @@ List<StoreApp> mockCatalog() {
       sizeMiB: 60,
       installer: false,
       icon: StoreIcon(desktopId: 'mpv'),
+      permissions: [
+        AppPermission(name: 'gamepad', required: true),
+        AppPermission(name: 'mic'),
+        AppPermission(name: 'downloads'),
+      ],
     ),
   ];
 }
@@ -1248,6 +1253,10 @@ class MockStore implements StoreRepository {
   final _busy = <String, StoreState>{};
   final Set<String> _needsTerms = {};
 
+  /// This profile's opt-outs: app id -> denied permission names (only
+  /// optional ones, as in the session daemon's `permissions.json`).
+  final Map<String, Set<String>> denied = {};
+
   /// Earlier app generations of this profile (newest first), below the
   /// current one, which is what [installed] holds.
   List<AppGeneration> earlierGenerations = [
@@ -1272,8 +1281,8 @@ class MockStore implements StoreRepository {
   @override
   bool moreAfterUpdate;
 
-  /// `install:<id>:<id=terms version,...>` / `remove:<id>:<deleteData>` in
-  /// order.
+  /// `install:<id>:<id=terms version,...>` / `remove:<id>:<deleteData>` /
+  /// `set_permission:<id>:<permission>:<granted>` in order.
   final List<String> log = [];
 
   /// `<id>=<terms version>` for every acceptance the box would record.
@@ -1319,6 +1328,10 @@ class MockStore implements StoreRepository {
         removeDataWarning: a.removeDataWarning,
         state: stateOf(a.id),
         missingServices: a.missingServices,
+        permissions: [
+          for (final p in a.permissions)
+            p.copyWith(granted: !(denied[a.id]?.contains(p.name) ?? false)),
+        ],
       ),
   ];
 
@@ -1359,6 +1372,32 @@ class MockStore implements StoreRepository {
     acceptances.add('$id=$version');
     _needsTerms.remove(id);
     onTermsAccepted?.call(id);
+    _changes.add(null);
+  }
+
+  @override
+  Future<void> setPermission(String id, String permission, bool granted) async {
+    final a = _app(id);
+    _maybeFail();
+    final p = a.permissions.where((p) => p.name == permission).firstOrNull;
+    if (p == null) {
+      throw SystemException(
+        SystemErrorKind.notFound,
+        '${a.name} has no such permission.',
+        data: {'id': id, 'permission': permission},
+      );
+    }
+    if (p.required && !granted) {
+      throw SystemException(
+        SystemErrorKind.invalidParams,
+        '${a.name} needs this permission.',
+        data: {'id': id, 'permission': permission},
+      );
+    }
+    log.add('set_permission:$id:$permission:$granted');
+    final d = denied.putIfAbsent(id, () => {});
+    granted ? d.remove(permission) : d.add(permission);
+    if (d.isEmpty) denied.remove(id);
     _changes.add(null);
   }
 

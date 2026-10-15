@@ -175,6 +175,9 @@ class _UnavailableStore implements StoreRepository {
   @override
   Future<void> acceptTerms(String id, String version) => Future.error(_gone);
   @override
+  Future<void> setPermission(String id, String permission, bool granted) =>
+      Future.error(_gone);
+  @override
   Future<List<AppGeneration>> appGenerations() => Future.error(_gone);
   @override
   Future<JobHandle> rollbackApps(int generation) => Future.error(_gone);

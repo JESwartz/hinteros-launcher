@@ -136,6 +136,12 @@ StoreApp? _parseApp(Map<String, Object?> a, TermsReader readTerms) {
             firefoxProfile: icon['firefoxProfile'] == true,
           )
         : const StoreIcon(),
+    // Index 3 (optional): `permissions`, name -> "required" / "optional".
+    permissions: [
+      if (a['permissions'] case final Map<String, Object?> perms)
+        for (final e in perms.entries)
+          AppPermission(name: e.key, required: e.value == 'required'),
+    ],
     removeDataWarning: removeDataWarningFor(dataPaths),
   );
 }

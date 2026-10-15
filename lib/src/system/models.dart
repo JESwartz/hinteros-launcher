@@ -1001,6 +1001,44 @@ class StoreIcon {
   final bool firefoxProfile;
 }
 
+/// One permission an app declares in the catalog (session API 0.18): what
+/// its sandbox may reach. A required one is always granted; an optional one
+/// the profile can turn off (at install and on the app's page). A change
+/// applies the next time the app starts.
+@immutable
+class AppPermission {
+  const AppPermission({
+    required this.name,
+    this.required = false,
+    this.granted = true,
+  });
+
+  /// The catalog name (`gamepad`, `mic`, `downloads`).
+  final String name;
+  final bool required;
+
+  /// This profile's choice (true until it turns an optional one off).
+  final bool granted;
+
+  /// What the user sees: a short name, or the catalog name for one this
+  /// launcher does not know.
+  String get label => permissionLabel(name);
+
+  AppPermission copyWith({bool? granted}) => AppPermission(
+    name: name,
+    required: required,
+    granted: granted ?? this.granted,
+  );
+}
+
+/// The short name of permission [name] on screen.
+String permissionLabel(String name) => switch (name) {
+  'gamepad' => 'Controller',
+  'mic' => 'Microphone',
+  'downloads' => 'Downloads folder',
+  _ => name,
+};
+
 /// One catalog index entry (format 2); see `catalog.dart` for the parser.
 @immutable
 class StoreApp {
@@ -1027,6 +1065,7 @@ class StoreApp {
     this.statusReason,
     this.conflicts = const [],
     this.missingServices = const [],
+    this.permissions = const [],
   });
 
   final String id;
@@ -1079,6 +1118,10 @@ class StoreApp {
   /// Services (box-wide, admin profile only) this app needs that are not
   /// enabled on this box (0.12). While any is missing it cannot be installed.
   final List<({String id, String name})> missingServices;
+
+  /// What its sandbox may reach (0.18), in catalog order, with this
+  /// profile's choices. Empty: it declares none.
+  final List<AppPermission> permissions;
 
   bool get hasTerms => terms != null;
 
