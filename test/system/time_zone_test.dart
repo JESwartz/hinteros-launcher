@@ -1,7 +1,8 @@
-// The time zone (session API 0.16): the picker (the drop-down's list, the
-// map's band from the standard offset), Settings > Time zone with the admin
-// PIN, the first-boot step without one, and the top-bar clock (UTC plus the
-// daemon's offset, again at the next change and on `time_zone_changed`).
+// The time zone (session API 0.16): the picker (the map over the drop-down,
+// the list under it with the map following its focus, the band from the
+// standard offset), Settings > Time zone with the admin PIN, the first-boot
+// step without one, and the top-bar clock (UTC plus the daemon's offset,
+// again at the next change and on `time_zone_changed`).
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -9,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/mock_time_zones.dart';
 import 'package:hinteros_launcher/src/system/mock_system.dart';
 import 'package:hinteros_launcher/src/system/time_zone.dart';
+import 'package:hinteros_launcher/src/ui/drop_down.dart';
 import 'package:hinteros_launcher/src/ui/time_zone/time_zone_map.dart';
 
 import '../support/harness.dart';
@@ -245,6 +247,69 @@ void main() {
       expect(listOpen(), isFalse);
       expect(find.text(_askPin), findsNothing);
       expect(h.services.mockTimeZone.log, isEmpty);
+    });
+  });
+
+  group('the map over the drop-down', () {
+    // Where the list opens (at 1x and 1.6x text, so with the real font):
+    // test/golden/time_zone_test.dart.
+    testWidgets('the map is over the field, the field is focused', (t) async {
+      setView(t);
+      await harness(zone: 'Asia/Kolkata').pump(t);
+      await enterSettingsEntry(t, 'time');
+      final map = t.getRect(find.byKey(const ValueKey('time-zone-map')));
+      final field = t.getRect(find.byType(DropDownField));
+      expect(map.bottom, lessThanOrEqualTo(field.top));
+      expect(focusLabel(), 'settings-detail/zone:0');
+    });
+
+    testWidgets('the map follows the focus in the list; B puts it back', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness(zone: 'Europe/Paris');
+      await h.pump(t);
+      await enterSettingsEntry(t, 'time');
+      expect(mapBand(t), const Duration(hours: 1));
+      await press(t, [kEnter]);
+      expect(mapBand(t), const Duration(hours: 1));
+      await press(t, [kRight]);
+      expect(focusedZone(all), 'Africa/Lagos');
+      expect(mapBand(t), const Duration(hours: 1));
+      await press(t, [kRight]);
+      expect(focusedZone(all), 'Africa/Abidjan');
+      expect(mapBand(t), Duration.zero);
+      // Atlantic/Azores: UTC+00:00 now (summer time), −01:00 standard.
+      await press(t, [kDown]);
+      expect(focusedZone(all), 'Atlantic/Azores');
+      expect(mapBand(t), const Duration(hours: -1));
+      await press(t, [kEscape]);
+      expect(listOpen(), isFalse);
+      expect(mapBand(t), const Duration(hours: 1));
+      expect(find.text('Europe/Paris'), findsOneWidget);
+    });
+
+    testWidgets('a choice keeps the map on it; Back on the PIN, not', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await enterSettingsEntry(t, 'time');
+      // UTC+00:00, then UTC+01:00: Africa/Lagos.
+      await press(t, [kEnter, kLeft, kLeft]);
+      expect(focusedZone(all), 'Africa/Lagos');
+      expect(mapBand(t), const Duration(hours: 1));
+      await press(t, [kEnter]);
+      expect(find.text(_askPin), findsOneWidget);
+      expect(mapBand(t), const Duration(hours: 1));
+      await press(t, [kEscape]);
+      expect(find.text(_askPin), findsNothing);
+      expect(mapBand(t), Duration.zero);
+      await press(t, [kEnter, kLeft, kLeft, kEnter]);
+      await enterPin(t, '2468');
+      expect(h.services.mockTimeZone.zone, 'Africa/Lagos');
+      expect(mapBand(t), const Duration(hours: 1));
     });
   });
 

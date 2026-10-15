@@ -379,7 +379,7 @@ class _FirstBootPageState extends State<FirstBootPage> {
               zones: _zones,
               current: z,
               busy: _settingZone,
-              onChoose: (e) => unawaited(_setZone(e)),
+              onChoose: _setZone,
             ),
           );
         }
