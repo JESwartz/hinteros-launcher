@@ -158,7 +158,7 @@ void main() {
   });
 
   group('security notice lockout, exact timing', () {
-    testWidgets('inert for 5 seconds, then Update now and Later', (t) async {
+    testWidgets('Update now at once, Later after 5 seconds', (t) async {
       setView(t);
       final host = ModalTestHost();
       await host.pump(t, (_) => const SizedBox());
@@ -169,14 +169,12 @@ void main() {
           )
           .then((v) => choice = v);
       await t.pumpAndSettle();
-      expect(
-        find.textContaining('You can choose in 5 seconds'),
-        findsOneWidget,
-      );
+      expect(enabled(t, 'Update now'), isTrue);
+      expect(enabled(t, 'Later (5)'), isFalse);
 
       await t.pump(const Duration(milliseconds: 4500));
-      expect(find.textContaining('in 1 second'), findsOneWidget);
-      expect(enabled(t, 'Update now (1)'), isFalse);
+      expect(enabled(t, 'Later (1)'), isFalse);
+      host.nav.dispatch(NavAction.left, NavPhase.press);
       host.nav.dispatch(NavAction.accept, NavPhase.press);
       host.nav.dispatch(NavAction.back, NavPhase.press);
       await t.pump();
@@ -184,9 +182,7 @@ void main() {
       expect(host.modals.isOpen, isTrue);
 
       await t.pump(const Duration(milliseconds: 500));
-      expect(find.textContaining('Choose when to update'), findsOneWidget);
       expect(enabled(t, 'Later'), isTrue);
-      expect(enabled(t, 'Update now'), isTrue);
       host.nav.dispatch(NavAction.right, NavPhase.press);
       host.nav.dispatch(NavAction.accept, NavPhase.press);
       await t.pumpAndSettle();

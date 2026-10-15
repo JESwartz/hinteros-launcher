@@ -904,12 +904,12 @@ class _Track extends StatelessWidget {
 
 enum SecurityChoice { updateNow, later }
 
-/// How long the security notice cannot be dismissed (threat-model decision).
+/// How long Later (and Back) on the security notice wait (threat-model decision).
 const securityLockout = Duration(seconds: 5);
 
-/// The full-screen security-update notice: states the severity, and for
-/// [securityLockout] cannot be dismissed (visible countdown, buttons and Back
-/// inert). Then "Update now" / "Later". Never updates by itself.
+/// The full-screen security-update notice: states the severity. "Update now"
+/// works at once and has the focus; "Later" and Back wait [securityLockout]
+/// (a countdown on Later). Never updates by itself.
 Future<SecurityChoice?> showSecurityNotice(
   BuildContext context,
   AvailableUpdate update, {
@@ -940,6 +940,7 @@ class _SecurityNoticeState extends State<SecurityNotice> {
   Timer? _timer;
 
   bool get _locked => _left > 0;
+  bool _placed = false;
 
   @override
   void initState() {
@@ -966,6 +967,11 @@ class _SecurityNoticeState extends State<SecurityNotice> {
     final u = widget.update;
     final region = widget.modal.region;
     region.setRows(const [NavRow('buttons', 2)]);
+    if (!_placed) {
+      // Focus starts on Update now (Later waits).
+      _placed = true;
+      region.model.goTo(0, 1);
+    }
     final sev = u.severity ?? SecuritySeverity.unknown;
     return ColoredBox(
       color: t.background,
@@ -1038,15 +1044,6 @@ class _SecurityNoticeState extends State<SecurityNotice> {
                 const SizedBox(height: HinterTokens.s2),
                 Text('The update restarts your session.', style: t.bodyDim),
                 const SizedBox(height: HinterTokens.s4),
-                Text(
-                  _locked
-                      ? 'You can choose in $_left '
-                            '${_left == 1 ? 'second' : 'seconds'}.'
-                      : 'Choose when to update.',
-                  key: const ValueKey('countdown'),
-                  style: t.label.copyWith(color: _locked ? t.accent : t.text),
-                ),
-                const SizedBox(height: HinterTokens.s2),
                 DialogButtons(
                   region: region,
                   rowKey: 'buttons',
@@ -1057,10 +1054,9 @@ class _SecurityNoticeState extends State<SecurityNotice> {
                       enabled: !_locked,
                     ),
                     btn(
-                      _locked ? 'Update now ($_left)' : 'Update now',
+                      'Update now',
                       () => widget.modal.close(SecurityChoice.updateNow),
                       primary: true,
-                      enabled: !_locked,
                     ),
                   ],
                 ),
