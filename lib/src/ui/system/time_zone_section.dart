@@ -1,4 +1,4 @@
-/// Settings -> Time zone: the box's zone in the picker (drop-down and map).
+/// Settings -> Time zone: the box's zone in the picker (map and drop-down).
 /// A box-wide setting: a change takes the admin PIN on the usual pad
 /// ([withBoxAdminPin]) and applies at once (no job).
 library;
@@ -77,7 +77,7 @@ class _TimeZoneSectionState extends State<TimeZoneSection> {
             zones: zones,
             current: info,
             busy: _busy,
-            onChoose: (z) => unawaited(_set(z, reload)),
+            onChoose: (z) => _set(z, reload),
           ),
         );
         return p.build();

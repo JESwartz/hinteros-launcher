@@ -3,13 +3,15 @@
 /// a down arrow. A on the field opens the list of choices under (or over)
 /// it, at the current one: up and down move, A chooses, B closes. A list in
 /// groups has a header per group; left and right (or L1 and R1) go to the
-/// previous or next group.
+/// previous or next group. A field under something the list must not cover
+/// (the time zone map) opens its list only under it ([DropDown.below]).
 library;
 
 import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 
 import '../api/api.dart' show NavAction;
 import '../nav/nav_controller.dart';
@@ -56,6 +58,9 @@ class DropDown<T> extends StatefulWidget {
     required this.onChoose,
     this.busy = false,
     this.listKey = const ValueKey('drop-down-list'),
+    this.onHighlight,
+    this.below = false,
+    this.keepInView,
   });
 
   final NavRegion region;
@@ -78,6 +83,20 @@ class DropDown<T> extends StatefulWidget {
   /// The key of the open list.
   final Key listKey;
 
+  /// The focused choice while the list is open (also the first one, where
+  /// it opens); null when it closes (after [onChoose] if a choice was made).
+  final void Function(T? value)? onHighlight;
+
+  /// The list opens only under the field, shorter if needed; over it only
+  /// when there is no room for two lines under it.
+  final bool below;
+
+  /// What holds the field and must stay in view with it (the time zone
+  /// picker: the map over the field). On focus it is scrolled into the
+  /// middle instead of the field; before the list opens, up to the top, so
+  /// the list has room under the field.
+  final GlobalKey? keepInView;
+
   @override
   State<DropDown<T>> createState() => _DropDownState<T>();
 }
@@ -87,35 +106,86 @@ class _DropDownState<T> extends State<DropDown<T>> {
   final _field = GlobalKey();
   bool _open = false;
 
+  /// Room left over [DropDown.keepInView] when it is scrolled to the top:
+  /// past the fade at the top of a pane.
+  static const _topRoom = HinterTokens.s4;
+
+  void _revealMiddle() {
+    final c = widget.keepInView?.currentContext;
+    if (c == null) return;
+    unawaited(
+      Scrollable.ensureVisible(
+        c,
+        alignment: 0.5,
+        duration: HinterTheme.of(context).medium,
+        curve: Curves.easeOutCubic,
+      ),
+    );
+  }
+
+  /// Scrolls [DropDown.keepInView] up to the top of its scroll view (as far
+  /// as it goes), and waits for the frame that lays it out there.
+  Future<void> _revealTop() async {
+    final c = widget.keepInView?.currentContext;
+    final box = c?.findRenderObject();
+    if (c == null || box == null) return;
+    final position = Scrollable.maybeOf(c)?.position;
+    final viewport = RenderAbstractViewport.maybeOf(box);
+    if (position == null || viewport == null) return;
+    final to = (viewport.getOffsetToReveal(box, 0).offset - _topRoom).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if ((to - position.pixels).abs() < 1) return;
+    position.jumpTo(to);
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
   Future<void> _openList() async {
     if (_open || widget.busy) return;
     final groups = widget.groups();
     if (groups.every((g) => g.choices.isEmpty)) return;
+    _open = true;
+    try {
+      await _revealTop();
+      if (!mounted) return;
+      await _showList(groups);
+    } finally {
+      _open = false;
+    }
+  }
+
+  Future<void> _showList(List<DropDownGroup<T>> groups) async {
     final box = _field.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
     final topLeft = box.localToGlobal(Offset.zero);
     final anchor = topLeft & box.size;
+    final keep =
+        widget.keepInView?.currentContext?.findRenderObject() as RenderBox?;
+    final clear = keep == null || !keep.hasSize
+        ? null
+        : keep.localToGlobal(Offset.zero) & keep.size;
     final screen = MediaQuery.sizeOf(context);
     final textScale = MediaQuery.textScalerOf(context).scale(1);
-    _open = true;
-    final DropDownChoice<T>? chosen;
-    try {
-      chosen = await ModalScope.of(context).show<DropDownChoice<T>>(
-        (c, modal) => DropDownList<T>(
-          key: widget.listKey,
-          modal: modal,
-          groups: groups,
-          link: _link,
-          anchor: anchor,
-          screen: screen,
-          textScale: textScale,
-        ),
-      );
-    } finally {
-      _open = false;
+    final onHighlight = widget.onHighlight;
+    final chosen = await ModalScope.of(context).show<DropDownChoice<T>>(
+      (c, modal) => DropDownList<T>(
+        key: widget.listKey,
+        modal: modal,
+        groups: groups,
+        link: _link,
+        anchor: anchor,
+        screen: screen,
+        textScale: textScale,
+        below: widget.below,
+        clear: clear,
+        onHighlight: onHighlight == null ? null : (c) => onHighlight(c.value),
+      ),
+    );
+    if (mounted && chosen != null && !chosen.current) {
+      widget.onChoose(chosen.value);
     }
-    if (!mounted || chosen == null || chosen.current) return;
-    widget.onChoose(chosen.value);
+    if (mounted) onHighlight?.call(null);
   }
 
   @override
@@ -127,6 +197,8 @@ class _DropDownState<T> extends State<DropDown<T>> {
         rowKey: widget.rowKey,
         col: 0,
         onSelect: () => unawaited(_openList()),
+        scrollIntoView: widget.keepInView == null,
+        onFocused: widget.keepInView == null ? null : _revealMiddle,
         builder: (_, f) => KeyedSubtree(
           key: _field,
           child: DropDownField(
@@ -234,6 +306,9 @@ class DropDownList<T> extends StatefulWidget {
     required this.anchor,
     required this.screen,
     this.textScale = 1,
+    this.below = false,
+    this.clear,
+    this.onHighlight,
   });
 
   final ModalHandle<DropDownChoice<T>> modal;
@@ -244,6 +319,15 @@ class DropDownList<T> extends StatefulWidget {
 
   /// The text size setting: the lines grow with it.
   final double textScale;
+
+  /// See [DropDown.below].
+  final bool below;
+
+  /// Not shaded (global): what [DropDown.keepInView] keeps in view.
+  final Rect? clear;
+
+  /// The focused choice, at each move.
+  final void Function(DropDownChoice<T> choice)? onHighlight;
 
   /// Line heights at 100% text.
   static const rowHeight = 64.0;
@@ -303,11 +387,15 @@ class _DropDownListState<T> extends State<DropDownList<T>> {
     final total = y + _pad;
 
     // Under the field when there is room for a good part of the list,
-    // else over it.
+    // else over it. Only under it ([DropDownList.below]) while two lines
+    // fit there.
     const margin = HinterTokens.s4;
     final under = widget.screen.height - widget.anchor.bottom - margin;
     final over = widget.anchor.top - margin;
-    _below = under >= 6 * _rowH || under >= over;
+    _below =
+        (widget.below && under - HinterTokens.s1 >= 2 * _rowH) ||
+        under >= 6 * _rowH ||
+        under >= over;
     final room = (_below ? under : over) - HinterTokens.s1;
     _height = math.max(
       math.min(math.min(room, 10.5 * _rowH), total),
@@ -383,9 +471,7 @@ class _DropDownListState<T> extends State<DropDownList<T>> {
     final width = widget.anchor.width;
     return Stack(
       children: [
-        Positioned.fill(
-          child: ColoredBox(color: Colors.black.withValues(alpha: 0.45)),
-        ),
+        Positioned.fill(child: _Shade(clear: widget.clear)),
         Positioned(
           left: 0,
           top: 0,
@@ -450,6 +536,9 @@ class _DropDownListState<T> extends State<DropDownList<T>> {
                             rowKey: 'c${l.index}',
                             col: 0,
                             onSelect: () => widget.modal.close(c),
+                            onFocused: widget.onHighlight == null
+                                ? null
+                                : () => widget.onHighlight!(c),
                             builder: (_, f) =>
                                 _ChoiceRow(choice: c, focused: f),
                           ),
@@ -550,6 +639,63 @@ class _ChoiceRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The shade over the screen behind the open list, with a hole at [clear]
+/// (global), where things must stay as they are (the time zone map).
+class _Shade extends LeafRenderObjectWidget {
+  const _Shade({this.clear});
+
+  final Rect? clear;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderShade(clear);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderShade r) =>
+      r.clear = clear;
+}
+
+class _RenderShade extends RenderBox {
+  _RenderShade(this._clear);
+
+  Rect? _clear;
+  set clear(Rect? v) {
+    if (v == _clear) return;
+    _clear = v;
+    markNeedsPaint();
+  }
+
+  @override
+  bool get sizedByParent => true;
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) => constraints.biggest;
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final paint = Paint()..color = Colors.black.withValues(alpha: 0.45);
+    final area = offset & size;
+    final c = _clear;
+    if (c == null) {
+      context.canvas.drawRect(area, paint);
+      return;
+    }
+    // [clear] is global; [offset] is in the layer this paints into.
+    final hole = c.shift(offset - localToGlobal(Offset.zero));
+    context.canvas.drawPath(
+      Path()
+        ..fillType = PathFillType.evenOdd
+        ..addRect(area)
+        ..addRRect(
+          RRect.fromRectAndRadius(
+            hole,
+            const Radius.circular(HinterTokens.radiusSmall),
+          ),
+        ),
+      paint,
     );
   }
 }

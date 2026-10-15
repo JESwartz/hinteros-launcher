@@ -116,17 +116,23 @@ Design: `hinteros-docs/design/time-zone.md`. The box's zone (`TimeZoneRepository
 `lib/src/system/time_zone.dart`, over the relayed `system.time_zone.get` / `list` / `set` and
 `time_zone_changed` in `daemon_time_zone.dart`, faked in `mock_time_zone.dart`).
 
-- **The picker** (`lib/src/ui/time_zone/time_zone_picker.dart`, `TimeZonePicker`): a drop-down
-  (`UTC−06:00  America/Chicago` and a down arrow) and under it the world map
+- **The picker** (`lib/src/ui/time_zone/time_zone_picker.dart`, `TimeZonePicker`): the world map
   (`time_zone_map.dart`, a `CustomPainter`, equirectangular) with every area of the zone's
-  standard offset highlighted (the band, not only the zone) over the land outlines. The map only
-  shows. A on the drop-down opens the list under it (or over it, where there is no room): every
-  zone by its offset now, highest at the top (UTC+14:00 at the top, UTC+00:00 in the middle,
-  UTC−12:00 at the bottom), a header per offset and, under it, its zones by name, opening at the
-  current zone (a filled disc marks it). Up and down move, left and right (and L1/R1) go to the
-  start of the previous or next offset, A chooses, B closes. No hint text. The field and its list
-  are the shared drop-down (`lib/src/ui/drop_down.dart`), also used for the display modes in
-  Settings > Display and the first-boot Display step.
+  standard offset highlighted (the band, not only the zone) over the land outlines, and under it
+  a drop-down (`UTC−06:00  America/Chicago` and a down arrow). The map only shows. A on the
+  drop-down opens the list under it, never over the map (the pane first scrolls the map to its
+  top so the list has room; the list is as long as the room under the field, at least two lines;
+  the shade behind the list leaves the map and field clear): every zone by its offset now,
+  highest at the top (UTC+14:00 at the top, UTC+00:00 in the middle, UTC−12:00 at the bottom),
+  a header per offset and, under it, its zones by name, opening at the current zone (a filled
+  disc marks it). Up and down move, left and right (and L1/R1) go to the start of the previous or
+  next offset, A chooses, B closes. The map follows the focus in the list live (the focused
+  zone's standard-offset band, like the map's bands, so summer time does not move it); B puts it
+  back on the box's zone; a choice keeps it on the chosen zone while it is applied (PIN pad
+  included; Back there puts it back). No hint text. The field and its list are the shared
+  drop-down (`lib/src/ui/drop_down.dart`: `onHighlight`, `below` and `keepInView` are the
+  picker's options), also used for the display modes in Settings > Display and the first-boot
+  Display step (which open under or over the field as before).
 - **First boot**: a "Time zone" step after "Internet", on the box's zone (UTC on a new box);
   a choice applies at once, with no PIN (no admin profile yet).
 - **Settings > Time zone** (`lib/src/ui/system/time_zone_section.dart`): the picker; a choice
