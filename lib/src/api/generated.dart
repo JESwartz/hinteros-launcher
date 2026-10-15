@@ -320,7 +320,7 @@ typedef AppId = String;
 /// A running app's id, or null for the launcher.
 typedef FocusTarget = String;
 
-/// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder). More may come; show unknown names as they are.
+/// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder), lan (the local network: other devices at home and this box's own services). More may come; show unknown names as they are.
 typedef PermissionName = String;
 
 /// Absolute path of an image file in Steam's library cache (readable by the session user), or null if Steam has not cached it.
@@ -655,7 +655,7 @@ class AppPermission {
     required this.granted,
   });
 
-  /// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder). More may come; show unknown names as they are.
+  /// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder), lan (the local network: other devices at home and this box's own services). More may come; show unknown names as they are.
   final String name;
 
   /// Cannot be switched off (no switch).
@@ -3942,7 +3942,7 @@ class AppsSetPermissionParams {
   /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'. 'steam' is Steam itself (Big Picture and its other windows).
   final String id;
 
-  /// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder). More may come; show unknown names as they are.
+  /// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder), lan (the local network: other devices at home and this box's own services). More may come; show unknown names as they are.
   final String permission;
   final bool granted;
 

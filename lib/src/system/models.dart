@@ -1036,6 +1036,7 @@ String permissionLabel(String name) => switch (name) {
   'gamepad' => 'Controller',
   'mic' => 'Microphone',
   'downloads' => 'Downloads folder',
+  'lan' => 'Local network',
   _ => name,
 };
 
