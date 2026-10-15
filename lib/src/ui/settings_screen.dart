@@ -56,6 +56,7 @@ const _groups = [
   _Group('system', 'System', [
     _Setting('time', 'Time zone'),
     _Setting('power', 'Power'),
+    _Setting('app_displays', 'Apps open at once'),
     _Setting('ssh', 'Remote access'),
     _Setting('about', 'About'),
   ]),
@@ -493,6 +494,7 @@ class _Detail extends StatelessWidget {
       'display' => DisplaySection(env),
       'audio' => AudioSection(env),
       'power' => PowerSection(env),
+      'app_displays' => AppDisplaysSection(env),
       'time' => TimeZoneSection(env),
       'ssh' => RemoteAccessSection(env),
       'updates' => UpdatesSection(env),

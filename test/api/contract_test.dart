@@ -469,6 +469,14 @@ void main() {
                   !method.startsWith('system.')) {
             await _prepareProfiles(mock, method, ex);
           }
+          // 0.18: the example has two app displays, both in use.
+          if (errCode == ApiErrorCode.noAppDisplay) {
+            mock.appDisplays = 2;
+            await mock.appsLaunch(
+              const AppsLaunchParams(command: ['kodi'], name: 'Kodi'),
+            );
+            await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin'));
+          }
           if (method == 'session.restart' && ex.containsKey('error')) {
             mock.sessionRestartAvailable = false;
           }

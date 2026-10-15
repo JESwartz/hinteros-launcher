@@ -915,6 +915,30 @@ class DaemonSystem implements SystemRepository {
     };
   });
 
+  @override
+  Future<AppDisplaySetting> appDisplays() => guardCall(() async {
+    final r = await _conn.appsDisplaysGet();
+    return AppDisplaySetting(
+      count: r.count,
+      active: r.active,
+      min: r.min,
+      max: r.max,
+    );
+  });
+
+  @override
+  Future<AppDisplaySetting> setAppDisplays(int count) => guardCall(() async {
+    final r = await _conn.appsDisplaysSet(
+      api.AppsDisplaysSetParams(count: count),
+    );
+    return AppDisplaySetting(
+      count: r.count,
+      active: r.active,
+      min: r.min,
+      max: r.max,
+    );
+  });
+
   /// `session.restart`: the daemon answers and then ends the session, so the
   /// connection may drop before (or just after) the answer is read; that is
   /// the restart working.

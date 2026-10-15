@@ -35,6 +35,7 @@ const _groups = <(String, String, List<(String, String)>)>[
     [
       ('time', 'Time zone'),
       ('power', 'Power'),
+      ('app_displays', 'Apps open at once'),
       ('ssh', 'Remote access'),
       ('about', 'About'),
     ],
@@ -52,7 +53,7 @@ void main() {
     ]);
     expect(settingsGroupIndexOf('bt'), 3);
     expect(settingsGroupIndexOf('network'), 3);
-    expect(settingsSectionIndexOf('about'), 3);
+    expect(settingsSectionIndexOf('about'), 4);
     expect(settingsSectionIndexOf('updates'), 0);
   });
 
@@ -140,7 +141,7 @@ void main() {
     await press(t, [kLeft, kUp]); // another group
     regions().select('about');
     await t.pumpAndSettle();
-    expect(focusLabel(), startsWith('settings-detail-3/'));
+    expect(focusLabel(), startsWith('settings-detail-4/'));
     final focused = FocusManager.instance.primaryFocus!.context!;
     final box = focused.findRenderObject()! as RenderBox;
     final top = box.localToGlobal(Offset.zero).dy;

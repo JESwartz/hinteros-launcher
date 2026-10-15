@@ -695,6 +695,27 @@ class MockSystem implements SystemRepository {
   @override
   Future<Set<PowerAction>> powerAllowed() async => allowedActions;
 
+  /// `apps.displays.*`: the setting and what this session has.
+  AppDisplaySetting appDisplaySetting = const AppDisplaySetting(
+    count: 4,
+    active: 4,
+  );
+
+  @override
+  Future<AppDisplaySetting> appDisplays() async => appDisplaySetting;
+
+  @override
+  Future<AppDisplaySetting> setAppDisplays(int count) async {
+    log.add('app-displays:$count');
+    final s = appDisplaySetting;
+    return appDisplaySetting = AppDisplaySetting(
+      count: count,
+      active: s.active,
+      min: s.min,
+      max: s.max,
+    );
+  }
+
   /// Makes the next `restartSession` fail with this.
   SystemException? restartFails;
 

@@ -151,6 +151,17 @@ void main() {
     );
   });
 
+  testWidgets('Apps open at once: changed, applies after a restart', (t) async {
+    final h = harness();
+    h.mock.appDisplaysSetting = 6;
+    await shot(
+      t,
+      'settings_app_displays_restart_1080p',
+      h,
+      run: (t) => enterSettingsEntry(t, 'app_displays'),
+    );
+  });
+
   testWidgets('Power: logind allows only some actions', (t) async {
     final h = harness();
     h.mock.runtime.powerCapabilities = const PowerCapabilities(
