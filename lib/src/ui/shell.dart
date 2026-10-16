@@ -244,6 +244,15 @@ class _LauncherShellState extends State<LauncherShell> {
       if (c == null) return Future.value(false);
       return firstLaunchTerms(c, widget.services, app, data: d);
     };
+    d.chooseAppToClose = (name, running) {
+      final c = _scopeContext;
+      if (c == null) return Future.value(null);
+      return showChoice<String>(
+        c,
+        title: 'Close an app to open $name',
+        choices: [for (final r in running) Choice(r.name, r.id)],
+      );
+    };
     d.start();
     d.addListener(_onData);
     if (_grace) {

@@ -629,7 +629,7 @@ void main() {
       expect(find.text('Installing the boot loader'), findsOneWidget);
       expect(
         t.widget<Text>(find.byKey(const ValueKey('build-line'))).data,
-        startsWith('Building hinteros-launcher (3 of 12). Time elapsed: '),
+        startsWith('Building hinteros-launcher (3 of 12): 88%. Time elapsed: '),
       );
       expect(find.byKey(const ValueKey('spinner')), findsOneWidget);
       expect(find.textContaining('general drivers'), findsOneWidget);

@@ -195,6 +195,7 @@ BuildProgress? _build(api.ProgressDetail? d) {
     name: _oneLine(b?.name),
     version: _oneLine(b?.version),
     phase: _oneLine(b?.phase),
+    percent: b?.percent?.clamp(0, 99),
   );
 }
 
@@ -912,6 +913,30 @@ class DaemonSystem implements SystemRepository {
       if (ok(c.reboot)) PowerAction.restart,
       if (ok(c.poweroff)) PowerAction.shutdown,
     };
+  });
+
+  @override
+  Future<AppDisplaySetting> appDisplays() => guardCall(() async {
+    final r = await _conn.appsDisplaysGet();
+    return AppDisplaySetting(
+      count: r.count,
+      active: r.active,
+      min: r.min,
+      max: r.max,
+    );
+  });
+
+  @override
+  Future<AppDisplaySetting> setAppDisplays(int count) => guardCall(() async {
+    final r = await _conn.appsDisplaysSet(
+      api.AppsDisplaysSetParams(count: count),
+    );
+    return AppDisplaySetting(
+      count: r.count,
+      active: r.active,
+      min: r.min,
+      max: r.max,
+    );
   });
 
   /// `session.restart`: the daemon answers and then ends the session, so the

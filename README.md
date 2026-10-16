@@ -87,6 +87,40 @@ flutter run -d linux --dart-entrypoint-args=--mock
 ./result/bin/hinteros-launcher --mock --windowed
 ```
 
+### Session API 0.18: app permissions
+
+`store.list` and `apps.list` carry each app's `permissions` (`{name, required, granted}`, catalog
+order; see hinteros-docs `design/sandbox.md`). `StoreApp.permissions` holds them
+(`AppPermission`, labels: `gamepad` "Controller", `mic` "Microphone", `downloads` "Downloads
+folder", an unknown name as it is). **Install:** an app with permissions gets them in the confirm
+dialog as switches under "Permissions", all on; a required one is locked on and says "Required";
+the buttons are Cancel and Accept. After Accept (and the vendor terms, if any) the launcher calls
+`apps.set_permission` for every optional permission whose switch differs from the stored choice,
+then `system.apps.install`; Cancel, Back or declined terms set nothing. An app without
+permissions keeps the old dialog. **App page:** an installed app has a "Permissions" section after
+its buttons, one switch per permission (required: locked, "Required"); A on an optional one calls
+`apps.set_permission`, a refusal is the usual "That didn't work" message, and while the app runs
+one line says "Restart the app to apply.". Errors: `unknown_app` and `unknown_permission` are
+`notFound`, `permission_required` is `invalidParams`. Both mocks follow the rules (`MockStore.denied`,
+`MockDaemon.system.deniedPermissions`; the mock Video player declares a required controller, a
+microphone and the Downloads folder).
+
+**App displays.** Each app the daemon starts runs on an X display of its own, from a fixed set
+the session makes at start. `apps.launch` answers `no_app_display` (2009,
+`NoAppDisplayData.apps`: the running apps that hold one) when all are in use: `LauncherData`
+asks `chooseAppToClose` (the shell: "Close an app to open <Name>", the apps, Cancel). A pick
+calls `apps.close`, waits for that app's `app_exited` (up to 30 s; "Starting <Name>…" shows
+meanwhile) and launches again; Cancel or Back open nothing. Nothing closes on its own. Settings >
+System > "Apps open at once": `apps.displays.get` / `apps.displays.set` (`AppDisplaySetting`,
+`SystemRepository.appDisplays` / `setAppDisplays`), a drop-down of 1 to 8 apps. A new number
+applies at the next session start: the launcher asks "Restart the session now?" (Restart, Later)
+and, until then, shows "Restart the session to apply this." with a Restart session button.
+`active: null` (no app displays): "Not available on this box.". `MockDaemon.appDisplays`
+(default 4, null: none) and `appDisplaysSetting`; `MockSystem.appDisplaySetting`.
+`test/app_displays_test.dart` covers the dialog (pick, Cancel, Back, a running app or Steam
+needs no display) and the setting; goldens `close_to_open_1080p`,
+`settings_app_displays_restart_1080p`.
+
 ### Session API 0.17: the admin PIN locks until a restart
 
 The daemon refuses the admin profile's PIN after 10 wrong tries a boot, the right one too, until
@@ -163,7 +197,8 @@ API 0.15 (`job_started` / `job_progress` / `job_finished` with `subject`, `start
   deleted too.").
 - **Never stalled**: next to the stages, the stage now with its count large ("Building 3 of 12",
   `builds_done + 1` capped at `builds_total`) or its percentage ("Downloading 40%"), what builds in
-  small text ("hinteros-daemon 0.7.1, compiling"; the bytes while downloading), a bar (filled to
+  small text ("hinteros-daemon 0.7.1: 20%, compiling", the percent of that build alone from its
+  phase when the daemon gives `building.percent`, session API 0.18; the bytes while downloading), a bar (filled to
   the percentage with a light band that moves, or a block that moves from end to end without
   one), the percentage in all while building, and the time it has taken ("Time elapsed: 12:05", mm:ss, h:mm:ss after an hour; no estimate
   of the time left). The bar moves once a second (a 0.7 s move, still with reduced motion). The
@@ -448,7 +483,7 @@ params/result schemas that are a `$ref` (the relayed `system.*` results; `displa
   confirm step, the attention banner.
 - `test/system/daemon_runtime_test.dart` runs the real network, Bluetooth, display/audio and power repositories over the mock's runtime (mapping, events, the 4xxx errors). `test/system/runtime_ui_test.dart` is the same through the Settings screens: Wi-Fi with a wrong password then the right one, Bluetooth pairing with a passkey (Accept, Reject, the code shown for a device that shows none), the display keep or revert dialog with its 15 seconds (`display.keep` / `display.revert`), `can_set` false, power refused while an update is being applied, and one section unavailable while the others work.
 - `test/api/mock08_test.dart`: what the contract test's examples do not show about the 0.8 mock: the order of events and answers around the admin password prompt (`auth.respond` answers before the waiting `ssh.set`), three wrong passwords, cancel, who gets the events and may answer, the Store's states while an apps job runs, `store_changed`, dependencies and conflicts, `more_after_update`, `session.restart`.
-- `test/system/daemon_store_test.dart`: `DaemonStore` over `MockDaemon`: the listing (sorted, states, terms text from the daemon's file path, unfree without readable terms left out, `unavailable {catalog}`, `system_unavailable`, icons from `apps.list`, a slow older answer not overwriting a newer one), following jobs and `store_changed`, `accepted_terms`, `app_conflict`, `insufficient_resources`, `not_found`, `not_available`, `job_busy`, a stale revision retried once (and only once). `test/system/daemon_store_ui_test.dart`: the same through the screens: install with terms and progress, a stale revision, `terms_required` with a newer version, conflicts, no space, remove with delete data (two confirmations), a running app closed first, retired and going-away apps, the update's new and removed apps, the Games tab's "Install Steam", and the session restart offer (also on a desktop session).
+- `test/system/daemon_store_test.dart`: `DaemonStore` over `MockDaemon`: the listing (sorted, states, terms text from the daemon's file path, unfree without readable terms left out, `unavailable {catalog}`, `system_unavailable`, icons from `apps.list`, a slow older answer not overwriting a newer one), permissions and `apps.set_permission` with its errors (0.18), following jobs and `store_changed`, `accepted_terms`, `app_conflict`, `insufficient_resources`, `not_found`, `not_available`, `job_busy`, a stale revision retried once (and only once). `test/system/daemon_store_ui_test.dart`: the same through the screens: install with terms and progress, permissions (one switched off at install, on again on the app page), a stale revision, `terms_required` with a newer version, conflicts, no space, remove with delete data (two confirmations), a running app closed first, retired and going-away apps, the update's new and removed apps, the Games tab's "Install Steam", and the session restart offer (also on a desktop session).
 - `test/system/daemon_system_test.dart` runs the real repositories (`DaemonSystem`, `DaemonUpdates`, `DaemonJobs`) over `MockDaemon`'s relay: error mapping, jobs from events, cancel, downgrade acknowledgement (base), the channel check and switch (0.17), the update check and its cache, `settings.set` with a revision. Since 0.15 also builds (count, name, phase), the subject with its release name, heartbeats, and the running job found with `jobs.list` by a new launcher. `test/system/daemon_ui_test.dart` is the same through the Settings screens (SSH without a polkit agent, settings unavailable, About with the DEV badge, a security update through to "Restart session"). `test/osk/osk_auto_show_test.dart`: the keyboard opens and closes with the launcher's text fields.
 - `test/installer/` covers the installer: `flow_test.dart` walks the screens with a fake backend (disk filtering, the one erase confirmation on the summary (A held 5 s on "Erase and install"; a shorter hold or Back erases nothing), password mismatch, SSH off by default, offline disabling the online-only apps, the plan JSON for several choices, progress, exit status 2 and 1 with their codes, a disk replaced under the same path (`disk-changed`, back to the disk choice; "Look again" drops it), typing with the pad on the in-app keyboard), `plan_test.dart`, `progress_test.dart`, `parsers_test.dart` (lsblk, nmcli; the catalog index is in `test/system/catalog_test.dart`, against `test/fixtures/catalog`, the real index with placeholder terms text), `process_backend_test.dart` (the real backend class against a stand-in script: the plan arrives on stdin, never in the arguments), `gamepad_test.dart` (the stick deadzone and hysteresis, key repeat, hotplug, disconnects and permission errors, all over synthetic evdev streams from `test/support/fake_pads.dart`; no real device is ever opened), `two_stage_test.dart` (the phase fields, the two progress sections, failed apps on Done), `keyboard_fallback_test.dart` (the evdev keyboard mapping incl. Shift symbols and key repeat, hotplug, and the focus gate: active only while unfocused, never doubled), `input_test.dart` (the installer driven by the keyboard alone and by the stick alone, from Welcome to the restart, and the text-field exceptions), `test/nav/key_map_test.dart`, `first_boot_test.dart`.
 - `test/system/job_progress_test.dart`: the job page while building (count, name, time, the bar moving with no news), the heartbeat gap ("still running", never "failed") and no output for minutes, the title and line under it for every job kind, Hide and the top bar indicator (it follows the job, A opens the page, Back leaves it again), the notices when a hidden job ends (done, failed with the indicator kept, the session restart offered by the notice and by the page opened again), the restart countdown (on the page and in the notice: to 0, Later, Restart at once, waiting while an app is in front and starting again from 30), and a launcher restart during a job.
@@ -810,7 +845,7 @@ the client handles by matching on the request id; `system.ssh.set` has a 340 s t
 | `NetworkRepository` | `network.status`, `wifi.*`, `network_changed`, `wifi_list_changed` | Network |
 | `BluetoothRepository` | `bluetooth.*`, `bluetooth_changed`, `bluetooth_confirm` | Bluetooth |
 | `DisplayAudioRepository` | `display.modes` / `set_mode` / `keep` / `revert`, `audio.*`, `audio_changed` | Display, Audio |
-| `StoreRepository` | `store.list`, `store_changed`, `system.apps.install` / `remove` (+ the job events) | Store, Games |
+| `StoreRepository` | `store.list`, `store_changed`, `system.apps.install` / `remove` (+ the job events), `apps.set_permission` | Store, Games |
 | `TimeZoneRepository` | `system.time_zone.get` / `list` / `set`, `time_zone_changed` | Time zone, first boot, the top-bar clock |
 
 `MockJobs` behaves like the service: one mutating job at a time (`job_busy`), stages, progress,
@@ -923,7 +958,7 @@ Focus marker in the Accessibility pane with the glow style (`settings_focus_deta
 scrolled to its last setting (`settings_osk_text`). `test/golden/osk_test.dart` renders the on-screen keyboard at 1920x1080 over
 a checkerboard (so the transparent area and the panel's rounded corners show): letters, symbols with dots in the preview,
 the masked preview with its newest character readable, the preview with the setting on, high contrast at 1.6x with caps lock, and the bar focus marker with one-shot shift
-(`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. `test/golden/runtime_test.dart` covers the runtime settings on the real repositories over the mock daemon (`bt_pair_*` for the passkey modal, `wifi_wrong_password`, `settings_bt_unavailable`, `settings_display_cannot_set`, `display_keep_daemon`, `power_inhibited`, `settings_power_restricted`, `settings_net_no_internet`). `test/golden/system_test.dart` covers the system screens (`settings_sys_*`, `auth_prompt_*` (the admin password prompt: masked, and after a wrong password in high contrast at 1.6x; also over the real repositories), `ssh_cancelled`, `wifi_password`, `display_*`), the progress page (`progress_*`: building with its count, name and time also in high contrast at 1.6x), the job left running (`topbar_job_indicator_*`, also high contrast at 1.6x), the notices when it ends (`job_notice_failed`, `job_notice_restart`), the security notice (`security_notice_*`, also high contrast at 1.6x, locked and unlocked), the Home reminder, the Store (`store_*`; over the real repository: `store_retired_detail`, `store_install_conflict`, `store_installing_progress`, `store_no_space`, `store_more_apps_highcontrast_text160`), the terms page (`terms_*`, also high contrast at 1.6x, from the top and scrolled to the end), `games_steam_missing` and `installer_app_selection`. `test/golden/installer_test.dart` has `installer_*_1080p.png` for every installer screen (welcome, network, disk, the disk warning and the second confirmation, the warning in high contrast at 1.4x text, account, keyboard, options, apps offline and online, summary, progress with the system stage and with the apps stage, both failures, done, done with failed apps). Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
+(`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. `test/golden/runtime_test.dart` covers the runtime settings on the real repositories over the mock daemon (`bt_pair_*` for the passkey modal, `wifi_wrong_password`, `settings_bt_unavailable`, `settings_display_cannot_set`, `display_keep_daemon`, `power_inhibited`, `settings_power_restricted`, `settings_net_no_internet`). `test/golden/system_test.dart` covers the system screens (`settings_sys_*`, `auth_prompt_*` (the admin password prompt: masked, and after a wrong password in high contrast at 1.6x; also over the real repositories), `ssh_cancelled`, `wifi_password`, `display_*`), the progress page (`progress_*`: building with its count, name and time also in high contrast at 1.6x), the job left running (`topbar_job_indicator_*`, also high contrast at 1.6x), the notices when it ends (`job_notice_failed`, `job_notice_restart`), the security notice (`security_notice_*`, also high contrast at 1.6x, locked and unlocked), the Home reminder, the Store (`store_*`; `store_install_permissions`, `store_app_permissions`; over the real repository: `store_retired_detail`, `store_install_conflict`, `store_installing_progress`, `store_no_space`, `store_more_apps_highcontrast_text160`), the terms page (`terms_*`, also high contrast at 1.6x, from the top and scrolled to the end), `games_steam_missing` and `installer_app_selection`. `test/golden/installer_test.dart` has `installer_*_1080p.png` for every installer screen (welcome, network, disk, the disk warning and the second confirmation, the warning in high contrast at 1.4x text, account, keyboard, options, apps offline and online, summary, progress with the system stage and with the apps stage, both failures, done, done with failed apps). Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
 running game, the attention banner, the close confirm and the app tiles at text 1.3x/1.6x (also high
 contrast). Tests load the bundled font explicitly (`flutter_test_config.dart`, no
 Ahem), use a fixed clock, the in-process mock, the committed placeholder art

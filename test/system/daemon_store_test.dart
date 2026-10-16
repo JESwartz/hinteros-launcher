@@ -190,6 +190,7 @@ void main() {
               id: 'steam',
               name: 'Steam',
               kind: api.AppKind.native,
+              permissions: [],
               icon: '/icons/steam.png',
             ),
           ],
@@ -495,6 +496,72 @@ void main() {
       final steam = _app(services.store.apps, 'steam');
       expect(steam.icon.path, isNull);
       expect(await services.store.resolveIcon(steam), isNull);
+    });
+  });
+
+  group('session API 0.18: permissions', () {
+    test(
+      'store.list and apps.list carry them; set_permission changes them',
+      () async {
+        final (mock, services) = await _setup();
+        final store = services.store;
+        await store.catalog();
+        final before = _app(store.apps, 'mpv').permissions;
+        expect(
+          [for (final p in before) (p.name, p.required, p.granted)],
+          [
+            ('gamepad', true, true),
+            ('mic', false, true),
+            ('downloads', false, true),
+          ],
+        );
+        expect(before.map((p) => p.label), [
+          'Controller',
+          'Microphone',
+          'Downloads folder',
+        ]);
+        expect(_app(store.apps, 'kodi').permissions, isEmpty);
+        final events = <api.SessionEvent>[];
+        final sub = mock.events.listen(events.add);
+        addTearDown(sub.cancel);
+        // Not installed yet: the choice is kept for its install.
+        await store.setPermission('mpv', 'mic', false);
+        await _settle();
+        await _settle();
+        expect(mock.system.log, contains('apps.set_permission:mpv:mic:false'));
+        expect(events.whereType<api.AppsChangedEvent>(), isNotEmpty);
+        expect(_app(store.apps, 'mpv').permissions.map((p) => p.granted), [
+          true,
+          false,
+          true,
+        ], reason: 'store_changed refreshed the listing');
+        mock.apps.add(
+          const api.App(
+            id: 'mpv',
+            name: 'Video player',
+            kind: api.AppKind.native,
+            permissions: [],
+          ),
+        );
+        final listed = (await mock.appsList()).apps.firstWhere(
+          (a) => a.id == 'mpv',
+        );
+        expect(listed.permissions.map((p) => p.granted), [true, false, true]);
+      },
+    );
+
+    test('the errors', () async {
+      final (_, services) = await _setup();
+      final store = services.store;
+      var e = await _fails(store.setPermission('mpv', 'gamepad', false));
+      expect(e.kind, SystemErrorKind.invalidParams);
+      expect(e.message, 'This app needs that permission.');
+      e = await _fails(store.setPermission('mpv', 'lan', false));
+      expect(e.kind, SystemErrorKind.notFound);
+      expect(e.message, 'This app does not use that permission.');
+      e = await _fails(store.setPermission('nope', 'mic', false));
+      expect(e.kind, SystemErrorKind.notFound);
+      expect(e.message, 'That app is not there any more.');
     });
   });
 }

@@ -158,6 +158,53 @@ class MockSystemRelay {
   /// No catalog index on this system (`store.list` is `unavailable`).
   bool catalogMissing = false;
 
+  /// This profile's permission opt-outs (0.18): app id -> denied names, as
+  /// the session daemon keeps them in `permissions.json`.
+  final Map<String, Set<String>> deniedPermissions = {};
+
+  /// App [id]'s permissions with this profile's choices (empty for an app
+  /// the catalog does not know).
+  List<AppPermission> permissionsOf(String id) {
+    final a = catalog.where((a) => a.id == id).firstOrNull;
+    final denied = deniedPermissions[id] ?? const {};
+    return [
+      for (final p in a?.permissions ?? const <AppPermission>[])
+        AppPermission(
+          name: p.name,
+          required: p.required,
+          granted: p.required || !denied.contains(p.name),
+        ),
+    ];
+  }
+
+  /// `apps.set_permission` (answered by the session daemon; the catalog is
+  /// here). Sends `store_changed`; the caller sends `apps_changed`.
+  void setPermission(AppsSetPermissionParams p) {
+    final a = catalog.where((a) => a.id == p.id).firstOrNull;
+    if (a == null) {
+      throw ApiException(ApiErrorCode.unknownApp, "no app with id '${p.id}'");
+    }
+    final perm = a.permissions.where((x) => x.name == p.permission).firstOrNull;
+    if (perm == null) {
+      throw ApiException(
+        ApiErrorCode.unknownPermission,
+        '${p.id} does not use ${p.permission}',
+      );
+    }
+    if (perm.required) {
+      if (p.granted) return;
+      throw ApiException(
+        ApiErrorCode.permissionRequired,
+        '${p.id} needs ${p.permission}',
+      );
+    }
+    log.add('apps.set_permission:${p.id}:${p.permission}:${p.granted}');
+    final denied = deniedPermissions.putIfAbsent(p.id, () => {});
+    p.granted ? denied.remove(p.permission) : denied.add(p.permission);
+    if (denied.isEmpty) deniedPermissions.remove(p.id);
+    emit('store_changed', const {});
+  }
+
   /// The daemon resolved a catalog icon (0.9): `icon.path` appears and
   /// `store_changed` is sent.
   void setStoreIcon(String id, String? path) {
@@ -845,8 +892,11 @@ class MockSystemRelay {
     }
     final installing = _jobApps(JobKind.appsInstall);
     final removing = _jobApps(JobKind.appsRemove);
-    StoreApp with_(StoreApp a, StoreState s) =>
-        StoreApp.fromJson({...a.toJson(), 'state': s.value});
+    StoreApp with_(StoreApp a, StoreState s) => StoreApp.fromJson({
+      ...a.toJson(),
+      'state': s.value,
+      'permissions': [for (final p in permissionsOf(a.id)) p.toJson()],
+    });
     final apps = <StoreApp>[];
     for (final a in catalog) {
       final installed = installedApps.contains(a.id);
@@ -1125,7 +1175,12 @@ class MockSystemRelay {
           percent: built * 100 ~/ mockBuilds.length,
           buildsDone: built,
           buildsTotal: mockBuilds.length,
-          building: Building(name: name, version: version, phase: 'build'),
+          building: Building(
+            name: name,
+            version: version,
+            phase: 'build',
+            percent: 20,
+          ),
         );
         built++;
         j.timer = Timer(stepDelay!, step);

@@ -171,6 +171,7 @@ class LauncherData extends ChangeNotifier {
         if (id != null && launching?.id == id) _endLaunching();
         unawaited(refreshRunning());
       case AppExitedEvent():
+        _exitWaiters.remove(e.id)?.complete();
         if (launching?.id == e.id) {
           final l = launching!;
           _endLaunching();
@@ -336,12 +337,29 @@ class LauncherData extends ChangeNotifier {
   /// first-launch terms. False: it is not started.
   Future<bool> Function(App app)? beforeLaunch;
 
+  /// Asked when every app display is in use (`no_app_display`, 0.18): which
+  /// of the [running] apps to close so that [name] can open (its id), or
+  /// null to open nothing. Nothing closes without this.
+  Future<String?> Function(String name, List<RunningApp> running)?
+  chooseAppToClose;
+
+  /// How long an app the user chose to close may take to exit (the daemon
+  /// kills it after its close timeout).
+  static const closeWait = Duration(seconds: 30);
+
+  /// `app_exited` for an app being closed so that another can open.
+  final Map<String, Completer<void>> _exitWaiters = {};
+
   Future<void> launchApp(String id, String name) async {
     final app = appList?.where((a) => a.id == id).firstOrNull;
     final gate = beforeLaunch;
     if (app != null && app.needsTerms != null && gate != null) {
       if (!await gate(app)) return;
     }
+    await _startApp(id, name);
+  }
+
+  Future<void> _startApp(String id, String name) async {
     _beginLaunching(id, name, _iconOf(id));
     try {
       _launched(await apps.launch(id));
@@ -350,9 +368,67 @@ class LauncherData extends ChangeNotifier {
         ..insert(0, id);
       if (_recent.length > 8) _recent.removeLast();
       unawaited(refreshRunning());
+    } on ApiException catch (e) {
+      if (e.code == ApiErrorCode.noAppDisplay && chooseAppToClose != null) {
+        _endLaunching();
+        if (await _closeOneFor(id, name, e)) await _startApp(id, name);
+      } else {
+        _fail('start', name, e);
+      }
     } catch (e) {
       _fail('start', name, e);
     }
+  }
+
+  /// Every app display is in use: the user picks a running app to close (or
+  /// cancels). True once the chosen app has exited, so its display is free.
+  Future<bool> _closeOneFor(String id, String name, ApiException e) async {
+    final List<RunningApp> holders;
+    try {
+      holders = NoAppDisplayData.fromJson(
+        (e.data! as Map).cast<String, dynamic>(),
+      ).apps;
+    } catch (_) {
+      _fail('start', name, e);
+      return false;
+    }
+    final choose = chooseAppToClose;
+    if (choose == null || holders.isEmpty) {
+      _fail('start', name, e);
+      return false;
+    }
+    final pick = await choose(name, holders);
+    if (pick == null || _disposed) return false;
+    final pickName =
+        holders.where((r) => r.id == pick).firstOrNull?.name ?? pick;
+    // "Starting ..." while the chosen app closes.
+    _beginLaunching(id, name, _iconOf(id));
+    final exited = (_exitWaiters[pick] ??= Completer<void>()).future;
+    try {
+      await apps.close(pick);
+    } on ApiException catch (err) {
+      if (err.code != ApiErrorCode.appNotFound) {
+        _exitWaiters.remove(pick);
+        _fail('close', pickName, err);
+        return false;
+      }
+      // Gone already.
+      _exitWaiters.remove(pick)?.complete();
+    } catch (err) {
+      _exitWaiters.remove(pick);
+      _fail('close', pickName, err);
+      return false;
+    }
+    unawaited(refreshRunning());
+    final ok = await exited
+        .then((_) => true)
+        .timeout(closeWait, onTimeout: () => false);
+    if (!ok) {
+      _exitWaiters.remove(pick);
+      _fail('close', pickName, TimeoutException('it did not exit'));
+      return false;
+    }
+    return !_disposed;
   }
 
   /// A Continue card: running games and command apps are not in `apps.list`,

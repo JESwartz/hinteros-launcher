@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.17).
+// Source: schema/session-api.json (session API 0.18).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.17';
+const apiVersion = '0.18';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -16,6 +16,9 @@ const apiMethodNames = <String>[
   'subscribe',
   'unsubscribe',
   'apps.list',
+  'apps.set_permission',
+  'apps.displays.get',
+  'apps.displays.set',
   'games.list',
   'steam.attention',
   'steam.focus',
@@ -170,6 +173,10 @@ const apiErrorCodesByName = <String, int>{
   'steam_no_windows': 2003,
   'keyboard_unavailable': 2004,
   'osk_unavailable': 2005,
+  'unknown_app': 2006,
+  'unknown_permission': 2007,
+  'permission_required': 2008,
+  'no_app_display': 2009,
   'permission_denied': 3002,
   'job_failed': 3003,
   'insufficient_resources': 3004,
@@ -233,6 +240,18 @@ abstract final class ApiErrorCode {
 
   /// osk.show: the on-screen keyboard is disabled in the daemon's config.
   static const oskUnavailable = 2005;
+
+  /// apps.set_permission: the app is not installed and not in the catalog.
+  static const unknownApp = 2006;
+
+  /// apps.set_permission: the app does not declare this permission (or it is not enforced on this box).
+  static const unknownPermission = 2007;
+
+  /// apps.set_permission: a required permission cannot be denied.
+  static const permissionRequired = 2008;
+
+  /// apps.launch: every app display is in use (apps.displays.get). apps: the running apps that hold one; closing one frees it once it has exited (app_exited).
+  static const noAppDisplay = 2009;
 
   /// Not allowed: the caller does not own seat0's active session (seat), polkit said no (polkit), or the peer cannot be identified safely (peer: no SO_PEERPIDFD, or the process is gone).
   static const permissionDenied = 3002;
@@ -306,6 +325,9 @@ typedef AppId = String;
 
 /// A running app's id, or null for the launcher.
 typedef FocusTarget = String;
+
+/// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder), lan (the local network: other devices at home and this box's own services). More may come; show unknown names as they are.
+typedef PermissionName = String;
 
 /// Absolute path of an image file in Steam's library cache (readable by the session user), or null if Steam has not cached it.
 typedef ArtworkPath = String;
@@ -631,6 +653,47 @@ class AppNeedsTerms {
   String toString() => 'AppNeedsTerms(${jsonEncode(toJson())})';
 }
 
+/// 0.18: a permission the app declares in the catalog, and this profile's choice. Only permissions this box enforces are listed.
+class AppPermission {
+  const AppPermission({
+    required this.name,
+    required this.required,
+    required this.granted,
+  });
+
+  /// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder), lan (the local network: other devices at home and this box's own services). More may come; show unknown names as they are.
+  final String name;
+
+  /// Cannot be switched off (no switch).
+  final bool required;
+
+  /// The app gets it the next time it starts. Always true when required.
+  final bool granted;
+
+  factory AppPermission.fromJson(Map<String, dynamic> json) => AppPermission(
+    name: json['name'] as String,
+    required: json['required'] as bool,
+    granted: json['granted'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'required': required,
+    'granted': granted,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppPermission &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppPermission(${jsonEncode(toJson())})';
+}
+
 class App {
   const App({
     required this.id,
@@ -638,6 +701,7 @@ class App {
     required this.kind,
     this.icon,
     this.needsTerms,
+    required this.permissions,
   });
 
   /// Stable identifier, used by apps.launch.
@@ -655,6 +719,9 @@ class App {
   /// 0.12: the app came with the starter set and this profile has not accepted its vendor terms yet. Show the full text (file) on first launch; accept with system.apps.accept_terms {id, version}, decline leaves it installed and unlaunched (offer Remove). apps.launch refuses it with terms_required meanwhile.
   final AppNeedsTerms? needsTerms;
 
+  /// 0.18: what the app may use in its sandbox, in catalog order. Empty for Steam and for apps that run without a sandbox.
+  final List<AppPermission> permissions;
+
   factory App.fromJson(Map<String, dynamic> json) => App(
     id: json['id'] as String,
     name: json['name'] as String,
@@ -665,6 +732,9 @@ class App {
         : AppNeedsTerms.fromJson(
             (json['needs_terms'] as Map).cast<String, dynamic>(),
           ),
+    permissions: (json['permissions'] as List)
+        .map((x) => AppPermission.fromJson((x as Map).cast<String, dynamic>()))
+        .toList(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -673,6 +743,7 @@ class App {
     'kind': kind.toJson(),
     'icon': ?icon,
     if (needsTerms != null) 'needs_terms': needsTerms!.toJson(),
+    'permissions': permissions.map((x) => x.toJson()).toList(),
   };
 
   @override
@@ -684,6 +755,49 @@ class App {
 
   @override
   String toString() => 'App(${jsonEncode(toJson())})';
+}
+
+/// 0.18: how many apps can run at once (apps.displays.get).
+class AppDisplays {
+  const AppDisplays({
+    required this.count,
+    required this.active,
+    required this.min,
+    required this.max,
+  });
+
+  /// The setting: what the next session starts with.
+  final int count;
+
+  /// What this session has; null: apps do not get displays of their own.
+  final int? active;
+  final int min;
+  final int max;
+
+  factory AppDisplays.fromJson(Map<String, dynamic> json) => AppDisplays(
+    count: json['count'] as int,
+    active: json['active'] == null ? null : json['active'] as int,
+    min: json['min'] as int,
+    max: json['max'] as int,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'count': count,
+    'active': active,
+    'min': min,
+    'max': max,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppDisplays &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppDisplays(${jsonEncode(toJson())})';
 }
 
 /// A game's install state, from its manifest's StateFlags: 'installed' (ready), 'update_required' (installed; Steam updates it before it starts, launching works), 'updating' (installed; an update is downloading or being applied), 'installing' (not fully installed yet: first download in progress or paused), 'uninstalling'. Clients must treat unknown values like 'updating' (installed, but maybe not launchable right now).
@@ -1495,6 +1609,8 @@ class StoreApp {
     required this.status,
     required this.statusReason,
     required this.state,
+    required this.permissions,
+    required this.fullAccess,
   });
 
   /// Catalog app id (state.json apps).
@@ -1536,6 +1652,12 @@ class StoreApp {
   final String? statusReason;
   final StoreState state;
 
+  /// 0.18: what the app may use in its sandbox, in catalog order. Not installed: the stored choice for its install (default granted). Empty for Steam, apps without a sandbox and tombstones.
+  final List<AppPermission> permissions;
+
+  /// 0.18: runs without the app sandbox (Steam, apps with sandbox = false, or every app while the sandbox is off on this box): it can use everything the profile can. The install sheet warns. False for tombstones.
+  final bool fullAccess;
+
   factory StoreApp.fromJson(Map<String, dynamic> json) => StoreApp(
     id: json['id'] as String,
     name: json['name'] as String,
@@ -1566,6 +1688,10 @@ class StoreApp {
         ? null
         : json['status_reason'] as String,
     state: StoreState.fromJson(json['state'] as String),
+    permissions: (json['permissions'] as List)
+        .map((x) => AppPermission.fromJson((x as Map).cast<String, dynamic>()))
+        .toList(),
+    fullAccess: json['full_access'] as bool,
   );
 
   Map<String, dynamic> toJson() => {
@@ -1592,6 +1718,8 @@ class StoreApp {
     'status': status.toJson(),
     'status_reason': statusReason,
     'state': state.toJson(),
+    'permissions': permissions.map((x) => x.toJson()).toList(),
+    'full_access': fullAccess,
   };
 
   @override
@@ -2611,22 +2739,27 @@ class CleanedResult {
 
 /// 0.7: the most recently started derivation that is still building. name and version from the .drv name (nix's rule: the version starts at the first dash followed by a non-letter); phase is nix's build phase without the Phase suffix (unpack, patch, configure, build, check, install, fixup, ...), absent until nix reports one.
 class Building {
-  const Building({required this.name, this.version, this.phase});
+  const Building({required this.name, this.version, this.phase, this.percent});
 
   final String name;
   final String? version;
   final String? phase;
 
+  /// System API 0.10, session API 0.18: how far this derivation is, from the last standard stdenv phase it started (unpack 0, patch 5, updateAutotoolsGnuConfigScripts 8, configure 10, build 20, check 80, install 88, fixup 94, installCheck 98, dist 99; other phases keep the value); never goes back; below 100. Absent before the first standard phase and for builders without phases.
+  final int? percent;
+
   factory Building.fromJson(Map<String, dynamic> json) => Building(
     name: json['name'] as String,
     version: json['version'] == null ? null : json['version'] as String,
     phase: json['phase'] == null ? null : json['phase'] as String,
+    percent: json['percent'] == null ? null : json['percent'] as int,
   );
 
   Map<String, dynamic> toJson() => {
     'name': name,
     'version': ?version,
     'phase': ?phase,
+    'percent': ?percent,
   };
 
   @override
@@ -3857,6 +3990,195 @@ class AppsListResult {
 
   @override
   String toString() => 'AppsListResult(${jsonEncode(toJson())})';
+}
+
+class AppsSetPermissionParams {
+  const AppsSetPermissionParams({
+    required this.id,
+    required this.permission,
+    required this.granted,
+  });
+
+  /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'. 'steam' is Steam itself (Big Picture and its other windows).
+  final String id;
+
+  /// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder), lan (the local network: other devices at home and this box's own services). More may come; show unknown names as they are.
+  final String permission;
+  final bool granted;
+
+  factory AppsSetPermissionParams.fromJson(Map<String, dynamic> json) =>
+      AppsSetPermissionParams(
+        id: json['id'] as String,
+        permission: json['permission'] as String,
+        granted: json['granted'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'permission': permission,
+    'granted': granted,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppsSetPermissionParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppsSetPermissionParams(${jsonEncode(toJson())})';
+}
+
+class AppsSetPermissionResult {
+  const AppsSetPermissionResult();
+
+  factory AppsSetPermissionResult.fromJson(Map<String, dynamic> json) =>
+      AppsSetPermissionResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppsSetPermissionResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppsSetPermissionResult(${jsonEncode(toJson())})';
+}
+
+class AppsDisplaysGetParams {
+  const AppsDisplaysGetParams();
+
+  factory AppsDisplaysGetParams.fromJson(Map<String, dynamic> json) =>
+      AppsDisplaysGetParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppsDisplaysGetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppsDisplaysGetParams(${jsonEncode(toJson())})';
+}
+
+/// 0.18: how many apps can run at once (apps.displays.get).
+class AppsDisplaysGetResult {
+  const AppsDisplaysGetResult({
+    required this.count,
+    required this.active,
+    required this.min,
+    required this.max,
+  });
+
+  /// The setting: what the next session starts with.
+  final int count;
+
+  /// What this session has; null: apps do not get displays of their own.
+  final int? active;
+  final int min;
+  final int max;
+
+  factory AppsDisplaysGetResult.fromJson(Map<String, dynamic> json) =>
+      AppsDisplaysGetResult(
+        count: json['count'] as int,
+        active: json['active'] == null ? null : json['active'] as int,
+        min: json['min'] as int,
+        max: json['max'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'count': count,
+    'active': active,
+    'min': min,
+    'max': max,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppsDisplaysGetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppsDisplaysGetResult(${jsonEncode(toJson())})';
+}
+
+class AppsDisplaysSetParams {
+  const AppsDisplaysSetParams({required this.count});
+
+  final int count;
+
+  factory AppsDisplaysSetParams.fromJson(Map<String, dynamic> json) =>
+      AppsDisplaysSetParams(count: json['count'] as int);
+
+  Map<String, dynamic> toJson() => {'count': count};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppsDisplaysSetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppsDisplaysSetParams(${jsonEncode(toJson())})';
+}
+
+/// 0.18: how many apps can run at once (apps.displays.get).
+class AppsDisplaysSetResult {
+  const AppsDisplaysSetResult({
+    required this.count,
+    required this.active,
+    required this.min,
+    required this.max,
+  });
+
+  /// The setting: what the next session starts with.
+  final int count;
+
+  /// What this session has; null: apps do not get displays of their own.
+  final int? active;
+  final int min;
+  final int max;
+
+  factory AppsDisplaysSetResult.fromJson(Map<String, dynamic> json) =>
+      AppsDisplaysSetResult(
+        count: json['count'] as int,
+        active: json['active'] == null ? null : json['active'] as int,
+        min: json['min'] as int,
+        max: json['max'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'count': count,
+    'active': active,
+    'min': min,
+    'max': max,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppsDisplaysSetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'AppsDisplaysSetResult(${jsonEncode(toJson())})';
 }
 
 class GamesListParams {
@@ -10445,7 +10767,7 @@ final class GamesChangedEvent extends SessionEvent {
   String toString() => 'GamesChangedEvent(${jsonEncode(toJson())})';
 }
 
-/// The apps.list result changed: an app's resolved icon became available or changed (for example a web app's icon finished downloading), or (0.9) the daemon reloaded its app list after a switch installed or removed apps. Call apps.list again.
+/// The apps.list result changed: an app's resolved icon became available or changed (for example a web app's icon finished downloading), or (0.9) the daemon reloaded its app list after a switch installed or removed apps, or (0.18) apps.set_permission changed a permission. Call apps.list again.
 final class AppsChangedEvent extends SessionEvent {
   const AppsChangedEvent();
 
@@ -11199,7 +11521,7 @@ final class AuthenticationFinishedEvent extends SessionEvent {
   String toString() => 'AuthenticationFinishedEvent(${jsonEncode(toJson())})';
 }
 
-/// What store.list returns may have changed: an apps job started or finished, any other job that switched the system finished, or an update check changed more_after_update, or (0.9) a catalog app's icon was resolved (icon.path). Query store.list again.
+/// What store.list returns may have changed: an apps job started or finished, any other job that switched the system finished, or an update check changed more_after_update, or (0.9) a catalog app's icon was resolved (icon.path), or (0.18) apps.set_permission changed a permission. Query store.list again.
 final class StoreChangedEvent extends SessionEvent {
   const StoreChangedEvent();
 
@@ -11575,6 +11897,34 @@ class VersionMismatchData {
 
   @override
   String toString() => 'VersionMismatchData(${jsonEncode(toJson())})';
+}
+
+class NoAppDisplayData {
+  const NoAppDisplayData({required this.apps});
+
+  final List<RunningApp> apps;
+
+  factory NoAppDisplayData.fromJson(Map<String, dynamic> json) =>
+      NoAppDisplayData(
+        apps: (json['apps'] as List)
+            .map((x) => RunningApp.fromJson((x as Map).cast<String, dynamic>()))
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'apps': apps.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is NoAppDisplayData &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'NoAppDisplayData(${jsonEncode(toJson())})';
 }
 
 enum PermissionDeniedDataReason {
@@ -12204,6 +12554,33 @@ mixin SessionApiMethods {
     AppsListParams params = const AppsListParams(),
   ]) async => AppsListResult.fromJson(await rpc('apps.list', params.toJson()));
 
+  /// 0.18: grant or deny one optional permission of an app, for this profile. Applies the next time the app starts.
+  ///
+  /// id: an installed app (apps.list) or a catalog app that is not installed yet (store.list): the launcher calls this for each permission switched off on the install sheet, then system.apps.install. The choice is kept per profile ($XDG_STATE_HOME/hinteros/permissions.json); only denials are stored, so an app without a stored choice has every permission. Emits apps_changed and store_changed. Errors: unknown_app (not installed and not in the catalog), unknown_permission (the app does not declare it, or it is not enforced on this box), permission_required (granted false for a required one). Granting a required one is accepted and changes nothing.
+  Future<AppsSetPermissionResult> appsSetPermission(
+    AppsSetPermissionParams params,
+  ) async => AppsSetPermissionResult.fromJson(
+    await rpc('apps.set_permission', params.toJson()),
+  );
+
+  /// 0.18: how many apps can run at once. Each app the daemon starts gets an X display of its own, from a fixed set.
+  ///
+  /// count: the setting, which the next session starts with (kept per profile in $XDG_STATE_HOME/hinteros/app-displays; default 4). active: the number this session started with (gamescope makes its Xwaylands at start only), null when apps do not get displays of their own (no gamescope; then nothing limits them). Steam and its games never use one. A display is free again once every process of its app has ended. apps.launch answers no_app_display while all are in use.
+  Future<AppsDisplaysGetResult> appsDisplaysGet([
+    AppsDisplaysGetParams params = const AppsDisplaysGetParams(),
+  ]) async => AppsDisplaysGetResult.fromJson(
+    await rpc('apps.displays.get', params.toJson()),
+  );
+
+  /// 0.18: set how many apps can run at once. Applies at the next session start (session.restart).
+  ///
+  /// Saves count for this profile and answers with apps.displays.get's result: active stays what this session started with, so count != active means a session restart is needed. invalid_params for a count outside min..max.
+  Future<AppsDisplaysSetResult> appsDisplaysSet(
+    AppsDisplaysSetParams params,
+  ) async => AppsDisplaysSetResult.fromJson(
+    await rpc('apps.displays.set', params.toJson()),
+  );
+
   /// Installed Steam games of the session user, read from Steam's library on disk.
   ///
   /// Read from the Steam directory (~/.local/share/Steam, else ~/.steam/steam; configurable): every library in steamapps/libraryfolders.vdf and its steamapps/appmanifest_&lt;appid&gt;.acf files. Steam tools (Proton, Steam Linux Runtime, Steamworks Common Redistributables, ...) are left out. Empty when Steam is not installed. Sorted by name. Launch a game with apps.launch {url: 'steam://rungameid/&lt;appid&gt;'}. games_changed says when to query again.
@@ -12231,7 +12608,7 @@ mixin SessionApiMethods {
 
   /// Start an app and give it focus. Returns once it is spawned, before it shows a window.
   ///
-  /// Exactly one of: 'id' (an app from apps.list), 'command' (argv, run as the session user), or 'url' (a Steam game, handed to the running Steam client; use it for games.list entries). If the app is already running it is focused instead and the result describes the running instance. Its windows are shown as soon as they appear; until then the launcher stays visible. Progress is reported through app_started, focus_changed and app_exited. The built-in id 'steam' opens Steam's Big Picture mode (steam://open/bigpicture, or 'steam -gamepadui' when Steam is not running) and shows Steam's own windows; it runs as the app 'steam' with source 'steam_client'. A Steam game's name comes from its Steam library manifest when it is installed.
+  /// Exactly one of: 'id' (an app from apps.list), 'command' (argv, run as the session user), or 'url' (a Steam game, handed to the running Steam client; use it for games.list entries). If the app is already running it is focused instead and the result describes the running instance. Its windows are shown as soon as they appear; until then the launcher stays visible. Progress is reported through app_started, focus_changed and app_exited. The built-in id 'steam' opens Steam's Big Picture mode (steam://open/bigpicture, or 'steam -gamepadui' when Steam is not running) and shows Steam's own windows; it runs as the app 'steam' with source 'steam_client'. A Steam game's name comes from its Steam library manifest when it is installed. 0.18: an app the daemon starts itself (from apps.list, or a command) gets an X display of its own (apps.displays.get); while all are in use it is not started: no_app_display names the running apps that hold one (close one with apps.close, wait for its app_exited, then launch again).
   Future<AppsLaunchResult> appsLaunch([
     AppsLaunchParams params = const AppsLaunchParams(),
   ]) async =>

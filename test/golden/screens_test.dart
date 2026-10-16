@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -244,6 +246,23 @@ void main() {
       keys: [LogicalKeyboardKey.escape],
     );
   });
+  testWidgets('close an app to open another (every app display in use)', (
+    t,
+  ) async {
+    await shot(
+      t,
+      'close_to_open_1080p',
+      setup: (t, h) async {
+        h.mock.appDisplays = 2;
+        await h.launch(t, 'jellyfin');
+        await h.launch(t, 'youtube');
+        h.mock.pressHome();
+        await t.pumpAndSettle();
+        unawaited(h.data.launchApp('crunchyroll', 'Crunchyroll'));
+        await t.pumpAndSettle();
+      },
+    );
+  });
   testWidgets('games 4k', (t) async {
     await shot(
       t,
@@ -292,12 +311,14 @@ void main() {
             id: a.id,
             name: a.name,
             kind: a.kind,
+            permissions: a.permissions,
             icon: '${iconDir()}/broken.png',
           ),
           'youtube' => App(
             id: a.id,
             name: a.name,
             kind: a.kind,
+            permissions: a.permissions,
             icon: '${iconDir()}/not-there.png',
           ),
           _ => a,

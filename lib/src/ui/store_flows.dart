@@ -33,9 +33,11 @@ List<StoreApp> missingDependencies(
   return out;
 }
 
-/// Install flow: confirm (size, dependencies) -> the vendor terms of the app
-/// and of every app that comes with it, each in full -> the install job with
-/// its progress page. Returns whether the app got installed.
+/// Install flow: confirm (size, dependencies, and the permissions as switches,
+/// all on, the required ones locked) -> the vendor terms of the app and of
+/// every app that comes with it, each in full -> the switched-off permissions
+/// stored (`apps.set_permission`) -> the install job with its progress page.
+/// Returns whether the app got installed.
 ///
 /// What the service says is handled here: `terms_required` shows the named
 /// terms again (a newer version than the list had), `app_conflict` names the
@@ -53,6 +55,7 @@ Future<bool> installFlow(
     for (final a in [app, ...deps])
       if (a.hasTerms) a,
   ];
+  final perms = app.permissions;
   final ok = await showConfirm(
     context,
     title: 'Install ${app.name} for this profile?',
@@ -64,10 +67,28 @@ Future<bool> installFlow(
         StatusLine(
           'Also installs: ${[for (final d in deps) '${d.name} (${_sizeLabel(d.sizeMiB)})'].join(', ')}.',
         ),
+      // Steam and other apps without the sandbox can reach everything.
+      for (final a in [app, ...deps])
+        if (a.fullAccess)
+          StatusLine(
+            '${a.name} has full access. It can use all data and devices of '
+            'this profile.',
+            error: true,
+          ),
       for (final a in withTerms)
         StatusLine('${a.terms!.title} applies. Read and accept it next.'),
     ],
-    confirmLabel: withTerms.isNotEmpty ? 'Continue' : 'Install',
+    // Phone style: every permission on, the optional ones can be turned off.
+    switchesTitle: perms.isEmpty ? null : 'Permissions',
+    switches: [
+      for (final p in perms)
+        ConfirmSwitch(p.label, locked: p.required, lockedLabel: 'Required'),
+    ],
+    confirmLabel: perms.isNotEmpty
+        ? 'Accept'
+        : withTerms.isNotEmpty
+        ? 'Continue'
+        : 'Install',
   );
   if (ok == null || !context.mounted) return false;
   // The exact version the user read, per app.
@@ -76,6 +97,24 @@ Future<bool> installFlow(
     if (!await showTerms(context, a) || !context.mounted) return false;
     accepted[a.id] = a.terms!.version;
   }
+  // The permission choices are stored only once the install goes ahead
+  // (not on Cancel or a declined terms page). Each one that differs from the
+  // stored choice is set, so an earlier opt-out left on is granted again.
+  try {
+    for (var i = 0; i < perms.length; i++) {
+      final p = perms[i];
+      final on = ok.switches[i];
+      if (!p.required && on != p.granted) {
+        await store.setPermission(app.id, p.name, on);
+      }
+    }
+  } on SystemException catch (e) {
+    if (context.mounted) {
+      await showMessage(context, title: refusalTitle(e), body: e.message);
+    }
+    return false;
+  }
+  if (!context.mounted) return false;
   final JobHandle? job = await _startInstall(
     context,
     services,

@@ -247,7 +247,7 @@ class _SpinnerCaption extends StatelessWidget {
   }
 }
 
-/// "Building hinteros-launcher (3 of 12). Time elapsed: 06:12", built again
+/// "Building hinteros-launcher (3 of 12): 20%. Time elapsed: 06:12", built again
 /// every second so the time counts up while the backend says nothing new.
 class _BuildLine extends StatefulWidget {
   const _BuildLine({required this.flow});

@@ -38,6 +38,7 @@ class FakeScript {
     int step, [
     String? name,
     int? index,
+    int? buildPercent,
   ]) => InstallEvent(
     stage: 'build',
     percent: percent,
@@ -47,6 +48,7 @@ class FakeScript {
     build: name,
     buildIndex: index,
     buildTotal: 12,
+    buildPercent: buildPercent,
   );
 
   /// The system stages: the packages (copied from the USB stick with
@@ -58,7 +60,7 @@ class FakeScript {
     _e('packages', 36, '120 of 480 packages', InstallLevel.info, null, 25),
     _e('packages', 40, '480 of 480 packages', InstallLevel.info, null, 100),
     _b(42, 'Building hinteros-daemon (1 of 12)', 0, 'hinteros-daemon', 1),
-    _b(50, 'Building hinteros-daemon (1 of 12)', 8, 'hinteros-daemon', 1),
+    _b(50, 'Building hinteros-daemon (1 of 12)', 8, 'hinteros-daemon', 1, 20),
     if (until > 50) ...[
       _b(
         57,
@@ -66,6 +68,7 @@ class FakeScript {
         17,
         'hinteros-launcher',
         3,
+        88,
       ),
       _b(80, '12 of 12 built', 100),
       _e('bootloader', 85, 'Installing the boot loader'),

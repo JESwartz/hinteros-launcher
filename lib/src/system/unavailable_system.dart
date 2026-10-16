@@ -33,6 +33,10 @@ class _UnavailableSystem implements SystemRepository {
   @override
   Future<Set<PowerAction>> powerAllowed() => Future.error(_gone);
   @override
+  Future<AppDisplaySetting> appDisplays() => Future.error(_gone);
+  @override
+  Future<AppDisplaySetting> setAppDisplays(int count) => Future.error(_gone);
+  @override
   Future<SshState> ssh() => Future.error(_gone);
   @override
   Future<JobHandle?> applySettings() => Future.error(_gone);
@@ -174,6 +178,9 @@ class _UnavailableStore implements StoreRepository {
   Set<String> get needsTerms => const {};
   @override
   Future<void> acceptTerms(String id, String version) => Future.error(_gone);
+  @override
+  Future<void> setPermission(String id, String permission, bool granted) =>
+      Future.error(_gone);
   @override
   Future<List<AppGeneration>> appGenerations() => Future.error(_gone);
   @override

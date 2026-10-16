@@ -59,6 +59,19 @@ void main() {
       expect(e.build, 'hinteros-launcher');
       expect(e.buildIndex, 3);
       expect(e.buildTotal, 12);
+      expect(e.buildPercent, isNull, reason: 'no build_percent');
+      final phased = parseProgressLine(
+        '{"phase":"system","stage":"build","percent":57,"level":"info",'
+        '"message":"Building hinteros-launcher (3 of 12)","step_percent":17,'
+        '"build":"hinteros-launcher","build_index":3,"build_total":12,'
+        '"build_percent":20}',
+      )!;
+      expect(phased.buildPercent, 20);
+      final over = parseProgressLine(
+        '{"stage":"build","percent":57,"level":"info","message":"m",'
+        '"build":"x","build_percent":140}',
+      )!;
+      expect(over.buildPercent, 99, reason: 'below 100 while it builds');
       final none = parseProgressLine(
         '{"phase":"system","stage":"build","percent":80,"level":"info",'
         '"message":"12 of 12 built","step_percent":100,"build_total":12}',
@@ -68,9 +81,10 @@ void main() {
       expect(none.buildTotal, 12);
       final odd = parseProgressLine(
         '{"stage":"build","percent":50,"level":"info","message":"m",'
-        '"build":"","build_index":0,"build_total":"12"}',
+        '"build":"","build_index":0,"build_total":"12","build_percent":5}',
       )!;
       expect(odd.build, isNull);
+      expect(odd.buildPercent, isNull, reason: 'only with a build');
       expect(odd.buildIndex, isNull);
       expect(odd.buildTotal, isNull);
       final packages = parseProgressLine(

@@ -122,7 +122,7 @@ void main() {
         case 'apps.list':
           return ok(req['id'], {
             'apps': [
-              {'id': 'a', 'name': 'A', 'kind': 'native'},
+              {'id': 'a', 'name': 'A', 'kind': 'native', 'permissions': []},
             ],
           });
       }

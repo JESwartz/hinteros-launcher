@@ -276,6 +276,7 @@ void main() {
           name: 'hinteros-daemon',
           version: '0.7.1',
           phase: 'build',
+          percent: 20,
         ),
       );
       await t.pumpAndSettle();
@@ -501,6 +502,56 @@ void main() {
         run: (t) async {
           await openStore(t);
           await press(t, [kDown, kRight, kDown, kEnter, kEnter]);
+        },
+      );
+    });
+    testWidgets('install confirm with permissions', (t) async {
+      await shot(
+        t,
+        'store_install_permissions_1080p',
+        harness(installed: {'jellyfin'}),
+        run: (t) async {
+          await openStore(t);
+          // Video: the Video player (third row, second column), Install.
+          await press(t, [kDown, kDown, kRight, kRight, kDown, kDown]);
+          await press(t, [kEnter, kEnter]);
+        },
+      );
+    });
+    testWidgets('install confirm with full access (Steam)', (t) async {
+      await shot(
+        t,
+        'store_install_full_access_1080p',
+        harness(installed: {'jellyfin'}),
+        run: (t) async {
+          await openStore(t);
+          // Games: Steam (Moonlight comes first), Install.
+          await press(t, [kDown, kRight, kRight, kEnter, kEnter]);
+        },
+      );
+    });
+    testWidgets('app page with permissions, running', (t) async {
+      final h = harness(installed: {'jellyfin', 'mpv'});
+      h.mock.apps.add(
+        const App(
+          id: 'mpv',
+          name: 'Video player',
+          kind: AppKind.native,
+          permissions: [],
+        ),
+      );
+      await h.services.mockStore.setPermission('mpv', 'mic', false);
+      await shot(
+        t,
+        'store_app_permissions_1080p',
+        h,
+        run: (t) async {
+          await h.launch(t, 'mpv');
+          h.mock.pressHome();
+          await t.pumpAndSettle();
+          await openStore(t);
+          await press(t, [kDown, kDown, kRight, kRight, kDown, kDown]);
+          await press(t, [kEnter, kDown, kDown]); // focus on Microphone
         },
       );
     });

@@ -422,7 +422,7 @@ void main() {
         await t.pump(const Duration(seconds: 15));
         expect(
           find.text(
-            'Building hinteros-launcher (3 of 12). Time elapsed: 06:00',
+            'Building hinteros-launcher (3 of 12): 88%. Time elapsed: 06:00',
           ),
           findsOneWidget,
         );

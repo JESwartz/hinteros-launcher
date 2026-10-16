@@ -182,7 +182,9 @@ void main() {
     setView(t);
     final h = Harness(
       mock: MockDaemon(
-        apps: const [App(id: 'only', name: 'Only App', kind: AppKind.web)],
+        apps: const [
+          App(id: 'only', name: 'Only App', kind: AppKind.web, permissions: []),
+        ],
       ),
     );
     await h.pump(t);
@@ -196,7 +198,14 @@ void main() {
       setView(t);
       final h = Harness(
         mock: MockDaemon(
-          apps: const [App(id: 'only', name: 'Only App', kind: AppKind.web)],
+          apps: const [
+            App(
+              id: 'only',
+              name: 'Only App',
+              kind: AppKind.web,
+              permissions: [],
+            ),
+          ],
         ),
       );
       await h.pump(t);

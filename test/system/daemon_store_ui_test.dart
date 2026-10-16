@@ -572,4 +572,37 @@ void main() {
       expect(find.text('Steam is not installed'), findsOneWidget);
     });
   });
+
+  group('permissions (0.18)', () {
+    testWidgets('install with one turned off, then on again on the app page', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await endStartupCheck(t, h);
+      await openApp(t, 2, more: 1, rows: 2); // Video: Video player
+      expect(find.text('Video player'), findsWidgets);
+      await press(t, [kEnter]); // Install
+      expect(find.text('Required'), findsOneWidget);
+      await press(t, [kDown, kEnter]); // Microphone off
+      await press(t, [kDown, kDown, kRight, kEnter]); // Accept
+      // The choice goes out first, then the install.
+      expect(appsLog(h), [
+        'apps.set_permission:mpv:mic:false',
+        'apps.install:mpv',
+      ]);
+      h.mock.system.finishJob(h.mock.system.runningJobId!);
+      await t.pumpAndSettle();
+      await press(t, [kEnter]); // Close
+      expect(find.text('Installed.'), findsOneWidget);
+      expect(find.text('Permissions'), findsOneWidget);
+      expect(find.text('Off'), findsOneWidget);
+      await press(t, [kDown, kDown, kEnter]); // Microphone on
+      await t.pumpAndSettle();
+      expect(appsLog(h).last, 'apps.set_permission:mpv:mic:true');
+      expect(find.text('Off'), findsNothing);
+      expect(h.mock.system.deniedPermissions, isEmpty);
+    });
+  });
 }

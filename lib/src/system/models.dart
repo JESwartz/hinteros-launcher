@@ -321,6 +321,7 @@ class BuildProgress {
     this.name,
     this.version,
     this.phase,
+    this.percent,
   });
 
   /// Derivations built so far.
@@ -337,6 +338,10 @@ class BuildProgress {
   final String? name;
   final String? version;
   final String? phase;
+
+  /// How far that one is, 0..99, from its build phase (session API 0.18);
+  /// null when nix gives none (no phase yet, or a builder without phases).
+  final int? percent;
 
   /// The one that builds now as "n of m": done + 1, never above the total.
   int? get current {
@@ -645,6 +650,42 @@ class Generation {
 }
 
 // ---------------------------------------------------------------- system
+
+/// How many apps can run at once (session API 0.18 `apps.displays.*`): each
+/// app gets an X display of its own, and the compositor makes them when the
+/// session starts.
+@immutable
+class AppDisplaySetting {
+  const AppDisplaySetting({
+    required this.count,
+    required this.active,
+    this.min = 1,
+    this.max = 8,
+  });
+
+  /// The setting: what the next session starts with.
+  final int count;
+
+  /// What this session has; null when apps do not get displays of their own
+  /// (then nothing limits them and the setting does nothing yet).
+  final int? active;
+  final int min;
+  final int max;
+
+  /// The setting differs from this session: it applies after a restart.
+  bool get restartNeeded => active != null && active != count;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppDisplaySetting &&
+      other.count == count &&
+      other.active == active &&
+      other.min == min &&
+      other.max == max;
+
+  @override
+  int get hashCode => Object.hash(count, active, min, max);
+}
 
 enum PowerAction {
   sleep('Sleep'),
@@ -1001,6 +1042,45 @@ class StoreIcon {
   final bool firefoxProfile;
 }
 
+/// One permission an app declares in the catalog (session API 0.18): what
+/// its sandbox may reach. A required one is always granted; an optional one
+/// the profile can turn off (at install and on the app's page). A change
+/// applies the next time the app starts.
+@immutable
+class AppPermission {
+  const AppPermission({
+    required this.name,
+    this.required = false,
+    this.granted = true,
+  });
+
+  /// The catalog name (`gamepad`, `mic`, `downloads`).
+  final String name;
+  final bool required;
+
+  /// This profile's choice (true until it turns an optional one off).
+  final bool granted;
+
+  /// What the user sees: a short name, or the catalog name for one this
+  /// launcher does not know.
+  String get label => permissionLabel(name);
+
+  AppPermission copyWith({bool? granted}) => AppPermission(
+    name: name,
+    required: required,
+    granted: granted ?? this.granted,
+  );
+}
+
+/// The short name of permission [name] on screen.
+String permissionLabel(String name) => switch (name) {
+  'gamepad' => 'Controller',
+  'mic' => 'Microphone',
+  'downloads' => 'Downloads folder',
+  'lan' => 'Local network',
+  _ => name,
+};
+
 /// One catalog index entry (format 2); see `catalog.dart` for the parser.
 @immutable
 class StoreApp {
@@ -1027,6 +1107,8 @@ class StoreApp {
     this.statusReason,
     this.conflicts = const [],
     this.missingServices = const [],
+    this.permissions = const [],
+    this.fullAccess = false,
   });
 
   final String id;
@@ -1079,6 +1161,15 @@ class StoreApp {
   /// Services (box-wide, admin profile only) this app needs that are not
   /// enabled on this box (0.12). While any is missing it cannot be installed.
   final List<({String id, String name})> missingServices;
+
+  /// What its sandbox may reach (0.18), in catalog order, with this
+  /// profile's choices. Empty: it declares none.
+  final List<AppPermission> permissions;
+
+  /// Runs without the app sandbox (0.18: Steam, `sandbox = false`, or the
+  /// sandbox is off on this box): it can use everything the profile can. The
+  /// install sheet warns.
+  final bool fullAccess;
 
   bool get hasTerms => terms != null;
 

@@ -13,12 +13,17 @@ import 'version.dart';
 /// The default fake app list: what a fresh HinterOS has (the built-in Steam
 /// entry first, then the default apps; Plex is a Store app).
 const mockApps = <App>[
-  App(id: 'steam', name: 'Steam', kind: AppKind.native),
-  App(id: 'jellyfin', name: 'Jellyfin', kind: AppKind.native),
-  App(id: 'youtube', name: 'YouTube', kind: AppKind.web),
-  App(id: 'crunchyroll', name: 'Crunchyroll', kind: AppKind.web),
-  App(id: 'firefox', name: 'Firefox', kind: AppKind.native),
-  App(id: 'plex', name: 'Plex', kind: AppKind.native),
+  App(id: 'steam', name: 'Steam', kind: AppKind.native, permissions: []),
+  App(id: 'jellyfin', name: 'Jellyfin', kind: AppKind.native, permissions: []),
+  App(id: 'youtube', name: 'YouTube', kind: AppKind.web, permissions: []),
+  App(
+    id: 'crunchyroll',
+    name: 'Crunchyroll',
+    kind: AppKind.web,
+    permissions: [],
+  ),
+  App(id: 'firefox', name: 'Firefox', kind: AppKind.native, permissions: []),
+  App(id: 'plex', name: 'Plex', kind: AppKind.native, permissions: []),
 ];
 
 /// The default apps with local icons from [iconDir] (holding `<app-id>.png` or
@@ -39,6 +44,7 @@ List<App> mockAppsWithIcons(String iconDir, {Set<String> without = const {}}) {
         name: a.name,
         kind: a.kind,
         icon: without.contains(a.id) ? null : find(a.id),
+        permissions: a.permissions,
       ),
   ];
 }
@@ -137,7 +143,9 @@ class MockDaemon extends DaemonConnection {
         var changed = false;
         for (final a in added) {
           if (this.apps.any((x) => x.id == a.id)) continue;
-          this.apps.add(App(id: a.id, name: a.name, kind: a.kind));
+          this.apps.add(
+            App(id: a.id, name: a.name, kind: a.kind, permissions: const []),
+          );
           changed = true;
         }
         if (changed) emitRaw('apps_changed');
@@ -217,6 +225,13 @@ class MockDaemon extends DaemonConnection {
 
   /// How many times `session.restart` was accepted.
   int sessionRestarts = 0;
+
+  /// App displays this session has (0.18; null: none, nothing limits apps):
+  /// a command app launched while this many run is `no_app_display`.
+  int? appDisplays = 4;
+
+  /// The `apps.displays.set` setting (applies at the next session start).
+  int appDisplaysSetting = 4;
 
   bool _oskVisible = false;
 
@@ -349,7 +364,12 @@ class MockDaemon extends DaemonConnection {
         _subscribed.removeWhere(_eventNames(params).contains);
         return {'events': List<String>.of(_subscribed)};
       case 'apps.list':
-        return AppsListResult(apps: List.of(apps)).toJson();
+        return AppsListResult(apps: [for (final a in apps) _withPermissions(a)])
+            .toJson();
+      case 'apps.set_permission':
+        system.setPermission(AppsSetPermissionParams.fromJson(params));
+        emitRaw('apps_changed');
+        return const AppsSetPermissionResult().toJson();
       case 'games.list':
         return GamesListResult(games: List.of(_games)).toJson();
       case 'steam.attention':
@@ -365,6 +385,18 @@ class MockDaemon extends DaemonConnection {
         }
         _close(params['id'] as String);
         return const AppsCloseResult().toJson();
+      case 'apps.displays.get':
+        return _appDisplays().toJson();
+      case 'apps.displays.set':
+        final count = AppsDisplaysSetParams.fromJson(params).count;
+        if (count < 1 || count > 8) {
+          throw const ApiException(
+            ApiErrorCode.invalidParams,
+            'count must be 1 to 8',
+          );
+        }
+        appDisplaysSetting = count;
+        return _appDisplays().toJson();
       case 'apps.launch':
         return AppsLaunchResult(app: _launch(AppsLaunchParams.fromJson(params)))
             .toJson();
@@ -490,6 +522,7 @@ class MockDaemon extends DaemonConnection {
         _setFocus(id);
         return running;
       }
+      if (id != 'steam') _needAppDisplay();
       app = id == 'steam'
           ? _newRunning(
               id,
@@ -506,6 +539,7 @@ class MockDaemon extends DaemonConnection {
           'cannot start $program: No such file or directory (os error 2)',
         );
       }
+      _needAppDisplay();
       app = _newRunning(
         'cmd-${++_cmdCounter}',
         p.name ?? program.split('/').last,
@@ -552,6 +586,27 @@ class MockDaemon extends DaemonConnection {
     gamescopeAppId: gamescopeAppId ?? 4100000000 + (++_gamescopeCounter),
     pid: source == AppSource.command ? 4200 + _running.length : null,
   );
+
+  AppsDisplaysGetResult _appDisplays() => AppsDisplaysGetResult(
+    count: appDisplaysSetting,
+    active: appDisplays,
+    min: 1,
+    max: 8,
+  );
+
+  /// Like the daemon: a command app needs a free app display (Steam and its
+  /// games take none).
+  void _needAppDisplay() {
+    final n = appDisplays;
+    if (n == null) return;
+    final holders = _running.where((a) => a.source == AppSource.command);
+    if (holders.length < n) return;
+    throw ApiException(
+      ApiErrorCode.noAppDisplay,
+      'every app display is in use ($n)',
+      NoAppDisplayData(apps: holders.toList()).toJson(),
+    );
+  }
 
   /// apps.close: the app goes away, `app_exited` says `closed`.
   void _close(String id) {
@@ -622,6 +677,21 @@ class MockDaemon extends DaemonConnection {
     }
   }
 
+  /// [a] with its permissions (0.18) and this profile's choices, from the
+  /// catalog (the session daemon reads them from the app-env manifest); an
+  /// app the catalog does not know keeps its own.
+  App _withPermissions(App a) => App(
+    id: a.id,
+    name: a.name,
+    kind: a.kind,
+    icon: a.icon,
+    needsTerms: a.needsTerms,
+    permissions: switch (system.permissionsOf(a.id)) {
+      [] => a.permissions,
+      final p => p,
+    },
+  );
+
   /// Emits the event if this connection subscribed to [name] (like the daemon).
   void emitRaw(String name, [Map<String, dynamic> params = const {}]) {
     if (_closed || !_subscribed.contains(name)) return;
@@ -641,6 +711,7 @@ class MockDaemon extends DaemonConnection {
       kind: a.kind,
       icon: icon,
       needsTerms: a.needsTerms,
+      permissions: a.permissions,
     );
     emitRaw('apps_changed');
   }
@@ -658,6 +729,7 @@ class MockDaemon extends DaemonConnection {
       kind: a.kind,
       icon: a.icon,
       needsTerms: terms,
+      permissions: a.permissions,
     );
     emitRaw('apps_changed');
   }
