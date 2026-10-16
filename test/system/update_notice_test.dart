@@ -20,42 +20,38 @@ bool buttonEnabled(WidgetTester t, String label) =>
 
 void main() {
   group('security update notice', () {
-    testWidgets(
-      'full screen, severity shown, cannot be dismissed for 5 seconds',
-      (t) async {
-        setView(t);
-        final h = behind(mockSecurityUpdate());
-        await h.pump(t);
-        expect(find.text('Security update'), findsOneWidget);
-        expect(find.text('Severity: High'), findsOneWidget);
-        expect(find.textContaining('in 5 seconds'), findsOneWidget);
-        expect(buttonEnabled(t, 'Later (5)'), isFalse);
-        expect(buttonEnabled(t, 'Update now (5)'), isFalse);
+    testWidgets('full screen, severity shown, Later and Back wait 5 seconds', (
+      t,
+    ) async {
+      setView(t);
+      final h = behind(mockSecurityUpdate());
+      await h.pump(t);
+      expect(find.text('Security update'), findsOneWidget);
+      expect(find.text('Severity: High'), findsOneWidget);
+      expect(buttonEnabled(t, 'Later (5)'), isFalse);
+      expect(buttonEnabled(t, 'Update now'), isTrue);
 
-        // Accept, Back and the Home button all do nothing while it counts down.
-        await press(t, [kEnter, kEscape, kRight, kEnter]);
-        h.mock.pressHome();
-        await t.pumpAndSettle();
-        expect(find.text('Security update'), findsOneWidget);
-        expect(h.services.mockJobs.started, isEmpty);
+      // Later, Back and the Home button do nothing while it counts down.
+      await press(t, [kLeft, kEnter, kEscape]);
+      h.mock.pressHome();
+      await t.pumpAndSettle();
+      expect(find.text('Security update'), findsOneWidget);
+      expect(h.services.mockJobs.started, isEmpty);
 
-        // The presses above took well under a second of fake time.
-        await t.pump(const Duration(seconds: 3));
-        expect(find.textContaining('You can choose in'), findsOneWidget);
-        expect(find.textContaining(RegExp(r'Later \(\d\)')), findsOneWidget);
-        await press(t, [kEscape, kEnter]);
-        expect(
-          find.text('Security update'),
-          findsOneWidget,
-          reason: 'still locked',
-        );
+      // The presses above took well under a second of fake time.
+      await t.pump(const Duration(seconds: 3));
+      expect(find.textContaining(RegExp(r'Later \(\d\)')), findsOneWidget);
+      await press(t, [kEscape, kEnter]);
+      expect(
+        find.text('Security update'),
+        findsOneWidget,
+        reason: 'still locked',
+      );
 
-        await t.pump(const Duration(seconds: 2));
-        expect(find.textContaining('Choose when to update.'), findsOneWidget);
-        expect(buttonEnabled(t, 'Later'), isTrue);
-        expect(buttonEnabled(t, 'Update now'), isTrue);
-      },
-    );
+      await t.pump(const Duration(seconds: 2));
+      expect(buttonEnabled(t, 'Later'), isTrue);
+      expect(buttonEnabled(t, 'Update now'), isTrue);
+    });
 
     testWidgets('Later closes it, and nothing is updated', (t) async {
       setView(t);
@@ -63,7 +59,7 @@ void main() {
       await h.pump(t);
       expect(find.text('Severity: Critical'), findsOneWidget);
       await t.pump(const Duration(seconds: 5));
-      await press(t, [kEnter]); // Later is focused first
+      await press(t, [kLeft, kEnter]); // Update now is focused first
       expect(find.text('Security update'), findsNothing);
       expect(h.services.mockJobs.started, isEmpty);
       // The reminder banner is there instead.
@@ -90,7 +86,7 @@ void main() {
 
       // Later, then the banner leads to Settings > Updates, which shows it too.
       await t.pump(const Duration(seconds: 5));
-      await press(t, [kEnter]);
+      await press(t, [kLeft, kEnter]);
       await press(t, [kUp, kEnter]);
       expect(
         find.textContaining('Update available: HinterOS 0.6.2'),

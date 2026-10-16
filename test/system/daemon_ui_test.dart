@@ -302,11 +302,9 @@ void main() {
       await endStartupCheck(t, h);
       expect(find.text('Security update'), findsOneWidget);
       expect(find.text('Severity: High'), findsOneWidget);
-      // Wait out the 5 s lock, then Update now (the second button).
-      await t.pump(const Duration(seconds: 6));
-      await t.pumpAndSettle();
+      // Update now has the focus and works at once.
       h.mock.system.restartNext = true;
-      await press(t, [kRight, kEnter]);
+      await press(t, [kEnter]);
       await enterPin(t, '2468'); // the admin PIN
       final job = h.mock.system.runningJobId!;
       expect(h.mock.system.log.last, 'update.apply');
