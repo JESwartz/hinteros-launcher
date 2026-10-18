@@ -199,6 +199,21 @@ void main() {
     expect(focusLabel(), startsWith('tabs/'));
   });
 
+  testWidgets('settings: without Wi-Fi, Right on Network goes to Bluetooth', (
+    t,
+  ) async {
+    final h = Harness();
+    h.services.mockNetwork.wifiAvailable = false;
+    await start(t, h: h);
+    await keys(t, [up, right, right, right, right, down]);
+    await keys(t, List.filled(3, down));
+    expect(focusLabel(), 'settings-list/network:0');
+    await keys(t, [right]);
+    expect(focusLabel(), startsWith('settings-detail-1/'));
+    await keys(t, [left]);
+    expect(focusLabel(), 'settings-list/network:0');
+  });
+
   testWidgets('settings: another group starts at the top of its pane', (
     t,
   ) async {

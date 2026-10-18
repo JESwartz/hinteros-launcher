@@ -873,6 +873,9 @@ class MockNetwork implements NetworkRepository {
   late List<WifiNetwork> _networks;
   bool _wifi = true;
 
+  /// False: the box has no Wi-Fi adapter.
+  bool wifiAvailable = true;
+
   /// The password every secured, unsaved mock network accepts.
   String password = 'wifi-pass';
 
@@ -884,6 +887,7 @@ class MockNetwork implements NetworkRepository {
   Future<NetworkStatus> status() async {
     final c = _networks.where((n) => n.connected).firstOrNull;
     return NetworkStatus(
+      wifiAvailable: wifiAvailable,
       wifiEnabled: _wifi,
       wifiSsid: c?.ssid,
       address: c == null ? null : '192.168.1.42',
