@@ -36,7 +36,10 @@ class NavRegion extends ChangeNotifier {
   void Function(NavDir dir)? onEnter;
 
   /// A move into this region while it has no items goes on to this region's
-  /// own neighbour in the same direction (stacked panes still loading).
+  /// own neighbour in the same direction (stacked panes still loading). A
+  /// move left or right with no neighbour there goes on to the region below
+  /// (a stacked section with nothing to focus, such as Network without a
+  /// Wi-Fi adapter).
   bool passWhenEmpty = false;
 
   /// Region Back moves to, if any. If null, Back falls through to
@@ -256,12 +259,20 @@ class NavController {
           unawaited(region.focusCurrent());
         } else {
           var n = region.neighbors[dir];
+          var enter = dir;
+          final sideways = dir == NavDir.left || dir == NavDir.right;
           for (var hops = 0; hops < 16; hops++) {
             if (n == null || n.hasItems || !n.passWhenEmpty) break;
-            n = n.neighbors[dir];
+            final next = n.neighbors[dir];
+            if (next == null && sideways) {
+              n = n.neighbors[NavDir.down];
+              enter = NavDir.down;
+            } else {
+              n = next;
+            }
           }
           if (n != null && n.hasItems) {
-            n.onEnter?.call(dir);
+            n.onEnter?.call(enter);
             focusRegion(n);
           }
         }
