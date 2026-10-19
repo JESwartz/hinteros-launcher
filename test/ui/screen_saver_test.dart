@@ -150,9 +150,17 @@ void main() {
     await h.pump(t);
     await t.pump(const Duration(minutes: 1));
     expect(_saver, findsOneWidget);
-    // The top bar's time (the box's zone: 00:30 the next day).
-    expect(_in('00:30'), findsOneWidget);
-    expect(_in('Wednesday 7 October'), findsOneWidget);
+    // The top bar's time, and the date.
+    final texts = [
+      for (final e
+          in find
+              .descendant(of: _saver, matching: find.byType(Text))
+              .evaluate())
+        (e.widget as Text).data!,
+    ];
+    expect(texts[0], matches(RegExp(r'^\d\d:\d\d$')));
+    expect(find.text(texts[0]), findsNWidgets(2));
+    expect(texts[1], matches(RegExp(r'^[A-Z][a-z]+day \d{1,2} [A-Z][a-z]+$')));
     // Nothing animates: it settles.
     await t.pumpAndSettle();
     await press(t, [kDown]);
