@@ -129,7 +129,7 @@ void main() {
     setView(t);
     final h = harness(current: 'guest');
     await h.pump(t);
-    await openChip(t);
+    await enterSettingsEntry(t, 'profiles');
     await keys(t, [kDown, kEnter]); // End guest session
     expect(
       find.text(
@@ -162,7 +162,7 @@ void main() {
     final h = harness();
     await h.pump(t);
     await openChip(t);
-    await keys(t, [kEnter, kRight, kEnter]); // Switch profile, Sam
+    await keys(t, [kRight, kEnter]); // Sam
     await typePin(t, '1357', settle: false);
     await frames(t, 20);
     expect(find.text('Switching to Sam').hitTestable(), findsOneWidget);
@@ -183,7 +183,7 @@ void main() {
     h.services.mockProfiles.blockingApp = (id: 'youtube', name: 'YouTube');
     await h.pump(t);
     await openChip(t);
-    await keys(t, [kEnter, kRight, kEnter]);
+    await keys(t, [kRight, kEnter]);
     await typePin(t, '1357', settle: false);
     await frames(t, 10);
     await keys(t, [kRight, kRight, kEnter], settle: false); // Cancel switch

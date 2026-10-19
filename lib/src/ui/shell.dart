@@ -606,33 +606,13 @@ class _LauncherShellState extends State<LauncherShell> {
     );
   }
 
-  /// A on the profile chip.
-  Future<void> _profileMenu() async {
+  /// A on the profile chip: the profile picker. Profile settings and End guest
+  /// session are in Settings -> Profiles.
+  Future<void> _switchProfile() async {
     final c = _scopeContext;
-    final me = _profile.current;
-    if (c == null || me == null) return;
-    final choice = await showChoice<String>(
-      c,
-      title: me.displayName,
-      choices: [
-        const Choice('Switch profile', 'switch'),
-        if (!me.guest) const Choice('Profile settings', 'settings'),
-        if (me.guest) const Choice('End guest session', 'end', danger: true),
-      ],
-    );
-    if (!mounted || choice == null) return;
-    switch (choice) {
-      case 'switch':
-        await _profile.switchProfile(_scopeContext ?? c);
-      case 'settings':
-        _openProfileSettings();
-      case 'end':
-        await _profile.endGuest(_scopeContext ?? c);
-    }
+    if (c == null || _profile.current == null) return;
+    await _profile.switchProfile(c);
   }
-
-  /// Settings, on the Profiles entry.
-  void _openProfileSettings() => _openSettings('profiles');
 
   /// Settings at [id], a list entry or a setting in one (see
   /// [SettingsRegions.select]).
@@ -951,7 +931,7 @@ class _LauncherShellState extends State<LauncherShell> {
                   onFocusTab: (i) => _setSection(_sections[i]),
                   time: _time,
                   profile: _profile.current,
-                  onProfile: () => unawaited(_profileMenu()),
+                  onProfile: () => unawaited(_switchProfile()),
                   job: _jobs.showsIndicator ? _jobs.background : null,
                   jobName: _jobs.backgroundName,
                   onJob: _openJob,

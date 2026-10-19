@@ -63,17 +63,14 @@ Future<void> openChip(WidgetTester t) async {
 void main() {
   appearanceTests();
   pickerRefreshTests();
-  testWidgets('the chip opens Switch profile and Profile settings', (t) async {
+  testWidgets('the chip opens the profile picker at once', (t) async {
     setView(t);
     final h = harness();
     await h.pump(t);
     expect(find.text('J'), findsOneWidget);
     await openChip(t);
-    expect(find.text('James'), findsOneWidget);
-    expect(find.text('Switch profile'), findsOneWidget);
-    expect(find.text('Profile settings'), findsOneWidget);
-    await keys(t, [down, enter]); // Profile settings
-    expect(focusLabel(), 'settings-list/profiles:0');
+    expect(find.text('Who is watching?'), findsOneWidget);
+    expect(find.text('Profile settings'), findsNothing);
   });
 
   testWidgets('switching: what closes, then the Switching page', (t) async {
@@ -84,7 +81,6 @@ void main() {
     h.mock.pressHome();
     await t.pumpAndSettle();
     await openChip(t);
-    await keys(t, [enter]); // Switch profile
     // The boot picker's screen, James marked open and focused.
     expect(find.text('Who is watching?'), findsOneWidget);
     for (final n in ['James', 'Sam', 'Guest', 'Add profile', 'Power']) {
@@ -106,7 +102,7 @@ void main() {
     expect(h.mock.running.map((a) => a.id), contains('youtube'));
     // Back on the chip. Again, with the right PIN: then the switch.
     expect(focusLabel(), 'tabs/tabs:5');
-    await keys(t, [enter, enter, right, enter]);
+    await keys(t, [enter, right, enter]);
     await typePin(t, '1357', settle: false);
     expect(h.services.mockProfiles.log, contains('switch:p3'));
     expect(find.text('Switching to Sam'), findsOneWidget);
@@ -123,7 +119,7 @@ void main() {
     h.services.mockProfiles.blockingApp = (id: 'youtube', name: 'YouTube');
     await h.pump(t);
     await openChip(t);
-    await keys(t, [enter, right, enter]); // Switch profile, Sam
+    await keys(t, [right, enter]); // Sam
     await typePin(t, '1357', settle: false);
     await frames(t, 10);
     expect(find.textContaining("YouTube isn't responding ("), findsOneWidget);
@@ -158,7 +154,7 @@ void main() {
     h.services.mockProfiles.blockingApp = (id: 'youtube', name: 'YouTube');
     await h.pump(t);
     await openChip(t);
-    await keys(t, [enter, right, enter]);
+    await keys(t, [right, enter]);
     await typePin(t, '1357', settle: false);
     await frames(t, 10);
     await keys(t, [right, right, enter], settle: false);
@@ -299,13 +295,11 @@ void main() {
     expect(box.byId('p1')!.pin, '1234');
   });
 
-  testWidgets('the guest ends its session from the chip', (t) async {
+  testWidgets('the guest ends its session from Settings', (t) async {
     setView(t);
     final h = harness(current: 'guest');
     await h.pump(t);
-    await openChip(t);
-    expect(find.text('End guest session'), findsOneWidget);
-    expect(find.text('Profile settings'), findsNothing);
+    await enterSettingsEntry(t, 'profiles');
     await keys(t, [down, enter]);
     expect(find.text('End the guest session?'), findsOneWidget);
     await keys(t, [right, enter], settle: false);
@@ -323,7 +317,6 @@ void main() {
     h.mock.pressHome();
     await t.pumpAndSettle();
     await openChip(t);
-    await keys(t, [enter]); // Switch profile
     expect(find.text('Who is watching?'), findsOneWidget);
     await keys(t, [enter]); // James, the open one
     expect(find.text('Who is watching?'), findsNothing);
@@ -335,7 +328,7 @@ void main() {
     expect(h.mock.running.map((a) => a.id), contains('youtube'));
     // B: the same (the focus is back on the chip).
     expect(focusLabel(), 'tabs/tabs:5');
-    await keys(t, [enter, enter, right]);
+    await keys(t, [enter, right]);
     await keys(t, [escape]);
     expect(find.text('Who is watching?'), findsNothing);
     expect(
@@ -355,7 +348,7 @@ void main() {
     h.mock.pressHome();
     await t.pumpAndSettle();
     await openChip(t);
-    await keys(t, [enter, right, enter]); // Switch profile, Sam
+    await keys(t, [right, enter]); // Sam
     expect(find.text('Celeste is still running'), findsOneWidget);
     expect(h.services.mockProfiles.log, isNot(contains('switch:p3')));
     await keys(t, [right, enter]); // Close it and switch
@@ -372,7 +365,7 @@ void main() {
     final h = harness();
     await h.pump(t);
     await openChip(t);
-    await keys(t, [enter, right, right, enter], settle: false);
+    await keys(t, [right, right, enter], settle: false);
     await frames(t);
     expect(h.services.mockProfiles.log, contains('switch:guest'));
     await frames(t, 20);
@@ -409,7 +402,6 @@ void pickerRefreshTests() {
     final h = harness();
     await h.pump(t);
     await openChip(t);
-    await keys(t, [enter]); // Switch profile
     expect(find.text('Sam'), findsOneWidget);
     // Removed meanwhile (from another session, or a job that just ended).
     final job = await h.services.mockProfiles.remove('p3', '2468');

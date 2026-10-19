@@ -22,18 +22,10 @@ void main() {
     matchesGoldenFile('goldens/profiles_${name}_1080p.png'),
   );
 
-  testWidgets('chip menu', (t) async {
-    setView(t);
-    await harness().pump(t);
-    await openChip(t);
-    await shot(t, 'chip_menu');
-  });
-
   testWidgets('switch picker', (t) async {
     setView(t);
     await harness().pump(t);
     await openChip(t);
-    await keys(t, [kEnter]);
     await shot(t, 'switch_picker');
   });
 
@@ -43,7 +35,7 @@ void main() {
     h.services.mockProfiles.blockingApp = (id: 'youtube', name: 'YouTube');
     await h.pump(t);
     await openChip(t);
-    await keys(t, [kEnter, kRight, kEnter]);
+    await keys(t, [kRight, kEnter]);
     await typePin(t, '1357', settle: false); // Sam is locked
     await frames(t, 10);
     await shot(t, 'not_responding');
@@ -98,7 +90,7 @@ void main() {
     setView(t);
     await harness().pump(t);
     await openChip(t);
-    await keys(t, [kEnter, kRight, kEnter]);
+    await keys(t, [kRight, kEnter]);
     await shot(t, 'switch_pin');
   });
 
@@ -189,7 +181,7 @@ void moreGoldens() {
   testWidgets('End guest session: removed now', (t) async {
     setView(t);
     await harness(current: 'guest').pump(t);
-    await openChip(t);
+    await enterSettingsEntry(t, 'profiles');
     await keys(t, [kDown, kEnter]);
     await shot(t, 'end_guest_confirm');
   });

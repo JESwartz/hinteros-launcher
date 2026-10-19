@@ -39,7 +39,7 @@ class TopBar extends StatelessWidget {
   /// of the tab row; null: no chip (no profiles on this box).
   final CurrentProfile? profile;
 
-  /// A on the chip: Switch profile, Profile settings.
+  /// A on the chip: the profile picker.
   final VoidCallback? onProfile;
 
   final NavRegion region;
