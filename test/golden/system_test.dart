@@ -52,13 +52,34 @@ void main() {
   const hc160 = LauncherSettings(textScale: 1.6, highContrast: true);
 
   group('Settings > System', () {
-    for (final id in ['net', 'display', 'audio', 'power', 'ssh', 'about']) {
+    for (final id in [
+      'net',
+      'display',
+      'audio',
+      'screensaver',
+      'power',
+      'ssh',
+      'about',
+    ]) {
       testWidgets('settings $id', (t) async {
         await shot(
           t,
           'settings_sys_${id}_1080p',
           harness(),
           run: (t) => enterSettingsEntry(t, id),
+        );
+      });
+    }
+    for (final s in [ScreenSaverStyle.clock, ScreenSaverStyle.logo]) {
+      testWidgets('screen saver ${s.name}', (t) async {
+        await shot(
+          t,
+          'screen_saver_${s.name}_1080p',
+          harness(settings: LauncherSettings(screenSaverStyle: s)),
+          run: (t) async {
+            await t.pump(const Duration(minutes: 10));
+            await t.pump();
+          },
         );
       });
     }

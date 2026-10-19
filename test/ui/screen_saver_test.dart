@@ -1,0 +1,175 @@
+// The screen saver: when it starts (only over the launcher), what closes it
+// (the first press only closes it), and its settings.
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hinteros_launcher/src/api/api.dart' show NavAction, NavPhase;
+import 'package:hinteros_launcher/src/settings/launcher_settings.dart';
+import 'package:hinteros_launcher/src/ui/screen_saver.dart';
+
+import '../support/harness.dart';
+import '../support/nav_helpers.dart';
+
+final _saver = find.byKey(const ValueKey('screen-saver'));
+Finder _in(String text) =>
+    find.descendant(of: _saver, matching: find.text(text));
+
+Harness _harness({
+  int minutes = 1,
+  ScreenSaverStyle style = ScreenSaverStyle.black,
+  bool reduceMotion = false,
+}) => Harness(
+  settings: LauncherSettings(
+    screenSaverMinutes: minutes,
+    screenSaverStyle: style,
+    reduceMotion: reduceMotion,
+  ),
+);
+
+void main() {
+  test('settings: defaults, JSON round trip, bad values', () {
+    const d = LauncherSettings();
+    expect(d.screenSaverMinutes, 10);
+    expect(d.screenSaverStyle, ScreenSaverStyle.clock);
+    const s = LauncherSettings(
+      screenSaverMinutes: 30,
+      screenSaverStyle: ScreenSaverStyle.logo,
+    );
+    expect(LauncherSettings.fromJson(s.toJson()), s);
+    expect(s.toJson()['screen_saver_style'], 'logo');
+    final bad = LauncherSettings.fromJson({
+      'screen_saver_minutes': 7,
+      'screen_saver_style': 'fish',
+    });
+    expect(bad.screenSaverMinutes, 10);
+    expect(bad.screenSaverStyle, ScreenSaverStyle.clock);
+    expect(
+      LauncherSettings.fromJson({'screen_saver_minutes': 0}).screenSaverMinutes,
+      0,
+    );
+  });
+
+  test('the press that closes it goes nowhere, its release neither', () {
+    final c = ScreenSaverController(
+      SettingsController(MemorySettingsStorage()),
+    );
+    addTearDown(c.dispose);
+    c.allowed = true;
+    c.show();
+    expect(c.showing, true);
+    expect(c.input(NavAction.accept, NavPhase.press), true);
+    expect(c.showing, false);
+    expect(c.input(NavAction.accept, NavPhase.repeat), true);
+    expect(c.input(NavAction.accept, NavPhase.release), true);
+    expect(c.input(NavAction.accept, NavPhase.press), false);
+    expect(c.input(NavAction.down, NavPhase.press), false);
+    // Show now: the release of its A does not close it.
+    c.show();
+    expect(c.input(NavAction.accept, NavPhase.release), true);
+    expect(c.showing, true);
+    // Not allowed (an app in front): closed, and no wait.
+    c.allowed = false;
+    expect(c.showing, false);
+  });
+
+  testWidgets('it starts after the time without input; input waits again', (
+    t,
+  ) async {
+    setView(t);
+    final h = _harness();
+    await h.pump(t);
+    await t.pump(const Duration(seconds: 40));
+    await press(t, [kRight]);
+    final focus = focusLabel();
+    await t.pump(const Duration(seconds: 40));
+    expect(_saver, findsNothing, reason: 'the press made it wait again');
+    await t.pump(const Duration(seconds: 21));
+    expect(_saver, findsOneWidget);
+    // The first press only closes it.
+    await press(t, [kRight]);
+    expect(_saver, findsNothing);
+    expect(focusLabel(), focus);
+    // Off: never.
+    h.settings.update(h.settings.value.copyWith(screenSaverMinutes: 0));
+    await t.pump(const Duration(minutes: 31));
+    expect(_saver, findsNothing);
+  });
+
+  testWidgets('not over an app; Home closes it and stays where it was', (
+    t,
+  ) async {
+    setView(t);
+    final h = _harness();
+    await h.pump(t);
+    await h.launch(t, 'youtube');
+    await t.pump(const Duration(minutes: 2));
+    expect(_saver, findsNothing);
+    h.mock.pressHome();
+    await t.pumpAndSettle();
+    await press(t, [kRight]);
+    final focus = focusLabel();
+    await t.pump(const Duration(minutes: 1));
+    expect(_saver, findsOneWidget);
+    h.mock.pressHome();
+    await t.pumpAndSettle();
+    expect(_saver, findsNothing);
+    expect(focusLabel(), focus);
+  });
+
+  testWidgets('Settings: start after, style, Show now', (t) async {
+    setView(t);
+    final h = _harness(minutes: 10);
+    await h.pump(t);
+    await enterSettingsEntry(t, 'screensaver');
+    expect(focusLabel(), 'settings-detail-2/after:0');
+    expect(find.text('10 minutes'), findsOneWidget);
+    // The list opens at 10 minutes; one down is 15.
+    await press(t, [kEnter, kDown, kEnter]);
+    expect(h.settings.value.screenSaverMinutes, 15);
+    expect(find.text('15 minutes'), findsOneWidget);
+    await press(t, [kDown]);
+    expect(focusLabel(), 'settings-detail-2/style:0');
+    await press(t, [kEnter]);
+    for (final s in ['Clock', 'Drifting logo', 'Black screen']) {
+      expect(find.text(s), findsWidgets, reason: s);
+    }
+    await press(t, [kDown, kDown, kEnter]);
+    expect(h.settings.value.screenSaverStyle, ScreenSaverStyle.black);
+    await press(t, [kDown]);
+    expect(focusLabel(), 'settings-detail-2/show:0');
+    // A press and its release: it stays up.
+    await press(t, [kEnter]);
+    expect(_saver, findsOneWidget);
+    await press(t, [kDown]);
+    expect(_saver, findsNothing);
+    expect(focusLabel(), 'settings-detail-2/show:0');
+  });
+
+  testWidgets('clock and logo; with reduce motion they hold still', (t) async {
+    setView(t);
+    final h = _harness(style: ScreenSaverStyle.clock, reduceMotion: true);
+    await h.pump(t);
+    await t.pump(const Duration(minutes: 1));
+    expect(_saver, findsOneWidget);
+    // The top bar's time (the box's zone: 00:30 the next day).
+    expect(_in('00:30'), findsOneWidget);
+    expect(_in('Wednesday 7 October'), findsOneWidget);
+    // Nothing animates: it settles.
+    await t.pumpAndSettle();
+    await press(t, [kDown]);
+    h.settings.update(
+      h.settings.value.copyWith(
+        screenSaverStyle: ScreenSaverStyle.logo,
+        reduceMotion: false,
+      ),
+    );
+    await t.pump(const Duration(minutes: 1));
+    expect(_in('HinterOS'), findsOneWidget);
+    // It moves.
+    final at = t.getTopLeft(_in('HinterOS'));
+    await t.pump(const Duration(seconds: 2));
+    expect(t.getTopLeft(_in('HinterOS')), isNot(at));
+    await t.sendKeyEvent(kDown);
+    await t.pump();
+    expect(_saver, findsNothing);
+  });
+}

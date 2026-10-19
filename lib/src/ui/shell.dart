@@ -36,6 +36,7 @@ import 'update_banner.dart';
 import 'widgets.dart' show StatusLine;
 import 'pages.dart';
 import 'restart_countdown.dart';
+import 'screen_saver.dart';
 import 'session_ending.dart';
 import 'tab_bar.dart';
 
@@ -133,6 +134,7 @@ class _LauncherShellState extends State<LauncherShell> {
 
   /// The launcher is in front: a restart offer counts down only then.
   late final _front = ValueNotifier<bool>(widget.data.inFront);
+  late final _saver = ScreenSaverController(widget.settings);
   bool _bannerVisible = false;
   bool _updateBannerVisible = false;
   late final UpdateReminders _reminders = UpdateReminders(
@@ -303,7 +305,7 @@ class _LauncherShellState extends State<LauncherShell> {
     );
     _subs.add(
       d.homePressed.listen((_) {
-        if (_endingShown) return;
+        if (_endingShown || _saver.wake()) return;
         d.cancelLaunching();
         // A modal (a security notice, a job in progress) is not dismissed by Home.
         if (!_modals.isOpen) _goHome(reset: true);
@@ -325,6 +327,18 @@ class _LauncherShellState extends State<LauncherShell> {
     _nav.fallback = () => _modals.topRegion ?? _contentOf(_section);
     _home.addListener(_initialFocus);
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialFocus());
+    _syncSaver();
+  }
+
+  /// The screen saver waits only while the launcher has the screen.
+  void _syncSaver() {
+    final d = widget.data;
+    _saver.allowed =
+        d.inFront &&
+        !d.oskVisible &&
+        d.status is Connected &&
+        !_loading &&
+        !_endingShown;
   }
 
   DateTime _now() => (widget.now ?? DateTime.now)();
@@ -402,6 +416,7 @@ class _LauncherShellState extends State<LauncherShell> {
     if (!mounted) return;
     final d = widget.data;
     _front.value = d.inFront;
+    _syncSaver();
     if (_hideConnection != _hidingConnection) {
       _hidingConnection = _hideConnection;
       setState(() {});
@@ -473,6 +488,7 @@ class _LauncherShellState extends State<LauncherShell> {
     _loadingCap?.cancel();
     if (!_loading || !mounted) return;
     setState(() => _loading = false);
+    _syncSaver();
   }
 
   LoadingIdentity _loadingIdentity() {
@@ -500,6 +516,7 @@ class _LauncherShellState extends State<LauncherShell> {
     if (_ending.ending != null) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
     }
+    _syncSaver();
     setState(() {});
   }
 
@@ -658,6 +675,7 @@ class _LauncherShellState extends State<LauncherShell> {
     widget.data.removeListener(_onData);
     widget.data.removeListener(_checkLoading);
     _front.dispose();
+    _saver.dispose();
     _loadingCap?.cancel();
     _graceTimer?.cancel();
     _clock?.cancel();
@@ -829,6 +847,7 @@ class _LauncherShellState extends State<LauncherShell> {
   void _onAction(NavAction action, NavPhase phase) {
     // The session is ending: there is no way back.
     if (_endingShown) return;
+    if (_saver.input(action, phase)) return;
     if (widget.data.launching != null) {
       // The "Starting ..." view has the screen: B stops waiting, nothing else
       // moves the (hidden) launcher.
@@ -848,7 +867,11 @@ class _LauncherShellState extends State<LauncherShell> {
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
     // In a text field letters are letters (not Y/X) and Backspace deletes.
     final action = navActionForKey(e.logicalKey, inTextField: _typingInField());
-    if (action == null) return KeyEventResult.ignored;
+    if (action == null) {
+      // A letter, typed: input too.
+      final woke = e is KeyDownEvent && _saver.wake();
+      return woke ? KeyEventResult.handled : KeyEventResult.ignored;
+    }
     _onAction(action, switch (e) {
       KeyDownEvent() => NavPhase.press,
       KeyRepeatEvent() => NavPhase.repeat,
@@ -898,6 +921,7 @@ class _LauncherShellState extends State<LauncherShell> {
       services: widget.services,
       regions: _settingsRegions,
       profileSession: _profile,
+      onShowScreenSaver: _saver.show,
       now: widget.now,
     ),
     // Phase 2.
@@ -922,6 +946,17 @@ class _LauncherShellState extends State<LauncherShell> {
             child: Stack(
               children: [
                 Positioned.fill(child: _host()),
+                Positioned.fill(
+                  child: ListenableBuilder(
+                    listenable: _saver,
+                    builder: (_, _) => _saver.showing
+                        ? ScreenSaver(
+                            style: widget.settings.value.screenSaverStyle,
+                            time: _time,
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ),
                 // Over everything, modals included.
                 if (_ending.ending case final e? when _endingShown)
                   Positioned.fill(child: SessionEndingPage(ending: e)),
