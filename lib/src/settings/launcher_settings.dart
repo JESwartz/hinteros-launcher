@@ -19,6 +19,21 @@ enum FocusStyle {
   final String label;
 }
 
+/// What the screen saver shows.
+enum ScreenSaverStyle {
+  /// The time and date, moving slowly over a black screen.
+  clock('Clock'),
+
+  /// The HinterOS name, moving slowly over a black screen.
+  logo('Drifting logo'),
+
+  /// Nothing: a black screen.
+  black('Black screen');
+
+  const ScreenSaverStyle(this.label);
+  final String label;
+}
+
 /// Local-only launcher preferences (the daemon knows nothing about these).
 @immutable
 class LauncherSettings {
@@ -28,6 +43,8 @@ class LauncherSettings {
     this.focusStyle = FocusStyle.ring,
     this.reduceMotion = false,
     this.showTypedOnOsk = false,
+    this.screenSaverMinutes = 10,
+    this.screenSaverStyle = ScreenSaverStyle.clock,
   });
 
   static const minTextScale = 1.0;
@@ -47,18 +64,30 @@ class LauncherSettings {
   /// always show what was typed.
   final bool showTypedOnOsk;
 
+  /// The steps offered in Settings; 0 is Off.
+  static const screenSaverSteps = [0, 1, 5, 10, 15, 30];
+
+  /// Minutes without input on the launcher before the screen saver shows;
+  /// 0: never.
+  final int screenSaverMinutes;
+  final ScreenSaverStyle screenSaverStyle;
+
   LauncherSettings copyWith({
     double? textScale,
     bool? highContrast,
     FocusStyle? focusStyle,
     bool? reduceMotion,
     bool? showTypedOnOsk,
+    int? screenSaverMinutes,
+    ScreenSaverStyle? screenSaverStyle,
   }) => LauncherSettings(
     textScale: textScale ?? this.textScale,
     highContrast: highContrast ?? this.highContrast,
     focusStyle: focusStyle ?? this.focusStyle,
     reduceMotion: reduceMotion ?? this.reduceMotion,
     showTypedOnOsk: showTypedOnOsk ?? this.showTypedOnOsk,
+    screenSaverMinutes: screenSaverMinutes ?? this.screenSaverMinutes,
+    screenSaverStyle: screenSaverStyle ?? this.screenSaverStyle,
   );
 
   Map<String, dynamic> toJson() => {
@@ -68,6 +97,8 @@ class LauncherSettings {
     'focus_style': focusStyle.name,
     'reduce_motion': reduceMotion,
     'osk_show_typed': showTypedOnOsk,
+    'screen_saver_minutes': screenSaverMinutes,
+    'screen_saver_style': screenSaverStyle.name,
   };
 
   /// Lenient: wrong types or unknown values fall back to the default for that
@@ -92,6 +123,13 @@ class LauncherSettings {
       showTypedOnOsk: j['osk_show_typed'] is bool
           ? j['osk_show_typed'] as bool
           : d.showTypedOnOsk,
+      screenSaverMinutes: screenSaverSteps.contains(j['screen_saver_minutes'])
+          ? j['screen_saver_minutes'] as int
+          : d.screenSaverMinutes,
+      screenSaverStyle: ScreenSaverStyle.values.firstWhere(
+        (s) => s.name == j['screen_saver_style'],
+        orElse: () => d.screenSaverStyle,
+      ),
     );
   }
 
@@ -102,7 +140,9 @@ class LauncherSettings {
       other.highContrast == highContrast &&
       other.focusStyle == focusStyle &&
       other.reduceMotion == reduceMotion &&
-      other.showTypedOnOsk == showTypedOnOsk;
+      other.showTypedOnOsk == showTypedOnOsk &&
+      other.screenSaverMinutes == screenSaverMinutes &&
+      other.screenSaverStyle == screenSaverStyle;
 
   @override
   int get hashCode => Object.hash(
@@ -111,6 +151,8 @@ class LauncherSettings {
     focusStyle,
     reduceMotion,
     showTypedOnOsk,
+    screenSaverMinutes,
+    screenSaverStyle,
   );
 }
 

@@ -16,7 +16,11 @@ const _groups = <(String, String, List<(String, String)>)>[
   (
     'display_sound',
     'Display and sound',
-    [('display', 'Display'), ('audio', 'Audio')],
+    [
+      ('display', 'Display'),
+      ('audio', 'Audio'),
+      ('screensaver', 'Screen saver'),
+    ],
   ),
   (
     'accessibility',

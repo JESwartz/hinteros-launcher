@@ -16,6 +16,7 @@ import 'focus_frame.dart';
 import 'nav_focusable.dart';
 import 'profiles/profiles_section.dart';
 import 'profiles/session_profile.dart';
+import 'screen_saver.dart';
 
 /// One setting: a section of a group's pane.
 class _Setting {
@@ -45,6 +46,7 @@ const _groups = [
   _Group('display_sound', 'Display and sound', [
     _Setting('display', 'Display'),
     _Setting('audio', 'Audio'),
+    _Setting('screensaver', 'Screen saver'),
   ]),
   _Group('accessibility', 'Accessibility', [
     _Setting('text', 'Text size'),
@@ -297,6 +299,7 @@ class SettingsScreen extends StatelessWidget {
     required this.services,
     required this.regions,
     this.profileSession,
+    this.onShowScreenSaver,
     this.now,
   });
 
@@ -305,6 +308,9 @@ class SettingsScreen extends StatelessWidget {
 
   /// The shell's profile session (Settings -> Profiles switches with it).
   final ProfileSession? profileSession;
+
+  /// Settings > Screen saver: Show now.
+  final VoidCallback? onShowScreenSaver;
 
   final SettingsController settings;
   final SystemServices services;
@@ -370,6 +376,7 @@ class SettingsScreen extends StatelessWidget {
                   settings: settings,
                   services: services,
                   profileSession: profileSession,
+                  onShowScreenSaver: onShowScreenSaver,
                   now: now ?? DateTime.now,
                 ),
               ),
@@ -438,10 +445,12 @@ class _Detail extends StatelessWidget {
     required this.settings,
     required this.services,
     this.profileSession,
+    this.onShowScreenSaver,
     this.now = DateTime.now,
   });
 
   final ProfileSession? profileSession;
+  final VoidCallback? onShowScreenSaver;
   final DateTime Function() now;
   final _Group group;
   final SettingsRegions regions;
@@ -493,6 +502,11 @@ class _Detail extends StatelessWidget {
       'bt' => BluetoothSection(env),
       'display' => DisplaySection(env),
       'audio' => AudioSection(env),
+      'screensaver' => ScreenSaverSection(
+        region: region,
+        settings: settings,
+        onShow: onShowScreenSaver,
+      ),
       'power' => PowerSection(env),
       'app_displays' => AppDisplaysSection(env),
       'time' => TimeZoneSection(env),
