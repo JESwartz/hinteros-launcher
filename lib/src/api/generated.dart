@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.18).
+// Source: schema/session-api.json (session API 0.19).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.18';
+const apiVersion = '0.19';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -4280,12 +4280,19 @@ class SteamAttentionResult {
 }
 
 class SteamFocusParams {
-  const SteamFocusParams();
+  const SteamFocusParams({this.screensaver});
+
+  /// 0.19: Steam is the screen saver (see above). Default false.
+  final bool? screensaver;
 
   factory SteamFocusParams.fromJson(Map<String, dynamic> json) =>
-      SteamFocusParams();
+      SteamFocusParams(
+        screensaver: json['screensaver'] == null
+            ? null
+            : json['screensaver'] as bool,
+      );
 
-  Map<String, dynamic> toJson() => {};
+  Map<String, dynamic> toJson() => {'screensaver': ?screensaver};
 
   @override
   bool operator ==(Object other) =>
@@ -12600,7 +12607,7 @@ mixin SessionApiMethods {
 
   /// Bring Steam's own windows to the front (e.g. after steam_attention). Controller input goes to Steam.
   ///
-  /// Steam then runs as the app 'steam' (source 'steam_client'; app_started if it was not running) and has focus; its pending windows no longer need attention. When Steam's windows close, focus returns to the app that had it before (or the launcher). Home brings the launcher back as usual.
+  /// Steam then runs as the app 'steam' (source 'steam_client'; app_started if it was not running) and has focus; its pending windows no longer need attention. When Steam's windows close, focus returns to the app that had it before (or the launcher). Home brings the launcher back as usual. 0.19: with 'screensaver', Steam is the screen saver (its own one starts after Steam's idle time): controller input stays with the daemon instead, and the first press brings back the app that had focus before (or the launcher); neither that press nor its release goes anywhere else. Any focus change, also steam.focus without 'screensaver', ends it.
   Future<SteamFocusResult> steamFocus([
     SteamFocusParams params = const SteamFocusParams(),
   ]) async =>

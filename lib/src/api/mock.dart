@@ -375,6 +375,9 @@ class MockDaemon extends DaemonConnection {
       case 'steam.attention':
         return SteamAttentionResult(windows: List.of(_attention)).toJson();
       case 'steam.focus':
+        if (SteamFocusParams.fromJson(params).screensaver == true) {
+          return SteamFocusResult(app: _steamScreenSaver()).toJson();
+        }
         return SteamFocusResult(app: _focusSteam()).toJson();
       case 'apps.close':
         if (params['id'] is! String) {
@@ -642,6 +645,30 @@ class MockDaemon extends DaemonConnection {
     setSteamAttention(const []);
     return app;
   }
+
+  /// How often steam.focus was asked for as the screen saver.
+  int steamScreenSavers = 0;
+
+  /// steam.focus as the screen saver: Steam comes to the front when it has
+  /// windows (it runs, or shows dialogs), as with the daemon.
+  RunningApp _steamScreenSaver() {
+    final app =
+        _running.where((a) => a.id == 'steam').firstOrNull ??
+        (_attention.isNotEmpty ? _focusSteam() : null);
+    if (app == null) {
+      throw const ApiException(
+        ApiErrorCode.steamNoWindows,
+        'Steam has no windows to show',
+      );
+    }
+    steamScreenSavers++;
+    _setFocus('steam');
+    return app;
+  }
+
+  /// The first press while Steam is the screen saver: the daemon gives the
+  /// launcher the focus back (no home_pressed, the press goes nowhere).
+  void endSteamScreenSaver() => _setFocus(null);
 
   void _setFocus(String? id) {
     if (_focused == id) return;

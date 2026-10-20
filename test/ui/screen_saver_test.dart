@@ -9,6 +9,8 @@ import 'package:hinteros_launcher/src/ui/screen_saver.dart';
 import '../support/harness.dart';
 import '../support/nav_helpers.dart';
 
+import 'package:hinteros_launcher/src/api/mock.dart';
+
 final _saver = find.byKey(const ValueKey('screen-saver'));
 Finder _in(String text) =>
     find.descendant(of: _saver, matching: find.text(text));
@@ -132,7 +134,8 @@ void main() {
     for (final s in ['Clock', 'Drifting logo', 'Black screen']) {
       expect(find.text(s), findsWidgets, reason: s);
     }
-    await press(t, [kDown, kDown, kEnter]);
+    // The list opens on the current style (black); up, then back down.
+    await press(t, [kUp, kDown, kEnter]);
     expect(h.settings.value.screenSaverStyle, ScreenSaverStyle.black);
     await press(t, [kDown]);
     expect(focusLabel(), 'settings-detail-2/show:0');
@@ -212,5 +215,74 @@ void main() {
     expect((next.dy - at.dy).abs(), 0.5);
     await t.sendKeyEvent(kDown);
     await t.pump();
+  });
+
+  testWidgets('Steam: Steam comes forward; the clock when it cannot', (
+    t,
+  ) async {
+    setView(t);
+    final h = _harness(style: ScreenSaverStyle.steam);
+    await h.pump(t);
+    // Steam is not running: the clock.
+    await t.pump(const Duration(minutes: 1));
+    await t.pump();
+    expect(h.mock.steamScreenSavers, 0);
+    expect(_saver, findsOneWidget);
+    expect(find.textContaining(RegExp(r'^[A-Z][a-z]+day ')), findsOneWidget);
+    await press(t, [kDown]);
+    expect(_saver, findsNothing);
+    // Steam runs (opened, then Home): next time it comes forward instead.
+    await h.launch(t, 'steam');
+    h.mock.pressHome();
+    await t.pumpAndSettle();
+    await press(t, [kRight]);
+    final focus = focusLabel();
+    await t.pump(const Duration(minutes: 1));
+    await t.pump();
+    expect(h.mock.steamScreenSavers, 1);
+    expect(h.data.focusedApp, 'steam');
+    expect(_saver, findsNothing);
+    // No wait while Steam is in front.
+    await t.pump(const Duration(minutes: 5));
+    expect(h.mock.steamScreenSavers, 1);
+    // The first press brings the launcher back, as it was; then the wait
+    // starts again.
+    h.mock.endSteamScreenSaver();
+    await t.pumpAndSettle();
+    expect(h.data.focusedApp, isNull);
+    expect(focusLabel(), focus);
+    expect(_saver, findsNothing);
+    await t.pump(const Duration(minutes: 1));
+    await t.pump();
+    expect(h.mock.steamScreenSavers, 2);
+  });
+
+  testWidgets('Settings: Steam only while it is installed, with its hint', (
+    t,
+  ) async {
+    setView(t);
+    final h = _harness(minutes: 10);
+    await h.pump(t);
+    await enterSettingsEntry(t, 'screensaver');
+    await press(t, [kDown]);
+    expect(focusLabel(), 'settings-detail-2/style:0');
+    await press(t, [kEnter]);
+    expect(find.text('Steam'), findsWidgets);
+    // The list opens on the current style (black); Steam is next.
+    await press(t, [kDown, kEnter]);
+    expect(h.settings.value.screenSaverStyle, ScreenSaverStyle.steam);
+    expect(find.textContaining('Steam: Settings > Power'), findsOneWidget);
+
+    // Without Steam: no Steam choice.
+    final n = Harness(
+      mock: MockDaemon(
+        apps: appsWithIcons().where((a) => a.id != 'steam').toList(),
+        games: gamesWithArt(),
+      ),
+    );
+    await n.pump(t);
+    await enterSettingsEntry(t, 'screensaver');
+    await press(t, [kDown, kEnter]);
+    expect(find.text('Steam'), findsNothing);
   });
 }

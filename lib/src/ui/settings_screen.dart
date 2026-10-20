@@ -300,8 +300,12 @@ class SettingsScreen extends StatelessWidget {
     required this.regions,
     this.profileSession,
     this.onShowScreenSaver,
+    this.steamInstalled = false,
     this.now,
   });
+
+  /// Steam is installed (Settings > Screen saver offers its screen saver).
+  final bool steamInstalled;
 
   /// The clock of the sections ("measured 2 hours ago"); fixed in tests.
   final DateTime Function()? now;
@@ -377,6 +381,7 @@ class SettingsScreen extends StatelessWidget {
                   services: services,
                   profileSession: profileSession,
                   onShowScreenSaver: onShowScreenSaver,
+                  steamInstalled: steamInstalled,
                   now: now ?? DateTime.now,
                 ),
               ),
@@ -446,11 +451,13 @@ class _Detail extends StatelessWidget {
     required this.services,
     this.profileSession,
     this.onShowScreenSaver,
+    this.steamInstalled = false,
     this.now = DateTime.now,
   });
 
   final ProfileSession? profileSession;
   final VoidCallback? onShowScreenSaver;
+  final bool steamInstalled;
   final DateTime Function() now;
   final _Group group;
   final SettingsRegions regions;
@@ -506,6 +513,7 @@ class _Detail extends StatelessWidget {
         region: region,
         settings: settings,
         onShow: onShowScreenSaver,
+        steamInstalled: steamInstalled,
       ),
       'power' => PowerSection(env),
       'app_displays' => AppDisplaysSection(env),

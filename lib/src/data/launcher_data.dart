@@ -502,6 +502,22 @@ class LauncherData extends ChangeNotifier {
     unawaited(refreshRunning());
   }
 
+  /// Steam as the screen saver: true when Steam came to the front. False
+  /// when Steam is not installed or has no windows (not running).
+  Future<bool> steamScreenSaver() async {
+    if (appList?.any((a) => a.id == 'steam') != true) return false;
+    try {
+      await apps.focusSteam(screensaver: true);
+      unawaited(refreshRunning());
+      return true;
+    } catch (e) {
+      if (e is! ApiException || e.code != ApiErrorCode.steamNoWindows) {
+        debugPrint('Steam as the screen saver: $e');
+      }
+      return false;
+    }
+  }
+
   /// "Open Steam" on the attention banner.
   Future<void> focusSteam() async {
     try {
