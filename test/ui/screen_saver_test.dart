@@ -169,14 +169,24 @@ void main() {
     );
     await t.pump(const Duration(minutes: 1));
     expect(_in('HinterOS'), findsOneWidget);
-    // The logo moves, four times a second.
+    // The logo moves one pixel on each axis, eight times a second, always
+    // on whole pixels.
     final at = t.getTopLeft(_in('HinterOS'));
-    await t.pump(const Duration(milliseconds: 200));
-    expect(t.getTopLeft(_in('HinterOS')), at);
     await t.pump(const Duration(milliseconds: 100));
-    final next = t.getTopLeft(_in('HinterOS'));
-    expect(next, isNot(at));
-    expect((next - at).distance, lessThan(8));
+    expect(t.getTopLeft(_in('HinterOS')), at);
+    await t.pump(const Duration(milliseconds: 50));
+    var next = t.getTopLeft(_in('HinterOS'));
+    expect((next.dx - at.dx).abs(), 1);
+    expect((next.dy - at.dy).abs(), 1);
+    for (var i = 0; i < 40; i++) {
+      final before = next;
+      await t.pump(const Duration(milliseconds: 125));
+      next = t.getTopLeft(_in('HinterOS'));
+      expect((next.dx - before.dx).abs(), lessThanOrEqualTo(1));
+      expect((next.dy - before.dy).abs(), lessThanOrEqualTo(1));
+      expect(next.dx, next.dx.roundToDouble());
+      expect(next.dy, next.dy.roundToDouble());
+    }
     // With reduce motion it holds still.
     h.settings.update(h.settings.value.copyWith(reduceMotion: true));
     await t.pump();
@@ -186,5 +196,21 @@ void main() {
     await t.sendKeyEvent(kDown);
     await t.pump();
     expect(_saver, findsNothing);
+  });
+
+  testWidgets('the logo steps one physical pixel at any pixel ratio', (
+    t,
+  ) async {
+    setView(t, dpr: 2);
+    final h = _harness(style: ScreenSaverStyle.logo);
+    await h.pump(t);
+    await t.pump(const Duration(minutes: 1));
+    final at = t.getTopLeft(_in('HinterOS'));
+    await t.pump(const Duration(milliseconds: 125));
+    final next = t.getTopLeft(_in('HinterOS'));
+    expect((next.dx - at.dx).abs(), 0.5);
+    expect((next.dy - at.dy).abs(), 0.5);
+    await t.sendKeyEvent(kDown);
+    await t.pump();
   });
 }

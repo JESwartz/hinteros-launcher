@@ -129,9 +129,11 @@ const _months = [
 /// that nothing stays on the same pixels, but it draws few frames: a frame
 /// costs the box's CPU as much as any animation (Xwayland and gamescope
 /// included), and the screen saver can be up for hours. The clock goes to a
-/// new place each minute, when its time changes anyway; the logo moves a
-/// few pixels four times a second. With reduce motion the logo also only
-/// moves once a minute.
+/// new place each minute, when its time changes anyway, with a short fade.
+/// The logo moves one screen pixel on each axis eight times a second: steps
+/// that small look like smooth motion, at an eighth of the frames of a
+/// normal animation (bigger steps less often looked jerky). With reduce
+/// motion the logo also only moves once a minute, and nothing fades.
 class ScreenSaver extends StatefulWidget {
   const ScreenSaver({super.key, required this.style, required this.time});
 
@@ -145,9 +147,11 @@ class ScreenSaver extends StatefulWidget {
 }
 
 class _ScreenSaverState extends State<ScreenSaver> {
-  static const _step = Duration(milliseconds: 250);
+  /// One physical pixel per axis per step: 8 pixels a second.
+  static const _step = Duration(milliseconds: 125);
+  static const _fade = Duration(milliseconds: 500);
   Timer? _timer;
-  Duration _elapsed = Duration.zero;
+  int _steps = 0;
 
   bool get _drifts =>
       widget.style == ScreenSaverStyle.logo &&
@@ -167,10 +171,7 @@ class _ScreenSaverState extends State<ScreenSaver> {
 
   void _sync() {
     if (_drifts) {
-      _timer ??= Timer.periodic(
-        _step,
-        (_) => setState(() => _elapsed += _step),
-      );
+      _timer ??= Timer.periodic(_step, (_) => setState(() => _steps++));
     } else {
       _timer?.cancel();
       _timer = null;
@@ -183,27 +184,18 @@ class _ScreenSaverState extends State<ScreenSaver> {
     super.dispose();
   }
 
-  /// Where the content is, from -1 to 1 on each axis.
-  Alignment _where() {
-    if (!_drifts) {
-      // A new place each minute.
-      final m = widget.time.millisecondsSinceEpoch ~/ 60000;
-      double r(int salt) {
-        final x = math.sin(m * 12.9898 + salt * 78.233) * 43758.5453;
-        return (x - x.floorToDouble()) * 1.6 - 0.8;
-      }
+  int get _minute => widget.time.millisecondsSinceEpoch ~/ 60000;
 
-      return Alignment(r(1), r(2));
-    }
-    // Straight lines that turn back at the edges, slowly (some pixels a
-    // second on a 1080p screen).
-    final s = _elapsed.inMilliseconds / 1000;
-    double bounce(double period) {
-      final f = (s / period) % 1;
-      return f < 0.5 ? -1 + 4 * f : 3 - 4 * f;
+  /// Where the content is when it does not drift: a new place each minute,
+  /// from -0.8 to 0.8 on each axis.
+  Alignment _place() {
+    final m = _minute;
+    double r(int salt) {
+      final x = math.sin(m * 12.9898 + salt * 78.233) * 43758.5453;
+      return (x - x.floorToDouble()) * 1.6 - 0.8;
     }
 
-    return Alignment(bounce(360), bounce(220));
+    return Alignment(r(1), r(2));
   }
 
   @override
@@ -233,17 +225,62 @@ class _ScreenSaverState extends State<ScreenSaver> {
         style: t.headline.copyWith(fontSize: 96, color: t.accent),
       ),
     };
+    final Widget? placed = switch (content) {
+      null => null,
+      // Drawn once; each step only moves the layer.
+      final c when _drifts => CustomSingleChildLayout(
+        delegate: _Drift(_steps, MediaQuery.devicePixelRatioOf(context)),
+        child: RepaintBoundary(child: c),
+      ),
+      final c => AnimatedSwitcher(
+        duration: t.reduceMotion ? Duration.zero : _fade,
+        child: Align(key: ValueKey(_minute), alignment: _place(), child: c),
+      ),
+    };
     return ColoredBox(
       key: const ValueKey('screen-saver'),
       color: Colors.black,
-      child: content == null
+      child: placed == null
           ? const SizedBox.expand()
           : Padding(
               padding: const EdgeInsets.all(HinterTokens.s5),
-              child: Align(alignment: _where(), child: content),
+              child: placed,
             ),
     );
   }
+}
+
+/// The drifting logo's place after [steps]: straight lines at 45 degrees that
+/// turn back at the edges, one physical pixel per axis per step, always on
+/// whole pixels.
+class _Drift extends SingleChildLayoutDelegate {
+  _Drift(this.steps, this.dpr);
+
+  final int steps;
+  final double dpr;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      constraints.loosen();
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    // 0..max..0 in physical pixels, starting part of the way along.
+    double axis(double room, double start) {
+      final max = (math.max(0, room) * dpr).floor();
+      if (max == 0) return 0;
+      final p = (steps + (max * start).floor()) % (2 * max);
+      return (p <= max ? p : 2 * max - p) / dpr;
+    }
+
+    return Offset(
+      axis(size.width - childSize.width, 0.5),
+      axis(size.height - childSize.height, 0.3),
+    );
+  }
+
+  @override
+  bool shouldRelayout(_Drift old) => old.steps != steps || old.dpr != dpr;
 }
 
 String _minutesLabel(int m) => switch (m) {
