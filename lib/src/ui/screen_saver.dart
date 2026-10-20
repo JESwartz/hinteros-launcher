@@ -24,11 +24,6 @@ class ScreenSaverController extends ChangeNotifier {
   }
 
   final SettingsController _settings;
-
-  /// Brings Steam forward as the screen saver ([ScreenSaverStyle.steam]);
-  /// false when it cannot (the clock then).
-  Future<bool> Function()? startSteam;
-
   Timer? _timer;
   bool _allowed = false;
   bool _showing = false;
@@ -52,21 +47,6 @@ class ScreenSaverController extends ChangeNotifier {
   void show() {
     if (_showing) return;
     _timer?.cancel();
-    final steam = startSteam;
-    if (_settings.value.screenSaverStyle == ScreenSaverStyle.steam &&
-        steam != null) {
-      // Steam takes the screen: the launcher is no longer in front, so the
-      // wait starts again when it is.
-      unawaited(
-        steam().then((ok) {
-          if (!ok && _allowed && !_showing) {
-            _showing = true;
-            notifyListeners();
-          }
-        }),
-      );
-      return;
-    }
     _showing = true;
     notifyListeners();
   }
@@ -224,8 +204,7 @@ class _ScreenSaverState extends State<ScreenSaver> {
     final dim = t.text.withValues(alpha: 0.7);
     final Widget? content = switch (widget.style) {
       ScreenSaverStyle.black => null,
-      // Steam could not come forward.
-      ScreenSaverStyle.clock || ScreenSaverStyle.steam => Column(
+      ScreenSaverStyle.clock => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
@@ -318,15 +297,11 @@ class ScreenSaverSection extends StatelessWidget {
     required this.region,
     required this.settings,
     required this.onShow,
-    this.steamInstalled = false,
   });
 
   final NavRegion region;
   final SettingsController settings;
   final VoidCallback? onShow;
-
-  /// Steam is installed: its screen saver is a choice.
-  final bool steamInstalled;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -356,29 +331,13 @@ class ScreenSaverSection extends StatelessWidget {
         _field<ScreenSaverStyle>(
           rowKey: 'style',
           label: s.screenSaverStyle.label,
-          values: [
-            for (final v in ScreenSaverStyle.values)
-              if (v != ScreenSaverStyle.steam ||
-                  steamInstalled ||
-                  s.screenSaverStyle == v)
-                v,
-          ],
+          values: ScreenSaverStyle.values,
           current: s.screenSaverStyle,
           labelOf: (v) => v.label,
           onChoose: (v) =>
               settings.update(settings.value.copyWith(screenSaverStyle: v)),
         ),
       );
-      if (s.screenSaverStyle == ScreenSaverStyle.steam) {
-        p.add(
-          Text(
-            'Steam waits before it shows its screen saver. '
-            'Set the time in Steam: Settings > Power.',
-            style: t.bodyDim,
-          ),
-          gap: HinterTokens.s2,
-        );
-      }
       p.buttons('show', [btn('Show now', onShow)], gap: HinterTokens.s3);
       return p.build();
     },

@@ -327,7 +327,6 @@ class _LauncherShellState extends State<LauncherShell> {
     _nav.fallback = () => _modals.topRegion ?? _contentOf(_section);
     _home.addListener(_initialFocus);
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialFocus());
-    _saver.startSteam = widget.data.steamScreenSaver;
     _syncSaver();
   }
 
@@ -903,7 +902,6 @@ class _LauncherShellState extends State<LauncherShell> {
       regions: _settingsRegions,
       profileSession: _profile,
       onShowScreenSaver: _saver.show,
-      steamInstalled: widget.data.appList?.any((a) => a.id == 'steam') ?? false,
       now: widget.now,
     ),
     // Phase 2.

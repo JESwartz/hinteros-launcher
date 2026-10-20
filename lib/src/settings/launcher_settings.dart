@@ -28,12 +28,7 @@ enum ScreenSaverStyle {
   logo('Drifting logo'),
 
   /// Nothing: a black screen.
-  black('Black screen'),
-
-  /// Steam's own screen saver: Steam comes to the front and shows it after
-  /// its own idle time. Offered only while Steam is installed; when Steam
-  /// cannot come forward (not running), the clock.
-  steam('Steam');
+  black('Black screen');
 
   const ScreenSaverStyle(this.label);
   final String label;

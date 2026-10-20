@@ -38,10 +38,5 @@ class AppsRepository {
       (await connection.steamAttention()).windows;
 
   /// Brings Steam's windows to the front; throws 2003 when there are none.
-  /// [screensaver]: as the screen saver (the daemon keeps the input, and the
-  /// first press comes back here).
-  Future<RunningApp> focusSteam({bool screensaver = false}) async =>
-      (await connection.steamFocus(
-        SteamFocusParams(screensaver: screensaver ? true : null),
-      )).app;
+  Future<RunningApp> focusSteam() async => (await connection.steamFocus()).app;
 }
