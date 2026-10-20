@@ -9,7 +9,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 
 import '../api/api.dart' show NavAction, NavPhase;
 import '../nav/nav_controller.dart';
@@ -126,9 +125,13 @@ const _months = [
   'December',
 ];
 
-/// The screen saver itself, over the whole screen. What is on it moves all
-/// the time so that nothing stays on the same pixels; with reduce motion it
-/// moves once a minute, without animation.
+/// The screen saver itself, over the whole screen. What is on it moves so
+/// that nothing stays on the same pixels, but it draws few frames: a frame
+/// costs the box's CPU as much as any animation (Xwayland and gamescope
+/// included), and the screen saver can be up for hours. The clock goes to a
+/// new place each minute, when its time changes anyway; the logo moves a
+/// few pixels four times a second. With reduce motion the logo also only
+/// moves once a minute.
 class ScreenSaver extends StatefulWidget {
   const ScreenSaver({super.key, required this.style, required this.time});
 
@@ -141,14 +144,14 @@ class ScreenSaver extends StatefulWidget {
   State<ScreenSaver> createState() => _ScreenSaverState();
 }
 
-class _ScreenSaverState extends State<ScreenSaver>
-    with SingleTickerProviderStateMixin {
-  late final Ticker _ticker = createTicker(_tick);
+class _ScreenSaverState extends State<ScreenSaver> {
+  static const _step = Duration(milliseconds: 250);
+  Timer? _timer;
   Duration _elapsed = Duration.zero;
 
-  void _tick(Duration elapsed) => setState(() => _elapsed = elapsed);
-
-  bool get _moves => widget.style != ScreenSaverStyle.black;
+  bool get _drifts =>
+      widget.style == ScreenSaverStyle.logo &&
+      !HinterTheme.of(context).reduceMotion;
 
   @override
   void didChangeDependencies() {
@@ -163,20 +166,26 @@ class _ScreenSaverState extends State<ScreenSaver>
   }
 
   void _sync() {
-    final run = _moves && !HinterTheme.of(context).reduceMotion;
-    if (run && !_ticker.isActive) unawaited(_ticker.start());
-    if (!run && _ticker.isActive) _ticker.stop();
+    if (_drifts) {
+      _timer ??= Timer.periodic(
+        _step,
+        (_) => setState(() => _elapsed += _step),
+      );
+    } else {
+      _timer?.cancel();
+      _timer = null;
+    }
   }
 
   @override
   void dispose() {
-    _ticker.dispose();
+    _timer?.cancel();
     super.dispose();
   }
 
   /// Where the content is, from -1 to 1 on each axis.
-  Alignment _where(bool still) {
-    if (still) {
+  Alignment _where() {
+    if (!_drifts) {
       // A new place each minute.
       final m = widget.time.millisecondsSinceEpoch ~/ 60000;
       double r(int salt) {
@@ -186,21 +195,15 @@ class _ScreenSaverState extends State<ScreenSaver>
 
       return Alignment(r(1), r(2));
     }
+    // Straight lines that turn back at the edges, slowly (some pixels a
+    // second on a 1080p screen).
     final s = _elapsed.inMilliseconds / 1000;
-    if (widget.style == ScreenSaverStyle.clock) {
-      // A slow loop over the screen (minutes for one round).
-      return Alignment(
-        0.8 * math.sin(s * 2 * math.pi / 420),
-        0.8 * math.sin(s * 2 * math.pi / 300 + 1),
-      );
-    }
-    // Straight lines that turn back at the edges.
     double bounce(double period) {
       final f = (s / period) % 1;
       return f < 0.5 ? -1 + 4 * f : 3 - 4 * f;
     }
 
-    return Alignment(bounce(46), bounce(34));
+    return Alignment(bounce(360), bounce(220));
   }
 
   @override
@@ -237,7 +240,7 @@ class _ScreenSaverState extends State<ScreenSaver>
           ? const SizedBox.expand()
           : Padding(
               padding: const EdgeInsets.all(HinterTokens.s5),
-              child: Align(alignment: _where(t.reduceMotion), child: content),
+              child: Align(alignment: _where(), child: content),
             ),
     );
   }

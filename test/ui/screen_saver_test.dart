@@ -144,9 +144,9 @@ void main() {
     expect(focusLabel(), 'settings-detail-2/show:0');
   });
 
-  testWidgets('clock and logo; with reduce motion they hold still', (t) async {
+  testWidgets('clock and logo; few frames', (t) async {
     setView(t);
-    final h = _harness(style: ScreenSaverStyle.clock, reduceMotion: true);
+    final h = _harness(style: ScreenSaverStyle.clock);
     await h.pump(t);
     await t.pump(const Duration(minutes: 1));
     expect(_saver, findsOneWidget);
@@ -161,21 +161,28 @@ void main() {
     expect(texts[0], matches(RegExp(r'^\d\d:\d\d$')));
     expect(find.text(texts[0]), findsNWidgets(2));
     expect(texts[1], matches(RegExp(r'^[A-Z][a-z]+day \d{1,2} [A-Z][a-z]+$')));
-    // Nothing animates: it settles.
+    // The clock does not animate (it moves each minute): it settles.
     await t.pumpAndSettle();
     await press(t, [kDown]);
     h.settings.update(
-      h.settings.value.copyWith(
-        screenSaverStyle: ScreenSaverStyle.logo,
-        reduceMotion: false,
-      ),
+      h.settings.value.copyWith(screenSaverStyle: ScreenSaverStyle.logo),
     );
     await t.pump(const Duration(minutes: 1));
     expect(_in('HinterOS'), findsOneWidget);
-    // It moves.
+    // The logo moves, four times a second.
     final at = t.getTopLeft(_in('HinterOS'));
+    await t.pump(const Duration(milliseconds: 200));
+    expect(t.getTopLeft(_in('HinterOS')), at);
+    await t.pump(const Duration(milliseconds: 100));
+    final next = t.getTopLeft(_in('HinterOS'));
+    expect(next, isNot(at));
+    expect((next - at).distance, lessThan(8));
+    // With reduce motion it holds still.
+    h.settings.update(h.settings.value.copyWith(reduceMotion: true));
+    await t.pump();
+    final still = t.getTopLeft(_in('HinterOS'));
     await t.pump(const Duration(seconds: 2));
-    expect(t.getTopLeft(_in('HinterOS')), isNot(at));
+    expect(t.getTopLeft(_in('HinterOS')), still);
     await t.sendKeyEvent(kDown);
     await t.pump();
     expect(_saver, findsNothing);
