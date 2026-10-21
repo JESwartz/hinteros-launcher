@@ -170,6 +170,8 @@ class ServerService {
     this.terms,
     this.termsMissing = false,
     this.detail,
+    this.iconPath,
+    this.hasData = false,
   });
 
   /// The catalog id (`jellyfin-server`).
@@ -194,6 +196,12 @@ class ServerService {
   /// cannot be turned on from here.
   final bool termsMissing;
   final ServiceDetail? detail;
+
+  /// The icon the daemon resolved (`icon.path`); null: the letter tile.
+  final String? iconPath;
+
+  /// Turning it off can also delete its data (`has_data`).
+  final bool hasData;
 
   /// What the Server tab shows.
   ServiceState get state {
@@ -305,16 +313,14 @@ abstract class ServerRepository {
   Future<ServerList> list();
 
   /// A job of the Server section ended (also one another client started),
-  /// or the connection came back: read [list] again.
+  /// or the connection came back, or (daemon) `store_changed` (a
+  /// service's icon may have arrived): read [list] again.
   Stream<void> get changes;
 
   /// `media.folders`: the folders directly in `/srv/media` ([folderId]
   /// null) or in one of its folders. [SystemErrorKind.notFound]: no such
   /// folder (any more).
   Future<List<MediaFolder>> folders([String? folderId]);
-
-  /// The service's icon, a file path; null: the letter tile.
-  Future<String?> resolveIcon(ServerService service);
 
   /// `services.enable {ids: [id], pin, revision, accepted_terms}`; a stale
   /// revision is read again and the call made once more.

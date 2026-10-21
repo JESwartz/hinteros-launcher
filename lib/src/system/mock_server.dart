@@ -39,6 +39,9 @@ class MockService {
   bool enabled = false;
   UnitStatus status = UnitStatus.active;
 
+  /// The catalog entry has `stateDirs`: Turn off can delete them.
+  bool hasData = true;
+
   // Jellyfin.
   bool setupDone = true;
   List<JellyfinLibrary> libraries = [];
@@ -184,6 +187,8 @@ class MockServer implements ServerRepository {
     setup: s.setup,
     terms: s.terms,
     detail: s.enabled ? _detail(s) : null,
+    iconPath: _icon(s.id),
+    hasData: s.hasData,
   );
 
   @override
@@ -225,14 +230,13 @@ class MockServer implements ServerRepository {
   }
 
   /// The generic placeholder icons, by service id (no logos).
-  @override
-  Future<String?> resolveIcon(ServerService service) async {
+  String? _icon(String id) {
     final d = iconDir;
     if (d == null) return null;
-    final name = switch (service.id) {
+    final name = switch (id) {
       'jellyfin-server' => 'jellyfin',
       'plex-media-server' => 'plex',
-      _ => service.id,
+      _ => id,
     };
     for (final ext in ['png', 'svg']) {
       final f = File('$d/$name.$ext');

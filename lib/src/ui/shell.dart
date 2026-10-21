@@ -370,6 +370,7 @@ class _LauncherShellState extends State<LauncherShell> {
         if (mounted) unawaited(_loadZone());
       });
     }
+    _serverModel.zone = z;
     setState(() {
       _zone = z;
       _time = _clockTime();

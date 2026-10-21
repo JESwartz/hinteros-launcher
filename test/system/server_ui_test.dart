@@ -97,6 +97,26 @@ String stateOf(WidgetTester t, String name) {
 }
 
 void main() {
+  test('a library row: the kind, then its folder under /srv/media', () {
+    const l = JellyfinLibrary(
+      id: 'a2c4e6f8a0b2c4d6e8f0a2b4c6d8e0f2',
+      name: 'Books',
+      kind: LibraryKind.other,
+    );
+    expect(librarySubtitle(l), 'Other');
+    expect(
+      librarySubtitle(
+        const JellyfinLibrary(
+          id: 'f137a2dd21bbc1b99aa5c0f6bf02a805',
+          name: 'Movies',
+          kind: LibraryKind.movies,
+          folder: 'Movies',
+        ),
+      ),
+      'Movies · /srv/media/Movies',
+    );
+  });
+
   testWidgets('the tab lists every service with its state', (t) async {
     setView(t);
     final h = harness();
@@ -293,6 +313,19 @@ void main() {
     expect(find.text('Sign out'), findsOneWidget);
   });
 
+  testWidgets('Tailscale: the key expiry is in the box time zone', (t) async {
+    setView(t);
+    final h = harness();
+    // 2027-04-18 00:00 UTC is the evening before in Los Angeles.
+    h.services.mockTimeZone.zone = 'America/Los_Angeles';
+    server(h).tailscale
+      ..enabled = true
+      ..tailscale = TailscaleState.running;
+    await h.pump(t);
+    await openService(t, tailscaleRow);
+    expect(find.text('Key expires: 2027-04-17'), findsOneWidget);
+  });
+
   testWidgets('Tailscale: nobody signed in in time', (t) async {
     setView(t);
     final h = harness();
@@ -323,7 +356,7 @@ void main() {
     expect(find.text('Address: http://192.168.1.42:8096'), findsOneWidget);
     expect(find.text('Movies'), findsWidgets);
     expect(find.text('Shows'), findsOneWidget);
-    expect(find.text('Shows, TV/Series'), findsOneWidget);
+    expect(find.text('Shows · /srv/media/TV/Series'), findsOneWidget);
     await choose(t, 'Shows');
     expect(find.text('Remove the library Shows?'), findsOneWidget);
     await confirm(t);
@@ -370,7 +403,7 @@ void main() {
     await finishJob(t, h);
     // The page closed; the library is in the list.
     expect(find.text('Add library'), findsOneWidget);
-    expect(find.text('Shows, TV/Cartoons'), findsOneWidget);
+    expect(find.text('Shows · /srv/media/TV/Cartoons'), findsOneWidget);
   });
 
   testWidgets('Jellyfin: "Use this folder" and a taken name', (t) async {
@@ -446,6 +479,37 @@ void main() {
     expect(find.text('Delete all data of Jellyfin server?'), findsNothing);
     await enterPin(t, '2468');
     expect(server(h).log.last, 'services.disable:jellyfin-server:data=false');
+  });
+
+  testWidgets('Tailscale: Turn off can delete its data too', (t) async {
+    setView(t);
+    final h = harness();
+    server(h).tailscale.enabled = true;
+    await h.pump(t);
+    await openService(t, tailscaleRow);
+    await choose(t, 'Turn off');
+    expect(find.text('Delete server data'), findsOneWidget);
+    expect(find.text('Sign-in and settings.'), findsOneWidget);
+    await press(t, [kEnter]); // the check box
+    await press(t, [kDown, kRight, kEnter]); // Turn off
+    expect(find.text('Delete all data of Tailscale?'), findsOneWidget);
+    expect(find.text("You can't undo this."), findsOneWidget);
+    await confirm(t);
+    await enterPin(t, '2468');
+    expect(server(h).log.last, 'services.disable:tailscale:data=true');
+  });
+
+  testWidgets('Turn off without data to delete: no check box', (t) async {
+    setView(t);
+    final h = harness();
+    server(h).cloudflare
+      ..enabled = true
+      ..hasData = false;
+    await h.pump(t);
+    await openService(t, cloudflareRow);
+    await choose(t, 'Turn off');
+    expect(find.text('Turn off Cloudflare Tunnel?'), findsOneWidget);
+    expect(find.text('Delete server data'), findsNothing);
   });
 
   testWidgets('Cloudflare: the route, the token, a refused token', (t) async {

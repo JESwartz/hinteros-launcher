@@ -147,11 +147,20 @@ class DaemonServer implements ServerRepository {
     _events = _conn.events.listen((e) {
       if (e is api.JobFinishedEvent && _kinds.contains(e.kind)) {
         _changes.add(null);
+      } else if (e is api.StoreChangedEvent && _iconsPending) {
+        // A catalog icon arrived, maybe a service's (`icon.path`).
+        _changes.add(null);
       }
     });
     _status = _conn.statusChanges.listen((s) {
       if (s is api.Connected) _changes.add(null);
     });
+    // Job events: [DaemonJobs] subscribes to them.
+    unawaited(
+      _conn
+          .subscribeTo(const [api.EventName.storeChanged])
+          .then((_) {}, onError: (_) {}),
+    );
   }
 
   final api.DaemonConnection _conn;
@@ -160,6 +169,10 @@ class DaemonServer implements ServerRepository {
   late final StreamSubscription<api.SessionEvent> _events;
   late final StreamSubscription<api.ConnectionStatus> _status;
   final _changes = StreamController<void>.broadcast();
+
+  /// The last list has a service whose icon the session daemon has not
+  /// resolved yet: `store_changed` may mean it has now.
+  bool _iconsPending = false;
 
   static const _kinds = {
     api.JobKind.servicesEnable,
@@ -199,12 +212,20 @@ class DaemonServer implements ServerRepository {
             ),
       termsMissing: t != null && text == null,
       detail: s.enabled ? _detail(setup, s.detail) : null,
+      iconPath: s.icon?.path,
+      hasData: s.hasData,
     );
   }
 
   @override
   Future<ServerList> list() => guardCall(() async {
     final r = await _conn.systemServicesList();
+    _iconsPending = r.services.any((s) {
+      final i = s.icon;
+      return i != null &&
+          i.path == null &&
+          (i.desktopId != null || i.iconUrl != null || i.siteUrl != null);
+    });
     return ServerList(
       revision: r.revision,
       services: [for (final s in r.services) _service(s)],
@@ -225,11 +246,6 @@ class DaemonServer implements ServerRepository {
         ),
     ];
   });
-
-  /// The service list carries no icon, and the Store's resolution covers
-  /// apps only (session API 0.19): the letter tile.
-  @override
-  Future<String?> resolveIcon(ServerService service) async => null;
 
   /// Starts a job with the admin [pin]; none yet asks for it.
   Future<JobHandle> _start(

@@ -142,11 +142,8 @@ class _ServerScreenState extends State<ServerScreen> {
                       rowKey: 's$i',
                       col: 0,
                       onSelect: () => _open(context, services[i]),
-                      builder: (_, f) => ServiceRow(
-                        service: services[i],
-                        iconPath: m.icons[services[i].id],
-                        focused: f,
-                      ),
+                      builder: (_, f) =>
+                          ServiceRow(service: services[i], focused: f),
                     ),
                   ],
                 ],
@@ -161,15 +158,9 @@ class _ServerScreenState extends State<ServerScreen> {
 
 /// A service in the list: icon, name, state.
 class ServiceRow extends StatelessWidget {
-  const ServiceRow({
-    super.key,
-    required this.service,
-    required this.iconPath,
-    required this.focused,
-  });
+  const ServiceRow({super.key, required this.service, required this.focused});
 
   final ServerService service;
-  final String? iconPath;
   final bool focused;
 
   @override
@@ -191,7 +182,11 @@ class ServiceRow extends StatelessWidget {
           padding: const EdgeInsets.all(HinterTokens.s2),
           child: Row(
             children: [
-              AppIconBadge(name: service.name, iconPath: iconPath, size: 88),
+              AppIconBadge(
+                name: service.name,
+                iconPath: service.iconPath,
+                size: 88,
+              ),
               const SizedBox(width: HinterTokens.s3),
               Expanded(
                 child: Text(

@@ -312,8 +312,6 @@ class _UnavailableServer implements ServerRepository {
   @override
   Future<List<MediaFolder>> folders([String? folderId]) => Future.error(_gone);
   @override
-  Future<String?> resolveIcon(ServerService service) async => null;
-  @override
   Future<JobHandle> enable(
     String id, {
     String? pin,

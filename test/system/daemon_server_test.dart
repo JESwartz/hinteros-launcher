@@ -74,7 +74,56 @@ void main() {
     expect(p.terms!.version, '2025-10-30');
     expect(p.terms!.text, 'Placeholder terms.');
     expect(p.termsMissing, isFalse);
+    // Icons: the path the session daemon resolved, else the letter tile.
+    expect(j.iconPath, '/home/tv/.cache/hinteros/icons/jellyfin-server.svg');
+    expect(p.iconPath, isNull);
+    expect([for (final s in l.services) s.hasData], everyElement(isTrue));
   });
+
+  test('has_data false: no data to delete', () async {
+    final b = await _setup();
+    b.mock.system.server.cloudflare.hasData = false;
+    final l = await b.server.list();
+    expect(l.byId('cloudflare-tunnel')!.hasData, isFalse);
+    expect(l.byId('tailscale')!.hasData, isTrue);
+  });
+
+  test(
+    'store_changed reads the list again while an icon is not there',
+    () async {
+      final b = await _setup();
+      var n = 0;
+      final sub = b.server.changes.listen((_) => n++);
+      addTearDown(sub.cancel);
+      final srv = b.mock.system.server;
+      await b.server.list();
+      srv.setServiceIcon(
+        srv.plex,
+        '/home/tv/.cache/hinteros/icons/plex-media-server.png',
+      );
+      await pumpEventQueue();
+      expect(n, 1);
+      var l = await b.server.list();
+      expect(
+        l.byId('plex-media-server')!.iconPath,
+        '/home/tv/.cache/hinteros/icons/plex-media-server.png',
+      );
+      srv.setServiceIcon(
+        srv.cloudflare,
+        '/home/tv/.cache/hinteros/icons/c.png',
+      );
+      await pumpEventQueue();
+      expect(n, 2);
+      l = await b.server.list();
+      // Every icon is there: another Store change does not read the list.
+      srv.setServiceIcon(
+        srv.cloudflare,
+        '/home/tv/.cache/hinteros/icons/c.png',
+      );
+      await pumpEventQueue();
+      expect(n, 2);
+    },
+  );
 
   test('terms whose text cannot be read: it cannot be turned on', () async {
     final b = await _setup(readTerms: (_) => null);

@@ -100,9 +100,11 @@ Server, Tailscale, Cloudflare Tunnel. `ServerRepository` (`lib/src/system/server
   not linked, Tailscale not signed in or waiting for the tailnet's approval, Cloudflare without a
   token), Error (the unit failed or is not running, Tailscale does not answer, the tunnel does not
   connect). The list is read again when a job of the section ends, after a reconnect and when a
-  page closes. A on a row opens the service's page. **Icons:** `services.list` has none and the
-  Store's icon resolution covers apps only, so the daemon build shows the letter tile (the mock
-  uses the generic fixtures).
+  page closes. A on a row opens the service's page. **Icons:** `services.list`'s `icon.path`, which
+  the session daemon resolves and caches like the Store's catalog icons (Jellyfin and Plex from
+  their `iconUrl`, Tailscale and Cloudflare by `siteUrl` discovery); none yet: the letter tile.
+  While one is missing, `store_changed` reads the list again (`DaemonServer` subscribes to it).
+  The mock uses the generic fixtures.
 - **Every change** asks for the admin profile's PIN on the admin-PIN pad (`runAdminJob`, the same
   as Settings: a wrong PIN asks again, Back changes nothing) and runs on the job page (Hide puts it
   in the top bar). New job kinds: turning a service on or off, adding or removing a library,
@@ -114,18 +116,24 @@ Server, Tailscale, Cloudflare Tunnel. `ServerRepository` (`lib/src/system/server
 - **Off:** Turn on. Plex shows its vendor terms first (the Store's terms page, "Accept and turn
   on", read to the end), then the PIN, with `accepted_terms`. Terms whose text is not on the box:
   Turn on stays off.
-- **Jellyfin:** the address for other devices, the libraries (kind and folder; A on one removes it
+- **Jellyfin:** the address for other devices, the libraries (the kind, then the folder under
+  `/srv/media`: "Movies · /srv/media/Movies"; only the kind without one; A on one removes it
   after a confirmation, the media stay), Add library (a full page: the folder, picked one level at
   a time from `/srv/media` with `media.folders` (A opens a folder that has folders, chooses one
   that has none; "Use this folder" inside one; Back goes one level up), the name with the
   on-screen keyboard (the folder's until one is typed), the kind: Movies, Shows, Music, Mixed;
   the page stays open when the service refuses, e.g. a taken name), Show accounts (PIN, then
   `jellyfin.users.reveal`: the admin and each profile's user and password; nothing is kept), Turn
-  off with "Delete server data" (a second confirmation; the media stay).
+  off.
+- **Turn off** (every service): with "Delete server data" when `has_data` (the entry has
+  `stateDirs`), and a hint of what goes (Jellyfin: libraries, accounts and settings; Plex:
+  libraries, account link and settings; Tailscale: sign-in and settings; Cloudflare: the tunnel
+  token); checked, a second confirmation ("The media files stay." for Jellyfin and Plex).
 - **Plex:** linked or not, the name and address; not linked: a QR code of `https://plex.tv/claim`
   and the code field with `claim-` filled in (a code that is not `claim-` and 20 characters is
   refused before the PIN), Link (`plex.claim`). Turn off.
-- **Tailscale:** signed in or not, name, address, DNS name, tailnet, key expiry; Sign in
+- **Tailscale:** signed in or not, name, address, DNS name, tailnet, key expiry (the day in the
+  box's time zone, the top bar clock's: the shell gives it to `ServerModel.zone`); Sign in
   (`tailscale.login`: while the job waits at `signing_in` the job page shows `detail.auth_url` as a
   large QR code with the address under it; a newer address replaces it), Sign out, Turn off.
 - **Cloudflare:** "Route this address in Zero Trust: <local IP>", connected or not, the token

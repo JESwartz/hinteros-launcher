@@ -98,13 +98,13 @@ class _ServicePageState extends State<ServicePage> {
   }
 
   Future<void> _turnOff(ServerService s) async {
-    // Jellyfin keeps libraries, accounts and settings: they can go too.
-    final data = s.setup == ServiceSetup.jellyfin;
+    // A service keeps its data when it is off (`stateDirs`): it can go too.
+    final data = s.hasData;
     final first = await showConfirm(
       context,
       title: 'Turn off ${s.name}?',
       checkbox: data ? 'Delete server data' : null,
-      checkboxHint: data ? 'Libraries, accounts and settings.' : null,
+      checkboxHint: data ? _dataHint(s) : null,
       confirmLabel: 'Turn off',
       danger: true,
     );
@@ -113,7 +113,9 @@ class _ServicePageState extends State<ServicePage> {
       final second = await showConfirm(
         context,
         title: 'Delete all data of ${s.name}?',
-        body: "The media files stay. You can't undo this.",
+        body: s.setup == ServiceSetup.jellyfin || s.setup == ServiceSetup.plex
+            ? "The media files stay. You can't undo this."
+            : "You can't undo this.",
         confirmLabel: 'Delete data and turn off',
         danger: true,
       );
@@ -260,11 +262,7 @@ class _ServicePageState extends State<ServicePage> {
     return FullPage(
       title: s.name,
       subtitle: s.state.label,
-      leading: AppIconBadge(
-        name: s.name,
-        iconPath: widget.model.icons[s.id],
-        size: 128,
-      ),
+      leading: AppIconBadge(name: s.name, iconPath: s.iconPath, size: 128),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -297,7 +295,7 @@ class _ServicePageState extends State<ServicePage> {
         onSelect: d.setupDone ? () => _removeLibrary(l) : null,
         builder: (f) => SettingRow(
           title: l.name,
-          subtitle: [l.kind.label, if (l.folder != null) l.folder!].join(', '),
+          subtitle: librarySubtitle(l),
           focused: f,
           trailing: Text('Remove', style: t.label.copyWith(color: t.danger)),
         ),
@@ -417,13 +415,30 @@ class _ServicePageState extends State<ServicePage> {
     _turnOffButton(p, s);
   }
 
-  /// The day, as UTC (the box zone is not at hand here).
-  static String _date(DateTime d) {
+  /// The day [d] is in the box's zone (the top bar clock's).
+  String _date(DateTime d) {
     String two(int n) => n.toString().padLeft(2, '0');
-    final l = d.toUtc();
+    final z = widget.model.zone;
+    final l = z == null ? d.toLocal() : z.wallClock(d);
     return '${l.year}-${two(l.month)}-${two(l.day)}';
   }
 }
+
+/// A library row's subtitle: its kind, then its folder under /srv/media
+/// ("Movies · /srv/media/Movies"); only the kind when it has no folder there.
+String librarySubtitle(JellyfinLibrary l) {
+  final f = l.folder;
+  return f == null ? l.kind.label : '${l.kind.label} · /srv/media/$f';
+}
+
+/// What "Delete server data" removes, by setup.
+String _dataHint(ServerService s) => switch (s.setup) {
+  ServiceSetup.jellyfin => 'Libraries, accounts and settings.',
+  ServiceSetup.plex => 'Libraries, account link and settings.',
+  ServiceSetup.tailscale => 'Sign-in and settings.',
+  ServiceSetup.cloudflare => 'The tunnel token.',
+  ServiceSetup.none => 'All settings of the service.',
+};
 
 /// "Address: http://192.168.1.42:8096": a name and its value.
 class InfoLine extends StatelessWidget {

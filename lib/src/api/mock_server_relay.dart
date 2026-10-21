@@ -28,12 +28,24 @@ const mockMediaTree = <String, List<String>>{
 
 /// One service of the mock box, with what it keeps while off.
 class MockWireService {
-  MockWireService(this.id, this.name, this.setup, {this.terms});
+  MockWireService(
+    this.id,
+    this.name,
+    this.setup, {
+    this.terms,
+    this.icon = const ServiceIcon(firefoxProfile: false),
+  });
 
   final String id;
   final String name;
   final Setup setup;
   final ServiceTerms? terms;
+
+  /// The catalog's icon; `path` as the session daemon adds it once resolved.
+  ServiceIcon icon;
+
+  /// The catalog entry has `stateDirs`.
+  bool hasData = true;
   bool enabled = false;
   UnitState status = UnitState.active;
 
@@ -78,6 +90,14 @@ class MockServerRelay {
     'jellyfin-server',
     'Jellyfin server',
     Setup.jellyfin,
+    icon: const ServiceIcon(
+      iconUrl: 'https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/SVG/icon-transparent.svg',
+      sha256:
+          '817c25b47442b192250448fe48cd5f265fe9183bc75aa12030bbe335495255d1',
+      siteUrl: 'https://jellyfin.org',
+      firefoxProfile: false,
+      path: '/home/tv/.cache/hinteros/icons/jellyfin-server.svg',
+    ),
   );
   final plex = MockWireService(
     'plex-media-server',
@@ -89,12 +109,32 @@ class MockServerRelay {
       url: 'https://www.plex.tv/about/privacy-legal/plex-terms-of-service/',
       file: '/run/current-system/sw/share/hinteros/terms/plex-media-server-2025-10-30.txt',
     ),
+    icon: const ServiceIcon(
+      iconUrl: 'https://watch.plex.tv/icons/icon-512x512.png',
+      sha256:
+          '78072fd57aacff1f73dee6432fb8d7f0360f300b4545422fb767cce638c4e7d3',
+      siteUrl: 'https://www.plex.tv',
+      firefoxProfile: false,
+    ),
   );
-  final tailscale = MockWireService('tailscale', 'Tailscale', Setup.tailscale);
+  final tailscale = MockWireService(
+    'tailscale',
+    'Tailscale',
+    Setup.tailscale,
+    icon: const ServiceIcon(
+      siteUrl: 'https://tailscale.com',
+      firefoxProfile: false,
+      path: '/home/tv/.cache/hinteros/icons/tailscale.png',
+    ),
+  );
   final cloudflare = MockWireService(
     'cloudflare-tunnel',
     'Cloudflare Tunnel',
     Setup.cloudflare,
+    icon: const ServiceIcon(
+      siteUrl: 'https://www.cloudflare.com/products/tunnel/',
+      firefoxProfile: false,
+    ),
   );
 
   List<MockWireService> get services => [cloudflare, jellyfin, plex, tailscale];
@@ -344,6 +384,15 @@ class MockServerRelay {
   List<(String, String)> _profiles() =>
       _relay.profileList?.call() ?? const [('p1', 'Alex'), ('p2', 'Sam')];
 
+  /// The session daemon resolved a service's icon: `icon.path` appears and
+  /// `store_changed` is sent.
+  void setServiceIcon(MockWireService s, String? path) {
+    final j = s.icon.toJson();
+    path == null ? j.remove('path') : j['path'] = path;
+    s.icon = ServiceIcon.fromJson(j);
+    _relay.emit('store_changed', const {});
+  }
+
   ServiceInfo _info(MockWireService s) => ServiceInfo(
     id: s.id,
     name: s.name,
@@ -353,6 +402,8 @@ class MockServerRelay {
     setup: s.setup,
     terms: s.enabled ? null : s.terms,
     detail: s.enabled ? _detail(s) : null,
+    icon: s.icon,
+    hasData: s.hasData,
   );
 
   Map<String, dynamic> _detail(MockWireService s) {

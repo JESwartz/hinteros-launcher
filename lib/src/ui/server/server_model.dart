@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../system/repositories.dart';
 
-/// The Server tab's data: the last `services.list` and the icons, read again
+/// The Server tab's data: the last `services.list` (icons included), read again
 /// when a job of the section ends, the connection comes back, or a page
 /// asks. The shell owns it, so a service page and the tab under it show the
 /// same list.
@@ -19,8 +19,9 @@ class ServerModel extends ChangeNotifier {
   /// Why the last read failed (null after one that worked).
   Object? error;
 
-  /// Icon paths by service id (null: the letter tile).
-  final icons = <String, String?>{};
+  /// The box's time zone, from the shell (the top bar clock's): dates on
+  /// the pages are in it. Null: the process's own zone.
+  TimeZoneInfo? zone;
 
   StreamSubscription<void>? _sub;
   int _requested = 0;
@@ -44,26 +45,11 @@ class ServerModel extends ChangeNotifier {
       if (_disposed || seq != _requested) return;
       list = l;
       error = null;
-      _resolveIcons(l);
     } catch (e) {
       if (_disposed || seq != _requested) return;
       error = e;
     }
     notifyListeners();
-  }
-
-  void _resolveIcons(ServerList l) {
-    for (final s in l.services) {
-      if (icons.containsKey(s.id)) continue;
-      icons[s.id] = null;
-      unawaited(
-        repo.resolveIcon(s).then((p) {
-          if (_disposed || p == null) return;
-          icons[s.id] = p;
-          notifyListeners();
-        }, onError: (_) {}),
-      );
-    }
   }
 
   @override

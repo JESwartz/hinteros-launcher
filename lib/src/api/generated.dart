@@ -3233,6 +3233,56 @@ class ServiceTerms {
   String toString() => 'ServiceTerms(${jsonEncode(toJson())})';
 }
 
+/// 0.11: where a service's real icon is (HinterOS ships no logos): the catalog entry's desktopId, iconUrl (with sha256: a download with another SHA-256 is not kept) or siteUrl (discovery on the site).
+class ServiceIcon {
+  const ServiceIcon({
+    this.desktopId,
+    this.siteUrl,
+    this.iconUrl,
+    this.sha256,
+    required this.firefoxProfile,
+    this.path,
+  });
+
+  final String? desktopId;
+  final String? siteUrl;
+  final String? iconUrl;
+  final String? sha256;
+  final bool firefoxProfile;
+
+  /// The resolved icon on this box (absolute path to an image). Only the session daemon sets it, in system.services.list: the same resolution and cache as store.list's icon.path. Absent until resolved; store_changed is sent when it appears.
+  final String? path;
+
+  factory ServiceIcon.fromJson(Map<String, dynamic> json) => ServiceIcon(
+    desktopId: json['desktop_id'] == null ? null : json['desktop_id'] as String,
+    siteUrl: json['site_url'] == null ? null : json['site_url'] as String,
+    iconUrl: json['icon_url'] == null ? null : json['icon_url'] as String,
+    sha256: json['sha256'] == null ? null : json['sha256'] as String,
+    firefoxProfile: json['firefox_profile'] as bool,
+    path: json['path'] == null ? null : json['path'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'desktop_id': ?desktopId,
+    'site_url': ?siteUrl,
+    'icon_url': ?iconUrl,
+    'sha256': ?sha256,
+    'firefox_profile': firefoxProfile,
+    'path': ?path,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ServiceIcon &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'ServiceIcon(${jsonEncode(toJson())})';
+}
+
 /// 0.11: one service of the Server section.
 class ServiceInfo {
   const ServiceInfo({
@@ -3244,6 +3294,8 @@ class ServiceInfo {
     required this.setup,
     required this.terms,
     required this.detail,
+    this.icon,
+    required this.hasData,
   });
 
   /// Catalog app id (state.json apps).
@@ -3262,6 +3314,12 @@ class ServiceInfo {
   /// The detail of the setup flow named by setup; null when off or without setup.
   final Object? detail;
 
+  /// The catalog entry's icon, as store.list shows an app's; absent when the catalog no longer has the entry.
+  final ServiceIcon? icon;
+
+  /// services.disable with delete_data has something to delete (the entry has stateDirs; Jellyfin always).
+  final bool hasData;
+
   factory ServiceInfo.fromJson(Map<String, dynamic> json) => ServiceInfo(
     id: json['id'] as String,
     name: json['name'] as String,
@@ -3277,6 +3335,10 @@ class ServiceInfo {
         ? null
         : ServiceTerms.fromJson((json['terms'] as Map).cast<String, dynamic>()),
     detail: json['detail'] == null ? null : json['detail'],
+    icon: json['icon'] == null
+        ? null
+        : ServiceIcon.fromJson((json['icon'] as Map).cast<String, dynamic>()),
+    hasData: json['has_data'] as bool,
   );
 
   Map<String, dynamic> toJson() => {
@@ -3288,6 +3350,8 @@ class ServiceInfo {
     'setup': setup == null ? null : setup!.toJson(),
     'terms': terms == null ? null : terms!.toJson(),
     'detail': detail,
+    if (icon != null) 'icon': icon!.toJson(),
+    'has_data': hasData,
   };
 
   @override
