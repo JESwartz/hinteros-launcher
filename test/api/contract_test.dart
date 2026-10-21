@@ -176,6 +176,35 @@ Future<void> _prepareSystem(
       ];
     case ('store.list', 'no catalog'):
       s.catalogMissing = true;
+    // 0.19: the Server section's examples describe particular boxes (the
+    // mock starts with Jellyfin on and the others off).
+    case ('system.services.enable', 'Jellyfin') ||
+        ('system.jellyfin.users.reveal', 'off'):
+      s.server.jellyfin.enabled = false;
+    case ('system.services.enable', 'already on'):
+      s.server.tailscale.enabled = true;
+    case ('system.services.disable', 'keep data'):
+      s.server.plex.enabled = true;
+    case ('system.jellyfin.libraries.add', 'movies'):
+      s.server.jellyfin.libraries = [];
+    case ('system.jellyfin.libraries.add', 'setup not done'):
+      s.server.jellyfin.setupDone = false;
+    case ('system.jellyfin.client_token', 'the guest'):
+      mock.profiles.current = 'guest';
+    case ('system.plex.claim', _):
+      s.server.plex
+        ..enabled = true
+        ..claimed = name == 'linked already';
+    case ('system.tailscale.login' || 'system.tailscale.logout', _):
+      s.server.tailscale
+        ..enabled = true
+        ..tailscale = name == 'sign in'
+            ? TailscaleState.needsLogin
+            : TailscaleState.running;
+    case ('system.cloudflare.set_token' || 'system.cloudflare.clear_token', _):
+      s.server.cloudflare
+        ..enabled = true
+        ..tokenSet = method.endsWith('clear_token');
     // 0.14: the storage examples describe a box that was measured.
     case ('system.storage.get', 'measured') || ('system.storage.tree', _):
       s.measurement = mockWireMeasurement();

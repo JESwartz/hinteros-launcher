@@ -15,6 +15,7 @@ import 'dart:async';
 
 import 'errors.dart';
 import 'generated.dart';
+import 'mock_server_relay.dart';
 import 'mock_store.dart';
 import 'mock_time_zones.dart';
 
@@ -59,6 +60,28 @@ List<Stage> mockStagesOf(JobKind kind) => switch (kind) {
     Stage.collecting,
     Stage.finishing,
   ],
+  JobKind.servicesEnable || JobKind.servicesDisable => const [
+    Stage.preparing,
+    Stage.evaluating,
+    Stage.building,
+    Stage.activating,
+    Stage.finishing,
+  ],
+  JobKind.tailscaleLogin => const [
+    Stage.preparing,
+    Stage.signingIn,
+    Stage.finishing,
+  ],
+  JobKind.jellyfinLibraryAdd ||
+  JobKind.jellyfinLibraryRemove ||
+  JobKind.plexClaim ||
+  JobKind.tailscaleLogout ||
+  JobKind.cloudflareSetToken ||
+  JobKind.cloudflareClearToken => const [
+    Stage.preparing,
+    Stage.configuring,
+    Stage.finishing,
+  ],
   _ => const [
     Stage.preparing,
     Stage.building,
@@ -94,6 +117,9 @@ class _Job {
 
   /// A clean-up's result (0.14).
   CleanedResult? cleaned;
+
+  /// A Tailscale sign-in: where it waits (stage signing_in).
+  String? authUrl;
 }
 
 class MockSystemRelay {
@@ -279,6 +305,12 @@ class MockSystemRelay {
   /// A profile's display name (a job's subject); null: the id.
   String? Function(String id)? profileName;
 
+  /// The profiles (id, name): their Jellyfin users (0.19).
+  List<(String, String)> Function()? profileList;
+
+  /// The Server section (0.19).
+  late final server = MockServerRelay(this);
+
   /// A `storage_measure` job finished: the measurement is new.
   MeasuredResult _measured() {
     final at = _nowSeconds();
@@ -386,6 +418,19 @@ class MockSystemRelay {
       }
     }
   }
+
+  /// A closed params object (for the other parts of the service).
+  void closedParams(Map<String, dynamic> params, Iterable<String> allowed) =>
+      _closed(params, allowed);
+
+  /// A mutating request reached the service: logged, [failNext] applied.
+  void mutating(String what) => _mutating(what);
+
+  /// `state_conflict` unless [revision] is state.json's.
+  void staleRevision(String revision) => _staleRevision(revision);
+
+  /// state.json changed.
+  void bumpRevision() => _bumpRevision();
 
   void _mutating(String what) {
     log.add(what);
@@ -860,6 +905,7 @@ class MockSystemRelay {
         finishJob(j.id, ok: false, cancelled: true);
         return JobRef(jobId: j.id).toJson();
     }
+    if (MockServerRelay.handles(method)) return server.call(method, p);
     throw ApiException(ApiErrorCode.methodNotFound, 'unknown method $method');
   }
 
@@ -1109,7 +1155,12 @@ class MockSystemRelay {
     JobKind kind, {
     void Function()? onSuccess,
     JobSubject subject = const JobSubject(),
-  }) => _start(kind, onSuccess: onSuccess, subject: subject);
+    String? authUrl,
+  }) {
+    final id = _start(kind, onSuccess: onSuccess, subject: subject);
+    _jobs[id]!.authUrl = authUrl;
+    return id;
+  }
 
   String _start(
     JobKind kind, {
@@ -1166,6 +1217,8 @@ class MockSystemRelay {
           j.timer = Timer(stepDelay!, step);
           return;
         }
+      } else if (s == Stage.signingIn) {
+        progressJob(j.id, s, authUrl: j.authUrl);
       } else if (s == Stage.building && built < mockBuilds.length) {
         // A few derivations, one at a time, like nix reports them.
         final (name, version) = mockBuilds[built];
@@ -1206,6 +1259,7 @@ class MockSystemRelay {
     int? buildsDone,
     int? buildsTotal,
     Building? building,
+    String? authUrl,
   }) {
     final j = _find(id);
     if (j.state != JobState.running) return;
@@ -1214,7 +1268,9 @@ class MockSystemRelay {
     j.lastActivityAt = _nowSeconds();
     final builds =
         buildsDone != null || buildsTotal != null || building != null;
-    j.detail = bytesTotal == null && !builds
+    j.detail = authUrl != null
+        ? ProgressDetail(authUrl: authUrl)
+        : bytesTotal == null && !builds
         ? null
         : ProgressDetail(
             bytesDone: bytesTotal == null || percent == null

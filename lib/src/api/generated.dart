@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.18).
+// Source: schema/session-api.json (session API 0.19).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.18';
+const apiVersion = '0.19';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -77,6 +77,19 @@ const apiMethodNames = <String>[
   'system.time_zone.get',
   'system.time_zone.list',
   'system.time_zone.set',
+  'system.services.list',
+  'system.services.enable',
+  'system.services.disable',
+  'system.media.folders',
+  'system.jellyfin.libraries.add',
+  'system.jellyfin.libraries.remove',
+  'system.jellyfin.users.reveal',
+  'system.jellyfin.client_token',
+  'system.plex.claim',
+  'system.tailscale.login',
+  'system.tailscale.logout',
+  'system.cloudflare.set_token',
+  'system.cloudflare.clear_token',
   'system.jobs.get',
   'system.jobs.list',
   'system.jobs.cancel',
@@ -256,7 +269,7 @@ abstract final class ApiErrorCode {
   /// Not allowed: the caller does not own seat0's active session (seat), polkit said no (polkit), or the peer cannot be identified safely (peer: no SO_PEERPIDFD, or the process is gone).
   static const permissionDenied = 3002;
 
-  /// Only in job_finished.error and jobs.get: the job failed (or was cancelled) at stage; log_hint is the last relevant log line.
+  /// Only in job_finished.error and jobs.get: the job failed (or was cancelled) at stage; log_hint is the last relevant log line. 0.19: reason says why a Server section job failed: unreachable (the service does not answer), not_ready (its setup is not done), refused (the service or tool said no; log_hint says why), timeout (nobody signed in in time), not_connected (the Cloudflare tunnel did not connect).
   static const jobFailed = 3003;
 
   /// Not enough memory or free disk space for a rebuild.
@@ -301,7 +314,7 @@ abstract final class ApiErrorCode {
   /// A relayed method could not reach the system service: it is down (reason down) or speaks another system API version (reason version_mismatch, e.g. after a switch until the session restarts). The session API keeps working.
   static const systemUnavailable = 3001;
 
-  /// A runtime-settings method needs a service that is not there (not installed, not running, no permission to reach it, or no such hardware). Also store.list without a readable catalog index (service catalog), session.restart without a greetd session on seat0 (service logind), and auth.respond when polkit's agent helper cannot be run (service polkit).
+  /// A runtime-settings method needs a service that is not there (not installed, not running, no permission to reach it, or no such hardware). Also store.list without a readable catalog index (service catalog), session.restart without a greetd session on seat0 (service logind), and auth.respond when polkit's agent helper cannot be run (service polkit). 0.19: the relayed Server section methods: service jellyfin, plex, tailscale or cloudflare with reason off or not_ready.
   static const unavailable = 4001;
 
   /// The service accepted the request but the operation failed (a connection or pairing attempt, a mode change). The message says why in words; reason is for code.
@@ -372,6 +385,21 @@ typedef OffsetSeconds = int;
 
 /// A profile id or guest.
 typedef StorageHomeId = String;
+
+/// A Jellyfin item id.
+typedef JellyfinId = String;
+
+/// 1 to 64 characters after trimming, without control or format characters or /\:*?"&lt;&gt;|.
+typedef LibraryName = String;
+
+/// A folder below /srv/media, as its path relative to it (media.folders).
+typedef FolderId = String;
+
+/// A plex.tv/claim code. Never logged.
+typedef PlexClaimCode = String;
+
+/// A Cloudflare tunnel token (standard padded base64). Never logged.
+typedef TunnelToken = String;
 
 /// A Bluetooth address, upper case.
 typedef BtAddress = String;
@@ -1185,6 +1213,15 @@ enum JobKind {
   cleanupProfiles('cleanup_profiles'),
   cleanupSet('cleanup_set'),
   channelCheck('channel_check'),
+  servicesEnable('services_enable'),
+  servicesDisable('services_disable'),
+  jellyfinLibraryAdd('jellyfin_library_add'),
+  jellyfinLibraryRemove('jellyfin_library_remove'),
+  plexClaim('plex_claim'),
+  tailscaleLogin('tailscale_login'),
+  tailscaleLogout('tailscale_logout'),
+  cloudflareSetToken('cloudflare_set_token'),
+  cloudflareClearToken('cloudflare_clear_token'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -1766,6 +1803,8 @@ enum Stage {
   cleaning('cleaning'),
   collecting('collecting'),
   apps('apps'),
+  configuring('configuring'),
+  signingIn('signing_in'),
   finishing('finishing'),
 
   /// A value this client does not know (newer daemon).
@@ -2783,6 +2822,7 @@ class ProgressDetail {
     this.buildsTotal,
     this.buildsRunning,
     this.building,
+    this.authUrl,
   });
 
   final int? pathsDone;
@@ -2802,6 +2842,9 @@ class ProgressDetail {
   /// 0.7: the most recently started derivation that is still building. name and version from the .drv name (nix's rule: the version starts at the first dash followed by a non-letter); phase is nix's build phase without the Phase suffix (unpack, patch, configure, build, check, install, fixup, ...), absent until nix reports one.
   final Building? building;
 
+  /// 0.11: tailscale_login, stage signing_in: the URL to sign in at (https, printable ASCII; shown as a QR code).
+  final String? authUrl;
+
   factory ProgressDetail.fromJson(Map<String, dynamic> json) => ProgressDetail(
     pathsDone: json['paths_done'] == null ? null : json['paths_done'] as int,
     pathsTotal: json['paths_total'] == null ? null : json['paths_total'] as int,
@@ -2817,6 +2860,7 @@ class ProgressDetail {
     building: json['building'] == null
         ? null
         : Building.fromJson((json['building'] as Map).cast<String, dynamic>()),
+    authUrl: json['auth_url'] == null ? null : json['auth_url'] as String,
   );
 
   Map<String, dynamic> toJson() => {
@@ -2828,6 +2872,7 @@ class ProgressDetail {
     'builds_total': ?buildsTotal,
     'builds_running': ?buildsRunning,
     if (building != null) 'building': building!.toJson(),
+    'auth_url': ?authUrl,
   };
 
   @override
@@ -2866,6 +2911,69 @@ class SubjectProfile {
   String toString() => 'SubjectProfile(${jsonEncode(toJson())})';
 }
 
+/// 0.11: what a new Jellyfin library holds (mixed: movies and shows).
+enum LibraryKind {
+  movies('movies'),
+  shows('shows'),
+  music('music'),
+  mixed('mixed'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const LibraryKind(this.value);
+  final String value;
+
+  factory LibraryKind.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+/// 0.11: the library a Jellyfin job is about (id: known for a removal, and for an addition once Jellyfin made it).
+class SubjectLibrary {
+  const SubjectLibrary({this.id, required this.name, this.kind, this.folder});
+
+  /// A Jellyfin item id.
+  final String? id;
+  final String name;
+
+  /// 0.11: what a new Jellyfin library holds (mixed: movies and shows).
+  final LibraryKind? kind;
+
+  /// A folder below /srv/media, as its path relative to it (media.folders).
+  final String? folder;
+
+  factory SubjectLibrary.fromJson(Map<String, dynamic> json) => SubjectLibrary(
+    id: json['id'] == null ? null : json['id'] as String,
+    name: json['name'] as String,
+    kind: json['kind'] == null
+        ? null
+        : LibraryKind.fromJson(json['kind'] as String),
+    folder: json['folder'] == null ? null : json['folder'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': ?id,
+    'name': name,
+    if (kind != null) 'kind': kind!.toJson(),
+    'folder': ?folder,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SubjectLibrary &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SubjectLibrary(${jsonEncode(toJson())})';
+}
+
 /// 0.7: what a job is about. Every field optional; which ones each kind sets: README, What a job is about.
 class JobSubject {
   const JobSubject({
@@ -2889,6 +2997,8 @@ class JobSubject {
     this.frequency,
     this.keepSystem,
     this.keepProfiles,
+    this.services,
+    this.library,
   });
 
   /// Apps jobs: whose apps (a profile id, guest or starter).
@@ -2930,6 +3040,12 @@ class JobSubject {
   final CleanupFrequency? frequency;
   final int? keepSystem;
   final int? keepProfiles;
+
+  /// 0.11: services turned on or off (services_enable, services_disable).
+  final List<CatalogApp>? services;
+
+  /// 0.11: the library a Jellyfin job is about (id: known for a removal, and for an addition once Jellyfin made it).
+  final SubjectLibrary? library;
 
   factory JobSubject.fromJson(Map<String, dynamic> json) => JobSubject(
     owner: json['owner'] == null ? null : json['owner'] as String,
@@ -2978,6 +3094,18 @@ class JobSubject {
     keepProfiles: json['keep_profiles'] == null
         ? null
         : json['keep_profiles'] as int,
+    services: json['services'] == null
+        ? null
+        : (json['services'] as List)
+              .map(
+                (x) => CatalogApp.fromJson((x as Map).cast<String, dynamic>()),
+              )
+              .toList(),
+    library: json['library'] == null
+        ? null
+        : SubjectLibrary.fromJson(
+            (json['library'] as Map).cast<String, dynamic>(),
+          ),
   );
 
   Map<String, dynamic> toJson() => {
@@ -3001,6 +3129,8 @@ class JobSubject {
     if (frequency != null) 'frequency': frequency!.toJson(),
     'keep_system': ?keepSystem,
     'keep_profiles': ?keepProfiles,
+    if (services != null) 'services': services!.map((x) => x.toJson()).toList(),
+    if (library != null) 'library': library!.toJson(),
   };
 
   @override
@@ -3012,6 +3142,578 @@ class JobSubject {
 
   @override
   String toString() => 'JobSubject(${jsonEncode(toJson())})';
+}
+
+/// 0.11: a service's setup flow in the Server section (catalog setup).
+enum Setup {
+  jellyfin('jellyfin'),
+  plex('plex'),
+  tailscale('tailscale'),
+  cloudflare('cloudflare'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const Setup(this.value);
+  final String value;
+
+  factory Setup.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+/// 0.11: systemd's ActiveState of a service's unit (unknown: a value this daemon does not know).
+enum UnitState {
+  active('active'),
+  reloading('reloading'),
+  inactive('inactive'),
+  failed('failed'),
+  activating('activating'),
+  deactivating('deactivating'),
+  maintenance('maintenance'),
+  refreshing('refreshing'),
+  unknown('unknown'),
+
+  /// A value this client does not know (newer daemon).
+  unknown_('unknown');
+
+  const UnitState(this.value);
+  final String value;
+
+  factory UnitState.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown_ && e.value == value,
+    orElse: () => unknown_,
+  );
+
+  String toJson() => value;
+}
+
+/// 0.11: a service's vendor terms; file is the absolute path of the text on the box.
+class ServiceTerms {
+  const ServiceTerms({
+    required this.title,
+    required this.version,
+    required this.url,
+    required this.file,
+  });
+
+  final String title;
+
+  /// A vendor terms version from the catalog.
+  final String version;
+  final String url;
+  final String file;
+
+  factory ServiceTerms.fromJson(Map<String, dynamic> json) => ServiceTerms(
+    title: json['title'] as String,
+    version: json['version'] as String,
+    url: json['url'] as String,
+    file: json['file'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'version': version,
+    'url': url,
+    'file': file,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ServiceTerms &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'ServiceTerms(${jsonEncode(toJson())})';
+}
+
+/// 0.11: one service of the Server section.
+class ServiceInfo {
+  const ServiceInfo({
+    required this.id,
+    required this.name,
+    required this.available,
+    required this.enabled,
+    required this.status,
+    required this.setup,
+    required this.terms,
+    required this.detail,
+  });
+
+  /// Catalog app id (state.json apps).
+  final String id;
+  final String name;
+
+  /// The catalog offers it (an enabled service the catalog dropped is listed with false).
+  final bool available;
+
+  /// In state.json services.
+  final bool enabled;
+  final UnitState? status;
+  final Setup? setup;
+  final ServiceTerms? terms;
+
+  /// The detail of the setup flow named by setup; null when off or without setup.
+  final Object? detail;
+
+  factory ServiceInfo.fromJson(Map<String, dynamic> json) => ServiceInfo(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    available: json['available'] as bool,
+    enabled: json['enabled'] as bool,
+    status: json['status'] == null
+        ? null
+        : UnitState.fromJson(json['status'] as String),
+    setup: json['setup'] == null
+        ? null
+        : Setup.fromJson(json['setup'] as String),
+    terms: json['terms'] == null
+        ? null
+        : ServiceTerms.fromJson((json['terms'] as Map).cast<String, dynamic>()),
+    detail: json['detail'] == null ? null : json['detail'],
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'available': available,
+    'enabled': enabled,
+    'status': status == null ? null : status!.toJson(),
+    'setup': setup == null ? null : setup!.toJson(),
+    'terms': terms == null ? null : terms!.toJson(),
+    'detail': detail,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ServiceInfo &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'ServiceInfo(${jsonEncode(toJson())})';
+}
+
+/// 0.11: what a Jellyfin library holds; other: a type made in Jellyfin's dashboard (books, photos, music videos, ...).
+enum LibraryKindShown {
+  movies('movies'),
+  shows('shows'),
+  music('music'),
+  mixed('mixed'),
+  other('other'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const LibraryKindShown(this.value);
+  final String value;
+
+  factory LibraryKindShown.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+class JellyfinLibrary {
+  const JellyfinLibrary({
+    required this.id,
+    required this.name,
+    required this.kind,
+    required this.folder,
+  });
+
+  /// A Jellyfin item id.
+  final String id;
+  final String name;
+
+  /// 0.11: what a Jellyfin library holds; other: a type made in Jellyfin's dashboard (books, photos, music videos, ...).
+  final LibraryKindShown kind;
+
+  /// The media.folders id of its first folder; null when that is not in /srv/media.
+  final String? folder;
+
+  factory JellyfinLibrary.fromJson(Map<String, dynamic> json) =>
+      JellyfinLibrary(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        kind: LibraryKindShown.fromJson(json['kind'] as String),
+        folder: json['folder'] == null ? null : json['folder'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'kind': kind.toJson(),
+    'folder': folder,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is JellyfinLibrary &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'JellyfinLibrary(${jsonEncode(toJson())})';
+}
+
+class JellyfinDetailUsersItem {
+  const JellyfinDetailUsersItem({
+    required this.profileId,
+    required this.jellyfinUser,
+  });
+
+  /// A profile id.
+  final String profileId;
+  final String jellyfinUser;
+
+  factory JellyfinDetailUsersItem.fromJson(Map<String, dynamic> json) =>
+      JellyfinDetailUsersItem(
+        profileId: json['profile_id'] as String,
+        jellyfinUser: json['jellyfin_user'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'profile_id': profileId,
+    'jellyfin_user': jellyfinUser,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is JellyfinDetailUsersItem &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'JellyfinDetailUsersItem(${jsonEncode(toJson())})';
+}
+
+class JellyfinDetail {
+  const JellyfinDetail({
+    required this.setupDone,
+    required this.url,
+    required this.libraries,
+    required this.users,
+  });
+
+  /// HinterOS made Jellyfin's first-run setup (admin user, API key).
+  final bool setupDone;
+
+  /// http://&lt;local IP&gt;:&lt;port&gt;, for other devices; null without a local network address.
+  final String? url;
+  final List<JellyfinLibrary> libraries;
+
+  /// Each profile's Jellyfin user name (passwords: jellyfin.users.reveal).
+  final List<JellyfinDetailUsersItem> users;
+
+  factory JellyfinDetail.fromJson(Map<String, dynamic> json) => JellyfinDetail(
+    setupDone: json['setup_done'] as bool,
+    url: json['url'] == null ? null : json['url'] as String,
+    libraries: (json['libraries'] as List)
+        .map(
+          (x) => JellyfinLibrary.fromJson((x as Map).cast<String, dynamic>()),
+        )
+        .toList(),
+    users: (json['users'] as List)
+        .map(
+          (x) => JellyfinDetailUsersItem.fromJson(
+            (x as Map).cast<String, dynamic>(),
+          ),
+        )
+        .toList(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'setup_done': setupDone,
+    'url': url,
+    'libraries': libraries.map((x) => x.toJson()).toList(),
+    'users': users.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is JellyfinDetail &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'JellyfinDetail(${jsonEncode(toJson())})';
+}
+
+class MediaFolder {
+  const MediaFolder({
+    required this.id,
+    required this.name,
+    required this.hasChildren,
+  });
+
+  /// A folder below /srv/media, as its path relative to it (media.folders).
+  final String id;
+  final String name;
+  final bool hasChildren;
+
+  factory MediaFolder.fromJson(Map<String, dynamic> json) => MediaFolder(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    hasChildren: json['has_children'] as bool,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'has_children': hasChildren,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is MediaFolder &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'MediaFolder(${jsonEncode(toJson())})';
+}
+
+class JellyfinAccount {
+  const JellyfinAccount({required this.name, required this.password});
+
+  final String name;
+  final String password;
+
+  factory JellyfinAccount.fromJson(Map<String, dynamic> json) =>
+      JellyfinAccount(
+        name: json['name'] as String,
+        password: json['password'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'name': name, 'password': password};
+
+  @override
+  bool operator ==(Object other) =>
+      other is JellyfinAccount &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'JellyfinAccount(${jsonEncode(toJson())})';
+}
+
+class JellyfinProfileAccount {
+  const JellyfinProfileAccount({
+    required this.profileId,
+    required this.profileName,
+    required this.name,
+    required this.password,
+  });
+
+  /// A profile id.
+  final String profileId;
+  final String profileName;
+
+  /// The Jellyfin user name.
+  final String name;
+  final String password;
+
+  factory JellyfinProfileAccount.fromJson(Map<String, dynamic> json) =>
+      JellyfinProfileAccount(
+        profileId: json['profile_id'] as String,
+        profileName: json['profile_name'] as String,
+        name: json['name'] as String,
+        password: json['password'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'profile_id': profileId,
+    'profile_name': profileName,
+    'name': name,
+    'password': password,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is JellyfinProfileAccount &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'JellyfinProfileAccount(${jsonEncode(toJson())})';
+}
+
+class PlexDetail {
+  const PlexDetail({
+    required this.claimed,
+    required this.serverName,
+    required this.url,
+  });
+
+  /// Linked to a Plex account.
+  final bool claimed;
+  final String? serverName;
+  final String? url;
+
+  factory PlexDetail.fromJson(Map<String, dynamic> json) => PlexDetail(
+    claimed: json['claimed'] as bool,
+    serverName: json['server_name'] == null
+        ? null
+        : json['server_name'] as String,
+    url: json['url'] == null ? null : json['url'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'claimed': claimed,
+    'server_name': serverName,
+    'url': url,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlexDetail && jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'PlexDetail(${jsonEncode(toJson())})';
+}
+
+/// 0.11: needs_login: not signed in; needs_approval: the tailnet's admin must approve the device; unavailable: tailscaled does not answer.
+enum TailscaleState {
+  needsLogin('needs_login'),
+  needsApproval('needs_approval'),
+  starting('starting'),
+  running('running'),
+  stopped('stopped'),
+  unavailable('unavailable'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const TailscaleState(this.value);
+  final String value;
+
+  factory TailscaleState.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
+class TailscaleDetail {
+  const TailscaleDetail({
+    required this.state,
+    required this.name,
+    required this.ip4,
+    required this.dnsName,
+    required this.tailnet,
+    required this.keyExpiry,
+  });
+
+  /// 0.11: needs_login: not signed in; needs_approval: the tailnet's admin must approve the device; unavailable: tailscaled does not answer.
+  final TailscaleState state;
+  final String? name;
+  final String? ip4;
+
+  /// The MagicDNS name, without the trailing dot.
+  final String? dnsName;
+  final String? tailnet;
+
+  /// Unix seconds; null: the key never expires, or unknown.
+  final int? keyExpiry;
+
+  factory TailscaleDetail.fromJson(Map<String, dynamic> json) =>
+      TailscaleDetail(
+        state: TailscaleState.fromJson(json['state'] as String),
+        name: json['name'] == null ? null : json['name'] as String,
+        ip4: json['ip4'] == null ? null : json['ip4'] as String,
+        dnsName: json['dns_name'] == null ? null : json['dns_name'] as String,
+        tailnet: json['tailnet'] == null ? null : json['tailnet'] as String,
+        keyExpiry: json['key_expiry'] == null
+            ? null
+            : json['key_expiry'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'state': state.toJson(),
+    'name': name,
+    'ip4': ip4,
+    'dns_name': dnsName,
+    'tailnet': tailnet,
+    'key_expiry': keyExpiry,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is TailscaleDetail &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'TailscaleDetail(${jsonEncode(toJson())})';
+}
+
+class CloudflareDetail {
+  const CloudflareDetail({
+    required this.tokenSet,
+    required this.connected,
+    required this.localIp,
+  });
+
+  final bool tokenSet;
+
+  /// cloudflared reports a connection to Cloudflare (its /ready).
+  final bool connected;
+
+  /// The box's IPv4 address on its local network (the subnet of the default route), for the tunnel's private-network route.
+  final String? localIp;
+
+  factory CloudflareDetail.fromJson(Map<String, dynamic> json) =>
+      CloudflareDetail(
+        tokenSet: json['token_set'] as bool,
+        connected: json['connected'] as bool,
+        localIp: json['local_ip'] == null ? null : json['local_ip'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'token_set': tokenSet,
+    'connected': connected,
+    'local_ip': localIp,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is CloudflareDetail &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'CloudflareDetail(${jsonEncode(toJson())})';
 }
 
 /// A JSON-RPC error object (codes from this document's errors).
@@ -7806,6 +8508,797 @@ class SystemTimeZoneSetResult {
   String toString() => 'SystemTimeZoneSetResult(${jsonEncode(toJson())})';
 }
 
+class SystemServicesListParams {
+  const SystemServicesListParams();
+
+  factory SystemServicesListParams.fromJson(Map<String, dynamic> json) =>
+      SystemServicesListParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemServicesListParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemServicesListParams(${jsonEncode(toJson())})';
+}
+
+class SystemServicesListResult {
+  const SystemServicesListResult({
+    required this.revision,
+    required this.services,
+  });
+
+  /// SHA-256 of state.json, hex.
+  final String revision;
+  final List<ServiceInfo> services;
+
+  factory SystemServicesListResult.fromJson(Map<String, dynamic> json) =>
+      SystemServicesListResult(
+        revision: json['revision'] as String,
+        services: (json['services'] as List)
+            .map(
+              (x) => ServiceInfo.fromJson((x as Map).cast<String, dynamic>()),
+            )
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'revision': revision,
+    'services': services.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemServicesListResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemServicesListResult(${jsonEncode(toJson())})';
+}
+
+class SystemServicesEnableParams {
+  const SystemServicesEnableParams({
+    required this.ids,
+    required this.pin,
+    required this.revision,
+    this.acceptedTerms,
+  });
+
+  final List<String> ids;
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  /// SHA-256 of state.json, hex.
+  final String revision;
+
+  /// Service id to the terms version accepted (after reading the full text).
+  final Map<String, Object?>? acceptedTerms;
+
+  factory SystemServicesEnableParams.fromJson(Map<String, dynamic> json) =>
+      SystemServicesEnableParams(
+        ids: (json['ids'] as List).map((x) => x as String).toList(),
+        pin: json['pin'] as String,
+        revision: json['revision'] as String,
+        acceptedTerms: json['accepted_terms'] == null
+            ? null
+            : (json['accepted_terms'] as Map).cast<String, Object?>(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'ids': ids,
+    'pin': pin,
+    'revision': revision,
+    'accepted_terms': ?acceptedTerms,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemServicesEnableParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemServicesEnableParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemServicesEnableResult {
+  const SystemServicesEnableResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemServicesEnableResult.fromJson(Map<String, dynamic> json) =>
+      SystemServicesEnableResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemServicesEnableResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemServicesEnableResult(${jsonEncode(toJson())})';
+}
+
+class SystemServicesDisableParams {
+  const SystemServicesDisableParams({
+    required this.ids,
+    required this.pin,
+    required this.revision,
+    required this.deleteData,
+  });
+
+  final List<String> ids;
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  /// SHA-256 of state.json, hex.
+  final String revision;
+  final bool deleteData;
+
+  factory SystemServicesDisableParams.fromJson(Map<String, dynamic> json) =>
+      SystemServicesDisableParams(
+        ids: (json['ids'] as List).map((x) => x as String).toList(),
+        pin: json['pin'] as String,
+        revision: json['revision'] as String,
+        deleteData: json['delete_data'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'ids': ids,
+    'pin': pin,
+    'revision': revision,
+    'delete_data': deleteData,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemServicesDisableParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemServicesDisableParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemServicesDisableResult {
+  const SystemServicesDisableResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemServicesDisableResult.fromJson(Map<String, dynamic> json) =>
+      SystemServicesDisableResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemServicesDisableResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemServicesDisableResult(${jsonEncode(toJson())})';
+}
+
+class SystemMediaFoldersParams {
+  const SystemMediaFoldersParams({this.folderId});
+
+  /// A folder below /srv/media, as its path relative to it (media.folders).
+  final String? folderId;
+
+  factory SystemMediaFoldersParams.fromJson(Map<String, dynamic> json) =>
+      SystemMediaFoldersParams(
+        folderId: json['folder_id'] == null
+            ? null
+            : json['folder_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'folder_id': ?folderId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemMediaFoldersParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemMediaFoldersParams(${jsonEncode(toJson())})';
+}
+
+class SystemMediaFoldersResult {
+  const SystemMediaFoldersResult({
+    required this.folderId,
+    required this.folders,
+  });
+
+  final String? folderId;
+  final List<MediaFolder> folders;
+
+  factory SystemMediaFoldersResult.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemMediaFoldersResult(
+    folderId: json['folder_id'] == null ? null : json['folder_id'] as String,
+    folders: (json['folders'] as List)
+        .map((x) => MediaFolder.fromJson((x as Map).cast<String, dynamic>()))
+        .toList(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'folder_id': folderId,
+    'folders': folders.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemMediaFoldersResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemMediaFoldersResult(${jsonEncode(toJson())})';
+}
+
+class SystemJellyfinLibrariesAddParams {
+  const SystemJellyfinLibrariesAddParams({
+    required this.pin,
+    required this.name,
+    required this.kind,
+    required this.folder,
+  });
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  /// 1 to 64 characters after trimming, without control or format characters or /\:*?"&lt;&gt;|.
+  final String name;
+
+  /// 0.11: what a new Jellyfin library holds (mixed: movies and shows).
+  final LibraryKind kind;
+
+  /// A folder below /srv/media, as its path relative to it (media.folders).
+  final String folder;
+
+  factory SystemJellyfinLibrariesAddParams.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemJellyfinLibrariesAddParams(
+    pin: json['pin'] as String,
+    name: json['name'] as String,
+    kind: LibraryKind.fromJson(json['kind'] as String),
+    folder: json['folder'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'pin': pin,
+    'name': name,
+    'kind': kind.toJson(),
+    'folder': folder,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemJellyfinLibrariesAddParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemJellyfinLibrariesAddParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemJellyfinLibrariesAddResult {
+  const SystemJellyfinLibrariesAddResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemJellyfinLibrariesAddResult.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemJellyfinLibrariesAddResult(
+    jobId: json['job_id'] == null ? null : json['job_id'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemJellyfinLibrariesAddResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemJellyfinLibrariesAddResult(${jsonEncode(toJson())})';
+}
+
+class SystemJellyfinLibrariesRemoveParams {
+  const SystemJellyfinLibrariesRemoveParams({
+    required this.pin,
+    required this.libraryId,
+  });
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  /// A Jellyfin item id.
+  final String libraryId;
+
+  factory SystemJellyfinLibrariesRemoveParams.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemJellyfinLibrariesRemoveParams(
+    pin: json['pin'] as String,
+    libraryId: json['library_id'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {'pin': pin, 'library_id': libraryId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemJellyfinLibrariesRemoveParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemJellyfinLibrariesRemoveParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemJellyfinLibrariesRemoveResult {
+  const SystemJellyfinLibrariesRemoveResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemJellyfinLibrariesRemoveResult.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemJellyfinLibrariesRemoveResult(
+    jobId: json['job_id'] == null ? null : json['job_id'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemJellyfinLibrariesRemoveResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemJellyfinLibrariesRemoveResult(${jsonEncode(toJson())})';
+}
+
+class SystemJellyfinUsersRevealParams {
+  const SystemJellyfinUsersRevealParams({required this.pin});
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  factory SystemJellyfinUsersRevealParams.fromJson(Map<String, dynamic> json) =>
+      SystemJellyfinUsersRevealParams(pin: json['pin'] as String);
+
+  Map<String, dynamic> toJson() => {'pin': pin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemJellyfinUsersRevealParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemJellyfinUsersRevealParams(${jsonEncode(toJson())})';
+}
+
+class SystemJellyfinUsersRevealResult {
+  const SystemJellyfinUsersRevealResult({
+    required this.admin,
+    required this.users,
+  });
+
+  final JellyfinAccount? admin;
+  final List<JellyfinProfileAccount> users;
+
+  factory SystemJellyfinUsersRevealResult.fromJson(Map<String, dynamic> json) =>
+      SystemJellyfinUsersRevealResult(
+        admin: json['admin'] == null
+            ? null
+            : JellyfinAccount.fromJson(
+                (json['admin'] as Map).cast<String, dynamic>(),
+              ),
+        users: (json['users'] as List)
+            .map(
+              (x) => JellyfinProfileAccount.fromJson(
+                (x as Map).cast<String, dynamic>(),
+              ),
+            )
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'admin': admin == null ? null : admin!.toJson(),
+    'users': users.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemJellyfinUsersRevealResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemJellyfinUsersRevealResult(${jsonEncode(toJson())})';
+}
+
+class SystemJellyfinClientTokenParams {
+  const SystemJellyfinClientTokenParams();
+
+  factory SystemJellyfinClientTokenParams.fromJson(Map<String, dynamic> json) =>
+      SystemJellyfinClientTokenParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemJellyfinClientTokenParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemJellyfinClientTokenParams(${jsonEncode(toJson())})';
+}
+
+class SystemJellyfinClientTokenResult {
+  const SystemJellyfinClientTokenResult({
+    required this.serverId,
+    required this.userId,
+    required this.deviceId,
+    required this.accessToken,
+  });
+
+  /// A Jellyfin item id.
+  final String serverId;
+
+  /// A Jellyfin item id.
+  final String userId;
+  final String deviceId;
+  final String accessToken;
+
+  factory SystemJellyfinClientTokenResult.fromJson(Map<String, dynamic> json) =>
+      SystemJellyfinClientTokenResult(
+        serverId: json['server_id'] as String,
+        userId: json['user_id'] as String,
+        deviceId: json['device_id'] as String,
+        accessToken: json['access_token'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'server_id': serverId,
+    'user_id': userId,
+    'device_id': deviceId,
+    'access_token': accessToken,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemJellyfinClientTokenResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemJellyfinClientTokenResult(${jsonEncode(toJson())})';
+}
+
+class SystemPlexClaimParams {
+  const SystemPlexClaimParams({required this.pin, required this.code});
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  /// A plex.tv/claim code. Never logged.
+  final String code;
+
+  factory SystemPlexClaimParams.fromJson(Map<String, dynamic> json) =>
+      SystemPlexClaimParams(
+        pin: json['pin'] as String,
+        code: json['code'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'pin': pin, 'code': code};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemPlexClaimParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemPlexClaimParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemPlexClaimResult {
+  const SystemPlexClaimResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemPlexClaimResult.fromJson(Map<String, dynamic> json) =>
+      SystemPlexClaimResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemPlexClaimResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemPlexClaimResult(${jsonEncode(toJson())})';
+}
+
+class SystemTailscaleLoginParams {
+  const SystemTailscaleLoginParams({required this.pin});
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  factory SystemTailscaleLoginParams.fromJson(Map<String, dynamic> json) =>
+      SystemTailscaleLoginParams(pin: json['pin'] as String);
+
+  Map<String, dynamic> toJson() => {'pin': pin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemTailscaleLoginParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemTailscaleLoginParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemTailscaleLoginResult {
+  const SystemTailscaleLoginResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemTailscaleLoginResult.fromJson(Map<String, dynamic> json) =>
+      SystemTailscaleLoginResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemTailscaleLoginResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemTailscaleLoginResult(${jsonEncode(toJson())})';
+}
+
+class SystemTailscaleLogoutParams {
+  const SystemTailscaleLogoutParams({required this.pin});
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  factory SystemTailscaleLogoutParams.fromJson(Map<String, dynamic> json) =>
+      SystemTailscaleLogoutParams(pin: json['pin'] as String);
+
+  Map<String, dynamic> toJson() => {'pin': pin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemTailscaleLogoutParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemTailscaleLogoutParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemTailscaleLogoutResult {
+  const SystemTailscaleLogoutResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemTailscaleLogoutResult.fromJson(Map<String, dynamic> json) =>
+      SystemTailscaleLogoutResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemTailscaleLogoutResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemTailscaleLogoutResult(${jsonEncode(toJson())})';
+}
+
+class SystemCloudflareSetTokenParams {
+  const SystemCloudflareSetTokenParams({
+    required this.pin,
+    required this.token,
+  });
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  /// A Cloudflare tunnel token (standard padded base64). Never logged.
+  final String token;
+
+  factory SystemCloudflareSetTokenParams.fromJson(Map<String, dynamic> json) =>
+      SystemCloudflareSetTokenParams(
+        pin: json['pin'] as String,
+        token: json['token'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'pin': pin, 'token': token};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemCloudflareSetTokenParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemCloudflareSetTokenParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemCloudflareSetTokenResult {
+  const SystemCloudflareSetTokenResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemCloudflareSetTokenResult.fromJson(Map<String, dynamic> json) =>
+      SystemCloudflareSetTokenResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemCloudflareSetTokenResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemCloudflareSetTokenResult(${jsonEncode(toJson())})';
+}
+
+class SystemCloudflareClearTokenParams {
+  const SystemCloudflareClearTokenParams({required this.pin});
+
+  /// 4 to 8 digits. Never logged.
+  final String pin;
+
+  factory SystemCloudflareClearTokenParams.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemCloudflareClearTokenParams(pin: json['pin'] as String);
+
+  Map<String, dynamic> toJson() => {'pin': pin};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemCloudflareClearTokenParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemCloudflareClearTokenParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemCloudflareClearTokenResult {
+  const SystemCloudflareClearTokenResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemCloudflareClearTokenResult.fromJson(
+    Map<String, dynamic> json,
+  ) => SystemCloudflareClearTokenResult(
+    jobId: json['job_id'] == null ? null : json['job_id'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemCloudflareClearTokenResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() =>
+      'SystemCloudflareClearTokenResult(${jsonEncode(toJson())})';
+}
+
 class SystemJobsGetParams {
   const SystemJobsGetParams({required this.jobId});
 
@@ -11977,20 +13470,50 @@ class PermissionDeniedData {
   String toString() => 'PermissionDeniedData(${jsonEncode(toJson())})';
 }
 
+enum JobFailedDataReason {
+  unreachable('unreachable'),
+  notReady('not_ready'),
+  refused('refused'),
+  timeout('timeout'),
+  notConnected('not_connected'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const JobFailedDataReason(this.value);
+  final String value;
+
+  factory JobFailedDataReason.fromJson(String value) => values.firstWhere(
+    (e) => e != unknown && e.value == value,
+    orElse: () => unknown,
+  );
+
+  String toJson() => value;
+}
+
 class JobFailedData {
-  const JobFailedData({required this.stage, required this.logHint});
+  const JobFailedData({
+    required this.stage,
+    required this.logHint,
+    this.reason,
+  });
 
   final Stage stage;
   final String logHint;
+  final JobFailedDataReason? reason;
 
   factory JobFailedData.fromJson(Map<String, dynamic> json) => JobFailedData(
     stage: Stage.fromJson(json['stage'] as String),
     logHint: json['log_hint'] as String,
+    reason: json['reason'] == null
+        ? null
+        : JobFailedDataReason.fromJson(json['reason'] as String),
   );
 
   Map<String, dynamic> toJson() => {
     'stage': stage.toJson(),
     'log_hint': logHint,
+    if (reason != null) 'reason': reason!.toJson(),
   };
 
   @override
@@ -12430,6 +13953,10 @@ enum UnavailableDataService {
   catalog('catalog'),
   polkit('polkit'),
   profiles('profiles'),
+  jellyfin('jellyfin'),
+  plex('plex'),
+  tailscale('tailscale'),
+  cloudflare('cloudflare'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -13059,6 +14586,124 @@ mixin SessionApiMethods {
     SystemTimeZoneSetParams params,
   ) async => SystemTimeZoneSetResult.fromJson(
     await rpc('system.time_zone.set', params.toJson()),
+  );
+
+  /// Relayed to the system service's services.list. the Server section: every service the catalog offers (kind service, status available) and every enabled one, with its unit's state and its setup flow's detail. Read-only, open to every caller.
+  ///
+  /// revision is the hash of state.json (pass it to services.enable/services.disable). status: systemd's ActiveState of the service's unit (jellyfin.service, plex.service, tailscaled.service, hinteros-cloudflared.service; inactive when not loaded), null when the service is off or has no known unit. setup: the catalog's setup flow (null: none, or one this daemon does not know: show only on/off). terms: the vendor terms to show before services.enable (file: the absolute path of the text next to the running catalog). detail: null unless the service is on and has a setup flow; no secrets. Jellyfin: setup_done (the first-run setup by HinterOS is done), url (http://&lt;local IP&gt;:&lt;port&gt;), libraries (from Jellyfin's API on loopback, or the last list a job or read saw while Jellyfin does not answer), users (each profile's Jellyfin user name). Plex: claimed (linked to a Plex account), server_name, url. Tailscale: state from tailscaled (unavailable: it does not answer), name, tailnet IPv4, MagicDNS name, tailnet, key_expiry (Unix seconds; null: never or unknown); all null unless signed in. Cloudflare: token_set, connected (cloudflared has a connection), local_ip (the box's address on its local network, for the private-network route). Each service is asked with a 1 s timeout.
+  Future<SystemServicesListResult> systemServicesList([
+    SystemServicesListParams params = const SystemServicesListParams(),
+  ]) async => SystemServicesListResult.fromJson(
+    await rpc('system.services.list', params.toJson()),
+  );
+
+  /// Relayed to the system service's services.enable. turn services on (job services_enable, a rebuild). Admin PIN. Action org.hinteros.system.services.
+  ///
+  /// ids: 1 to 8 different catalog ids, each kind service with status available in the running generation's catalog (not_found: not in the catalog; invalid_params {field: ids, reason: not_a_service | not_available}). Ids already on are skipped; job_id null when nothing is left. revision: services.list's (state_conflict otherwise). A service with vendor terms (Plex) needs accepted_terms[id] equal to the catalog's terms.version (terms_required {id, version}; terms for ids not being turned on: invalid_params {field: accepted_terms, reason: not_requested}); the acceptance is audited and recorded in /var/lib/hinteros/terms-accepted.json by the caller's user, with the admin profile's id. Schema-1 boxes: unavailable {service: profiles, reason: schema1}. The job writes state.json's services and runs the apply flow (stages preparing, evaluating, downloading, building, activating, finishing); for jellyfin-server it then waits up to 3 minutes for HinterOS's first-run setup (stage configuring) and makes each profile's Jellyfin user (best effort: jellyfin.users.reveal and every Jellyfin job make missing users too). Result: the applied generation.
+  Future<SystemServicesEnableResult> systemServicesEnable(
+    SystemServicesEnableParams params,
+  ) async => SystemServicesEnableResult.fromJson(
+    await rpc('system.services.enable', params.toJson()),
+  );
+
+  /// Relayed to the system service's services.disable. turn services off (job services_disable, a rebuild), their data deleted on request. Admin PIN. Action org.hinteros.system.services.
+  ///
+  /// ids: 1 to 8 different ids, each on (not_found otherwise). revision: services.list's. The job writes state.json without them and runs the apply flow. With delete_data (the launcher confirms twice), after a successful switch it deletes each service's catalog stateDirs below /var/lib, and for jellyfin-server also /var/cache/jellyfin and /var/lib/hinteros/services/jellyfin-server (admin password, API key, profile users), as root without following a symlink anywhere and without entering another filesystem; anything outside /var/lib and /var/cache is refused. Media files in /srv/media are never deleted. Without delete_data the data stays and turning the service on again finds it.
+  Future<SystemServicesDisableResult> systemServicesDisable(
+    SystemServicesDisableParams params,
+  ) async => SystemServicesDisableResult.fromJson(
+    await rpc('system.services.disable', params.toJson()),
+  );
+
+  /// Relayed to the system service's media.folders. one level of folders under /srv/media, for a Jellyfin library. Read-only, open to every caller.
+  ///
+  /// Without folder_id: the folders directly in /srv/media (an empty list when it does not exist); with it: the folders in that folder. An id is the folder's path relative to /srv/media (no empty, . or .. component, no component starting with a dot, no control characters, at most 1024 bytes; else invalid_params {field: folder_id}). Every component is opened without following symlinks: a symlink is neither listed nor entered (not_found), so no id leads out of /srv/media. Hidden folders, files, symlinks and names that are not UTF-8 are left out. Sorted by name, at most 500. has_children: the folder has folders of its own.
+  Future<SystemMediaFoldersResult> systemMediaFolders([
+    SystemMediaFoldersParams params = const SystemMediaFoldersParams(),
+  ]) async => SystemMediaFoldersResult.fromJson(
+    await rpc('system.media.folders', params.toJson()),
+  );
+
+  /// Relayed to the system service's jellyfin.libraries.add. add a Jellyfin library on a folder in /srv/media (job jellyfin_library_add). Admin PIN. Action org.hinteros.system.services.
+  ///
+  /// name: 1 to 64 characters after trimming, no control or format characters, none of /\:*?"&lt;&gt;| (invalid_params {field: name, reason: bad_length | bad_name}); a library with the same name (any case) is invalid_params {field: name, reason: exists} when Jellyfin answers in time, else the job fails. kind: movies, shows, music or mixed (Jellyfin's collection types movies, tvshows, music, and none for mixed). folder: a media.folders id, resolved again (no symlink followed) when the request comes and again in the job (not_found: no such folder). Jellyfin off: unavailable {service: jellyfin, reason: off}; its first-run setup not done: unavailable {service: jellyfin, reason: not_ready}. The job (stages preparing, configuring, finishing) waits up to 90 s for Jellyfin, makes missing profile users, adds the library and starts its scan; job_progress's subject then gains library.id. Failures: job_failed with reason unreachable, not_ready or refused.
+  Future<SystemJellyfinLibrariesAddResult> systemJellyfinLibrariesAdd(
+    SystemJellyfinLibrariesAddParams params,
+  ) async => SystemJellyfinLibrariesAddResult.fromJson(
+    await rpc('system.jellyfin.libraries.add', params.toJson()),
+  );
+
+  /// Relayed to the system service's jellyfin.libraries.remove. remove a Jellyfin library (job jellyfin_library_remove); the media files stay. Admin PIN. Action org.hinteros.system.services.
+  ///
+  /// library_id: a library id from services.list (not_found when Jellyfin answers in time and has no such library; else the job fails with reason refused). Jellyfin removes its own folder for the library (links, options), never the media. unavailable as for jellyfin.libraries.add.
+  Future<SystemJellyfinLibrariesRemoveResult> systemJellyfinLibrariesRemove(
+    SystemJellyfinLibrariesRemoveParams params,
+  ) async => SystemJellyfinLibrariesRemoveResult.fromJson(
+    await rpc('system.jellyfin.libraries.remove', params.toJson()),
+  );
+
+  /// Relayed to the system service's jellyfin.users.reveal. the Jellyfin passwords, for other devices: the admin user's and each profile's (admin PIN; not a job). Action org.hinteros.system.services.
+  ///
+  /// Makes missing profile users first (one Jellyfin user per profile, not the guest; named after the profile: letters, digits, space and _-'.@+ kept, unique in any case with a number added; not an administrator, no media deletion; random 16-character password), when Jellyfin answers within 3 s. admin: null until HinterOS's first-run setup wrote it. users: every profile that has a user, with the profile's name now. The answer is never logged; the audit records only that it was asked. Jellyfin off: unavailable {service: jellyfin, reason: off}.
+  Future<SystemJellyfinUsersRevealResult> systemJellyfinUsersReveal(
+    SystemJellyfinUsersRevealParams params,
+  ) async => SystemJellyfinUsersRevealResult.fromJson(
+    await rpc('system.jellyfin.users.reveal', params.toJson()),
+  );
+
+  /// Relayed to the system service's jellyfin.client_token. a Jellyfin access token for the caller's own profile, so the Jellyfin app on the box signs in by itself (spike S1). No PIN; read-only for the caller (no seat check, no rate limit).
+  ///
+  /// The profile comes from the caller's uid (SO_PEERCRED): the guest, spare accounts and other users get permission_denied {reason: profile}. Jellyfin off or not set up: unavailable {service: jellyfin, reason: off | not_ready}; Jellyfin does not answer or refuses: unavailable {service: jellyfin, reason: unreachable}. The profile's Jellyfin user is made first if it has none. The token is made with POST /Users/AuthenticateByName as device hinteros-&lt;profile id&gt; (Jellyfin ends that device's older token, so a profile has one live token), kept in users.json (root only) and made again when Jellyfin answers 401 to it. Never logged.
+  Future<SystemJellyfinClientTokenResult> systemJellyfinClientToken([
+    SystemJellyfinClientTokenParams params =
+        const SystemJellyfinClientTokenParams(),
+  ]) async => SystemJellyfinClientTokenResult.fromJson(
+    await rpc('system.jellyfin.client_token', params.toJson()),
+  );
+
+  /// Relayed to the system service's plex.claim. link Plex Media Server to the owner's Plex account with a code from plex.tv/claim (job plex_claim). Admin PIN. Action org.hinteros.system.services.
+  ///
+  /// code: claim- and 20 letters, digits, _ or - (what plex.tv/claim gives; valid about 4 minutes; never logged). Plex off: unavailable {service: plex, reason: off}; already linked: job_id null. The job (stages preparing, configuring, finishing) waits up to 90 s for Plex on 127.0.0.1:32400, posts the code to Plex's own /myplex/claim (Plex exchanges it with plex.tv), and succeeds once Preferences.xml has the account token (at most 30 s). Failures: job_failed with reason unreachable (Plex does not answer) or refused (Plex refused the code, e.g. it expired). Plex libraries are added in Plex's own app afterwards.
+  Future<SystemPlexClaimResult> systemPlexClaim(
+    SystemPlexClaimParams params,
+  ) async => SystemPlexClaimResult.fromJson(
+    await rpc('system.plex.claim', params.toJson()),
+  );
+
+  /// Relayed to the system service's tailscale.login. sign the box in to Tailscale (job tailscale_login). Admin PIN. Action org.hinteros.system.services.
+  ///
+  /// Tailscale off: unavailable {service: tailscale, reason: off}; signed in already (Running): job_id null. The job runs tailscale up --reset --json --timeout=600s (the defaults: no exit node, no subnet routes, no Tailscale SSH; --force-reauth when an expired key needs a new sign-in). When Tailscale has the sign-in URL, job_progress has stage signing_in and detail.auth_url (https, at most 512 printable ASCII characters; the launcher shows it as a QR code; jobs.get's detail has it too); a newer URL comes in a new job_progress. The job succeeds when tailscaled is Running (the person signed in, and the tailnet approved the device if it must). jobs.cancel stops the wait. Failures: job_failed with reason timeout (nobody signed in within 10 minutes), refused (the CLI failed; log_hint says why) or unreachable (no tailscale CLI).
+  Future<SystemTailscaleLoginResult> systemTailscaleLogin(
+    SystemTailscaleLoginParams params,
+  ) async => SystemTailscaleLoginResult.fromJson(
+    await rpc('system.tailscale.login', params.toJson()),
+  );
+
+  /// Relayed to the system service's tailscale.logout. sign the box out of Tailscale (job tailscale_logout; tailscale logout). Admin PIN. Action org.hinteros.system.services.
+  ///
+  /// Tailscale off: unavailable {service: tailscale, reason: off}; signed out already (NeedsLogin): job_id null. Stages preparing, configuring, finishing.
+  Future<SystemTailscaleLogoutResult> systemTailscaleLogout(
+    SystemTailscaleLogoutParams params,
+  ) async => SystemTailscaleLogoutResult.fromJson(
+    await rpc('system.tailscale.logout', params.toJson()),
+  );
+
+  /// Relayed to the system service's cloudflare.set_token. set the Cloudflare tunnel token and (re)start the tunnel (job cloudflare_set_token). Admin PIN. Action org.hinteros.system.services.
+  ///
+  /// token: the token of a remotely managed tunnel from the Zero Trust dashboard, checked strictly: at most 512 characters, standard padded base64 of a JSON object with exactly a (account tag, 32 hex digits), t (tunnel id, a UUID), s (secret: base64 of 32 to 256 bytes) and optionally e (endpoint, lower-case letters), each once; else invalid_params {field: token, reason: bad_length | not_base64 | not_a_token | bad_account | bad_tunnel_id | bad_secret | bad_endpoint}. Never logged. Cloudflare off: unavailable {service: cloudflare, reason: off}. The service writes it to /var/lib/hinteros/services/cloudflare-tunnel/token (0600 root, atomically); the job restarts hinteros-cloudflared.service and waits up to 30 s for a connection (stages configuring, finishing). Failures: job_failed with reason not_connected (the token is kept: check it, or clear it) or unreachable (systemd refused the restart).
+  Future<SystemCloudflareSetTokenResult> systemCloudflareSetToken(
+    SystemCloudflareSetTokenParams params,
+  ) async => SystemCloudflareSetTokenResult.fromJson(
+    await rpc('system.cloudflare.set_token', params.toJson()),
+  );
+
+  /// Relayed to the system service's cloudflare.clear_token. stop the Cloudflare tunnel and delete its token (job cloudflare_clear_token). Admin PIN. Action org.hinteros.system.services.
+  ///
+  /// No token: job_id null. Cloudflare off: unavailable {service: cloudflare, reason: off}. Stages configuring, finishing.
+  Future<SystemCloudflareClearTokenResult> systemCloudflareClearToken(
+    SystemCloudflareClearTokenParams params,
+  ) async => SystemCloudflareClearTokenResult.fromJson(
+    await rpc('system.cloudflare.clear_token', params.toJson()),
   );
 
   /// Relayed to the system service's jobs.get. One job: running or among the last 10 finished. Read-only.

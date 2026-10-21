@@ -304,6 +304,53 @@ class _UnavailableTimeZone implements TimeZoneRepository {
   Stream<TimeZoneInfo> get changes => const Stream.empty();
 }
 
+class _UnavailableServer implements ServerRepository {
+  @override
+  Future<ServerList> list() => Future.error(_gone);
+  @override
+  Stream<void> get changes => const Stream.empty();
+  @override
+  Future<List<MediaFolder>> folders([String? folderId]) => Future.error(_gone);
+  @override
+  Future<String?> resolveIcon(ServerService service) async => null;
+  @override
+  Future<JobHandle> enable(
+    String id, {
+    String? pin,
+    Map<String, String> acceptedTerms = const {},
+  }) => Future.error(_gone);
+  @override
+  Future<JobHandle> disable(
+    String id, {
+    String? pin,
+    bool deleteData = false,
+  }) => Future.error(_gone);
+  @override
+  Future<JobHandle> addLibrary({
+    required String name,
+    required LibraryKind kind,
+    required String folder,
+    String? pin,
+  }) => Future.error(_gone);
+  @override
+  Future<JobHandle> removeLibrary(String libraryId, {String? pin}) =>
+      Future.error(_gone);
+  @override
+  Future<JellyfinAccounts> revealAccounts({String? pin}) => Future.error(_gone);
+  @override
+  Future<JobHandle> claimPlex(String code, {String? pin}) =>
+      Future.error(_gone);
+  @override
+  Future<JobHandle> tailscaleLogin({String? pin}) => Future.error(_gone);
+  @override
+  Future<JobHandle> tailscaleLogout({String? pin}) => Future.error(_gone);
+  @override
+  Future<JobHandle> setCloudflareToken(String token, {String? pin}) =>
+      Future.error(_gone);
+  @override
+  Future<JobHandle> clearCloudflareToken({String? pin}) => Future.error(_gone);
+}
+
 /// Every system call fails with `unavailable`.
 SystemServices unavailableSystemServices() => SystemServices(
   jobs: _UnavailableJobs(),
@@ -317,4 +364,5 @@ SystemServices unavailableSystemServices() => SystemServices(
   profiles: const UnavailableProfiles(),
   storage: _UnavailableStorage(),
   timeZone: _UnavailableTimeZone(),
+  server: _UnavailableServer(),
 );

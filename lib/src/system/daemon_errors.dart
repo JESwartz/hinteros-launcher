@@ -38,11 +38,18 @@ SystemException systemExceptionFrom(Object e) {
         );
       case api.ApiErrorCode.unavailable:
         final service = data['service'] as String? ?? '';
-        return SystemException(
-          SystemErrorKind.unavailable,
-          "${runtimeServiceName(service)} isn't available on this box.",
-          data: data,
-        );
+        return SystemException(SystemErrorKind.unavailable, switch ((
+          service,
+          data['reason'],
+        )) {
+          // 0.19: a service of the Server section.
+          ('jellyfin' || 'plex' || 'tailscale' || 'cloudflare', 'off') =>
+            '${runtimeServiceName(service)} is off.',
+          ('jellyfin' || 'plex' || 'tailscale' || 'cloudflare', 'not_ready') =>
+            '${runtimeServiceName(service)} is not ready. Try again in a '
+                'moment.',
+          _ => "${runtimeServiceName(service)} isn't available on this box.",
+        }, data: data);
       case api.ApiErrorCode.deviceFailed:
         return SystemException(
           SystemErrorKind.deviceFailed,
@@ -264,5 +271,9 @@ String runtimeServiceName(String service) => switch (service) {
   'catalog' => 'The Store',
   'profiles' => 'Profiles',
   'polkit' => 'The admin password check',
+  'jellyfin' => 'Jellyfin',
+  'plex' => 'Plex',
+  'tailscale' => 'Tailscale',
+  'cloudflare' => 'Cloudflare Tunnel',
   _ => 'This',
 };

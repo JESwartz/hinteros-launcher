@@ -169,6 +169,9 @@ class MockDaemon extends DaemonConnection {
     system.firstBoot = () => !profiles.profiles.any((p) => p.admin);
     system.profileName = (id) =>
         profiles.profiles.where((p) => p.id == id).firstOrNull?.name;
+    system.profileList = () => [
+      for (final p in profiles.profiles) (p.id, p.name),
+    ];
   }
 
   /// Profiles (session API 0.12): the current profile, the switch, the

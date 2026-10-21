@@ -133,7 +133,20 @@ enum JobKind {
   cleanupSet('Saving the automatic clean-up'),
 
   /// 0.17: the tip of another channel verified before a switch.
-  channelCheck('Checking the channel');
+  channelCheck('Checking the channel'),
+
+  // 0.19 (system API 0.11): the Server section.
+
+  /// Box-wide services turned on or off (a rebuild).
+  servicesEnable('Turning on the service'),
+  servicesDisable('Turning off the service'),
+  libraryAdd('Adding the library'),
+  libraryRemove('Removing the library'),
+  plexClaim('Linking Plex'),
+  tailscaleLogin('Signing in to Tailscale'),
+  tailscaleLogout('Signing out of Tailscale'),
+  cloudflareSetToken('Saving the tunnel token'),
+  cloudflareClearToken('Removing the tunnel token');
 
   const JobKind(this.title);
   final String title;
@@ -169,6 +182,29 @@ enum JobKind {
       JobStage.finishing,
     ],
     guestEnd => const [JobStage.preparing, JobStage.finishing],
+    servicesEnable || servicesDisable => const [
+      JobStage.preparing,
+      JobStage.evaluating,
+      JobStage.downloading,
+      JobStage.building,
+      JobStage.activating,
+      JobStage.finishing,
+    ],
+    libraryAdd ||
+    libraryRemove ||
+    plexClaim ||
+    tailscaleLogout ||
+    cloudflareSetToken ||
+    cloudflareClearToken => const [
+      JobStage.preparing,
+      JobStage.configuring,
+      JobStage.finishing,
+    ],
+    tailscaleLogin => const [
+      JobStage.preparing,
+      JobStage.signingIn,
+      JobStage.finishing,
+    ],
     storageMeasure => const [
       JobStage.preparing,
       JobStage.measuring,
@@ -236,13 +272,22 @@ enum JobStage {
 
   /// 0.12: every profile's apps are rebuilt for the new system.
   apps('Updating the apps'),
+
+  /// 0.19: a service is set up (Jellyfin's first run, a library, Plex's
+  /// link, the tunnel).
+  configuring('Setting up'),
+
+  /// 0.19: Tailscale waits for the person to sign in (the job has the
+  /// sign-in address, [JobSnapshot.authUrl]).
+  signingIn('Waiting for sign-in'),
   finishing('Finishing');
 
   const JobStage(this.label);
   final String label;
 
-  /// `jobs.cancel` is allowed until the activation stage starts.
-  bool get cancellable => index < activating.index;
+  /// `jobs.cancel` is allowed until the activation stage starts; the wait
+  /// for a Tailscale sign-in can always be stopped.
+  bool get cancellable => index < activating.index || this == signingIn;
 }
 
 /// What a job is about (session API 0.15 `subject`): which apps, whose,
@@ -272,6 +317,8 @@ class JobSubject {
     this.frequency,
     this.keepSystem,
     this.keepProfiles,
+    this.services = const [],
+    this.library,
   });
 
   /// Apps jobs: a profile id, `guest` or `starter`.
@@ -309,6 +356,12 @@ class JobSubject {
   final CleanupFrequency? frequency;
   final int? keepSystem;
   final int? keepProfiles;
+
+  /// 0.19: the services turned on or off (id, name).
+  final List<({String id, String name})> services;
+
+  /// 0.19: the name of the Jellyfin library a library job adds or removes.
+  final String? library;
 }
 
 /// What nix builds now (session API 0.15 `detail.builds_*`, `building`).
@@ -372,6 +425,7 @@ class JobSnapshot {
     this.finishedAt,
     this.lastActivityAt,
     this.heardAt,
+    this.authUrl,
   });
 
   final String jobId;
@@ -409,6 +463,10 @@ class JobSnapshot {
   /// service sends a heartbeat at least every 2 s while it runs).
   final DateTime? heardAt;
 
+  /// 0.19: a Tailscale sign-in waits at this address (stage
+  /// [JobStage.signingIn]); the page shows it as a QR code.
+  final String? authUrl;
+
   bool get running => !finished;
   bool get failed => finished && !ok && !cancelled;
   bool get canCancel => running && stage.cancellable;
@@ -433,6 +491,8 @@ class JobSnapshot {
     DateTime? finishedAt,
     DateTime? lastActivityAt,
     DateTime? heardAt,
+    String? authUrl,
+    bool clearAuthUrl = false,
   }) => JobSnapshot(
     jobId: jobId,
     kind: kind ?? this.kind,
@@ -452,6 +512,7 @@ class JobSnapshot {
     finishedAt: finishedAt ?? this.finishedAt,
     lastActivityAt: lastActivityAt ?? this.lastActivityAt,
     heardAt: heardAt ?? this.heardAt,
+    authUrl: clearAuthUrl ? null : (authUrl ?? this.authUrl),
   );
 }
 

@@ -14,6 +14,7 @@ import 'daemon_auth.dart';
 import 'daemon_errors.dart';
 import 'daemon_profiles.dart';
 import 'daemon_runtime.dart';
+import 'daemon_server.dart';
 import 'daemon_storage.dart';
 import 'daemon_store.dart';
 import 'daemon_time_zone.dart';
@@ -46,6 +47,15 @@ JobKind _jobKind(api.JobKind k) => switch (k) {
   api.JobKind.cleanupProfiles => JobKind.cleanupProfiles,
   api.JobKind.cleanupSet => JobKind.cleanupSet,
   api.JobKind.channelCheck => JobKind.channelCheck,
+  api.JobKind.servicesEnable => JobKind.servicesEnable,
+  api.JobKind.servicesDisable => JobKind.servicesDisable,
+  api.JobKind.jellyfinLibraryAdd => JobKind.libraryAdd,
+  api.JobKind.jellyfinLibraryRemove => JobKind.libraryRemove,
+  api.JobKind.plexClaim => JobKind.plexClaim,
+  api.JobKind.tailscaleLogin => JobKind.tailscaleLogin,
+  api.JobKind.tailscaleLogout => JobKind.tailscaleLogout,
+  api.JobKind.cloudflareSetToken => JobKind.cloudflareSetToken,
+  api.JobKind.cloudflareClearToken => JobKind.cloudflareClearToken,
   // The v1 -> v2 apps migration (queued by the service itself).
   api.JobKind.migrateApps => JobKind.rebuild,
   api.JobKind.unknown => JobKind.rebuild,
@@ -65,6 +75,8 @@ JobStage? _stage(api.Stage? s) => switch (s) {
   api.Stage.measuring => JobStage.measuring,
   api.Stage.cleaning => JobStage.cleaning,
   api.Stage.collecting => JobStage.collecting,
+  api.Stage.configuring => JobStage.configuring,
+  api.Stage.signingIn => JobStage.signingIn,
   api.Stage.unknown || null => null,
 };
 
@@ -180,6 +192,11 @@ JobSubject _subject(api.JobSubject? s) {
     },
     keepSystem: s.keepSystem,
     keepProfiles: s.keepProfiles,
+    services: [
+      for (final a in s.services ?? const <api.CatalogApp>[])
+        (id: a.id, name: _oneLine(a.name) ?? a.id),
+    ],
+    library: _oneLine(s.library?.name),
   );
 }
 
@@ -197,6 +214,14 @@ BuildProgress? _build(api.ProgressDetail? d) {
     phase: _oneLine(b?.phase),
     percent: b?.percent?.clamp(0, 99),
   );
+}
+
+/// `detail.auth_url` (0.19): where a Tailscale sign-in waits. Only an https
+/// address of printable ASCII is shown (the schema's rule).
+String? _authUrl(api.ProgressDetail? d) {
+  final u = d?.authUrl;
+  if (u == null || u.length > 512) return null;
+  return RegExp(r'^https://[!-~]+$').hasMatch(u) ? u : null;
 }
 
 DateTime? _unixOrNull(int? seconds) => seconds == null ? null : _unix(seconds);
@@ -240,6 +265,10 @@ JobError _jobError(api.ErrorObject e) {
         data['kind'] == 'disk'
             ? 'Not enough free disk space.'
             : 'Not enough free memory.',
+      // 0.19: why a job of the Server section failed.
+      _ when serverFailureText(data['reason']) != null => serverFailureText(
+        data['reason'],
+      )!,
       _ => stage == null ? 'Job failed' : 'Job failed while ${_verb(stage)}',
     },
     stage: stage,
@@ -269,6 +298,8 @@ String _verb(JobStage s) => switch (s) {
   JobStage.measuring => 'scanning',
   JobStage.cleaning => 'removing old versions',
   JobStage.collecting => 'deleting unused files',
+  JobStage.configuring => 'setting up',
+  JobStage.signingIn => 'waiting for the sign-in',
   JobStage.finishing => 'finishing',
 };
 
@@ -405,6 +436,9 @@ class DaemonJobs implements JobsRepository {
             clearDetail: _progressText(ev.detail) == null,
             build: _build(ev.detail),
             clearBuild: _build(ev.detail) == null,
+            // A heartbeat may leave the address out: kept while it waits.
+            authUrl: _authUrl(ev.detail),
+            clearAuthUrl: stage != JobStage.signingIn,
             subject: ev.subject == null ? null : _subject(ev.subject),
             startedAt: _unix(ev.startedAt),
             lastActivityAt: _unixOrNull(ev.lastActivityAt),
@@ -460,6 +494,7 @@ class DaemonJobs implements JobsRepository {
       percent: finished ? null : j.percent,
       detail: finished ? null : _progressText(j.detail),
       build: finished ? null : _build(j.detail),
+      authUrl: finished ? null : _authUrl(j.detail),
       finished: finished,
       ok: j.state == api.JobState.succeeded,
       cancelled: cancelled,
@@ -991,5 +1026,6 @@ SystemServices daemonSystemServices(
     profiles: DaemonProfiles(connection, jobs),
     storage: DaemonStorage(connection, jobs),
     timeZone: DaemonTimeZone(connection),
+    server: DaemonServer(connection, jobs),
   );
 }

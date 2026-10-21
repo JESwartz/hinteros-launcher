@@ -10,10 +10,12 @@ library;
 
 import 'models.dart';
 import 'profiles.dart';
+import 'server.dart';
 import 'storage.dart';
 import 'time_zone.dart';
 
 export 'profiles.dart';
+export 'server.dart';
 export 'storage.dart';
 export 'time_zone.dart';
 
@@ -333,6 +335,7 @@ class SystemServices {
     required this.profiles,
     required this.storage,
     required this.timeZone,
+    required this.server,
   });
 
   final JobsRepository jobs;
@@ -353,4 +356,7 @@ class SystemServices {
 
   /// The box's time zone (0.16): the clock, first boot, Settings.
   final TimeZoneRepository timeZone;
+
+  /// The Server tab (0.19): the box-wide services and their setup.
+  final ServerRepository server;
 }

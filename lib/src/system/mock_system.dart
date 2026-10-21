@@ -12,12 +12,14 @@ import 'dart:io';
 import '../api/mock_store.dart' show mockCatalogDir;
 import 'catalog.dart';
 import 'mock_profiles.dart';
+import 'mock_server.dart';
 import 'mock_storage.dart';
 import 'mock_time_zone.dart';
 import 'models.dart';
 import 'repositories.dart';
 
 export 'mock_profiles.dart';
+export 'mock_server.dart';
 export 'mock_storage.dart';
 export 'mock_time_zone.dart';
 
@@ -37,6 +39,9 @@ class _Job {
   Map<String, dynamic>? result;
   Timer? timer;
   Timer? beat;
+
+  /// A Tailscale sign-in: the address its signing_in stage reports.
+  String? authUrl;
 }
 
 /// What a scripted build builds (`--mock`): name, version. Nix finds the
@@ -122,6 +127,7 @@ class MockJobs implements JobsRepository {
     void Function()? onFinish,
     Map<String, dynamic>? result,
     JobSubject subject = const JobSubject(),
+    String? authUrl,
   }) {
     final r = runningJob;
     if (r != null) {
@@ -145,7 +151,8 @@ class MockJobs implements JobsRepository {
           )
           ..onSuccess = onSuccess
           ..onFinish = onFinish
-          ..result = result;
+          ..result = result
+          ..authUrl = authUrl;
     _jobs[id] = job;
     final h = JobHandle(id, kind);
     started.add(h);
@@ -172,6 +179,7 @@ class MockJobs implements JobsRepository {
     var pct = 0;
     var built = 0;
     var phase = 0;
+    var waited = 0;
     // The heartbeat: every 2 s, also when nothing changed.
     job.beat = Timer.periodic(
       const Duration(seconds: 2),
@@ -196,6 +204,12 @@ class MockJobs implements JobsRepository {
           job.timer = Timer(stepDelay, step);
           return;
         }
+      } else if (s == JobStage.signingIn && waited < 8) {
+        // The person scans the code and signs in, after a while.
+        progress(job.snap.jobId, s, authUrl: job.authUrl);
+        waited++;
+        job.timer = Timer(stepDelay, step);
+        return;
       } else if (s == JobStage.building && built < mockBuildScript.length) {
         // Nix knows of nine at first and finds three more half way.
         final total = built < 5 ? 9 : mockBuildScript.length;
@@ -240,10 +254,13 @@ class MockJobs implements JobsRepository {
     int? percent,
     String? detail,
     BuildProgress? build,
+    String? authUrl,
   }) {
     final j = _jobs[jobId]!;
     final at = clock();
     j.snap = j.snap.copyWith(
+      authUrl: authUrl,
+      clearAuthUrl: authUrl == null,
       stage: stage,
       percent: percent,
       clearPercent: percent == null,
@@ -1607,6 +1624,7 @@ class MockSystemServices extends SystemServices {
     required this.mockProfiles,
     required this.mockStorage,
     required this.mockTimeZone,
+    required this.mockServer,
   }) : super(
          jobs: mockJobs,
          system: mockSystem,
@@ -1619,6 +1637,7 @@ class MockSystemServices extends SystemServices {
          profiles: mockProfiles,
          storage: mockStorage,
          timeZone: mockTimeZone,
+         server: mockServer,
        );
 
   /// [autoRunJobs]: jobs step through their stages by themselves (`--mock`);
@@ -1675,6 +1694,7 @@ class MockSystemServices extends SystemServices {
             profiles.setupRequired || !box.profiles.any((p) => p.admin),
         zone: timeZone,
       ),
+      mockServer: MockServer(jobs, box: box, iconDir: iconDir),
     );
   }
 
@@ -1689,6 +1709,7 @@ class MockSystemServices extends SystemServices {
   final MockProfiles mockProfiles;
   final MockStorage mockStorage;
   final MockTimeZone mockTimeZone;
+  final MockServer mockServer;
 
   void dispose() {
     mockJobs.dispose();
