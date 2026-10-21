@@ -46,7 +46,6 @@ class Harness {
     MockDaemon? mock,
     LauncherSettings settings = const LauncherSettings(),
     MockSystemServices? services,
-    this.showServer = false,
     this.realServices,
     this.now = fixedNow,
   }) : services =
@@ -65,7 +64,6 @@ class Harness {
   final SystemServices? realServices;
   final MemorySettingsStorage storage;
   late final SettingsController settings;
-  final bool showServer;
   late final LauncherData data;
 
   /// The clock of the app (the top bar, job times).
@@ -76,7 +74,6 @@ class Harness {
     settings: settings,
     services: realServices ?? services,
     now: now,
-    showServer: showServer,
   );
 
   /// Pumps the app and lets everything settle.

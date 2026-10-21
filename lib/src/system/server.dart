@@ -168,6 +168,7 @@ class ServerService {
     this.status,
     this.setup = ServiceSetup.none,
     this.terms,
+    this.termsMissing = false,
     this.detail,
   });
 
@@ -188,6 +189,10 @@ class ServerService {
   /// The vendor terms to accept before it is turned on (Plex), with the
   /// text read from the box.
   final VendorTerms? terms;
+
+  /// It has vendor terms, but their text cannot be read on this box: it
+  /// cannot be turned on from here.
+  final bool termsMissing;
   final ServiceDetail? detail;
 
   /// What the Server tab shows.

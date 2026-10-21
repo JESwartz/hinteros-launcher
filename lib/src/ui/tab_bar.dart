@@ -51,10 +51,47 @@ class TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
-    // Five tabs plus the clock: at large text sizes everything gets tighter.
+    // Six tabs plus the clock: at large text sizes everything gets tighter.
     final big = MediaQuery.textScalerOf(context).scale(1) > 1.1;
     final hh = time.hour.toString().padLeft(2, '0');
     final mm = time.minute.toString().padLeft(2, '0');
+    final tabs = [
+      for (var i = 0; i < labels.length; i++) ...[
+        if (i > 0) SizedBox(width: big ? HinterTokens.s1 : HinterTokens.s2),
+        NavFocusable(
+          region: region,
+          rowKey: 'tabs',
+          col: i,
+          onFocused: () => onFocusTab(i),
+          scrollIntoView: false,
+          builder: (context, focused) => _Tab(
+            label: labels[i],
+            selected: i == selected,
+            focused: focused,
+            compact: big,
+          ),
+        ),
+      ],
+    ];
+    final indicator = job == null
+        ? null
+        : ConstrainedBox(
+            // Its text gets shorter, never the tabs.
+            constraints: BoxConstraints(maxWidth: big ? 320 : 440),
+            child: NavFocusable(
+              region: region,
+              rowKey: 'tabs',
+              col: labels.length,
+              onSelect: onJob,
+              scrollIntoView: false,
+              builder: (context, focused) => JobIndicator(
+                job: job!,
+                name: jobName,
+                focused: focused,
+                compact: big,
+              ),
+            ),
+          );
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         HinterTokens.margin,
@@ -67,7 +104,7 @@ class TopBar extends StatelessWidget {
           // The wordmark makes way for the tabs at large text sizes, and for
           // the profile chip.
           if (MediaQuery.textScalerOf(context).scale(1) <= 1.0 &&
-              labels.length <= 5 &&
+              labels.length <= 6 &&
               profile == null &&
               job == null) ...[
             Text(
@@ -76,45 +113,21 @@ class TopBar extends StatelessWidget {
             ),
             const SizedBox(width: HinterTokens.s6),
           ],
-          for (var i = 0; i < labels.length; i++) ...[
-            if (i > 0) SizedBox(width: big ? HinterTokens.s1 : HinterTokens.s2),
-            NavFocusable(
-              region: region,
-              rowKey: 'tabs',
-              col: i,
-              onFocused: () => onFocusTab(i),
-              scrollIntoView: false,
-              builder: (context, focused) => _Tab(
-                label: labels[i],
-                selected: i == selected,
-                focused: focused,
-                compact: big,
+          // The tabs take the room there is and shrink together when it is
+          // not enough (six tabs at large text sizes, or with the job).
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(mainAxisSize: MainAxisSize.min, children: tabs),
               ),
             ),
-          ],
-          if (job == null)
-            const Spacer()
-          else ...[
+          ),
+          if (indicator != null) ...[
             SizedBox(width: big ? HinterTokens.s2 : HinterTokens.s3),
-            // Takes the room left; its text gets shorter, never the tabs.
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: NavFocusable(
-                  region: region,
-                  rowKey: 'tabs',
-                  col: labels.length,
-                  onSelect: onJob,
-                  scrollIntoView: false,
-                  builder: (context, focused) => JobIndicator(
-                    job: job!,
-                    name: jobName,
-                    focused: focused,
-                    compact: big,
-                  ),
-                ),
-              ),
-            ),
+            indicator,
             SizedBox(width: big ? HinterTokens.s2 : HinterTokens.s3),
           ],
           if (profile != null) ...[

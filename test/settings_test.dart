@@ -85,7 +85,7 @@ void main() {
     final h = Harness();
     await h.pump(t);
     // Settings > Accessibility > Text size > 160%
-    await press(t, [kUp, kRight, kRight, kRight, kRight, kDown]);
+    await press(t, [kUp, kRight, kRight, kRight, kRight, kRight, kDown]);
     await press(t, [...List.filled(5, kDown), kRight, kDown, kDown, kDown]);
     await press(t, [kEnter]);
     expect(h.settings.value.textScale, 1.6);

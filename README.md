@@ -1,7 +1,7 @@
 # HinterOS Launcher
 
-The Flutter UI that runs as the home app in the gamescope session: Home, Games, Apps, Settings
-(Server in phase 2). It talks to the daemon over a Unix socket and contains no system logic.
+The Flutter UI that runs as the home app in the gamescope session: Home, Games, Apps, Store,
+Server, Settings. It talks to the daemon over a Unix socket and contains no system logic.
 
 Part of [HinterOS](https://justsomeshed.com/JSwartz/HinterOS/hinteros). Licensed under GPL-3.0-only, see [LICENSE](LICENSE).
 
@@ -86,6 +86,56 @@ Escape and Backspace work in every mode and are the same actions as `input_nav` 
 flutter run -d linux --dart-entrypoint-args=--mock
 ./result/bin/hinteros-launcher --mock --windowed
 ```
+
+### Session API 0.19: the Server tab
+
+Design: `hinteros-docs/design/server.md` ("Launcher: Server tab") and `design/system-api.md` (system
+API 0.11, relayed as `system.*`). The box-wide services of the catalog: Jellyfin server, Plex Media
+Server, Tailscale, Cloudflare Tunnel. `ServerRepository` (`lib/src/system/server.dart`;
+`daemon_server.dart` over the relay, `mock_server.dart` for `--mock`), the screens in
+`lib/src/ui/server/` (`ServerModel` holds the last `services.list`; the shell owns it).
+
+- **The tab** (every profile, the guest too): one row per service with its icon, name and state:
+  Off, Starting (the unit starts, or Jellyfin's first run is not done), Running, Needs setup (Plex
+  not linked, Tailscale not signed in or waiting for the tailnet's approval, Cloudflare without a
+  token), Error (the unit failed or is not running, Tailscale does not answer, the tunnel does not
+  connect). The list is read again when a job of the section ends, after a reconnect and when a
+  page closes. A on a row opens the service's page. **Icons:** `services.list` has none and the
+  Store's icon resolution covers apps only, so the daemon build shows the letter tile (the mock
+  uses the generic fixtures).
+- **Every change** asks for the admin profile's PIN on the admin-PIN pad (`runAdminJob`, the same
+  as Settings: a wrong PIN asks again, Back changes nothing) and runs on the job page (Hide puts it
+  in the top bar). New job kinds: turning a service on or off, adding or removing a library,
+  linking Plex, Tailscale sign-in and sign-out, saving or removing the tunnel token; new stages
+  "Setting up" (`configuring`) and "Waiting for sign-in" (`signing_in`, which can be cancelled).
+  A failed job says why from `job_failed.data.reason` ("Nobody signed in in time.", "The tunnel
+  did not connect. Check the token.", ...); `unavailable {service, reason: off | not_ready}` is
+  "Jellyfin is off." / "... is not ready. Try again in a moment.".
+- **Off:** Turn on. Plex shows its vendor terms first (the Store's terms page, "Accept and turn
+  on", read to the end), then the PIN, with `accepted_terms`. Terms whose text is not on the box:
+  Turn on stays off.
+- **Jellyfin:** the address for other devices, the libraries (kind and folder; A on one removes it
+  after a confirmation, the media stay), Add library (a full page: the folder, picked one level at
+  a time from `/srv/media` with `media.folders` (A opens a folder that has folders, chooses one
+  that has none; "Use this folder" inside one; Back goes one level up), the name with the
+  on-screen keyboard (the folder's until one is typed), the kind: Movies, Shows, Music, Mixed;
+  the page stays open when the service refuses, e.g. a taken name), Show accounts (PIN, then
+  `jellyfin.users.reveal`: the admin and each profile's user and password; nothing is kept), Turn
+  off with "Delete server data" (a second confirmation; the media stay).
+- **Plex:** linked or not, the name and address; not linked: a QR code of `https://plex.tv/claim`
+  and the code field with `claim-` filled in (a code that is not `claim-` and 20 characters is
+  refused before the PIN), Link (`plex.claim`). Turn off.
+- **Tailscale:** signed in or not, name, address, DNS name, tailnet, key expiry; Sign in
+  (`tailscale.login`: while the job waits at `signing_in` the job page shows `detail.auth_url` as a
+  large QR code with the address under it; a newer address replaces it), Sign out, Turn off.
+- **Cloudflare:** "Route this address in Zero Trust: <local IP>", connected or not, the token
+  field (on-screen keyboard), Save token, Remove token (confirmed). Turn off.
+- **QR codes:** `QrCodeView` (`lib/src/ui/qr_code.dart`) over the pure-Dart `qr` package: black on
+  white with the quiet zone in every theme.
+- **Mock:** `MockServer` (Jellyfin on with two libraries, Plex on and not linked, Tailscale and
+  Cloudflare off; a `/srv/media` tree; the service's checks); `--mock` jobs run by themselves and a
+  Tailscale sign-in shows its address for a while. The mock daemon's relay answers the 13 methods
+  (`lib/src/api/mock_server_relay.dart`) for the contract test and `DaemonServer`.
 
 ### Session API 0.18: app permissions
 
@@ -486,6 +536,7 @@ params/result schemas that are a `$ref` (the relayed `system.*` results; `displa
 - `test/system/daemon_store_test.dart`: `DaemonStore` over `MockDaemon`: the listing (sorted, states, terms text from the daemon's file path, unfree without readable terms left out, `unavailable {catalog}`, `system_unavailable`, icons from `apps.list`, a slow older answer not overwriting a newer one), permissions and `apps.set_permission` with its errors (0.18), following jobs and `store_changed`, `accepted_terms`, `app_conflict`, `insufficient_resources`, `not_found`, `not_available`, `job_busy`, a stale revision retried once (and only once). `test/system/daemon_store_ui_test.dart`: the same through the screens: install with terms and progress, permissions (one switched off at install, on again on the app page), a stale revision, `terms_required` with a newer version, conflicts, no space, remove with delete data (two confirmations), a running app closed first, retired and going-away apps, the update's new and removed apps, the Games tab's "Install Steam", and the session restart offer (also on a desktop session).
 - `test/system/daemon_system_test.dart` runs the real repositories (`DaemonSystem`, `DaemonUpdates`, `DaemonJobs`) over `MockDaemon`'s relay: error mapping, jobs from events, cancel, downgrade acknowledgement (base), the channel check and switch (0.17), the update check and its cache, `settings.set` with a revision. Since 0.15 also builds (count, name, phase), the subject with its release name, heartbeats, and the running job found with `jobs.list` by a new launcher. `test/system/daemon_ui_test.dart` is the same through the Settings screens (SSH without a polkit agent, settings unavailable, About with the DEV badge, a security update through to "Restart session"). `test/osk/osk_auto_show_test.dart`: the keyboard opens and closes with the launcher's text fields.
 - `test/installer/` covers the installer: `flow_test.dart` walks the screens with a fake backend (disk filtering, the one erase confirmation on the summary (A held 5 s on "Erase and install"; a shorter hold or Back erases nothing), password mismatch, SSH off by default, offline disabling the online-only apps, the plan JSON for several choices, progress, exit status 2 and 1 with their codes, a disk replaced under the same path (`disk-changed`, back to the disk choice; "Look again" drops it), typing with the pad on the in-app keyboard), `plan_test.dart`, `progress_test.dart`, `parsers_test.dart` (lsblk, nmcli; the catalog index is in `test/system/catalog_test.dart`, against `test/fixtures/catalog`, the real index with placeholder terms text), `process_backend_test.dart` (the real backend class against a stand-in script: the plan arrives on stdin, never in the arguments), `gamepad_test.dart` (the stick deadzone and hysteresis, key repeat, hotplug, disconnects and permission errors, all over synthetic evdev streams from `test/support/fake_pads.dart`; no real device is ever opened), `two_stage_test.dart` (the phase fields, the two progress sections, failed apps on Done), `keyboard_fallback_test.dart` (the evdev keyboard mapping incl. Shift symbols and key repeat, hotplug, and the focus gate: active only while unfocused, never doubled), `input_test.dart` (the installer driven by the keyboard alone and by the stick alone, from Welcome to the restart, and the text-field exceptions), `test/nav/key_map_test.dart`, `first_boot_test.dart`.
+- `test/system/server_ui_test.dart`: the Server tab through the screens on the mocks (the states, Turn on with the PIN, a wrong PIN and Back, Plex's terms accepted and declined, the claim code, the Tailscale sign-in QR code on the job page and a sign-in that timed out, removing and adding a Jellyfin library with the folder picker, a taken name, the accounts, Turn off with and without the server data, the Cloudflare token refused and saved, a service not set up yet, the list unavailable). `test/system/daemon_server_test.dart`: `DaemonServer` over the mock daemon's relay (the list and its detail, terms not readable, the PIN and the terms before `services.enable`, `delete_data`, the sign-in address kept by heartbeats, `job_failed.data.reason`, the refusals, libraries, accounts, folders, the changes stream).
 - `test/system/job_progress_test.dart`: the job page while building (count, name, time, the bar moving with no news), the heartbeat gap ("still running", never "failed") and no output for minutes, the title and line under it for every job kind, Hide and the top bar indicator (it follows the job, A opens the page, Back leaves it again), the notices when a hidden job ends (done, failed with the indicator kept, the session restart offered by the notice and by the page opened again), the restart countdown (on the page and in the notice: to 0, Later, Restart at once, waiting while an app is in front and starting again from 30), and a launcher restart during a job.
 - `test/osk/` drives the on-screen keyboard with the mock backend: layout, D-pad navigation, shift,
   pages, and the exact backend calls for typing `P@ss-w0rd!` with D-pad presses only.
@@ -708,8 +759,9 @@ gamescope input method), Space included; the keyboard has no text field of its o
 
 ### Layout: top tab bar
 
-Sections are Home, Games, Apps, Store and Settings in a **top tab bar** (wordmark left, clock right). The
-Server tab (phase 2) only appears with `--server` or `HINTEROS_SERVER=1`. A top bar was chosen over
+Sections are Home, Games, Apps, Store, Server and Settings in a **top tab bar** (wordmark left, clock
+right; the wordmark makes way for the profile chip). When the six tabs do not fit (large text, a job
+indicator) they shrink together, never the chip or the clock. A top bar was chosen over
 a side rail for a TV at couch distance: content (card rows, a 6-column game grid, list-detail
 Settings) gets the full 1920 px width, the whole bar sits in one glance line with the first row
 instead of a column at the screen edge (where overscan and the far-left of a wide TV hurt), and
@@ -755,6 +807,7 @@ UI. Focus on a tab selects its section (like console UIs); Down enters the secti
   settings the Profiles group (focus on the list entry); a setting inside a group (for example
   `time`) opens its group with focus on that section.
 - **Store:** see "Store". A top-level tab after Apps (see the placement note there).
+- **Server:** every profile, after the Store; see "Session API 0.19: the Server tab".
 
 The layout is designed in 1920x1080 logical pixels. A 4K screen under native Wayland runs it at
 devicePixelRatio 2, so the same layout; any other size (720p TV, desktop window) is scaled uniformly
@@ -847,6 +900,7 @@ the client handles by matching on the request id; `system.ssh.set` has a 340 s t
 | `DisplayAudioRepository` | `display.modes` / `set_mode` / `keep` / `revert`, `audio.*`, `audio_changed` | Display, Audio |
 | `StoreRepository` | `store.list`, `store_changed`, `system.apps.install` / `remove` (+ the job events), `apps.set_permission` | Store, Games |
 | `TimeZoneRepository` | `system.time_zone.get` / `list` / `set`, `time_zone_changed` | Time zone, first boot, the top-bar clock |
+| `ServerRepository` | `system.services.*`, `system.media.folders`, `system.jellyfin.*`, `system.plex.claim`, `system.tailscale.*`, `system.cloudflare.*` (+ the job events) | Server |
 
 `MockJobs` behaves like the service: one mutating job at a time (`job_busy`), stages, progress,
 cancel until activation. Tests drive it by hand (`progress`, `finish`); `--mock` lets jobs run
@@ -972,6 +1026,10 @@ the lock screen, Settings -> Profiles, `profiles_delete_pin_hold` (Delete half h
 `profiles_startup_loading` for the first frames).
 `test/golden/time_zone_test.dart` covers the time zone picker (`time_zone_*`: Settings > Time zone, the
 open list, high contrast at 1.6x, the first-boot step).
+`test/golden/server_test.dart` covers the Server tab (`server_*`: the list in every state, also in high
+contrast at 1.6x, a service that is off, Jellyfin, Plex to link (also high contrast at 1.6x), Tailscale
+signed in, the Tailscale sign-in QR code on the job page, Cloudflare without a token, Add library, the
+folder picker, the Jellyfin accounts).
 
 ```
 nix run .#update-goldens   # renders them in the Nix sandbox (same environment as the check), copies them in

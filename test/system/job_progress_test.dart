@@ -64,11 +64,11 @@ Future<void> openIndicatorFromSettings(WidgetTester t) async {
   for (var i = 0; i < 20 && !(focusLabel() ?? '').startsWith('tabs'); i++) {
     await press(t, [kUp]);
   }
-  // Settings is the fifth tab; the indicator comes next.
-  for (var i = 0; i < 6 && focusLabel() != 'tabs/tabs:5'; i++) {
+  // Settings is the sixth tab; the indicator comes next.
+  for (var i = 0; i < 7 && focusLabel() != 'tabs/tabs:6'; i++) {
     await press(t, [kRight]);
   }
-  expect(focusLabel(), 'tabs/tabs:5');
+  expect(focusLabel(), 'tabs/tabs:6');
   await press(t, [kEnter]);
 }
 

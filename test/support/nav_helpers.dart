@@ -27,7 +27,7 @@ Future<void> openTab(WidgetTester t, int tabIndex) =>
 /// Settings with the list entry (group) of [id] focused: a group id, or a
 /// setting id (its group).
 Future<void> openSettingsEntry(WidgetTester t, String id) async {
-  await openTab(t, 4);
+  await openTab(t, 5);
   await press(t, List.filled(settingsGroupIndexOf(id), kDown));
 }
 
@@ -58,6 +58,9 @@ Future<void> downToSection(WidgetTester t, String id) async {
 
 /// The Store tab (index 3).
 Future<void> openStore(WidgetTester t) => openTab(t, 3);
+
+/// The Server tab (index 4).
+Future<void> openServer(WidgetTester t) => openTab(t, 4);
 
 /// Types [pin] on an open PIN pad (digit keys) and submits it with Enter.
 Future<void> enterPin(WidgetTester t, String pin) async {

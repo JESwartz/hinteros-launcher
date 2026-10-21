@@ -197,6 +197,7 @@ class DaemonServer implements ServerRepository {
               file: t.file,
               text: text,
             ),
+      termsMissing: t != null && text == null,
       detail: s.enabled ? _detail(setup, s.detail) : null,
     );
   }

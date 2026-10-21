@@ -44,7 +44,7 @@ void main() {
       final h = harness(status: mockBehind(mockOrdinaryUpdate()));
       await h.pump(t);
       // Up twice: the update banner, then the tabs.
-      await press(t, [kUp, kUp, kRight, kRight, kRight, kRight, kDown]);
+      await press(t, [kUp, kUp, kRight, kRight, kRight, kRight, kRight, kDown]);
       await press(t, [
         ...List.filled(settingsGroupIndexOf('updates'), kDown),
         kRight, // into the pane

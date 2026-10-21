@@ -56,7 +56,7 @@ Harness harness({
 /// Up to the tabs, left onto the chip (the tab row wraps), A.
 Future<void> openChip(WidgetTester t) async {
   await keys(t, [up, left]);
-  expect(focusLabel(), 'tabs/tabs:5');
+  expect(focusLabel(), 'tabs/tabs:6');
   await keys(t, [enter]);
 }
 
@@ -101,7 +101,7 @@ void main() {
     expect(find.textContaining('Switching'), findsNothing);
     expect(h.mock.running.map((a) => a.id), contains('youtube'));
     // Back on the chip. Again, with the right PIN: then the switch.
-    expect(focusLabel(), 'tabs/tabs:5');
+    expect(focusLabel(), 'tabs/tabs:6');
     await keys(t, [enter, right, enter]);
     await typePin(t, '1357', settle: false);
     expect(h.services.mockProfiles.log, contains('switch:p3'));
@@ -327,7 +327,7 @@ void main() {
     );
     expect(h.mock.running.map((a) => a.id), contains('youtube'));
     // B: the same (the focus is back on the chip).
-    expect(focusLabel(), 'tabs/tabs:5');
+    expect(focusLabel(), 'tabs/tabs:6');
     await keys(t, [enter, right]);
     await keys(t, [escape]);
     expect(find.text('Who is watching?'), findsNothing);

@@ -17,7 +17,6 @@ import '../updates/reminder.dart';
 import '../theme/hinter_theme.dart';
 import 'apps_screen.dart';
 import 'auth_prompt.dart';
-import 'common.dart';
 import 'dialogs.dart' show Choice, showChoice, showFailureOn;
 import 'profiles/first_launch_terms.dart';
 import 'profiles/profile_loading.dart';
@@ -36,6 +35,8 @@ import 'update_banner.dart';
 import 'widgets.dart' show StatusLine;
 import 'pages.dart';
 import 'restart_countdown.dart';
+import 'server/server_model.dart';
+import 'server/server_screen.dart';
 import 'screen_saver.dart';
 import 'session_ending.dart';
 import 'tab_bar.dart';
@@ -45,7 +46,6 @@ enum Section {
   games('Games'),
   apps('Apps'),
   store('Store'),
-  // Phase 2: only shown with the server flag.
   server('Server'),
   settings('Settings');
 
@@ -78,7 +78,6 @@ class LauncherShell extends StatefulWidget {
     required this.services,
     this.now,
     this.showFps = false,
-    this.showServer = false,
     this.startup,
   });
 
@@ -95,9 +94,6 @@ class LauncherShell extends StatefulWidget {
   /// for tests and goldens (no timer).
   final DateTime Function()? now;
   final bool showFps;
-
-  /// Phase 2: shows the Server tab (placeholder).
-  final bool showServer;
 
   @override
   State<LauncherShell> createState() => _LauncherShellState();
@@ -135,6 +131,9 @@ class _LauncherShellState extends State<LauncherShell> {
   /// The launcher is in front: a restart offer counts down only then.
   late final _front = ValueNotifier<bool>(widget.data.inFront);
   late final _saver = ScreenSaverController(widget.settings);
+
+  /// The Server tab's list (read when the tab first shows).
+  late final _serverModel = ServerModel(widget.services.server);
   bool _bannerVisible = false;
   bool _updateBannerVisible = false;
   late final UpdateReminders _reminders = UpdateReminders(
@@ -164,10 +163,7 @@ class _LauncherShellState extends State<LauncherShell> {
     ending: _ending,
   );
 
-  late final List<Section> _sections = [
-    for (final s in Section.values)
-      if (s != Section.server || widget.showServer) s,
-  ];
+  late final List<Section> _sections = Section.values;
   Section _section = Section.home;
   late DateTime _time = (widget.now ?? DateTime.now)();
   Timer? _clock;
@@ -656,6 +652,7 @@ class _LauncherShellState extends State<LauncherShell> {
     widget.data.removeListener(_checkLoading);
     _front.dispose();
     _saver.dispose();
+    _serverModel.dispose();
     _loadingCap?.cancel();
     _graceTimer?.cancel();
     _clock?.cancel();
@@ -904,10 +901,11 @@ class _LauncherShellState extends State<LauncherShell> {
       onShowScreenSaver: _saver.show,
       now: widget.now,
     ),
-    // Phase 2.
-    Section.server => const Notice(
-      title: 'Server',
-      detail: 'Not available yet.',
+    Section.server => ServerScreen(
+      model: _serverModel,
+      services: widget.services,
+      region: _server,
+      onPopulated: _contentReady,
     ),
   };
 

@@ -52,7 +52,6 @@ void main() {
     for (final s in ['Home', 'Games', 'Apps', 'Settings']) {
       expect(find.text(s), findsWidgets);
     }
-    expect(find.text('Server'), findsNothing);
     // The box is on UTC: the clock shows the fixed instant in UTC (20:30 when
     // the tests run in UTC, as in the Nix sandbox).
     final utc = fixedNow().toUtc();
@@ -61,9 +60,9 @@ void main() {
     expect(focusLabel(), 'home/apps:0');
   });
 
-  testWidgets('server tab only behind the flag', (t) async {
+  testWidgets('every profile has the Server tab', (t) async {
     setView(t);
-    await Harness(showServer: true).pump(t);
+    await Harness().pump(t);
     expect(find.text('Server'), findsOneWidget);
   });
 

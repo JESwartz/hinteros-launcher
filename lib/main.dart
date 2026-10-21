@@ -29,7 +29,6 @@ bool _flag(List<String> args, String flag, String env) =>
 /// that was started, F3/F4 make Steam ask for attention / stop, F5 finishes
 /// or restarts a game update, F6 makes the next missing app icon arrive
 /// (`apps_changed`).
-/// `--server` (or `HINTEROS_SERVER=1`) shows the phase 2 Server tab.
 Future<void> main(List<String> args) async {
   // One binary, two apps: `--osk` (the hinteros-osk wrapper) is the keyboard.
   if (args.contains('--osk')) return runOsk(args);
@@ -91,7 +90,6 @@ Future<void> main(List<String> args) async {
           )
         : daemonSystemServices(connection),
     showFps: showFps,
-    showServer: _flag(args, '--server', 'HINTEROS_SERVER'),
     // "Loading Sam…" until Home has its data, continuing the picker's and
     // the console's loading screen (the name from the service's public view).
     startup: mock

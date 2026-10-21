@@ -382,6 +382,7 @@ void main() {
         findsOneWidget,
       );
       await press(t, [
+        kRight, // Server
         kRight, // Settings
         kDown,
         ...List.filled(settingsGroupIndexOf('updates'), kDown),

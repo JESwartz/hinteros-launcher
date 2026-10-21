@@ -13,6 +13,7 @@ import 'focus_frame.dart';
 import 'jobs.dart';
 import 'modal_host.dart';
 import 'nav_focusable.dart';
+import 'qr_code.dart';
 import 'restart_countdown.dart';
 import 'session_ending.dart';
 import 'widgets.dart';
@@ -411,10 +412,39 @@ class _JobProgressScreenState extends State<JobProgressScreen> with JobTicker {
     );
   }
 
+  /// A Tailscale sign-in that waits (0.19): the address as a large QR code
+  /// and as text, for a phone.
+  Widget _signIn(BuildContext context, String url) {
+    final t = HinterTheme.of(context);
+    final side = (MediaQuery.sizeOf(context).height * 0.42).clamp(240.0, 460.0);
+    return Row(
+      key: const ValueKey('job-sign-in'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        QrCodeView(data: url, size: side),
+        const SizedBox(width: HinterTokens.s4),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Scan the code to sign in.', style: t.title),
+              const SizedBox(height: HinterTokens.s2),
+              Text(url, key: const ValueKey('job-auth-url'), style: t.body),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   /// What happens now: the stage with its count or percentage (large),
   /// what builds (small), the bar, the time, and a word when the job is
-  /// quiet.
+  /// quiet. A sign-in that waits shows its address instead.
   Widget _now(BuildContext context, JobSnapshot s) {
+    final url = s.authUrl;
+    if (url != null && s.stage == JobStage.signingIn) {
+      return _signIn(context, url);
+    }
     final t = HinterTheme.of(context);
     final building = s.stage == JobStage.building;
     final count = building ? buildCount(s.build) : null;
@@ -640,9 +670,27 @@ Future<bool> showTerms(
     await ModalScope.of(context).show<bool>(
       (context, modal) => TermsScreen(
         modal: modal,
-        app: app,
+        name: app.name,
+        terms: app.terms!,
         acceptLabel: acceptLabel,
         note: note,
+      ),
+    ) ??
+    false;
+
+/// [showTerms] for a box-wide service of the Server tab (Plex).
+Future<bool> showServiceTerms(
+  BuildContext context, {
+  required String name,
+  required VendorTerms terms,
+  String acceptLabel = 'Accept and turn on',
+}) async =>
+    await ModalScope.of(context).show<bool>(
+      (context, modal) => TermsScreen(
+        modal: modal,
+        name: name,
+        terms: terms,
+        acceptLabel: acceptLabel,
       ),
     ) ??
     false;
@@ -651,13 +699,17 @@ class TermsScreen extends StatefulWidget {
   const TermsScreen({
     super.key,
     required this.modal,
-    required this.app,
+    required this.name,
+    required this.terms,
     this.acceptLabel = 'Accept and install',
     this.note,
   });
 
   final ModalHandle<bool> modal;
-  final StoreApp app;
+
+  /// Whose terms (an app, a service).
+  final String name;
+  final VendorTerms terms;
   final String acceptLabel;
 
   /// A line above the buttons ("Each profile accepts these for itself").
@@ -673,7 +725,7 @@ class _TermsScreenState extends State<TermsScreen> {
   double _fraction = 0;
   static const _line = 96.0;
 
-  VendorTerms get _terms => widget.app.terms!;
+  VendorTerms get _terms => widget.terms;
 
   @override
   void initState() {
@@ -756,7 +808,7 @@ class _TermsScreenState extends State<TermsScreen> {
     final region = widget.modal.region;
     region.setRows(const [NavRow('text', 1), NavRow('buttons', 2)]);
     return FullPage(
-      title: 'Terms for ${widget.app.name}',
+      title: 'Terms for ${widget.name}',
       subtitle:
           '${_terms.title}, version ${_terms.version}. Source: '
           '${_terms.url}',

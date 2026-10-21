@@ -59,9 +59,9 @@ void main() {
     await keys(t, [up]);
     expect(focusLabel(), 'tabs/tabs:0');
     await keys(t, [left]);
-    expect(focusLabel(), 'tabs/tabs:5', reason: 'wraps to the profile chip');
+    expect(focusLabel(), 'tabs/tabs:6', reason: 'wraps to the profile chip');
     await keys(t, [left]);
-    expect(focusLabel(), 'tabs/tabs:4', reason: 'then Settings');
+    expect(focusLabel(), 'tabs/tabs:5', reason: 'then Settings');
     await keys(t, [right, right]);
     expect(focusLabel(), 'tabs/tabs:0');
     await keys(t, [down]);
@@ -113,7 +113,7 @@ void main() {
     expect(focusLabel(), 'tabs/tabs:2');
     await keys(t, [LogicalKeyboardKey.backspace]);
     expect(focusLabel(), 'home/apps:0');
-    await keys(t, [up, right, right, right, right, down]);
+    await keys(t, [up, right, right, right, right, right, down]);
     await keys(t, [...List.filled(5, down), right]); // Accessibility
     expect(focusLabel(), 'settings-detail/o0:0');
     await keys(t, [LogicalKeyboardKey.backspace]); // detail -> list
@@ -134,7 +134,7 @@ void main() {
     t,
   ) async {
     final h = await start(t);
-    await keys(t, [up, right, right, right, right, down]);
+    await keys(t, [up, right, right, right, right, right, down]);
     await keys(t, List.filled(5, down)); // Accessibility
     expect(focusLabel(), 'settings-list/accessibility:0');
     await keys(t, [right]);
@@ -153,7 +153,7 @@ void main() {
     t,
   ) async {
     await start(t);
-    await keys(t, [up, right, right, right, right, down]);
+    await keys(t, [up, right, right, right, right, right, down]);
     await keys(t, List.filled(3, down)); // Profiles, Updates, Storage, Network
     expect(focusLabel(), 'settings-list/network:0');
     await keys(t, [right]);
@@ -165,7 +165,7 @@ void main() {
   testWidgets('settings: Up and Down walk through the stacked sections of a '
       'group; Left and Back return to the list', (t) async {
     await start(t);
-    await keys(t, [up, right, right, right, right, down]);
+    await keys(t, [up, right, right, right, right, right, down]);
     await keys(t, List.filled(3, down));
     await keys(t, [right]);
     expect(focusLabel(), 'settings-detail/wifi:0');
@@ -205,7 +205,7 @@ void main() {
     final h = Harness();
     h.services.mockNetwork.wifiAvailable = false;
     await start(t, h: h);
-    await keys(t, [up, right, right, right, right, down]);
+    await keys(t, [up, right, right, right, right, right, down]);
     await keys(t, List.filled(3, down));
     expect(focusLabel(), 'settings-list/network:0');
     await keys(t, [right]);
@@ -218,7 +218,7 @@ void main() {
     t,
   ) async {
     await start(t);
-    await keys(t, [up, right, right, right, right, down]);
+    await keys(t, [up, right, right, right, right, right, down]);
     await keys(t, List.filled(5, down)); // Accessibility
     await keys(t, [right, down, down, down, down]); // Text size, then
     expect(focusLabel(), 'settings-detail-1/o0:0'); // High contrast Off

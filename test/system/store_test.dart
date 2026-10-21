@@ -54,10 +54,11 @@ void main() {
     expect(focusLabel(), 'store-cats/c1:0');
   });
 
-  testWidgets('Server tab stays hidden', (t) async {
+  testWidgets('the Server tab comes after the Store', (t) async {
     setView(t);
     await harness().pump(t);
-    expect(find.text('Server'), findsNothing);
+    await openServer(t);
+    expect(focusLabel(), 'server/s0:0');
   });
 
   testWidgets('the update note is gone when no catalog change is pending', (

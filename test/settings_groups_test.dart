@@ -64,7 +64,7 @@ void main() {
   testWidgets('the list shows the seven groups in order', (t) async {
     setView(t);
     await Harness().pump(t);
-    await openTab(t, 4);
+    await openTab(t, 5);
     expect(focusLabel(), 'settings-list/profiles:0');
     for (final g in _groups.skip(1)) {
       await press(t, [kDown]);
@@ -79,7 +79,7 @@ void main() {
   testWidgets('each group stacks its settings under their headings', (t) async {
     setView(t);
     await Harness().pump(t);
-    await openTab(t, 4);
+    await openTab(t, 5);
     for (final (i, g) in _groups.indexed) {
       if (i > 0) await press(t, [kDown]);
       final ids = [for (final e in g.$3) e.$1];

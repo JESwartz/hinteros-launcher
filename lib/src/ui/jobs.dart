@@ -79,6 +79,14 @@ String jobTitle(JobSnapshot s, {String? name}) {
     },
     JobKind.cleanupSet when x.enabled == false =>
       'Turning off automatic clean-up',
+    JobKind.servicesEnable when x.services.isNotEmpty =>
+      'Turning on ${_appNames(x.services)}',
+    JobKind.servicesDisable when x.services.isNotEmpty =>
+      'Turning off ${_appNames(x.services)}',
+    JobKind.libraryAdd when x.library != null =>
+      'Adding the library ${x.library}',
+    JobKind.libraryRemove when x.library != null =>
+      'Removing the library ${x.library}',
     _ => name != null && s.kind == JobKind.rebuild ? name : s.kind.title,
   };
 }
@@ -103,6 +111,8 @@ String? jobSubtitle(JobSnapshot s) {
     if (s.kind == JobKind.rollback && x.fromGeneration != null)
       'Now on generation ${x.fromGeneration}',
     if (s.kind == JobKind.remove && x.deleteData) 'The app data is deleted too',
+    if (s.kind == JobKind.servicesDisable && x.deleteData)
+      'The server data is deleted too',
     if (s.kind == JobKind.starterSet && x.apps.isNotEmpty)
       x.apps.length == 1 ? '1 app' : '${x.apps.length} apps',
     if ((s.kind == JobKind.cleanupSystem ||
