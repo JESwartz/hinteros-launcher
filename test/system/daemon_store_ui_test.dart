@@ -97,7 +97,7 @@ void main() {
       expect(find.text('Not installed.'), findsOneWidget);
       await press(t, [kEnter]); // Install
       expect(find.text('Install Steam for this profile?'), findsOneWidget);
-      await press(t, [kRight, kEnter]); // Continue
+      await press(t, [kDown, kRight, kEnter]); // Accept
       expect(find.text('Terms for Steam'), findsOneWidget);
       expect(buttonEnabled(t, 'Accept and install'), isFalse);
       await readTerms(t);
@@ -153,7 +153,7 @@ void main() {
       await h.pump(t);
       await endStartupCheck(t, h);
       await openSteam(t);
-      await press(t, [kEnter, kRight, kEnter]); // Install, Continue
+      await press(t, [kEnter, kDown, kRight, kEnter]); // Install, Accept
       await readTerms(t);
       // While the user read, the box's catalog got a newer terms version.
       h.mock.system.catalog = [
@@ -252,7 +252,7 @@ void main() {
       await endStartupCheck(t, h);
       await openSteam(t);
       expect(find.text('Installed.'), findsOneWidget);
-      await press(t, [kRight, kEnter]); // Remove
+      await press(t, [kRight, kRight, kRight, kEnter]); // Remove
       expect(find.text('Remove Steam from this profile?'), findsOneWidget);
       await press(t, [kEnter, kDown, kRight, kEnter]); // tick, Remove
       expect(find.text('Delete all data of Steam?'), findsOneWidget);
@@ -275,9 +275,37 @@ void main() {
       await h.pump(t);
       await endStartupCheck(t, h);
       await openSteam(t);
-      await press(t, [kRight, kEnter, kDown, kRight, kEnter]);
+      await press(t, [kRight, kRight, kRight, kEnter, kDown, kRight, kEnter]);
       expect(find.textContaining('Delete all data'), findsNothing);
       expect(appsLog(h), ['apps.remove:steam:data=false']);
+    });
+
+    testWidgets('data left behind: Clear user data, then the button goes', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await endStartupCheck(t, h);
+      await openSteam(t);
+      await press(t, [kRight, kRight, kRight, kEnter, kDown, kRight, kEnter]);
+      h.mock.system.finishJob(h.mock.system.runningJobId!);
+      await t.pumpAndSettle();
+      await press(t, [kEnter]); // Done
+      expect(find.text('Not installed.'), findsOneWidget);
+      expect(buttonEnabled(t, 'Clear user data'), isTrue);
+      await press(t, [kRight, kEnter]); // Clear user data
+      expect(find.text('Clear the data of Steam?'), findsOneWidget);
+      expect(
+        find.textContaining('Games this profile installed through Steam'),
+        findsOneWidget,
+      );
+      await press(t, [kRight, kEnter]); // Clear data
+      expect(appsLog(h).last, 'apps.clear_data:steam');
+      h.mock.system.finishJob(h.mock.system.runningJobId!);
+      await t.pumpAndSettle();
+      await press(t, [kEnter]); // Done
+      expect(find.text('Clear user data'), findsNothing);
     });
 
     testWidgets('a running app is closed first', (t) async {
@@ -290,7 +318,7 @@ void main() {
       h.mock.pressHome();
       await t.pumpAndSettle();
       await openApp(t, 2, more: 1); // Video: Jellyfin
-      await press(t, [kRight, kEnter]); // Remove
+      await press(t, [kRight, kRight, kRight, kEnter]); // Remove
       expect(find.textContaining('Jellyfin closes first'), findsOneWidget);
       await press(t, [kDown, kRight, kEnter]);
       expect(h.mock.running, isEmpty);
@@ -305,7 +333,7 @@ void main() {
       // Utilities: Emulator cores, Firefox? (Firefox is not installed here.)
       await openApp(t, 3);
       expect(find.text('Emulator cores'), findsWidgets);
-      await press(t, [kRight, kEnter, kDown, kRight, kEnter]);
+      await press(t, [kRight, kRight, kRight, kEnter, kDown, kRight, kEnter]);
       expect(find.text("Emulator cores can't be removed"), findsOneWidget);
       expect(
         find.textContaining('RetroArch needs Emulator cores'),
@@ -414,7 +442,7 @@ void main() {
       expect(find.text('Install Steam'), findsOneWidget);
       await press(t, [kEnter]);
       expect(find.text('Install Steam for this profile?'), findsOneWidget);
-      await press(t, [kRight, kEnter]); // Continue
+      await press(t, [kDown, kRight, kEnter]); // Accept
       await readTerms(t);
       await press(t, [kDown, kRight, kEnter]);
       expect(appsLog(h), ['apps.install:steam']);
@@ -542,7 +570,12 @@ void main() {
         await endStartupCheck(t, h);
         expect(h.data.appList!.any((a) => a.id == 'steam'), isFalse);
         await openTab(t, 1);
-        await press(t, [kEnter, kRight, kEnter]); // Install Steam, Continue
+        await press(t, [
+          kEnter,
+          kDown,
+          kRight,
+          kEnter,
+        ]); // Install Steam, Accept
         await readTerms(t);
         await press(t, [kDown, kRight, kEnter]);
         h.mock.system.finishJob(h.mock.system.runningJobId!);
@@ -563,7 +596,15 @@ void main() {
       await h.pump(t);
       await endStartupCheck(t, h);
       await openSteam(t);
-      await press(t, [kRight, kEnter, kDown, kRight, kEnter]); // Remove
+      await press(t, [
+        kRight,
+        kRight,
+        kRight,
+        kEnter,
+        kDown,
+        kRight,
+        kEnter,
+      ]); // Remove
       h.mock.system.finishJob(h.mock.system.runningJobId!);
       await t.pumpAndSettle();
       expect(h.data.appList!.any((a) => a.id == 'steam'), isFalse);

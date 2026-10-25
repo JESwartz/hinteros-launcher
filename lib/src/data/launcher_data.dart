@@ -502,6 +502,18 @@ class LauncherData extends ChangeNotifier {
     unawaited(refreshRunning());
   }
 
+  /// Force Stop on the app's Store page: kills app [id] now (Steam: the
+  /// whole client). Not running is fine.
+  Future<void> forceStopApp(String id) async {
+    if (!isRunning(id)) return;
+    try {
+      await apps.forceStop(id);
+    } on ApiException catch (e) {
+      if (e.code != ApiErrorCode.appNotFound) rethrow;
+    }
+    unawaited(refreshRunning());
+  }
+
   /// "Open Steam" on the attention banner.
   Future<void> focusSteam() async {
     try {

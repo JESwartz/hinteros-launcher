@@ -295,6 +295,10 @@ abstract class StoreRepository {
   /// when another installed app needs it.
   Future<JobHandle> remove(String id, {bool deleteData = false});
 
+  /// `apps.clear_data {id}` (0.19): delete app [id]'s files in this
+  /// profile's home, installed or not. Stop the app first.
+  Future<JobHandle> clearData(String id);
+
   // Per profile (session API 0.12): every profile has its own apps.
 
   /// Starter-set apps of this profile whose vendor terms it has not

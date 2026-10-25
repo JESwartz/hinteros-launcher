@@ -56,6 +56,7 @@ JobKind _jobKind(api.JobKind k) => switch (k) {
   api.JobKind.tailscaleLogout => JobKind.tailscaleLogout,
   api.JobKind.cloudflareSetToken => JobKind.cloudflareSetToken,
   api.JobKind.cloudflareClearToken => JobKind.cloudflareClearToken,
+  api.JobKind.appsClearData => JobKind.clearData,
   // The v1 -> v2 apps migration (queued by the service itself).
   api.JobKind.migrateApps => JobKind.rebuild,
   api.JobKind.unknown => JobKind.rebuild,

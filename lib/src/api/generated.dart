@@ -50,6 +50,7 @@ const apiMethodNames = <String>[
   'system.apps.generations',
   'system.apps.rollback',
   'system.apps.accept_terms',
+  'system.apps.clear_data',
   'system.profiles.list',
   'system.profiles.create',
   'system.profiles.setup_admin',
@@ -1222,6 +1223,7 @@ enum JobKind {
   tailscaleLogout('tailscale_logout'),
   cloudflareSetToken('cloudflare_set_token'),
   cloudflareClearToken('cloudflare_clear_token'),
+  appsClearData('apps_clear_data'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -1687,6 +1689,7 @@ class StoreApp {
     required this.statusReason,
     required this.state,
     required this.permissions,
+    required this.hasData,
     required this.fullAccess,
   });
 
@@ -1735,6 +1738,9 @@ class StoreApp {
   /// 0.18: what the app may use in its sandbox, in catalog order. Not installed: the stored choice for its install (default granted). Empty for Steam, apps without a sandbox and tombstones.
   final List<AppPermission> permissions;
 
+  /// 0.19: one of the app's dataPaths exists in this profile's home, installed or not (a remove can leave data behind): system.apps.clear_data has something to delete.
+  final bool hasData;
+
   /// 0.18: runs without the app sandbox (Steam, apps with sandbox = false, or every app while the sandbox is off on this box): it can use everything the profile can. The install sheet warns. False for tombstones.
   final bool fullAccess;
 
@@ -1776,6 +1782,7 @@ class StoreApp {
     permissions: (json['permissions'] as List)
         .map((x) => AppPermission.fromJson((x as Map).cast<String, dynamic>()))
         .toList(),
+    hasData: json['has_data'] as bool,
     fullAccess: json['full_access'] as bool,
   );
 
@@ -1805,6 +1812,7 @@ class StoreApp {
     'status_reason': statusReason,
     'state': state.toJson(),
     'permissions': permissions.map((x) => x.toJson()).toList(),
+    'has_data': hasData,
     'full_access': fullAccess,
   };
 
@@ -5303,15 +5311,21 @@ class AppsFocusResult {
 }
 
 class AppsCloseParams {
-  const AppsCloseParams({required this.id});
+  const AppsCloseParams({required this.id, this.force});
 
   /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'. 'steam' is Steam itself (Big Picture and its other windows).
   final String id;
 
-  factory AppsCloseParams.fromJson(Map<String, dynamic> json) =>
-      AppsCloseParams(id: json['id'] as String);
+  /// 0.19: Force Stop: SIGKILL now, no request to quit first (also while a close is under way). Steam ('steam_client'): every process of the Steam client and all below it, not just Big Picture.
+  final bool? force;
 
-  Map<String, dynamic> toJson() => {'id': id};
+  factory AppsCloseParams.fromJson(Map<String, dynamic> json) =>
+      AppsCloseParams(
+        id: json['id'] as String,
+        force: json['force'] == null ? null : json['force'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {'id': id, 'force': ?force};
 
   @override
   bool operator ==(Object other) =>
@@ -6854,6 +6868,54 @@ class SystemAppsAcceptTermsResult {
 
   @override
   String toString() => 'SystemAppsAcceptTermsResult(${jsonEncode(toJson())})';
+}
+
+class SystemAppsClearDataParams {
+  const SystemAppsClearDataParams({required this.id});
+
+  /// Catalog app id (state.json apps).
+  final String id;
+
+  factory SystemAppsClearDataParams.fromJson(Map<String, dynamic> json) =>
+      SystemAppsClearDataParams(id: json['id'] as String);
+
+  Map<String, dynamic> toJson() => {'id': id};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAppsClearDataParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAppsClearDataParams(${jsonEncode(toJson())})';
+}
+
+/// A started job, or null when there was nothing to do.
+class SystemAppsClearDataResult {
+  const SystemAppsClearDataResult({required this.jobId});
+
+  final String? jobId;
+
+  factory SystemAppsClearDataResult.fromJson(Map<String, dynamic> json) =>
+      SystemAppsClearDataResult(
+        jobId: json['job_id'] == null ? null : json['job_id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is SystemAppsClearDataResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'SystemAppsClearDataResult(${jsonEncode(toJson())})';
 }
 
 class SystemProfilesListParams {
@@ -14462,6 +14524,15 @@ mixin SessionApiMethods {
     SystemAppsAcceptTermsParams params,
   ) async => SystemAppsAcceptTermsResult.fromJson(
     await rpc('system.apps.accept_terms', params.toJson()),
+  );
+
+  /// Relayed to the system service's apps.clear_data. Delete a Store app's data in the caller's profile (job apps_clear_data, 0.19). Action org.hinteros.system.apps.
+  ///
+  /// id must be a catalog app (installed or not: data a remove left behind). The job deletes the app's dataPaths in the caller's own home, as system.apps.remove {delete_data} does; other profiles' data is never touched. Stop the app first (apps.close {force}). store_changed follows when the job ends (has_data).
+  Future<SystemAppsClearDataResult> systemAppsClearData(
+    SystemAppsClearDataParams params,
+  ) async => SystemAppsClearDataResult.fromJson(
+    await rpc('system.apps.clear_data', params.toJson()),
   );
 
   /// Relayed to the system service's profiles.list. The profiles (0.4). Read-only; starts a usage scan when the data is older than an hour.

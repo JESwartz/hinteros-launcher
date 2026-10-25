@@ -146,7 +146,10 @@ enum JobKind {
   tailscaleLogin('Signing in to Tailscale'),
   tailscaleLogout('Signing out of Tailscale'),
   cloudflareSetToken('Saving the tunnel token'),
-  cloudflareClearToken('Removing the tunnel token');
+  cloudflareClearToken('Removing the tunnel token'),
+
+  /// 0.19: an app's data deleted in this profile (Clear user data).
+  clearData('Clearing data');
 
   const JobKind(this.title);
   final String title;
@@ -154,6 +157,7 @@ enum JobKind {
   /// Stages a job of this kind can report, in order (system-api.md "Job
   /// model": not every job has every stage).
   List<JobStage> get stages => switch (this) {
+    clearData => const [JobStage.finishing],
     update || channel || base => const [
       JobStage.preparing,
       JobStage.fetching,
@@ -1183,6 +1187,7 @@ class StoreApp {
     this.missingServices = const [],
     this.permissions = const [],
     this.fullAccess = false,
+    this.hasData = false,
   });
 
   final String id;
@@ -1240,6 +1245,10 @@ class StoreApp {
   /// What its sandbox may reach (0.18), in catalog order, with this
   /// profile's choices. Empty: it declares none.
   final List<AppPermission> permissions;
+
+  /// One of its data folders is in this profile's home (0.19), installed or
+  /// not: Clear user data has something to delete.
+  final bool hasData;
 
   /// Runs without the app sandbox (0.18: Steam, `sandbox = false`, or the
   /// sandbox is off on this box): it can use everything the profile can. The

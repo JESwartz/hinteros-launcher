@@ -60,6 +60,8 @@ String jobTitle(JobSnapshot s, {String? name}) {
     JobKind.install when x.fromOwner == 'starter' => 'Adding the starter apps',
     JobKind.install => apps.isEmpty ? 'Installing apps' : 'Installing $apps',
     JobKind.remove => apps.isEmpty ? 'Removing apps' : 'Removing $apps',
+    JobKind.clearData =>
+      apps.isEmpty ? s.kind.title : 'Clearing the data of $apps',
     JobKind.appsRollback =>
       x.generation == null
           ? s.kind.title

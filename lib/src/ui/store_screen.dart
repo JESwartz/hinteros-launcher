@@ -653,14 +653,27 @@ class _AppDetailPageState extends State<AppDetailPage> {
       );
     }
     final cat = widget.catalog;
+    final data = widget.data;
+    final running = data?.isRunning(app.id) ?? false;
+    final clear = btn(
+      'Clear user data',
+      () => clearDataFlow(context, widget.services, app, data: data),
+      enabled: app.hasData,
+    );
     p.buttons('actions', [
       if (state.busy)
         btn('Back', widget.modal.close, primary: true)
       else if (installed) ...[
         btn('Back', widget.modal.close),
         btn(
+          'Force stop',
+          data == null ? null : () => forceStopFlow(context, data, app),
+          enabled: running,
+        ),
+        clear,
+        btn(
           'Remove',
-          () => removeFlow(context, widget.services, app, data: widget.data),
+          () => removeFlow(context, widget.services, app, data: data),
           danger: true,
         ),
       ] else ...[
@@ -670,46 +683,33 @@ class _AppDetailPageState extends State<AppDetailPage> {
           primary: true,
           enabled: needs.isEmpty,
         ),
+        // Data a remove left behind.
+        if (app.hasData) clear,
         btn('Back', widget.modal.close),
       ],
     ], gap: HinterTokens.s3);
-
-    // About: the upstream README, else the catalog's description.
-    final readme = app.readme;
-    final about = app.description.isEmpty ? app.summary : app.description;
-    if (readme != null || about.isNotEmpty) {
-      p.add(Text('About', style: t.label), gap: HinterTokens.s4);
-    }
-    if (readme != null) {
-      p.row(
-        'readme',
-        1,
-        NavFocusableBox(
-          key: _readmeKey,
-          region: widget.modal.region,
-          rowKey: 'readme',
-          child: Padding(
-            padding: const EdgeInsets.all(HinterTokens.s3),
-            child: MarkdownView(readme.text),
-          ),
-        ),
-      );
-      p.add(Text('From ${readme.url}', style: t.caption));
-    } else if (about.isNotEmpty) {
-      p.add(Text(about, style: t.body));
-    }
 
     // Permissions: switches once installed, a list before.
     final perms = app.permissions;
     if (app.fullAccess || perms.isNotEmpty) {
       p.add(Text('Permissions', style: t.label), gap: HinterTokens.s4);
     }
-    if (app.fullAccess) {
+    if (app.fullAccess && installed && !state.busy) {
+      p.item(
+        'perm-full',
+        onSelect: null,
+        builder: (f) => SettingRow(
+          title: fullAccessLabel,
+          focused: f,
+          trailing: const ToggleMark(on: true, locked: true, note: 'Required'),
+        ),
+      );
+    } else if (app.fullAccess) {
       p.add(
-        StatusLine(
-          '${app.name} has full access. It can use all data and devices of '
-          'this profile.',
-          error: true,
+        SettingRow(
+          title: fullAccessLabel,
+          focused: false,
+          trailing: Text('Required', style: t.bodyDim),
         ),
       );
     } else if (perms.isNotEmpty && installed && !state.busy) {
@@ -745,6 +745,31 @@ class _AppDetailPageState extends State<AppDetailPage> {
           gap: HinterTokens.s1 + 4,
         );
       }
+    }
+
+    // About: the upstream README, else the catalog's description.
+    final readme = app.readme;
+    final about = app.description.isEmpty ? app.summary : app.description;
+    if (readme != null || about.isNotEmpty) {
+      p.add(Text('About', style: t.label), gap: HinterTokens.s4);
+    }
+    if (readme != null) {
+      p.row(
+        'readme',
+        1,
+        NavFocusableBox(
+          key: _readmeKey,
+          region: widget.modal.region,
+          rowKey: 'readme',
+          child: Padding(
+            padding: const EdgeInsets.all(HinterTokens.s3),
+            child: MarkdownView(readme.text),
+          ),
+        ),
+      );
+      p.add(Text('From ${readme.url}', style: t.caption));
+    } else if (about.isNotEmpty) {
+      p.add(Text(about, style: t.body));
     }
 
     // Terms: the vendor's agreement, to read here at any time.

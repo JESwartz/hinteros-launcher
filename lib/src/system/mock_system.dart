@@ -1380,6 +1380,7 @@ class MockStore implements StoreRepository {
             p.copyWith(granted: !(denied[a.id]?.contains(p.name) ?? false)),
         ],
         fullAccess: a.fullAccess,
+        hasData: _hasData(a.id),
       ),
   ];
 
@@ -1576,7 +1577,10 @@ class MockStore implements StoreRepository {
       subject: JobSubject(
         apps: [for (final w in want) (id: w.id, name: w.name)],
       ),
-      onSuccess: () => _installed.addAll(want.map((w) => w.id)),
+      onSuccess: () {
+        _installed.addAll(want.map((w) => w.id));
+        dataCleared.removeAll(want.map((w) => w.id));
+      },
       onFinish: () {
         for (final w in want) {
           _busy.remove(w.id);
@@ -1600,11 +1604,42 @@ class MockStore implements StoreRepository {
         apps: [(id: id, name: _app(id).name)],
         deleteData: deleteData,
       ),
-      onSuccess: () => _installed.remove(id),
+      onSuccess: () {
+        _installed.remove(id);
+        dataCleared.remove(id);
+        deleteData ? dataLeft.remove(id) : dataLeft.add(id);
+      },
       onFinish: () {
         _busy.remove(id);
         _changes.add(null);
       },
+    );
+  }
+
+  /// `has_data`: installed apps have data unless it was cleared; apps
+  /// removed without their data leave it behind.
+  final Set<String> dataCleared = {};
+  final Set<String> dataLeft = {};
+  bool _hasData(String id) =>
+      (_installed.contains(id) && !dataCleared.contains(id)) ||
+      dataLeft.contains(id);
+
+  @override
+  Future<JobHandle> clearData(String id) async {
+    _app(id);
+    _maybeFail();
+    log.add('clear:$id');
+    return jobs.start(
+      JobKind.clearData,
+      subject: JobSubject(
+        apps: [(id: id, name: _app(id).name)],
+        deleteData: true,
+      ),
+      onSuccess: () {
+        dataLeft.remove(id);
+        if (_installed.contains(id)) dataCleared.add(id);
+      },
+      onFinish: () => _changes.add(null),
     );
   }
 }

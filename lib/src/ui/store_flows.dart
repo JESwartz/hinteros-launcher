@@ -67,8 +67,9 @@ Future<bool> installFlow(
         StatusLine(
           'Also installs: ${[for (final d in deps) '${d.name} (${_sizeLabel(d.sizeMiB)})'].join(', ')}.',
         ),
-      // Steam and other apps without the sandbox can reach everything.
-      for (final a in [app, ...deps])
+      // Apps that come along and have no sandbox (the app's own full access
+      // is a permission row below).
+      for (final a in deps)
         if (a.fullAccess)
           StatusLine(
             '${a.name} has full access. It can use all data and devices of '
@@ -79,12 +80,19 @@ Future<bool> installFlow(
         StatusLine('${a.terms!.title} applies. Read and accept it next.'),
     ],
     // Phone style: every permission on, the optional ones can be turned off.
-    switchesTitle: perms.isEmpty ? null : 'Permissions',
+    switchesTitle: perms.isEmpty && !app.fullAccess ? null : 'Permissions',
     switches: [
       for (final p in perms)
         ConfirmSwitch(p.label, locked: p.required, lockedLabel: 'Required'),
+      // After the permissions, so their switches keep their indexes.
+      if (app.fullAccess)
+        const ConfirmSwitch(
+          fullAccessLabel,
+          locked: true,
+          lockedLabel: 'Required',
+        ),
     ],
-    confirmLabel: perms.isNotEmpty
+    confirmLabel: perms.isNotEmpty || app.fullAccess
         ? 'Accept'
         : withTerms.isNotEmpty
         ? 'Continue'
@@ -123,6 +131,83 @@ Future<bool> installFlow(
     accepted,
   );
   if (job == null || !context.mounted) return false;
+  final r = await showJobProgress(context, services, job, name: app.name);
+  return r?.ok ?? false;
+}
+
+/// The permission row of an app without the sandbox (Steam): it can use
+/// all data and devices of the profile.
+const fullAccessLabel = 'Full profile access';
+
+/// Force stop on the app page: asks, then kills the app now (Steam: the
+/// whole client and its games).
+Future<void> forceStopFlow(
+  BuildContext context,
+  LauncherData data,
+  StoreApp app,
+) async {
+  final steam = app.id == 'steam';
+  final ok = await showConfirm(
+    context,
+    title: 'Force stop ${app.name}?',
+    body: steam
+        ? 'Steam and its games stop at once. Unsaved progress is lost.'
+        : 'It stops at once. Unsaved changes are lost.',
+    confirmLabel: 'Force stop',
+    danger: true,
+  );
+  if (ok == null || !context.mounted) return;
+  try {
+    await data.forceStopApp(app.id);
+  } catch (e) {
+    if (context.mounted) {
+      await showMessage(
+        context,
+        title: "That didn't work",
+        body: describeError(e),
+      );
+    }
+  }
+}
+
+/// Clear user data on the app page: asks, stops the app if it runs, then
+/// deletes its files in this profile (the job with its progress page). For
+/// installed apps and for data a remove left behind.
+Future<bool> clearDataFlow(
+  BuildContext context,
+  SystemServices services,
+  StoreApp app, {
+  LauncherData? data,
+}) async {
+  final warning = app.removeDataWarning;
+  final running = data?.isRunning(app.id) ?? false;
+  final ok = await showConfirm(
+    context,
+    title: 'Clear the data of ${app.name}?',
+    body:
+        'Its logins, settings and saved files in this profile are deleted. '
+        "You can't undo this."
+        '${running ? ' ${app.name} stops first.' : ''}',
+    extra: [if (warning != null) StatusLine(warning, error: true)],
+    confirmLabel: 'Clear data',
+    danger: true,
+  );
+  if (ok == null || !context.mounted) return false;
+  final JobHandle job;
+  try {
+    if (running) await data!.forceStopApp(app.id);
+    job = await services.store.clearData(app.id);
+  } catch (e) {
+    if (context.mounted) {
+      await showMessage(
+        context,
+        title: "${app.name}'s data can't be cleared",
+        body: describeError(e),
+      );
+    }
+    return false;
+  }
+  if (!context.mounted) return false;
   final r = await showJobProgress(context, services, job, name: app.name);
   return r?.ok ?? false;
 }

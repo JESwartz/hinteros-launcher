@@ -97,9 +97,10 @@ void main() {
       await press(t, [kEnter]); // Install
       expect(find.text('Install Steam for this profile?'), findsOneWidget);
       expect(find.textContaining('Read and accept it next'), findsOneWidget);
-      // On the sheet and on the app page behind it.
-      expect(find.textContaining('Steam has full access'), findsNWidgets(2));
-      await press(t, [kRight, kEnter]); // Continue
+      // A permission row, on the sheet and on the app page behind it.
+      expect(find.text('Full profile access'), findsNWidgets(2));
+      expect(find.textContaining('has full access'), findsNothing);
+      await press(t, [kDown, kRight, kEnter]); // Accept
       expect(find.text('Terms for Steam'), findsOneWidget);
     }
 
@@ -220,6 +221,62 @@ void main() {
       expect(scrolled(t), 0);
     });
 
+    testWidgets('installed: Force stop while it runs, then Clear user data', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      h.services.mockStore.setInstalled({'mpv'});
+      h.mock.apps.add(
+        const App(
+          id: 'mpv',
+          name: 'Video player',
+          kind: AppKind.native,
+          permissions: [],
+        ),
+      );
+      await h.pump(t);
+      await openApp(t, 2, 1, 2); // Video player, not running
+      expect(buttonEnabled(t, 'Force stop'), isFalse);
+      expect(buttonEnabled(t, 'Clear user data'), isTrue);
+      expect(find.text('Remove'), findsOneWidget);
+      await press(t, [kEscape]);
+      await press(t, [kEscape]);
+
+      await h.launch(t, 'mpv');
+      h.mock.pressHome();
+      await t.pumpAndSettle();
+      await openApp(t, 2, 1, 2);
+      expect(buttonEnabled(t, 'Force stop'), isTrue);
+      await press(t, [kRight, kEnter]); // Force stop
+      expect(find.text('Force stop Video player?'), findsOneWidget);
+      await press(t, [kRight, kEnter]); // confirm
+      expect(h.mock.forceStopped, ['mpv']);
+
+      await press(t, [kRight, kEnter]); // Clear user data
+      expect(find.text('Clear the data of Video player?'), findsOneWidget);
+      await press(t, [kRight, kEnter]); // Clear data
+      expect(h.services.mockStore.log, ['clear:mpv']);
+      expect(h.services.mockJobs.started.single.kind, JobKind.clearData);
+    });
+
+    testWidgets('not installed: Clear user data only with data left behind', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      h.services.mockStore.dataLeft.add('mpv');
+      await h.pump(t);
+      await openApp(t, 2, 1, 2); // Video player
+      expect(find.text('Not installed.'), findsOneWidget);
+      expect(buttonEnabled(t, 'Clear user data'), isTrue);
+      expect(find.text('Force stop'), findsNothing);
+      await press(t, [kEscape]);
+      await press(t, [kEscape]);
+      await openApp(t, 1); // Moonlight: nothing left
+      expect(find.text('Clear user data'), findsNothing);
+    });
+
     testWidgets('no README: the description; terms to read with Back', (
       t,
     ) async {
@@ -230,7 +287,8 @@ void main() {
       await openApp(t, 1, 1); // Steam
       expect(find.text('About'), findsOneWidget);
       expect(find.textContaining("Valve's store"), findsOneWidget);
-      expect(find.textContaining('Steam has full access'), findsOneWidget);
+      expect(find.text('Full profile access'), findsOneWidget);
+      expect(find.text('Required'), findsOneWidget);
       expect(
         find.text('Steam Subscriber Agreement, version 2026-09-10.'),
         findsOneWidget,
@@ -266,7 +324,7 @@ void main() {
         1,
       ); // Steam (Moonlight comes first) (installed): detail
       expect(find.text('Installed.'), findsOneWidget);
-      await press(t, [kRight, kEnter]); // Remove
+      await press(t, [kRight, kRight, kRight, kEnter]); // Remove
       expect(find.text('Remove Steam from this profile?'), findsOneWidget);
       expect(
         find.textContaining('Games this profile installed through Steam'),
@@ -295,7 +353,7 @@ void main() {
       final h = harness();
       await h.pump(t);
       await openApp(t, 2, 0, 1); // Video, second row, first column: Plex
-      await press(t, [kRight, kEnter]);
+      await press(t, [kRight, kRight, kRight, kEnter]);
       expect(find.text('Remove Plex from this profile?'), findsOneWidget);
       await press(t, [kDown, kRight, kEnter]);
       expect(find.textContaining('Delete all data'), findsNothing);
@@ -317,7 +375,7 @@ void main() {
       // The install flow starts right here, not in the Store tab.
       expect(find.text('Install Steam for this profile?'), findsOneWidget);
       expect(find.textContaining('Read and accept it next'), findsOneWidget);
-      await press(t, [kRight, kEnter]); // Continue
+      await press(t, [kDown, kRight, kEnter]); // Accept
       expect(find.text('Terms for Steam'), findsOneWidget);
       for (var i = 0; i < 60 && !buttonEnabled(t, 'Accept and install'); i++) {
         await press(t, [kPageDown]);

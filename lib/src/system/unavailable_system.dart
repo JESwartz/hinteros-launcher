@@ -175,6 +175,8 @@ class _UnavailableStore implements StoreRepository {
   Future<JobHandle> remove(String id, {bool deleteData = false}) =>
       Future.error(_gone);
   @override
+  Future<JobHandle> clearData(String id) => Future.error(_gone);
+  @override
   Set<String> get needsTerms => const {};
   @override
   Future<void> acceptTerms(String id, String version) => Future.error(_gone);

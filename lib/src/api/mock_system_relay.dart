@@ -177,6 +177,14 @@ class MockSystemRelay {
   /// Catalog ids installed from the Store (`settings.get`, state.json apps).
   final List<String> installedApps = ['steam'];
 
+  /// `has_data` (0.19): installed apps have data unless it was cleared;
+  /// apps removed without their data leave it behind.
+  final Set<String> dataCleared = {};
+  final Set<String> dataLeft = {};
+  bool _hasData(String id) =>
+      (installedApps.contains(id) && !dataCleared.contains(id)) ||
+      dataLeft.contains(id);
+
   /// The catalog of the running generation (`store.list`). Entries are wire
   /// apps; the `state` is worked out on every call.
   List<StoreApp> catalog;
@@ -526,6 +534,24 @@ class MockSystemRelay {
       case 'system.apps.remove':
         _closed(p, const ['ids', 'revision', 'delete_data']);
         return _appsRemove(SystemAppsRemoveParams.fromJson(p));
+      case 'system.apps.clear_data':
+        _closed(p, const ['id']);
+        final id = SystemAppsClearDataParams.fromJson(p).id;
+        _mutating('apps.clear_data:$id');
+        if (!catalog.any((a) => a.id == id)) {
+          throw ApiException(
+            ApiErrorCode.notFound,
+            '$id is not in the catalog',
+          );
+        }
+        return _started(
+          JobKind.appsClearData,
+          subject: _appsSubject([id], deleteData: true),
+          onSuccess: () {
+            dataLeft.remove(id);
+            if (installedApps.contains(id)) dataCleared.add(id);
+          },
+        );
       case 'system.generations.list':
         _closed(p, const []);
         return SystemGenerationsListResult(generations: List.of(generations))
@@ -942,6 +968,7 @@ class MockSystemRelay {
       ...a.toJson(),
       'state': s.value,
       'permissions': [for (final p in permissionsOf(a.id)) p.toJson()],
+      'has_data': _hasData(a.id),
     });
     final apps = <StoreApp>[];
     for (final a in catalog) {
@@ -1098,6 +1125,10 @@ class MockSystemRelay {
       subject: _appsSubject(p.ids, deleteData: p.deleteData),
       onSuccess: () {
         installedApps.removeWhere(p.ids.contains);
+        for (final id in p.ids) {
+          dataCleared.remove(id);
+          p.deleteData ? dataLeft.remove(id) : dataLeft.add(id);
+        }
         onAppsRemoved?.call(List.of(p.ids));
         _bumpRevision();
       },

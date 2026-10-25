@@ -120,6 +120,9 @@ List<Game> mockGames({String? artDir}) {
 /// events only for subscribed names. [rpc] speaks the wire shapes, so the
 /// contract test can replay schema examples straight through it.
 class MockDaemon extends DaemonConnection {
+  /// Ids `apps.close {force: true}` was called for (Force Stop).
+  final List<String> forceStopped = [];
+
   MockDaemon({
     List<App> apps = mockApps,
     List<Game>? games,
@@ -386,6 +389,7 @@ class MockDaemon extends DaemonConnection {
             'id is required',
           );
         }
+        if (params['force'] == true) forceStopped.add(params['id'] as String);
         _close(params['id'] as String);
         return const AppsCloseResult().toJson();
       case 'apps.displays.get':

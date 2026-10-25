@@ -611,9 +611,10 @@ void main() {
             kRight,
             kRight,
             kEnter,
-            kEnter,
+            kEnter, // Install
+            kDown, // past the permission row
             kRight,
-            kEnter,
+            kEnter, // Accept
           ]);
         },
       );
@@ -632,9 +633,10 @@ void main() {
             kRight,
             kRight,
             kEnter,
-            kEnter,
+            kEnter, // Install
+            kDown, // past the permission row
             kRight,
-            kEnter,
+            kEnter, // Accept
           ]);
           for (var i = 0; i < 80; i++) {
             await t.sendKeyEvent(kPageDown);
@@ -656,9 +658,10 @@ void main() {
             kRight,
             kRight,
             kEnter,
-            kEnter,
+            kEnter, // Install
+            kDown, // past the permission row
             kRight,
-            kEnter,
+            kEnter, // Accept
           ]);
         },
       );
@@ -675,7 +678,9 @@ void main() {
             kRight,
             kRight,
             kEnter,
-            kRight,
+            kRight, // Force stop
+            kRight, // Clear user data
+            kRight, // Remove
             kEnter,
             kEnter,
           ]);
@@ -690,7 +695,14 @@ void main() {
         run: (t) async {
           await openStore(t);
           await press(t, [
-            kDown, kRight, kRight, kEnter, kRight, kEnter, // Steam, Remove
+            kDown,
+            kRight,
+            kRight,
+            kEnter,
+            kRight,
+            kRight,
+            kRight,
+            kEnter, // Steam, Remove
             kEnter, kDown, kRight, kEnter, // tick, Remove
           ]);
         },

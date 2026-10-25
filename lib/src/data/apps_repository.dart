@@ -33,6 +33,11 @@ class AppsRepository {
     await connection.appsClose(AppsCloseParams(id: id));
   }
 
+  /// Force Stop (0.19): kills app [id] now. For Steam, the whole client.
+  Future<void> forceStop(String id) async {
+    await connection.appsClose(AppsCloseParams(id: id, force: true));
+  }
+
   /// Steam's windows that are waiting to be seen (empty: none).
   Future<List<SteamWindow>> steamAttention() async =>
       (await connection.steamAttention()).windows;

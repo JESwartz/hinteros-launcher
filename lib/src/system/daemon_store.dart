@@ -197,6 +197,7 @@ class DaemonStore implements StoreRepository {
           AppPermission(name: p.name, required: p.required, granted: p.granted),
       ],
       fullAccess: a.fullAccess,
+      hasData: a.hasData,
       // Services are not in the store yet (M10): store.list carries no
       // missing_services, so nothing is greyed out for one.
     );
@@ -336,6 +337,14 @@ class DaemonStore implements StoreRepository {
       )).jobId,
     ),
     nothingToDo: 'That app is already removed.',
+  );
+
+  @override
+  Future<JobHandle> clearData(String id) => _jobs.start(
+    JobKind.clearData,
+    () async =>
+        (await _conn.systemAppsClearData(api.SystemAppsClearDataParams(id: id)))
+            .jobId,
   );
 
   Future<void> dispose() async {
