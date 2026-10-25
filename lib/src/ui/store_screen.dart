@@ -780,26 +780,76 @@ class _AppDetailPageState extends State<AppDetailPage> {
       p.buttons('terms', [btn('Read', () => showTermsToRead(context, app))]);
     }
 
-    return FullPage(
-      title: app.name,
-      subtitle: app.summary.isEmpty
-          ? app.category.label
-          : '${app.category.label}: ${app.summary}',
-      leading: AppIconBadge(
-        name: app.name,
-        iconPath: widget.iconPath,
-        size: 128,
-      ),
-      // Clipped above and below only: the page scrolls under the header,
-      // and focus frames may still reach past the sides.
-      child: ClipRect(
-        clipper: const _VerticalClip(),
-        child: SingleChildScrollView(
-          key: _viewportKey,
-          controller: _scroll,
-          clipBehavior: Clip.none,
-          padding: const EdgeInsets.symmetric(vertical: HinterTokens.s1),
-          child: p.build(),
+    final subtitle = app.summary.isEmpty
+        ? app.category.label
+        : '${app.category.label}: ${app.summary}';
+    // A modal card over the dimmed Store: the header stays, the rest
+    // scrolls under it.
+    return ColoredBox(
+      color: Colors.black.withValues(alpha: 0.72),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1440, maxHeight: 960),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: t.surface,
+              borderRadius: BorderRadius.circular(HinterTokens.radiusCard),
+              border: Border.all(
+                color: t.highContrast ? t.text : t.surfaceHigh,
+                width: t.highContrast ? 3 : 2,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                HinterTokens.s5,
+                HinterTokens.s5,
+                HinterTokens.s5,
+                HinterTokens.s4,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      AppIconBadge(
+                        name: app.name,
+                        iconPath: widget.iconPath,
+                        size: 96,
+                      ),
+                      const SizedBox(width: HinterTokens.s3),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(app.name, style: t.title),
+                            Text(subtitle, style: t.bodyDim),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: HinterTokens.s2),
+                  // Clipped above and below only: focus frames may still
+                  // reach past the sides.
+                  Flexible(
+                    child: ClipRect(
+                      clipper: const _VerticalClip(),
+                      child: SingleChildScrollView(
+                        key: _viewportKey,
+                        controller: _scroll,
+                        clipBehavior: Clip.none,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: HinterTokens.s1,
+                        ),
+                        child: p.build(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
