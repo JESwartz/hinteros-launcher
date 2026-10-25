@@ -678,6 +678,17 @@ Future<bool> showTerms(
     ) ??
     false;
 
+/// The terms of [app] to read only (its Store page): Back, no Accept.
+Future<void> showTermsToRead(BuildContext context, StoreApp app) =>
+    ModalScope.of(context).show<bool>(
+      (context, modal) => TermsScreen(
+        modal: modal,
+        name: app.name,
+        terms: app.terms!,
+        readOnly: true,
+      ),
+    );
+
 /// [showTerms] for a box-wide service of the Server tab (Plex).
 Future<bool> showServiceTerms(
   BuildContext context, {
@@ -703,9 +714,13 @@ class TermsScreen extends StatefulWidget {
     required this.terms,
     this.acceptLabel = 'Accept and install',
     this.note,
+    this.readOnly = false,
   });
 
   final ModalHandle<bool> modal;
+
+  /// Only Back (the app page): nothing to accept.
+  final bool readOnly;
 
   /// Whose terms (an app, a service).
   final String name;
@@ -806,7 +821,10 @@ class _TermsScreenState extends State<TermsScreen> {
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
     final region = widget.modal.region;
-    region.setRows(const [NavRow('text', 1), NavRow('buttons', 2)]);
+    region.setRows([
+      const NavRow('text', 1),
+      NavRow('buttons', widget.readOnly ? 1 : 2),
+    ]);
     return FullPage(
       title: 'Terms for ${widget.name}',
       subtitle:
@@ -835,7 +853,9 @@ class _TermsScreenState extends State<TermsScreen> {
           ),
           const SizedBox(height: HinterTokens.s2),
           Text(
-            _atEnd
+            widget.readOnly
+                ? 'L1 and R1 scroll a page.'
+                : _atEnd
                 ? 'You read to the end.'
                 : 'Read to the end to accept. L1 and R1 scroll a page.',
             style: t.caption,
@@ -849,13 +869,17 @@ class _TermsScreenState extends State<TermsScreen> {
             region: region,
             rowKey: 'buttons',
             buttons: [
-              btn('Decline', () => widget.modal.close(false)),
-              btn(
-                widget.acceptLabel,
-                () => widget.modal.close(true),
-                primary: true,
-                enabled: _atEnd,
-              ),
+              if (widget.readOnly)
+                btn('Back', () => widget.modal.close(false), primary: true)
+              else ...[
+                btn('Decline', () => widget.modal.close(false)),
+                btn(
+                  widget.acceptLabel,
+                  () => widget.modal.close(true),
+                  primary: true,
+                  enabled: _atEnd,
+                ),
+              ],
             ],
           ),
         ],

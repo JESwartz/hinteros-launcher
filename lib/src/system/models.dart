@@ -1079,6 +1079,18 @@ class VendorTerms {
   final String text;
 }
 
+/// The upstream project's README (0.19), shown on the app's Store page.
+@immutable
+class StoreReadme {
+  const StoreReadme({required this.url, required this.text});
+
+  /// The upstream file at the commit it was copied from.
+  final String url;
+
+  /// Markdown.
+  final String text;
+}
+
 /// Where an app's icon comes from. The session daemon resolves it at runtime
 /// (installed app's `desktopId`, then `iconUrl`, then discovery on `siteUrl`,
 /// then the kiosk profile's favicon, then a letter tile); the launcher never
@@ -1154,6 +1166,7 @@ class StoreApp {
     this.description = '',
     this.depends = const [],
     this.terms,
+    this.readme,
     this.free = true,
     this.installer = true,
     this.installerDefault = false,
@@ -1183,6 +1196,7 @@ class StoreApp {
   /// repository, so these are the extra ones).
   final List<String> depends;
   final VendorTerms? terms;
+  final StoreReadme? readme;
   final bool free;
 
   /// Listed in the installer's app selection (always true for [onIso]).

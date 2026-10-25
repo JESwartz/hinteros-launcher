@@ -37,7 +37,12 @@ String? _readTermsFile(String path) {
 }
 
 class DaemonStore implements StoreRepository {
-  DaemonStore(this._conn, this._jobs, {this.readTerms = _readTermsFile}) {
+  DaemonStore(
+    this._conn,
+    this._jobs, {
+    this.readTerms = _readTermsFile,
+    this.readReadme = readReadmeFile,
+  }) {
     _events = _conn.events.listen((e) {
       if (e is api.StoreChangedEvent) {
         _refresh();
@@ -63,6 +68,7 @@ class DaemonStore implements StoreRepository {
   final api.DaemonConnection _conn;
   final DaemonJobs _jobs;
   final TermsFileReader readTerms;
+  final TermsFileReader readReadme;
   late final StreamSubscription<api.SessionEvent> _events;
   late final StreamSubscription<api.ConnectionStatus> _status;
   final _changes = StreamController<void>.broadcast();
@@ -153,6 +159,8 @@ class DaemonStore implements StoreRepository {
       }
     }
     if (state == StoreState.available && !a.free && terms == null) return null;
+    final r = a.readme;
+    final readmeText = r == null ? null : readReadme(r.file);
     return StoreApp(
       id: a.id,
       name: a.name,
@@ -165,6 +173,9 @@ class DaemonStore implements StoreRepository {
       depends: a.depends,
       conflicts: a.conflicts,
       terms: terms,
+      readme: readmeText == null
+          ? null
+          : StoreReadme(url: r!.url, text: readmeText),
       free: a.free,
       installer: a.installer,
       installerDefault: a.installerDefault,

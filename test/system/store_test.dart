@@ -97,7 +97,8 @@ void main() {
       await press(t, [kEnter]); // Install
       expect(find.text('Install Steam for this profile?'), findsOneWidget);
       expect(find.textContaining('Read and accept it next'), findsOneWidget);
-      expect(find.textContaining('Steam has full access'), findsOneWidget);
+      // On the sheet and on the app page behind it.
+      expect(find.textContaining('Steam has full access'), findsNWidgets(2));
       await press(t, [kRight, kEnter]); // Continue
       expect(find.text('Terms for Steam'), findsOneWidget);
     }
@@ -171,6 +172,84 @@ void main() {
       expect(focusLabel(), endsWith('/buttons:0'));
       await press(t, [kUp]);
       expect(focusLabel(), endsWith('/text:0'));
+    });
+  });
+
+  group('app page', () {
+    double scrolled(WidgetTester t) => t
+        .state<ScrollableState>(
+          find
+              .ancestor(
+                of: find.text('About'),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        )
+        .position
+        .pixels;
+
+    testWidgets('README: rendered without images and HTML, D-pad reads it', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await openApp(t, 1); // Games: Moonlight
+      expect(find.text('About'), findsOneWidget);
+      expect(find.text('Moonlight PC'), findsOneWidget, reason: 'the h1');
+      expect(find.textContaining('Hardware accelerated'), findsOneWidget);
+      expect(find.textContaining('shields.io'), findsNothing);
+      expect(find.textContaining(']('), findsNothing, reason: 'no raw links');
+      expect(find.textContaining('From https://github.com/'), findsOneWidget);
+      expect(focusLabel(), endsWith('/actions:0'));
+      await press(t, [kDown]);
+      expect(focusLabel(), endsWith('/readme:0'));
+      final start = scrolled(t);
+      await press(t, [kDown, kDown, kDown]);
+      expect(focusLabel(), endsWith('/readme:0'), reason: 'still reading');
+      expect(scrolled(t), greaterThan(start));
+      // Up goes back through it, then to the buttons at the top.
+      for (
+        var i = 0;
+        i < 40 && (focusLabel() ?? '').endsWith('/readme:0');
+        i++
+      ) {
+        await press(t, [kUp]);
+      }
+      expect(focusLabel(), endsWith('/actions:0'));
+      expect(scrolled(t), 0);
+    });
+
+    testWidgets('no README: the description; terms to read with Back', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      h.services.mockStore.setInstalled({'jellyfin'});
+      await h.pump(t);
+      await openApp(t, 1, 1); // Steam
+      expect(find.text('About'), findsOneWidget);
+      expect(find.textContaining("Valve's store"), findsOneWidget);
+      expect(find.textContaining('Steam has full access'), findsOneWidget);
+      expect(
+        find.text('Steam Subscriber Agreement, version 2026-09-10.'),
+        findsOneWidget,
+      );
+      await press(t, [kDown]);
+      expect(focusLabel(), endsWith('/terms:0'));
+      await press(t, [kEnter]); // Read
+      expect(find.text('Terms for Steam'), findsOneWidget);
+      expect(find.text('Decline'), findsNothing);
+      expect(find.text('Back'), findsWidgets);
+      // L1/R1 page through it; at the end, Down reaches Back.
+      for (var i = 0; i < 60; i++) {
+        await press(t, [kPageDown]);
+      }
+      await press(t, [kDown]);
+      expect(focusLabel(), endsWith('/buttons:0'));
+      await press(t, [kEnter]); // Back
+      expect(find.text('Terms for Steam'), findsNothing);
+      expect(h.services.mockStore.log, isEmpty, reason: 'nothing accepted');
     });
   });
 
@@ -276,17 +355,22 @@ void main() {
       final h = harness();
       await h.pump(t);
       await openPlayer(t);
-      expect(find.text('Permissions'), findsNothing, reason: 'not installed');
+      // Not installed: listed, not switches.
+      expect(find.text('Permissions'), findsOneWidget);
+      expect(find.text('Required'), findsOneWidget);
+      expect(find.text('Optional'), findsNWidgets(2));
+      expect(find.text('On'), findsNothing);
       await press(t, [kEnter]); // Install
       expect(
         find.text('Install Video player for this profile?'),
         findsOneWidget,
       );
-      expect(find.text('Permissions'), findsOneWidget);
-      expect(find.text('Controller'), findsOneWidget);
-      expect(find.text('Microphone'), findsOneWidget);
-      expect(find.text('Downloads folder'), findsOneWidget);
-      expect(find.text('Required'), findsOneWidget);
+      // The sheet's and the page's (behind it).
+      expect(find.text('Permissions'), findsNWidgets(2));
+      expect(find.text('Controller'), findsNWidgets(2));
+      expect(find.text('Microphone'), findsNWidgets(2));
+      expect(find.text('Downloads folder'), findsNWidgets(2));
+      expect(find.text('Required'), findsNWidgets(2), reason: 'sheet, page');
       expect(find.text('On'), findsNWidgets(3));
       expect(
         find.textContaining('full access'),
@@ -298,7 +382,7 @@ void main() {
       // Focus starts on the first switch; a locked one does not move.
       expect(focusLabel(), endsWith('/switch0:0'));
       await press(t, [kEnter]);
-      expect(find.text('Required'), findsOneWidget);
+      expect(find.text('Required'), findsNWidgets(2));
       await press(t, [kDown, kEnter]); // Microphone off
       expect(focusLabel(), endsWith('/switch1:0'));
       expect(find.text('Off'), findsOneWidget);

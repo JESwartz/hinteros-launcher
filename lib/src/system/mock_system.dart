@@ -1364,6 +1364,7 @@ class MockStore implements StoreRepository {
         depends: a.depends,
         conflicts: a.conflicts,
         terms: a.terms,
+        readme: a.readme,
         free: a.free,
         installer: a.installer,
         installerDefault: a.installerDefault,

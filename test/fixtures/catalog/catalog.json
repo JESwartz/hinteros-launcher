@@ -22,6 +22,7 @@
       "name": "Crunchyroll",
       "needsServices": [],
       "onIso": false,
+      "readme": null,
       "redistributable": true,
       "sizeMiB": 1,
       "starter": null,
@@ -53,6 +54,11 @@
       "name": "Firefox",
       "needsServices": [],
       "onIso": true,
+      "readme": {
+        "file": "readme/firefox.md",
+        "retrieved": "2026-10-25",
+        "url": "https://github.com/mozilla-firefox/firefox/blob/efd2d1e6f77570ae6bc5294731a68101e45c81a3/README.md"
+      },
       "redistributable": true,
       "sizeMiB": 1,
       "starter": "ticked",
@@ -90,6 +96,11 @@
       "name": "Jellyfin",
       "needsServices": [],
       "onIso": true,
+      "readme": {
+        "file": "readme/jellyfin.md",
+        "retrieved": "2026-10-25",
+        "url": "https://github.com/jellyfin/jellyfin-desktop/blob/2cb4a4456fd29b5b62d825ef0e5df93ed6913328/README.md"
+      },
       "redistributable": true,
       "sizeMiB": 250,
       "starter": "offered",
@@ -119,6 +130,7 @@
       "name": "Jellyfin server",
       "needsServices": [],
       "onIso": false,
+      "readme": null,
       "redistributable": true,
       "sizeMiB": 600,
       "starter": null,
@@ -153,6 +165,11 @@
       "name": "Moonlight",
       "needsServices": [],
       "onIso": false,
+      "readme": {
+        "file": "readme/moonlight.md",
+        "retrieved": "2026-10-25",
+        "url": "https://github.com/moonlight-stream/moonlight-qt/blob/ac296864ace96f51ad75f78b90644bdbca76c332/README.md"
+      },
       "redistributable": true,
       "sizeMiB": 150,
       "starter": null,
@@ -191,6 +208,7 @@
       "name": "Plex",
       "needsServices": [],
       "onIso": false,
+      "readme": null,
       "redistributable": false,
       "sizeMiB": 300,
       "starter": "offered",
@@ -233,6 +251,7 @@
       "name": "Steam",
       "needsServices": [],
       "onIso": false,
+      "readme": null,
       "redistributable": true,
       "sandbox": false,
       "sizeMiB": 1000,
@@ -273,6 +292,11 @@
       "name": "VacuumTube",
       "needsServices": [],
       "onIso": false,
+      "readme": {
+        "file": "readme/vacuum-tube.md",
+        "retrieved": "2026-10-25",
+        "url": "https://github.com/shy1132/VacuumTube/blob/21ed770379deefc123c1026774b7d8fc1bc0d84b/README.md"
+      },
       "redistributable": true,
       "sizeMiB": 450,
       "starter": "offered",
@@ -305,6 +329,7 @@
       "name": "YouTube",
       "needsServices": [],
       "onIso": true,
+      "readme": null,
       "redistributable": true,
       "sizeMiB": 1,
       "starter": "ticked",

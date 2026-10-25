@@ -39,6 +39,32 @@ TermsReader termsReaderFor(String indexPath) {
   };
 }
 
+/// A [TermsReader] for the READMEs next to the index at [indexPath]
+/// (`readme/<id>.md`).
+TermsReader readmeReaderFor(String indexPath) {
+  final dir = File(indexPath).parent.path;
+  return (file) {
+    if (!RegExp(r'^readme/[A-Za-z0-9._-]+\.md$').hasMatch(file) ||
+        file.contains('..')) {
+      return null;
+    }
+    return readReadmeFile('$dir/$file');
+  };
+}
+
+/// The README at [path], or null when it is missing, empty, unreadable or
+/// over 64 KiB (the catalog's limit).
+String? readReadmeFile(String path) {
+  try {
+    final f = File(path);
+    if (f.lengthSync() > 64 * 1024) return null;
+    final t = f.readAsStringSync();
+    return t.trim().isEmpty ? null : t;
+  } on FileSystemException {
+    return null;
+  }
+}
+
 /// The apps of an index, in its order: `status` available only (retired and
 /// removed entries are hidden), each with its terms text read through
 /// [readTerms]. An unfree entry (`free: false`) whose terms are missing,
@@ -48,6 +74,7 @@ TermsReader termsReaderFor(String indexPath) {
 List<StoreApp> parseCatalogIndex(
   String source, {
   required TermsReader readTerms,
+  TermsReader? readReadme,
 }) {
   final j = jsonDecode(source);
   if (j is! Map ||
@@ -58,7 +85,7 @@ List<StoreApp> parseCatalogIndex(
   final apps = <StoreApp>[];
   for (final a in j['apps'] as List) {
     if (a is! Map<String, Object?>) continue;
-    final app = _parseApp(a, readTerms);
+    final app = _parseApp(a, readTerms, readReadme);
     if (app != null) apps.add(app);
   }
   return apps;
@@ -70,13 +97,18 @@ List<StoreApp> loadCatalogIndex([String path = catalogIndexPath]) =>
     parseCatalogIndex(
       File(path).readAsStringSync(),
       readTerms: termsReaderFor(path),
+      readReadme: readmeReaderFor(path),
     );
 
 String? _str(Object? v) => v is String ? v : null;
 List<String> _strs(Object? v) =>
     v is List ? v.whereType<String>().toList() : [];
 
-StoreApp? _parseApp(Map<String, Object?> a, TermsReader readTerms) {
+StoreApp? _parseApp(
+  Map<String, Object?> a,
+  TermsReader readTerms,
+  TermsReader? readReadme,
+) {
   final id = _str(a['id']);
   final name = _str(a['name']);
   if (id == null || name == null) return null;
@@ -105,6 +137,14 @@ StoreApp? _parseApp(Map<String, Object?> a, TermsReader readTerms) {
   // The safety rule: unfree without readable terms is never offered.
   if (a['free'] != true && terms == null) return null;
 
+  StoreReadme? readme;
+  if (a['readme'] case {'file': final String file} && final r) {
+    final text = readReadme?.call(file);
+    if (text != null) {
+      readme = StoreReadme(url: _str(r['url']) ?? '', text: text);
+    }
+  }
+
   final icon = a['icon'];
   final dataPaths = _strs(a['dataPaths']);
   final size = a['sizeMiB'];
@@ -121,6 +161,7 @@ StoreApp? _parseApp(Map<String, Object?> a, TermsReader readTerms) {
     depends: _strs(a['depends']),
     conflicts: _strs(a['conflicts']),
     terms: terms,
+    readme: readme,
     free: a['free'] == true,
     // Index 3: `starter` offered/ticked; index 2: installer/installerDefault.
     installer: a['starter'] != null || a['installer'] == true,

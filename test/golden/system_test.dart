@@ -515,6 +515,29 @@ void main() {
         },
       );
     });
+    testWidgets('app page, reading the README', (t) async {
+      await shot(
+        t,
+        'store_app_readme_1080p',
+        harness(installed: {'jellyfin'}),
+        run: (t) async {
+          await openStore(t);
+          // Games: Moonlight, then into its README and a few lines down.
+          await press(t, [kDown, kRight, kEnter, kDown, kDown, kDown, kDown]);
+        },
+      );
+    });
+    testWidgets('app page with terms and full access (Steam)', (t) async {
+      await shot(
+        t,
+        'store_app_terms_1080p',
+        harness(installed: {'jellyfin'}),
+        run: (t) async {
+          await openStore(t);
+          await press(t, [kDown, kRight, kRight, kEnter]);
+        },
+      );
+    });
     testWidgets('install confirm with dependencies', (t) async {
       await shot(
         t,

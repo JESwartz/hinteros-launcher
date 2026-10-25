@@ -165,17 +165,6 @@ class ToggleMark extends StatelessWidget {
   final String? note;
   final bool locked;
 
-  static double _offWidth(BuildContext context, TextStyle style) {
-    final p = TextPainter(
-      text: TextSpan(text: 'Off', style: style),
-      textDirection: TextDirection.ltr,
-      textScaler: MediaQuery.textScalerOf(context),
-    )..layout();
-    final w = p.width;
-    p.dispose();
-    return w.ceilToDouble();
-  }
-
   @override
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
@@ -210,10 +199,23 @@ class ToggleMark extends StatelessWidget {
         if (label != null)
           Text(label!, style: t.bodyDim)
         else
-          // As wide as "Off" both ways, so the switch does not move.
-          SizedBox(
-            width: _offWidth(context, t.bodyDim),
-            child: Text(on ? 'On' : 'Off', style: t.bodyDim),
+          // As wide as "Off" both ways, so the switch does not move: an
+          // invisible "Off" (a RichText, laid out as Text would) under it.
+          Stack(
+            children: [
+              Opacity(
+                opacity: 0,
+                child: RichText(
+                  text: TextSpan(
+                    text: 'Off',
+                    style: DefaultTextStyle.of(context).style.merge(t.bodyDim),
+                  ),
+                  textScaler: MediaQuery.textScalerOf(context),
+                  maxLines: 1,
+                ),
+              ),
+              Text(on ? 'On' : 'Off', style: t.bodyDim),
+            ],
           ),
       ],
     );

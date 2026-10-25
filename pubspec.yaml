@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_svg: ^2.3.0
+  markdown: ^7.3.0
   qr: ^4.0.0
 
 dev_dependencies:

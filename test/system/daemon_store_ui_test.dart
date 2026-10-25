@@ -585,7 +585,7 @@ void main() {
       await openApp(t, 2, more: 1, rows: 2); // Video: Video player
       expect(find.text('Video player'), findsWidgets);
       await press(t, [kEnter]); // Install
-      expect(find.text('Required'), findsOneWidget);
+      expect(find.text('Required'), findsNWidgets(2), reason: 'sheet, page');
       await press(t, [kDown, kEnter]); // Microphone off
       await press(t, [kDown, kDown, kRight, kEnter]); // Accept
       // The choice goes out first, then the install.

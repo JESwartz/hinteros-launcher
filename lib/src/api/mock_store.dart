@@ -128,6 +128,16 @@ List<StoreApp> _fixtureApps(String? dir) {
                   );
                 }()
               : null,
+          readme: a['readme'] is Map
+              ? () {
+                  final r = (a['readme'] as Map).cast<String, dynamic>();
+                  return StoreAppReadme(
+                    url: r['url'] as String,
+                    retrieved: r['retrieved'] as String,
+                    file: '$root/${r['file']}',
+                  );
+                }()
+              : null,
           buildsOnDevice: a['buildsOnDevice'] == true,
           free: a['free'] == true,
           redistributable: a['redistributable'] == true,

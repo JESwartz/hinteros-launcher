@@ -1620,6 +1620,45 @@ class StoreAppTerms {
   String toString() => 'StoreAppTerms(${jsonEncode(toJson())})';
 }
 
+/// 0.19: the upstream project's README (Markdown, at most 64 KiB), shown on the app's Store page. Absent when the app has none.
+class StoreAppReadme {
+  const StoreAppReadme({
+    required this.url,
+    required this.retrieved,
+    required this.file,
+  });
+
+  /// The upstream file at the commit it was copied from.
+  final String url;
+  final String retrieved;
+
+  /// Absolute path of the Markdown file on this box.
+  final String file;
+
+  factory StoreAppReadme.fromJson(Map<String, dynamic> json) => StoreAppReadme(
+    url: json['url'] as String,
+    retrieved: json['retrieved'] as String,
+    file: json['file'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'url': url,
+    'retrieved': retrieved,
+    'file': file,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is StoreAppReadme &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'StoreAppReadme(${jsonEncode(toJson())})';
+}
+
 /// A catalog entry (hinteros-catalog index version 2, fields in snake_case) with its state on this box. Removed entries (tombstones) only have id, name and status_reason; the other fields are empty.
 class StoreApp {
   const StoreApp({
@@ -1640,6 +1679,7 @@ class StoreApp {
     required this.installerDefault,
     required this.dataPaths,
     required this.terms,
+    this.readme,
     required this.buildsOnDevice,
     required this.free,
     required this.redistributable,
@@ -1681,6 +1721,9 @@ class StoreApp {
   /// The vendor's terms, shown in full before install; null if none.
   final StoreAppTerms? terms;
 
+  /// 0.19: the upstream project's README (Markdown, at most 64 KiB), shown on the app's Store page. Absent when the app has none.
+  final StoreAppReadme? readme;
+
   /// Fetched from the vendor and prepared on this box during install (a few minutes, needs internet).
   final bool buildsOnDevice;
   final bool free;
@@ -1717,6 +1760,11 @@ class StoreApp {
         : StoreAppTerms.fromJson(
             (json['terms'] as Map).cast<String, dynamic>(),
           ),
+    readme: json['readme'] == null
+        ? null
+        : StoreAppReadme.fromJson(
+            (json['readme'] as Map).cast<String, dynamic>(),
+          ),
     buildsOnDevice: json['builds_on_device'] as bool,
     free: json['free'] as bool,
     redistributable: json['redistributable'] as bool,
@@ -1749,6 +1797,7 @@ class StoreApp {
     'installer_default': installerDefault,
     'data_paths': dataPaths,
     'terms': terms == null ? null : terms!.toJson(),
+    if (readme != null) 'readme': readme!.toJson(),
     'builds_on_device': buildsOnDevice,
     'free': free,
     'redistributable': redistributable,

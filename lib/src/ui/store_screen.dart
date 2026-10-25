@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../data/launcher_data.dart';
 import '../nav/nav_controller.dart';
 import '../nav/nav_model.dart';
+import '../api/api.dart' show NavAction;
 import '../system/models.dart';
 import '../system/repositories.dart';
 import '../theme/hinter_theme.dart';
@@ -12,6 +13,7 @@ import 'app_icon_view.dart';
 import 'common.dart';
 import 'dialogs.dart';
 import 'focus_frame.dart';
+import 'markdown_view.dart';
 import 'modal_host.dart';
 import 'nav_focusable.dart';
 import 'nav_grid_view.dart';
@@ -466,6 +468,10 @@ class AppDetailPage extends StatefulWidget {
 
 class _AppDetailPageState extends State<AppDetailPage> {
   StreamSubscription<void>? _sub;
+  final _scroll = ScrollController();
+  final _viewportKey = GlobalKey();
+  final _readmeKey = GlobalKey();
+  static const _line = 96.0;
 
   @override
   void initState() {
@@ -474,18 +480,100 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (mounted) setState(() {});
     });
     widget.data?.addListener(_rebuild);
+    final r = widget.modal.region;
+    r.interceptMove = _onMove;
+    r.onAction = _onAction;
   }
 
   @override
   void dispose() {
     _sub?.cancel();
     widget.data?.removeListener(_rebuild);
+    _scroll.dispose();
     super.dispose();
   }
 
   /// Which apps run changed ("Restart the app to apply.").
   void _rebuild() {
     if (mounted) setState(() {});
+  }
+
+  void _scrollBy(double d) {
+    final p = _scroll.position;
+    final target = (p.pixels + d).clamp(0.0, p.maxScrollExtent);
+    if (HinterTheme.of(context).fast == Duration.zero) {
+      _scroll.jumpTo(target);
+    } else {
+      _scroll.animateTo(
+        target,
+        duration: HinterTheme.of(context).fast,
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  /// The README box's top and bottom, relative to the top of the visible
+  /// page area.
+  (double, double)? _readmeBounds() {
+    final box = _readmeKey.currentContext?.findRenderObject() as RenderBox?;
+    final view = _viewportKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || view == null || !box.attached) return null;
+    final top = box.localToGlobal(Offset.zero, ancestor: view).dy;
+    return (top, top + box.size.height);
+  }
+
+  /// The page is one long column. Up and down scroll through the README
+  /// while it has the focus, and on to what is below the last item (the
+  /// permissions of an app that is not installed); otherwise they move the
+  /// focus.
+  bool _onMove(NavDir dir) {
+    if (!_scroll.hasClients || !_scroll.position.hasContentDimensions) {
+      return false;
+    }
+    final p = _scroll.position;
+    final model = widget.modal.region.model;
+    final key = model.currentRow?.key;
+    final down = dir == NavDir.down;
+    if (dir != NavDir.up && !down) return false;
+    if (key == 'readme') {
+      final b = _readmeBounds();
+      if (b != null) {
+        final (top, bottom) = b;
+        final view = p.viewportDimension;
+        if (down && bottom > view + 1 && p.pixels < p.maxScrollExtent - 1) {
+          _scrollBy(_line.clamp(0.0, bottom - view));
+          return true;
+        }
+        if (!down && top < -1 && p.pixels > 1) {
+          _scrollBy(-_line.clamp(0.0, -top));
+          return true;
+        }
+      }
+    }
+    final last = model.row == model.rows.length - 1;
+    if (down && last && p.pixels < p.maxScrollExtent - 1) {
+      _scrollBy(_line);
+      return true;
+    }
+    if (!down && model.row == 0 && p.pixels > 1) {
+      _scrollBy(-p.pixels);
+      return true;
+    }
+    return false;
+  }
+
+  bool _onAction(NavAction a) {
+    if (!_scroll.hasClients) return false;
+    final page = _scroll.position.viewportDimension - _line;
+    if (a == NavAction.pageRight) {
+      _scrollBy(page);
+      return true;
+    }
+    if (a == NavAction.pageLeft) {
+      _scrollBy(-page);
+      return true;
+    }
+    return false;
   }
 
   /// Turns optional permission [p] of [app] on or off for this profile.
@@ -516,8 +604,14 @@ class _AppDetailPageState extends State<AppDetailPage> {
           widget.catalog.where((a) => a.id == id).firstOrNull?.name ?? id,
     ];
     final p = Pane(widget.modal.region);
-    final about = app.description.isEmpty ? app.summary : app.description;
-    if (about.isNotEmpty) p.add(Text(about, style: t.body));
+    p.add(
+      Text(switch (state) {
+        StoreState.available => 'Not installed.',
+        StoreState.installing => 'Installing...',
+        StoreState.removing => 'Removing...',
+        _ => 'Installed.',
+      }, style: t.label),
+    );
     if (!installed && app.sizeMiB > 0) {
       p.add(Text('Size: ${app.sizeLabel}.', style: t.bodyDim));
     }
@@ -537,23 +631,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
         ),
       );
     }
-    if (app.hasTerms && !installed) {
-      p.add(
-        Text(
-          '${app.terms!.title} applies (version ${app.terms!.version}).',
-          style: t.bodyDim,
-        ),
-      );
-    }
-    p.add(
-      Text(switch (state) {
-        StoreState.available => 'Not installed.',
-        StoreState.installing => 'Installing...',
-        StoreState.removing => 'Removing...',
-        _ => 'Installed.',
-      }, style: t.label),
-      gap: HinterTokens.s3,
-    );
     if (state == StoreState.retired) {
       p.add(StatusLine('This app is retired.${_reason(app)} It still works.'));
     } else if (state == StoreState.unavailable) {
@@ -596,12 +673,50 @@ class _AppDetailPageState extends State<AppDetailPage> {
         btn('Back', widget.modal.close),
       ],
     ], gap: HinterTokens.s3);
-    if (installed && !state.busy && app.permissions.isNotEmpty) {
+
+    // About: the upstream README, else the catalog's description.
+    final readme = app.readme;
+    final about = app.description.isEmpty ? app.summary : app.description;
+    if (readme != null || about.isNotEmpty) {
+      p.add(Text('About', style: t.label), gap: HinterTokens.s4);
+    }
+    if (readme != null) {
+      p.row(
+        'readme',
+        1,
+        NavFocusableBox(
+          key: _readmeKey,
+          region: widget.modal.region,
+          rowKey: 'readme',
+          child: Padding(
+            padding: const EdgeInsets.all(HinterTokens.s3),
+            child: MarkdownView(readme.text),
+          ),
+        ),
+      );
+      p.add(Text('From ${readme.url}', style: t.caption));
+    } else if (about.isNotEmpty) {
+      p.add(Text(about, style: t.body));
+    }
+
+    // Permissions: switches once installed, a list before.
+    final perms = app.permissions;
+    if (app.fullAccess || perms.isNotEmpty) {
       p.add(Text('Permissions', style: t.label), gap: HinterTokens.s4);
+    }
+    if (app.fullAccess) {
+      p.add(
+        StatusLine(
+          '${app.name} has full access. It can use all data and devices of '
+          'this profile.',
+          error: true,
+        ),
+      );
+    } else if (perms.isNotEmpty && installed && !state.busy) {
       if (widget.data?.isRunning(app.id) ?? false) {
         p.add(Text('Restart the app to apply.', style: t.bodyDim));
       }
-      for (final perm in app.permissions) {
+      for (final perm in perms) {
         p.item(
           'perm-${perm.name}',
           onSelect: perm.required ? null : () => _togglePermission(app, perm),
@@ -616,7 +731,30 @@ class _AppDetailPageState extends State<AppDetailPage> {
           ),
         );
       }
+    } else {
+      for (final perm in perms) {
+        p.add(
+          SettingRow(
+            title: perm.label,
+            focused: false,
+            trailing: Text(
+              perm.required ? 'Required' : 'Optional',
+              style: t.bodyDim,
+            ),
+          ),
+          gap: HinterTokens.s1 + 4,
+        );
+      }
     }
+
+    // Terms: the vendor's agreement, to read here at any time.
+    final terms = app.terms;
+    if (terms != null) {
+      p.add(Text('Terms', style: t.label), gap: HinterTokens.s4);
+      p.add(Text('${terms.title}, version ${terms.version}.', style: t.body));
+      p.buttons('terms', [btn('Read', () => showTermsToRead(context, app))]);
+    }
+
     return FullPage(
       title: app.name,
       subtitle: app.summary.isEmpty
@@ -627,7 +765,18 @@ class _AppDetailPageState extends State<AppDetailPage> {
         iconPath: widget.iconPath,
         size: 128,
       ),
-      child: SingleChildScrollView(clipBehavior: Clip.none, child: p.build()),
+      // Clipped above and below only: the page scrolls under the header,
+      // and focus frames may still reach past the sides.
+      child: ClipRect(
+        clipper: const _VerticalClip(),
+        child: SingleChildScrollView(
+          key: _viewportKey,
+          controller: _scroll,
+          clipBehavior: Clip.none,
+          padding: const EdgeInsets.symmetric(vertical: HinterTokens.s1),
+          child: p.build(),
+        ),
+      ),
     );
   }
 
@@ -637,4 +786,19 @@ class _AppDetailPageState extends State<AppDetailPage> {
     if (r == null || r.isEmpty) return '';
     return r.endsWith('.') ? ' $r' : ' $r.';
   }
+}
+
+class _VerticalClip extends CustomClipper<Rect> {
+  const _VerticalClip();
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(
+    -HinterTokens.s5,
+    0,
+    size.width + HinterTokens.s5,
+    size.height,
+  );
+
+  @override
+  bool shouldReclip(_VerticalClip oldClipper) => false;
 }
