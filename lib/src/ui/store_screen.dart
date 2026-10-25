@@ -137,11 +137,22 @@ class _StoreScreenState extends State<StoreScreen> {
     }
   }
 
+  /// The category order of the Store; a category without apps is left
+  /// out.
+  static const _order = [
+    StoreCategory.video,
+    StoreCategory.games,
+    StoreCategory.music,
+    StoreCategory.utilities,
+    StoreCategory.photos,
+    StoreCategory.other,
+  ];
+
   List<(String id, String label)> _categories(List<StoreApp> apps) => [
-    (StoreScreen.all, 'All'),
-    for (final c in StoreCategory.values)
-      if (apps.any((a) => a.category == c)) (c.name, c.label),
     (StoreScreen.installedCat, 'Installed'),
+    (StoreScreen.all, 'All'),
+    for (final c in _order)
+      if (apps.any((a) => a.category == c)) (c.name, c.label),
   ];
 
   List<StoreApp> _appsIn(String cat, List<StoreApp> apps) => switch (cat) {

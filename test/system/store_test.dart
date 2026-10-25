@@ -24,7 +24,7 @@ Future<void> openApp(
 ]) async {
   await openStore(t);
   await press(t, [
-    ...List.filled(cat, kDown),
+    ...List.filled(storeRow(cat), kDown),
     kRight,
     ...List.filled(more, kRight),
     ...List.filled(rows, kDown),
@@ -41,17 +41,26 @@ void main() {
     await h.pump(t);
     await openStore(t);
     expect(focusLabel(), 'store-cats/c0:0');
-    expect(find.text('All'), findsOneWidget);
-    expect(find.text('Steam'), findsOneWidget);
-    expect(find.text('Installed'), findsWidgets);
+    // Installed first, then All and the categories (in the left column,
+    // below the tab bar).
+    double y(String label) => [
+      for (final e in find.text(label).evaluate())
+        (e.renderObject! as RenderBox).localToGlobal(Offset.zero),
+    ].where((o) => o.dx < 700 && o.dy > 150).first.dy;
+    final ys = [
+      for (final l in ['Installed', 'All', 'Video', 'Games', 'Utilities']) y(l),
+    ];
+    expect(ys, [...ys]..sort());
+    expect(find.text('Steam'), findsOneWidget, reason: 'installed');
+    expect(find.text('Moonlight'), findsNothing, reason: 'not installed');
     expect(find.byKey(const ValueKey('more-apps')), findsOneWidget);
     expect(find.text('More apps come with the next update.'), findsOneWidget);
-    await press(t, [kDown]);
+    await press(t, [kDown, kDown, kDown]);
     expect(find.text('Moonlight'), findsOneWidget, reason: 'Games category');
     await press(t, [kRight]);
     expect(focusLabel(), 'store-grid/r0:0');
     await press(t, [kLeft]);
-    expect(focusLabel(), 'store-cats/c1:0');
+    expect(focusLabel(), 'store-cats/c3:0');
   });
 
   testWidgets('the Server tab comes after the Store', (t) async {
@@ -79,7 +88,12 @@ void main() {
     final h = harness();
     await h.pump(t);
     await openStore(t);
-    await press(t, [kDown, kRight, kDown, kEnter]); // grid row 1: RetroArch
+    await press(t, [
+      ...List.filled(storeRow(1), kDown),
+      kRight,
+      kDown,
+      kEnter,
+    ]); // Games, grid row 1: RetroArch
     expect(find.text('RetroArch'), findsWidgets);
     await press(t, [kEnter]); // Install
     expect(find.text('Install RetroArch for this profile?'), findsOneWidget);
@@ -271,8 +285,7 @@ void main() {
       expect(find.text('Not installed.'), findsOneWidget);
       expect(buttonEnabled(t, 'Clear user data'), isTrue);
       expect(find.text('Force stop'), findsNothing);
-      await press(t, [kEscape]);
-      await press(t, [kEscape]);
+      await harness().pump(t);
       await openApp(t, 1); // Moonlight: nothing left
       expect(find.text('Clear user data'), findsNothing);
     });

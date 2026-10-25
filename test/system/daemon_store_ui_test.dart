@@ -66,7 +66,7 @@ Future<void> openApp(
 }) async {
   await openStore(t);
   await press(t, [
-    ...List.filled(cat, kDown),
+    ...List.filled(storeRow(cat), kDown),
     kRight,
     ...List.filled(more, kRight),
     ...List.filled(rows, kDown),
@@ -539,6 +539,7 @@ void main() {
       await h.pump(t);
       await endStartupCheck(t, h);
       await openStore(t);
+      await press(t, [kDown]); // All
       final before = find.byType(AppIconImage).evaluate().length;
       final path = '${iconDir()}/jellyfin.png';
       h.mock.system.setStoreIcon('moonlight', path); // store_changed
@@ -546,7 +547,7 @@ void main() {
       await loadIcons(t, [path]);
       await t.pumpAndSettle();
       expect(find.byType(AppIconImage).evaluate().length, before + 1);
-      // Its detail page shows it too.
+      // Its detail page shows it too (second row).
       await press(t, [kRight, kDown, kEnter]);
       expect(find.text('Moonlight'), findsWidgets);
       expect(find.byType(AppIconImage).evaluate().length, greaterThan(before));
@@ -558,6 +559,7 @@ void main() {
       await h.pump(t);
       await endStartupCheck(t, h);
       await openStore(t);
+      await press(t, [kDown]); // All
       expect(find.text('M'), findsWidgets);
     });
 

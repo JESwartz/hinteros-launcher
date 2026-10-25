@@ -59,6 +59,11 @@ Future<void> downToSection(WidgetTester t, String id) async {
 /// The Store tab (index 3).
 Future<void> openStore(WidgetTester t) => openTab(t, 3);
 
+/// The Store's row (Installed, All, Video, Games, Utilities with the mock
+/// catalog) of category [cat]: 0 All, 1 Games, 2 Video, 3 Utilities,
+/// 4 Installed.
+int storeRow(int cat) => const [1, 3, 2, 4, 0][cat];
+
 /// The Server tab (index 4).
 Future<void> openServer(WidgetTester t) => openTab(t, 4);
 

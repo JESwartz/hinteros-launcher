@@ -491,7 +491,15 @@ void main() {
 
   group('Store', () {
     testWidgets('all', (t) async {
-      await shot(t, 'store_all_1080p', harness(), run: openStore);
+      await shot(
+        t,
+        'store_all_1080p',
+        harness(),
+        run: (t) async {
+          await openStore(t);
+          await press(t, [kDown]); // All (Installed comes first)
+        },
+      );
     });
     testWidgets('games, text 1.6x, high contrast', (t) async {
       await shot(
@@ -500,7 +508,7 @@ void main() {
         harness(settings: hc160),
         run: (t) async {
           await openStore(t);
-          await press(t, [kDown, kRight]);
+          await press(t, [kDown, kDown, kDown, kRight]);
         },
       );
     });
@@ -511,7 +519,7 @@ void main() {
         harness(installed: {'jellyfin'}),
         run: (t) async {
           await openStore(t);
-          await press(t, [kDown, kRight, kEnter]);
+          await press(t, [kDown, kDown, kDown, kRight, kEnter]);
         },
       );
     });
@@ -523,7 +531,17 @@ void main() {
         run: (t) async {
           await openStore(t);
           // Games: Moonlight, then into its README and a few lines down.
-          await press(t, [kDown, kRight, kEnter, kDown, kDown, kDown, kDown]);
+          await press(t, [
+            kDown,
+            kDown,
+            kDown,
+            kRight,
+            kEnter,
+            kDown,
+            kDown,
+            kDown,
+            kDown,
+          ]);
         },
       );
     });
@@ -534,7 +552,7 @@ void main() {
         harness(installed: {'jellyfin'}),
         run: (t) async {
           await openStore(t);
-          await press(t, [kDown, kRight, kRight, kEnter]);
+          await press(t, [kDown, kDown, kDown, kRight, kRight, kEnter]);
         },
       );
     });
@@ -545,7 +563,7 @@ void main() {
         harness(installed: {'jellyfin'}),
         run: (t) async {
           await openStore(t);
-          await press(t, [kDown, kRight, kDown, kEnter, kEnter]);
+          await press(t, [kDown, kDown, kDown, kRight, kDown, kEnter, kEnter]);
         },
       );
     });
@@ -570,7 +588,7 @@ void main() {
         run: (t) async {
           await openStore(t);
           // Games: Steam (Moonlight comes first), Install.
-          await press(t, [kDown, kRight, kRight, kEnter, kEnter]);
+          await press(t, [kDown, kDown, kDown, kRight, kRight, kEnter, kEnter]);
         },
       );
     });
@@ -608,6 +626,8 @@ void main() {
           await openStore(t);
           await press(t, [
             kDown,
+            kDown,
+            kDown,
             kRight,
             kRight,
             kEnter,
@@ -629,6 +649,8 @@ void main() {
         run: (t) async {
           await openStore(t);
           await press(t, [
+            kDown,
+            kDown,
             kDown,
             kRight,
             kRight,
@@ -655,6 +677,8 @@ void main() {
           await openStore(t);
           await press(t, [
             kDown,
+            kDown,
+            kDown,
             kRight,
             kRight,
             kEnter,
@@ -674,6 +698,8 @@ void main() {
         run: (t) async {
           await openStore(t);
           await press(t, [
+            kDown,
+            kDown,
             kDown,
             kRight,
             kRight,
@@ -695,6 +721,8 @@ void main() {
         run: (t) async {
           await openStore(t);
           await press(t, [
+            kDown,
+            kDown,
             kDown,
             kRight,
             kRight,
@@ -745,7 +773,7 @@ void main() {
           run: (t) async {
             await endStartupCheck(t, h);
             await openStore(t);
-            await press(t, [kDown, kDown, kDown, kDown, kRight, kEnter]);
+            await press(t, [kRight, kEnter]); // Installed
           },
         );
       });
@@ -775,7 +803,16 @@ void main() {
           run: (t) async {
             await endStartupCheck(t, h);
             await openStore(t);
-            await press(t, [kDown, kRight, kEnter, kEnter, kRight, kEnter]);
+            await press(t, [
+              kDown,
+              kDown,
+              kDown,
+              kRight,
+              kEnter,
+              kEnter,
+              kRight,
+              kEnter,
+            ]);
             h.mock.system.progressJob(
               h.mock.system.runningJobId!,
               Stage.downloading,
@@ -797,7 +834,7 @@ void main() {
             await endStartupCheck(t, h);
             await openStore(t);
             await press(t, [
-              kDown, kRight, kRight, kEnter, // RetroArch
+              kDown, kDown, kDown, kRight, kRight, kEnter, // RetroArch
               kEnter, kRight, kEnter, // Install, confirm
             ]);
           },
