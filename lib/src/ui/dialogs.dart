@@ -240,7 +240,7 @@ class _ConfirmDialogState extends State<_ConfirmDialog> {
                 trailing: ToggleMark(
                   on: _on[i],
                   locked: widget.switches[i].locked,
-                  label: widget.switches[i].locked
+                  note: widget.switches[i].locked
                       ? widget.switches[i].lockedLabel
                       : null,
                 ),

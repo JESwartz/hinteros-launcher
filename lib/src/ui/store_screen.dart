@@ -611,7 +611,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             trailing: ToggleMark(
               on: perm.granted,
               locked: perm.required,
-              label: perm.required ? 'Required' : null,
+              note: perm.required ? 'Required' : null,
             ),
           ),
         );

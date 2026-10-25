@@ -149,18 +149,32 @@ class SettingRow extends StatelessWidget {
 }
 
 /// On/off shown as a switch plus the word, so it never relies on colour. A
-/// [locked] one (cannot be changed) is drawn faded.
+/// [locked] one (cannot be changed) is drawn faded. [note] goes left of the
+/// switch, so the switches of a list stay in line.
 class ToggleMark extends StatelessWidget {
   const ToggleMark({
     super.key,
     required this.on,
     this.label,
+    this.note,
     this.locked = false,
   });
 
   final bool on;
   final String? label;
+  final String? note;
   final bool locked;
+
+  static double _offWidth(BuildContext context, TextStyle style) {
+    final p = TextPainter(
+      text: TextSpan(text: 'Off', style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final w = p.width;
+    p.dispose();
+    return w.ceilToDouble();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -187,9 +201,20 @@ class ToggleMark extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (note != null) ...[
+          Text(note!, style: t.bodyDim),
+          const SizedBox(width: HinterTokens.s1),
+        ],
         if (locked) Opacity(opacity: 0.5, child: knob) else knob,
         const SizedBox(width: HinterTokens.s1),
-        Text(label ?? (on ? 'On' : 'Off'), style: t.bodyDim),
+        if (label != null)
+          Text(label!, style: t.bodyDim)
+        else
+          // As wide as "Off" both ways, so the switch does not move.
+          SizedBox(
+            width: _offWidth(context, t.bodyDim),
+            child: Text(on ? 'On' : 'Off', style: t.bodyDim),
+          ),
       ],
     );
   }

@@ -287,7 +287,7 @@ void main() {
       expect(find.text('Microphone'), findsOneWidget);
       expect(find.text('Downloads folder'), findsOneWidget);
       expect(find.text('Required'), findsOneWidget);
-      expect(find.text('On'), findsNWidgets(2));
+      expect(find.text('On'), findsNWidgets(3));
       expect(
         find.textContaining('full access'),
         findsNothing,
@@ -343,7 +343,7 @@ void main() {
       await h.pump(t);
       await openPlayer(t);
       await press(t, [kEnter]);
-      expect(find.text('On'), findsNWidgets(2), reason: 'all on, as asked');
+      expect(find.text('On'), findsNWidgets(3), reason: 'all on, as asked');
       await press(t, [kDown, kDown, kDown, kRight, kEnter]); // Accept
       expect(h.services.mockStore.log, [
         'set_permission:mpv:downloads:true',
