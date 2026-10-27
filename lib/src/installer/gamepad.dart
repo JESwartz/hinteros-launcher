@@ -15,7 +15,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import '../api/api.dart' show NavAction, NavPhase;
-import 'evdev_ioctl.dart';
+import 'evdev_ioctl.dart' if (dart.library.js_interop) 'evdev_ioctl_web.dart';
 
 typedef PadEvent = (NavAction, NavPhase);
 

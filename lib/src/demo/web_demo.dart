@@ -211,27 +211,40 @@ class WebDemo {
   WebDemo._(this.daemon, this.services);
 
   /// [autoRunJobs]: jobs step through their stages by themselves (the
-  /// page); tests drive them by hand.
-  factory WebDemo({bool autoRunJobs = true}) {
+  /// page); tests drive them by hand. [profileId]: whose session this is (a
+  /// profile id or `guest`). [box], [installed] and [starter] are box-wide:
+  /// the next session after a profile switch gets the previous one's.
+  factory WebDemo({
+    bool autoRunJobs = true,
+    String profileId = 'p1',
+    MockProfileBox? box,
+    Set<String>? installed,
+    StarterSet? starter,
+  }) {
     final catalog = demoCatalog();
+    final apps = installed ?? demoInstalled;
     final daemon = MockDaemon(
-      apps: demoApps(catalog, demoInstalled),
-      games: demoGames(catalog, demoInstalled),
+      apps: demoApps(catalog, apps),
+      games: demoGames(catalog, apps),
     );
     final services = MockSystemServices(
       autoRunJobs: autoRunJobs,
       iconDir: demoIconDir,
-      profileBox: MockProfileBox(profiles: demoProfiles()),
+      profileBox: box ?? MockProfileBox(profiles: demoProfiles()),
+      currentProfile: profileId,
       catalog: catalog,
-      installed: demoInstalled,
+      installed: {...apps},
       generations: demoGenerations(),
       homes: demoHome,
     );
     services.mockAuth.adminPassword = demoAdminPassword;
-    services.mockProfiles.starter = StarterSet(const [
-      'firefox',
-      'jellyfin',
-    ], updatedAt: DateTime(2026, 10, 1));
+    services.mockProfiles.steam = false;
+    services.mockProfiles.starter =
+        starter ??
+        StarterSet(const [
+          'firefox',
+          'jellyfin',
+        ], updatedAt: DateTime(2026, 10, 1));
     services.mockStore.earlierGenerations = [
       AppGeneration(
         generation: 2,

@@ -110,8 +110,13 @@ declared with `platforms: [web]`, so the desktop bundle does not have them. Stor
 removals show in Apps and Games. There is no Server tab and no dev keys (F2 to F6, W/A/S/D):
 Home is the Home key. A gamepad works through the Gamepad API (standard mapping: A, B, X, Y,
 bumpers, D-pad and left stick; View or Guide is Home; held directions repeat as in the daemon).
-Settings and the mock's state last for the page only. In the browser a local path is an asset
-key (`lib/src/platform/local_files.dart`); the texts are loaded before the app starts.
+Settings and the mock's state last for the page only. A profile switch ends as on a box: after
+"Opening <name>..." a fresh launcher starts as that profile (`MockProfiles.onSwitched`), and
+ending the guest session opens the boot picker (`GreeterApp`); the profiles, the installed apps
+and each profile's settings carry over. In the browser a local path is an asset key
+(`lib/src/platform/local_files.dart`); the texts are loaded before the app starts.
+`lib/src/installer/evdev_ioctl_web.dart` stands in for the `dart:ffi` ioctl the picker's import
+chain reaches (no evdev in the browser).
 
 ### Session API 0.19: the Server tab
 

@@ -1,13 +1,14 @@
 /// A gamepad in the browser demo (`lib/web_main.dart`): the Gamepad API
 /// (`navigator.getGamepads`, standard mapping only) polled every 16 ms and
-/// fed into the mock daemon's `input_nav`, as the session daemon does with a
-/// real controller. Browser only (`dart:js_interop`).
+/// fed into the current session (the mock daemon's `input_nav`, or the
+/// profile picker), as the session daemon does with a real controller.
+/// Browser only (`dart:js_interop`).
 library;
 
 import 'dart:async';
 import 'dart:js_interop';
 
-import '../api/api.dart' show MockDaemon, NavAction, NavPhase;
+import '../api/api.dart' show NavAction, NavPhase;
 
 @JS('navigator')
 external _Navigator get _navigator;
@@ -60,9 +61,13 @@ const _directions = {
 };
 
 class WebGamepad {
-  WebGamepad(this.mock);
+  WebGamepad({required this.nav, required this.home});
 
-  final MockDaemon mock;
+  /// A button: its action and phase.
+  final void Function(NavAction action, NavPhase phase) nav;
+
+  /// View or Guide.
+  final void Function() home;
   final _clock = Stopwatch()..start();
   Timer? _timer;
   Set<NavAction> _held = {};
@@ -89,7 +94,7 @@ class WebGamepad {
       return;
     }
     final now = <NavAction>{};
-    var home = false;
+    var homeDown = false;
     for (final p in pads) {
       if (p == null || p.mapping != 'standard') continue;
       final b = p.buttons.toDart;
@@ -97,7 +102,7 @@ class WebGamepad {
         if (i < b.length && b[i].pressed) now.add(a);
       }
       for (final i in _home) {
-        if (i < b.length && b[i].pressed) home = true;
+        if (i < b.length && b[i].pressed) homeDown = true;
       }
       final axes = p.axes.toDart;
       if (axes.length >= 2) {
@@ -109,16 +114,16 @@ class WebGamepad {
       }
     }
 
-    if (home && !_homeHeld) mock.pressHome();
-    _homeHeld = home;
+    if (homeDown && !_homeHeld) home();
+    _homeHeld = homeDown;
 
     final t = _clock.elapsed;
     for (final a in _held.difference(now)) {
-      mock.emitNav(a, NavPhase.release);
+      nav(a, NavPhase.release);
       if (a == _repeating) _repeating = null;
     }
     for (final a in now.difference(_held)) {
-      mock.emitNav(a);
+      nav(a, NavPhase.press);
       if (_directions.contains(a)) {
         _repeating = a;
         _next = t + _delay;
@@ -128,7 +133,7 @@ class WebGamepad {
 
     final r = _repeating;
     if (r != null && t >= _next) {
-      mock.emitNav(r, NavPhase.repeat);
+      nav(r, NavPhase.repeat);
       // A late tick gives one repeat, not a burst.
       final soonest = t + _interval ~/ 2;
       _next = _next + _interval;

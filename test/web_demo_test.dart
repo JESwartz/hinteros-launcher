@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/demo/web_demo.dart';
+import 'package:hinteros_launcher/src/system/profiles.dart';
 
 /// The browser demo's content (assets/demo, lib/src/demo/web_demo.dart),
 /// read from the repo as the desktop reads files.
@@ -76,5 +77,87 @@ void main() {
     expect(demo.daemon.games.map((g) => g.name), contains('OpenArena'));
     expect(demo.daemon.apps.map((a) => a.id), ['jellyfin', 'firefox']);
     demo.services.dispose();
+  });
+
+  group('profile switch (lib/web_main.dart starts the next session)', () {
+    // Waits (real timers, at most 2 s) until [done].
+    Future<void> until(bool Function() done) async {
+      for (var i = 0; i < 200 && !done(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    }
+
+    WebDemo session({String id = 'p1', WebDemo? from}) {
+      final d = WebDemo(
+        autoRunJobs: false,
+        profileId: id,
+        box: from?.services.mockProfiles.box,
+        installed: from?.services.mockStore.installed,
+      );
+      d.services.mockProfiles.switchStepDelay = const Duration(milliseconds: 1);
+      return d;
+    }
+
+    test('ends without a Steam stage and names the target', () async {
+      final d = session();
+      final stages = <SwitchStage>[];
+      d.services.mockProfiles.switchEvents.listen((e) {
+        if (e is SwitchProgress) stages.add(e.stage);
+      });
+      String? target;
+      d.services.mockProfiles.onSwitched = (t) => target = t;
+      await d.services.mockProfiles.switchTo('p2', pin: '1593');
+      await until(() => target != null);
+      expect(stages, [SwitchStage.closingApps, SwitchStage.ending]);
+      expect(target, 'p2');
+      d.services.dispose();
+    });
+
+    test('a blocked switch ends only after Close app', () async {
+      final d = session();
+      final p = d.services.mockProfiles
+        ..blockingApp = (id: 'jellyfin', name: 'Jellyfin');
+      final blocked = <SwitchBlocked>[];
+      p.switchEvents.listen((e) {
+        if (e is SwitchBlocked) blocked.add(e);
+      });
+      String? target;
+      p.onSwitched = (t) => target = t;
+      await p.switchTo('p3');
+      await until(() => blocked.isNotEmpty);
+      expect(blocked, hasLength(1));
+      expect(target, isNull);
+      await p.keepWaiting();
+      await until(() => blocked.length > 1);
+      expect(blocked, hasLength(2));
+      expect(target, isNull);
+      await p.forceClose('jellyfin');
+      await until(() => target != null);
+      expect(target, 'p3');
+      d.services.dispose();
+    });
+
+    test('ending the guest session goes to the picker', () async {
+      final d = session(id: CurrentProfile.guestId);
+      String? target;
+      d.services.mockProfiles.onSwitched = (t) => target = t;
+      await d.services.mockProfiles.endGuest();
+      await until(() => target != null);
+      expect(target, '');
+      d.services.dispose();
+    });
+
+    test('the next session: its profile, the same box and installs', () async {
+      final a = session();
+      a.services.mockJobs.finish(
+        (await a.services.mockStore.install('openarena')).jobId,
+      );
+      final b = session(id: 'p3', from: a);
+      expect(b.services.mockProfiles.currentId, 'p3');
+      expect(b.services.mockProfiles.box, same(a.services.mockProfiles.box));
+      expect(b.daemon.games.map((g) => g.name), contains('OpenArena'));
+      a.services.dispose();
+      b.services.dispose();
+    });
   });
 }

@@ -223,6 +223,10 @@ class MockProfiles implements ProfilesRepository {
   /// Time between switch stages.
   Duration switchStepDelay;
 
+  /// Steam is installed: a switch closes it (the `closing_steam` stage). The
+  /// session daemon skips that stage without Steam.
+  bool steam = true;
+
   /// The app that does not close on a switch (the not-responding pop-up),
   /// by id and name.
   ({String id, String name})? blockingApp;
@@ -250,6 +254,11 @@ class MockProfiles implements ProfilesRepository {
 
   /// Where a switch went (set when it reached `ending`).
   String? switchedTo;
+
+  /// Called when a switch reaches `ending`, with the target (a profile id,
+  /// `guest`, or '' for the picker). On a box greetd ends the session here;
+  /// the browser demo starts the next session itself.
+  void Function(String target)? onSwitched;
 
   @override
   Stream<List<ProfileInfo>> get changes => _changes.stream;
@@ -607,13 +616,17 @@ class MockProfiles implements ProfilesRepository {
   }
 
   void _finishSwitch(String target) {
+    void end() {
+      _switch.add(const SwitchProgress(SwitchStage.ending));
+      switchedTo = target;
+      _switching = false;
+      onSwitched?.call(target);
+    }
+
     _step(() {
+      if (!steam) return end();
       _switch.add(const SwitchProgress(SwitchStage.closingSteam));
-      _step(() {
-        _switch.add(const SwitchProgress(SwitchStage.ending));
-        switchedTo = target;
-        _switching = false;
-      });
+      _step(end);
     });
   }
 
@@ -732,6 +745,11 @@ class MockGreeter implements GreeterRepository {
   /// The profile whose session started (the greeter would exit now).
   String? entered;
 
+  LoginOutcome _enter(String id) {
+    entered = id;
+    return const LoginStarted();
+  }
+
   /// What happened (`login:p3`, `pin:p3:wrong`, `create:p4`...). Never a PIN.
   final List<String> log = [];
 
@@ -778,16 +796,12 @@ class MockGreeter implements GreeterRepository {
           'The guest is turned off.',
         );
       }
-      entered = id;
-      return const LoginStarted();
+      return _enter(id);
     }
     final p =
         box.byId(id) ??
         (throw SystemException(SystemErrorKind.notFound, 'No profile $id.'));
-    if (!p.locked || _tokens.remove(id)) {
-      entered = id;
-      return const LoginStarted();
-    }
+    if (!p.locked || _tokens.remove(id)) return _enter(id);
     if (pin == null) return const LoginNeedsPin();
     try {
       box.checkPin(p, pin, PinKind.target);
@@ -800,8 +814,7 @@ class MockGreeter implements GreeterRepository {
       );
     }
     log.add('pin:$id:ok');
-    entered = id;
-    return const LoginStarted();
+    return _enter(id);
   }
 
   @override
