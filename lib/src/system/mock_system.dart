@@ -7,9 +7,9 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
 
 import '../api/mock_store.dart' show mockCatalogDir;
+import '../platform/local_files.dart';
 import 'catalog.dart';
 import 'mock_profiles.dart';
 import 'mock_server.dart';
@@ -1230,7 +1230,12 @@ const mockServiceApp = StoreApp(
 List<StoreApp> mockCatalog() {
   final dir = mockCatalogDir();
   return [
-    if (dir != null) ...loadCatalogIndex('$dir/catalog.json'),
+    if (dir != null)
+      ...parseCatalogIndex(
+        readLocalText('$dir/catalog.json')!,
+        readTerms: termsReaderFor('$dir/catalog.json'),
+        readReadme: readmeReaderFor('$dir/catalog.json'),
+      ),
     const StoreApp(
       id: 'retroarch',
       name: 'RetroArch',
@@ -1509,8 +1514,8 @@ class MockStore implements StoreRepository {
     final d = iconDir;
     if (d == null) return null;
     for (final ext in ['png', 'svg']) {
-      final f = File('$d/${app.id}.$ext');
-      if (f.existsSync()) return f.path;
+      final p = '$d/${app.id}.$ext';
+      if (localFileExists(p)) return p;
     }
     return null;
   }

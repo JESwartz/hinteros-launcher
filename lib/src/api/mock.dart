@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:io' show File;
 
+import '../platform/local_files.dart';
 import 'daemon.dart';
 import 'errors.dart';
 import 'generated.dart';
@@ -32,7 +32,7 @@ const mockApps = <App>[
 List<App> mockAppsWithIcons(String iconDir, {Set<String> without = const {}}) {
   String? find(String id) {
     for (final ext in ['png', 'svg']) {
-      if (File('$iconDir/$id.$ext').existsSync()) return '$iconDir/$id.$ext';
+      if (localFileExists('$iconDir/$id.$ext')) return '$iconDir/$id.$ext';
     }
     return null;
   }
@@ -748,7 +748,7 @@ class MockDaemon extends DaemonConnection {
       if (a.icon != null) continue;
       for (final ext in ['png', 'svg']) {
         final p = '$iconDir/${a.id}.$ext';
-        if (File(p).existsSync()) {
+        if (localFileExists(p)) {
           setAppIcon(a.id, p);
           return a.id;
         }

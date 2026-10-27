@@ -1209,7 +1209,8 @@ class MockSystemRelay {
     }
     final id = jobIdQueue.isNotEmpty
         ? jobIdQueue.removeAt(0)
-        : (0x3f9a0c2b7e4d1a65 + ++_n * 7919).toRadixString(16).padLeft(16, '0');
+        // In two halves: JavaScript numbers hold 53 bits (the web demo).
+        : '3f9a0c2b${(0x7e4d1a65 + ++_n * 7919).toRadixString(16).padLeft(8, '0')}';
     final j = _Job(id, kind, _nowSeconds(), onSuccess: onSuccess)
       ..restart = restartNext
       ..apps = apps

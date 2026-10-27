@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -8,6 +7,8 @@ import 'package:flutter/foundation.dart'
     show ChangeNotifier, listEquals, visibleForTesting;
 import 'package:flutter/painting.dart' show Color;
 import 'package:flutter_svg/flutter_svg.dart';
+
+import '../platform/local_files.dart';
 
 /// A decoded app icon: a raster image (SVGs are rasterised once, here) plus
 /// the two numbers the tile needs to pick a backdrop.
@@ -92,7 +93,7 @@ class AppIconCache extends ChangeNotifier {
 
     Uint8List bytes;
     try {
-      bytes = await File(path).readAsBytes();
+      bytes = await readLocalBytes(path);
     } catch (_) {
       return done(null, null);
     }
@@ -121,26 +122,23 @@ class AppIconCache extends ChangeNotifier {
   }
 
   static Future<ui.Image> _decodeRaster(Uint8List bytes) async {
-    final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-    try {
-      final d = await ui.ImageDescriptor.encoded(buffer);
-      try {
-        final wide = d.width >= d.height;
-        final big = math.max(d.width, d.height) > maxEdge;
-        final codec = await d.instantiateCodec(
-          targetWidth: big && wide ? maxEdge : null,
-          targetHeight: big && !wide ? maxEdge : null,
+    // Not ImageDescriptor: the web engine cannot tell its size before
+    // decoding. The codec takes over the buffer.
+    final codec = await ui.instantiateImageCodecWithSize(
+      await ui.ImmutableBuffer.fromUint8List(bytes),
+      getTargetSize: (w, h) {
+        final wide = w >= h;
+        final big = math.max(w, h) > maxEdge;
+        return ui.TargetImageSize(
+          width: big && wide ? maxEdge : null,
+          height: big && !wide ? maxEdge : null,
         );
-        try {
-          return (await codec.getNextFrame()).image;
-        } finally {
-          codec.dispose();
-        }
-      } finally {
-        d.dispose();
-      }
+      },
+    );
+    try {
+      return (await codec.getNextFrame()).image;
     } finally {
-      buffer.dispose();
+      codec.dispose();
     }
   }
 

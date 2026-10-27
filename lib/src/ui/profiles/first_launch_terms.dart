@@ -5,12 +5,11 @@
 /// unlaunched, with Remove offered next to it.
 library;
 
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../api/api.dart' show App;
 import '../../data/launcher_data.dart';
+import '../../platform/local_files.dart';
 import '../../system/models.dart';
 import '../../system/repositories.dart';
 import '../dialogs.dart';
@@ -21,12 +20,8 @@ import '../store_flows.dart' show removeFlow;
 typedef TermsReader = String? Function(String path);
 
 String? _read(String path) {
-  try {
-    final t = File(path).readAsStringSync();
-    return t.isEmpty ? null : t;
-  } on FileSystemException {
-    return null;
-  }
+  final t = readLocalText(path);
+  return t == null || t.isEmpty ? null : t;
 }
 
 /// Shows [app]'s terms and records the answer. True: accepted, start it.

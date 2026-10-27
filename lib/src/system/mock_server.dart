@@ -5,9 +5,9 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
 
 import '../api/mock_server_relay.dart' show MockServerRelay, mockMediaTree;
+import '../platform/local_files.dart';
 import 'mock_profiles.dart';
 import 'models.dart';
 import 'server.dart';
@@ -239,8 +239,8 @@ class MockServer implements ServerRepository {
       _ => id,
     };
     for (final ext in ['png', 'svg']) {
-      final f = File('$d/$name.$ext');
-      if (f.existsSync()) return f.path;
+      final p = '$d/$name.$ext';
+      if (localFileExists(p)) return p;
     }
     return null;
   }

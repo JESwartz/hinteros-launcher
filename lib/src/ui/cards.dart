@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -6,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../api/api.dart' show Game;
 import '../data/app_icons.dart' show AppIcon;
 import '../data/games_repository.dart';
+import '../platform/local_files.dart';
 import '../theme/hinter_theme.dart';
 import 'app_icon_view.dart';
 import 'focus_frame.dart';
@@ -104,8 +104,8 @@ class ArtImage extends StatelessWidget {
     );
     final p = path;
     if (p == null || p.isEmpty) return placeholder;
-    return Image.file(
-      File(p),
+    return Image(
+      image: localImage(p),
       fit: BoxFit.cover,
       errorBuilder: (_, _, _) => placeholder,
     );

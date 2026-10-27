@@ -5,6 +5,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import '../platform/local_files.dart';
 import 'models.dart';
 
 /// Where the system keeps the catalog index (the ISO has the same path). The
@@ -23,7 +24,7 @@ typedef TermsReader = String? Function(String file);
 /// A [TermsReader] for the terms files that sit next to the index at
 /// [indexPath].
 TermsReader termsReaderFor(String indexPath) {
-  final dir = File(indexPath).parent.path;
+  final dir = _dirOf(indexPath);
   return (file) {
     // The schema only allows `terms/<name>.txt`; refuse anything else so a
     // damaged index cannot make us read arbitrary files.
@@ -31,18 +32,21 @@ TermsReader termsReaderFor(String indexPath) {
         file.contains('..')) {
       return null;
     }
-    try {
-      return File('$dir/$file').readAsStringSync();
-    } on FileSystemException {
-      return null;
-    }
+    return readLocalText('$dir/$file');
   };
+}
+
+/// The directory part of [path] (by string: in the browser demo a path is
+/// an asset key).
+String _dirOf(String path) {
+  final slash = path.lastIndexOf('/');
+  return slash < 0 ? '.' : path.substring(0, slash);
 }
 
 /// A [TermsReader] for the READMEs next to the index at [indexPath]
 /// (`readme/<id>.md`).
 TermsReader readmeReaderFor(String indexPath) {
-  final dir = File(indexPath).parent.path;
+  final dir = _dirOf(indexPath);
   return (file) {
     if (!RegExp(r'^readme/[A-Za-z0-9._-]+\.md$').hasMatch(file) ||
         file.contains('..')) {
@@ -55,14 +59,8 @@ TermsReader readmeReaderFor(String indexPath) {
 /// The README at [path], or null when it is missing, empty, unreadable or
 /// over 64 KiB (the catalog's limit).
 String? readReadmeFile(String path) {
-  try {
-    final f = File(path);
-    if (f.lengthSync() > 64 * 1024) return null;
-    final t = f.readAsStringSync();
-    return t.trim().isEmpty ? null : t;
-  } on FileSystemException {
-    return null;
-  }
+  final t = readLocalText(path, maxBytes: 64 * 1024);
+  return t == null || t.trim().isEmpty ? null : t;
 }
 
 /// The apps of an index, in its order: `status` available only (retired and

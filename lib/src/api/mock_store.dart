@@ -8,12 +8,15 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import '../platform/local_files.dart';
 import 'generated.dart';
 
 /// The directory of the real-format catalog fixture (`catalog.json` plus
 /// `terms/`): `$HINTEROS_MOCK_CATALOG`, else `test/fixtures/catalog` found
-/// from the working directory upwards.
+/// from the working directory upwards. None in the browser: the demo brings
+/// its own catalog (`lib/web_main.dart`).
 String? mockCatalogDir() {
+  if (localFilesAreAssets) return null;
   final env = Platform.environment['HINTEROS_MOCK_CATALOG'];
   if (env != null && env.isNotEmpty) return env;
   var d = Directory.current;
@@ -81,10 +84,9 @@ StoreApp mockStoreApp({
 /// fixture.
 List<StoreApp> _fixtureApps(String? dir) {
   if (dir == null) return const [];
-  final root = Directory(dir).absolute.path;
-  final index = jsonDecode(
-    File('$root/catalog.json').readAsStringSync(),
-  ) as Map<String, dynamic>;
+  final root = localAbsolute(dir);
+  final index =
+      jsonDecode(readLocalText('$root/catalog.json')!) as Map<String, dynamic>;
   return [
     for (final a in (index['apps'] as List).cast<Map<String, dynamic>>())
       // Services (index 3 `kind: service`) are not Store apps, as in the daemon.
