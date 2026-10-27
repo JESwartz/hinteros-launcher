@@ -214,9 +214,12 @@ void main() {
       await moveTo(t, 'k-back');
       expect(rowValue(t, 'keyboard_keys', 'B (Back)'), 'Escape');
       await press(t, [kEnter]);
-      // Ctrl, Alt, Shift, Meta, then None, then the keys (a, b, ...).
-      expect(focusLabel(), endsWith('/mods:0'));
-      await press(t, [kRight, kEnter]);
+      // Ctrl, Alt, Shift, Meta, then None, then the keys (a, b, ...); focus
+      // starts on the current key (Escape).
+      expect(focusLabel(), endsWith('/k6:1'));
+      await press(t, List.filled(8, kUp));
+      expect(focusLabel(), endsWith('/mods:1'));
+      await press(t, [kEnter]);
       await press(t, [kDown, kDown]);
       // The column stays: Alt is over b.
       expect(focusLabel(), endsWith('/k0:1'));
@@ -228,7 +231,9 @@ void main() {
       expect(ctl().stored.keyboard, {'back': 'alt+b'});
       // None.
       await moveTo(t, 'k-accept', up: true);
-      await press(t, [kEnter, kDown]);
+      await press(t, [kEnter]);
+      expect(focusLabel(), endsWith('/k6:0'));
+      await press(t, List.filled(7, kUp));
       expect(focusLabel(), endsWith('/none:0'));
       await press(t, [kEnter]);
       expect(ctl().stored.keyboard, {'back': 'alt+b', 'accept': 'none'});
@@ -251,7 +256,7 @@ void main() {
       );
       expect(value('LB (Page left)', 'Alt+Left'), findsWidgets);
       expect(focusLabel(), endsWith('/k-up:0'));
-      await press(t, [kEnter, kDown, kEnter]);
+      await press(t, [kEnter, ...List.filled(8, kUp), kEnter]);
       expect(ctl().stored.apps, {
         'firefox': {'up': 'none'},
       });

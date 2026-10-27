@@ -37,16 +37,16 @@
       "examples": [
         {
           "name": "accepted",
-          "params": { "api_version": "0.19", "client": { "name": "hinteros-launcher", "version": "0.1.0" } },
-          "result": { "api_version": "0.19", "server": { "name": "hinteros-session", "version": "0.1.0" } }
+          "params": { "api_version": "0.20", "client": { "name": "hinteros-launcher", "version": "0.1.0" } },
+          "result": { "api_version": "0.20", "server": { "name": "hinteros-session", "version": "0.1.0" } }
         },
         {
           "name": "major mismatch",
           "params": { "api_version": "1.0", "client": { "name": "hinteros-launcher", "version": "2.0.0" } },
           "error": {
             "code": 1002,
-            "message": "API version mismatch: client 1.0, server 0.19",
-            "data": { "client_api_version": "1.0", "server_api_version": "0.19" }
+            "message": "API version mismatch: client 1.0, server 0.20",
+            "data": { "client_api_version": "1.0", "server_api_version": "0.20" }
           }
         }
       ]

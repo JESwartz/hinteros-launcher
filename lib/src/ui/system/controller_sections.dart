@@ -540,6 +540,7 @@ class _KeyPickerState extends State<_KeyPicker> {
   late final Set<String> _mods = widget.current == 'none'
       ? <String>{}
       : {..._current.$2};
+  bool _placed = false;
 
   @override
   Widget build(BuildContext context) {
@@ -618,10 +619,18 @@ class _KeyPickerState extends State<_KeyPicker> {
     p.buttons('cancel', [
       btn('Cancel', widget.modal.close),
     ], gap: HinterTokens.s4);
+    final pane = p.build();
+    if (!_placed) {
+      // Focus starts on the current key (on None when there is none). Rows:
+      // modifiers, None, then the key rows.
+      _placed = true;
+      final i = widget.current == 'none' ? -1 : keys.indexOf(_current.$1);
+      region.model.goTo(i < 0 ? 1 : 2 + i ~/ _perRow, i < 0 ? 0 : i % _perRow);
+    }
     return FullPage(
       title: widget.title,
       subtitle: keyLabel(widget.current),
-      child: SingleChildScrollView(child: p.build()),
+      child: SingleChildScrollView(child: pane),
     );
   }
 }
