@@ -24,6 +24,8 @@ class LauncherApp extends StatelessWidget {
     this.now,
     this.showFps = false,
     this.startup,
+    this.showServer = true,
+    this.gamesNeedSteam = true,
   });
 
   final LauncherData data;
@@ -31,6 +33,12 @@ class LauncherApp extends StatelessWidget {
   final SystemServices services;
   final DateTime Function()? now;
   final bool showFps;
+
+  /// See [LauncherShell.showServer].
+  final bool showServer;
+
+  /// See [LauncherShell.gamesNeedSteam].
+  final bool gamesNeedSteam;
 
   /// See [LauncherShell.startup].
   final LoadingIdentity? startup;
@@ -63,6 +71,8 @@ class LauncherApp extends StatelessWidget {
             now: now,
             showFps: showFps,
             startup: startup,
+            showServer: showServer,
+            gamesNeedSteam: gamesNeedSteam,
           ),
         );
       },

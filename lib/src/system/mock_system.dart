@@ -372,6 +372,7 @@ class MockUpdates implements UpdatesRepository {
     this.base = NixBase.unstable,
     DateTime Function()? now,
     this.box,
+    List<Generation>? generations,
   }) : _now = now ?? DateTime.now,
        _status = status ?? mockUpToDate() {
     _generations = [
@@ -397,6 +398,7 @@ class MockUpdates implements UpdatesRepository {
               : const [],
         ),
     ];
+    if (generations != null) _generations = generations;
   }
 
   final MockJobs jobs;
@@ -1683,6 +1685,9 @@ class MockSystemServices extends SystemServices {
 
   /// [autoRunJobs]: jobs step through their stages by themselves (`--mock`);
   /// tests drive them by hand. [iconDir]: the generic icon fixtures.
+  /// [catalog], [installed], [generations] and [homes] replace the mock's
+  /// own Store catalog, installed apps, system generations and storage
+  /// trees (the browser demo has its own content).
   factory MockSystemServices({
     bool autoRunJobs = false,
     String? iconDir,
@@ -1694,16 +1699,29 @@ class MockSystemServices extends SystemServices {
     List<StoreApp> extraApps = const [],
     bool storageMeasured = true,
     String timeZone = 'UTC',
+    List<StoreApp>? catalog,
+    Set<String>? installed,
+    List<Generation>? generations,
+    StorageNode Function(String id)? homes,
   }) {
     final jobs = MockJobs(autoRun: autoRunJobs, now: now);
     final box = profileBox ?? MockProfileBox(now: now);
-    final updates = MockUpdates(jobs, status: status, now: now, box: box);
+    final updates = MockUpdates(
+      jobs,
+      status: status,
+      now: now,
+      box: box,
+      generations: generations,
+    );
     final auth = MockAuth();
     final store = MockStore(
       jobs,
       iconDir: iconDir,
       now: now,
-      catalog: extraApps.isEmpty ? null : [...mockCatalog(), ...extraApps],
+      catalog:
+          catalog ??
+          (extraApps.isEmpty ? null : [...mockCatalog(), ...extraApps]),
+      installed: installed,
     );
     final profiles = MockProfiles(
       jobs,
@@ -1728,6 +1746,7 @@ class MockSystemServices extends SystemServices {
         currentId: () => profiles.currentId,
         now: now,
         measured: storageMeasured,
+        home: homes ?? mockHome,
       ),
       mockTimeZone: MockTimeZone(
         box: box,

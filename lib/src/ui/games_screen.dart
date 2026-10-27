@@ -20,10 +20,15 @@ class GamesScreen extends StatelessWidget {
     required this.data,
     required this.region,
     this.onInstallSteam,
+    this.needsSteam = true,
   });
 
   final LauncherData data;
   final NavRegion region;
+
+  /// Without `steam` among the apps, show "Steam is not installed" (the
+  /// browser demo turns it off: its games are not Steam's).
+  final bool needsSteam;
 
   /// The install flow for Steam (confirm, terms, progress), through the Store.
   final Future<void> Function(BuildContext context)? onInstallSteam;
@@ -36,7 +41,7 @@ class GamesScreen extends StatelessWidget {
         // The daemon leaves `steam` out of apps.list while Steam is not
         // installed (and lists it again after an install: apps_changed).
         final list = data.appList;
-        if (list != null && !list.any((a) => a.id == 'steam')) {
+        if (needsSteam && list != null && !list.any((a) => a.id == 'steam')) {
           return _SteamPrompt(region: region, onInstall: onInstallSteam);
         }
         final notice = connectionNotice(data.status);

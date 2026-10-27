@@ -123,6 +123,7 @@ class MockStorage implements StorageRepository {
     required this.currentId,
     DateTime Function()? now,
     this.measured = true,
+    this.home = mockHome,
   }) : _now = now ?? DateTime.now {
     if (measured) _measurement = _measure(_now().subtract(_age));
   }
@@ -136,6 +137,9 @@ class MockStorage implements StorageRepository {
 
   /// There is a measurement from the start (2 hours old).
   final bool measured;
+
+  /// The folders and games of each home (profile id or `guest`).
+  final StorageNode Function(String id) home;
   static const _age = Duration(hours: 2);
 
   StorageMeasurement? _measurement;
@@ -191,10 +195,10 @@ class MockStorage implements StorageRepository {
         StorageNode(
           kind: StorageKind.profile,
           id: p.id,
-          bytes: mockHome(p.id).bytes,
+          bytes: home(p.id).bytes,
         ),
       if (box.guestEnabled)
-        StorageNode(kind: StorageKind.guest, bytes: mockHome('guest').bytes),
+        StorageNode(kind: StorageKind.guest, bytes: home('guest').bytes),
     ];
     final system = _sum(StorageKind.system, [
       ..._systemGens(),
@@ -307,7 +311,7 @@ class MockStorage implements StorageRepository {
         'That is not there any more.',
       );
     }
-    return StorageTree(id: id, measuredAt: m.measuredAt, root: mockHome(id));
+    return StorageTree(id: id, measuredAt: m.measuredAt, root: home(id));
   }
 
   @override

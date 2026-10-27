@@ -79,6 +79,8 @@ class LauncherShell extends StatefulWidget {
     this.now,
     this.showFps = false,
     this.startup,
+    this.showServer = true,
+    this.gamesNeedSteam = true,
   });
 
   final LauncherData data;
@@ -94,6 +96,13 @@ class LauncherShell extends StatefulWidget {
   /// for tests and goldens (no timer).
   final DateTime Function()? now;
   final bool showFps;
+
+  /// The Server tab is there (the browser demo has none).
+  final bool showServer;
+
+  /// Games shows "Steam is not installed" while `steam` is not an app (the
+  /// browser demo's games are not Steam's).
+  final bool gamesNeedSteam;
 
   @override
   State<LauncherShell> createState() => _LauncherShellState();
@@ -163,7 +172,10 @@ class _LauncherShellState extends State<LauncherShell> {
     ending: _ending,
   );
 
-  late final List<Section> _sections = Section.values;
+  late final List<Section> _sections = [
+    for (final s in Section.values)
+      if (widget.showServer || s != Section.server) s,
+  ];
   Section _section = Section.home;
   late DateTime _time = (widget.now ?? DateTime.now)();
   Timer? _clock;
@@ -885,6 +897,7 @@ class _LauncherShellState extends State<LauncherShell> {
       data: widget.data,
       region: _games,
       onInstallSteam: (context) => installSteam(context, widget.services),
+      needsSteam: widget.gamesNeedSteam,
     ),
     Section.store => StoreScreen(
       services: widget.services,
