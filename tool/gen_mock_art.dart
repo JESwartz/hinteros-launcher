@@ -1,8 +1,9 @@
 // Draws the placeholder game artwork used by the mock daemon in tests and
 // goldens (test/fixtures/art/*.png): sky, sun and mountain layers, no text, no
 // network, no third-party pictures. Deterministic; the PNGs are committed.
+// With --demo: the browser demo's games instead (assets/demo/art/*.png).
 //
-//   dart tool/gen_mock_art.dart
+//   dart tool/gen_mock_art.dart [--demo]
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -158,7 +159,85 @@ const games = <String, Palette>{
   ),
 };
 
-void main() {
+/// The browser demo's games (lib/web_main.dart), by catalog id.
+const demoGames = <String, Palette>{
+  'supertuxkart': Palette(
+    (0x0d, 0x3b, 0x66),
+    (0x6c, 0xc4, 0xe8),
+    (0xff, 0xf4, 0xb8),
+    [
+      (0x3f, 0x8f, 0x4a),
+      (0x2c, 0x6e, 0x38),
+      (0x1d, 0x4f, 0x28),
+      (0x10, 0x30, 0x18),
+    ],
+    0.9,
+  ),
+  'openarena': Palette(
+    (0x12, 0x10, 0x1e),
+    (0x8a, 0x2b, 0x5e),
+    (0xff, 0x8a, 0x5c),
+    [
+      (0x4a, 0x24, 0x48),
+      (0x33, 0x1a, 0x36),
+      (0x21, 0x11, 0x24),
+      (0x10, 0x08, 0x12),
+    ],
+    3.3,
+  ),
+  'neverball': Palette(
+    (0x1e, 0x50, 0x3c),
+    (0xd8, 0xe8, 0x9a),
+    (0xff, 0xff, 0xe0),
+    [
+      (0x5c, 0x8a, 0x3a),
+      (0x44, 0x6c, 0x2c),
+      (0x2e, 0x4c, 0x1e),
+      (0x18, 0x2a, 0x10),
+    ],
+    5.2,
+  ),
+  'shattered-pixel-dungeon': Palette(
+    (0x08, 0x0c, 0x14),
+    (0x2e, 0x3e, 0x5a),
+    (0xc8, 0xd4, 0xe8),
+    [
+      (0x3a, 0x40, 0x4c),
+      (0x28, 0x2c, 0x36),
+      (0x18, 0x1b, 0x22),
+      (0x0a, 0x0b, 0x0e),
+    ],
+    2.1,
+  ),
+  'freedoom-phase1': Palette(
+    (0x26, 0x08, 0x06),
+    (0xb8, 0x3a, 0x12),
+    (0xff, 0xd0, 0x6a),
+    [
+      (0x5e, 0x2a, 0x1a),
+      (0x44, 0x1c, 0x12),
+      (0x2c, 0x10, 0x0a),
+      (0x16, 0x07, 0x04),
+    ],
+    4.6,
+  ),
+};
+
+void main(List<String> args) {
+  if (args.contains('--demo')) {
+    final dir = Directory('assets/demo/art')..createSync(recursive: true);
+    for (final e in demoGames.entries) {
+      for (final (kind, w, h) in [
+        ('portrait', 400, 600),
+        ('header', 460, 215),
+      ]) {
+        File('${dir.path}/${e.key}_$kind.png')
+            .writeAsBytesSync(png(w, h, render(w, h, e.value)));
+      }
+    }
+    stdout.writeln('wrote ${dir.path}');
+    return;
+  }
   final dir = Directory('test/fixtures/art')..createSync(recursive: true);
   for (final e in games.entries) {
     for (final (kind, w, h) in [('portrait', 400, 600), ('header', 460, 215)]) {

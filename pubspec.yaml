@@ -25,6 +25,18 @@ flutter:
   assets:
     # The time zone map (Natural Earth, public domain; tool/gen_time_zone_map.dart).
     - assets/maps/time_zones.bin
+    # The browser demo's content (lib/web_main.dart, assets/demo/NOTICE):
+    # free apps and games, placeholder art. Web only: not in the desktop build.
+    - path: assets/demo/
+      platforms: [web]
+    - path: assets/demo/icons/
+      platforms: [web]
+    - path: assets/demo/art/
+      platforms: [web]
+    - path: assets/demo/catalog/
+      platforms: [web]
+    - path: assets/demo/catalog/readme/
+      platforms: [web]
 
   fonts:
     # Atkinson Hyperlegible (OFL-1.1, licence in assets/fonts/OFL.txt).
