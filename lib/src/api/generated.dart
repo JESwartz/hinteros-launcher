@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.19).
+// Source: schema/session-api.json (session API 0.20).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.19';
+const apiVersion = '0.20';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -139,6 +139,9 @@ const apiMethodNames = <String>[
   'greeter.create',
   'session.restart',
   'store.list',
+  'input.settings.get',
+  'input.settings.set',
+  'input.capture',
 ];
 
 /// Event names in the schema.
@@ -170,6 +173,7 @@ const apiEventNames = <String>[
   'greeter_prompt',
   'greeter_result',
   'profiles_changed',
+  'input_captured',
 ];
 
 /// Error name to JSON-RPC code.
@@ -343,6 +347,24 @@ typedef FocusTarget = String;
 /// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder), lan (the local network: other devices at home and this box's own services). More may come; show unknown names as they are.
 typedef PermissionName = String;
 
+/// 0.20: a remappable controller button, by its Xbox label: a, b, x, y, lb, rb, lt, rt, view, menu (input.settings.get buttons). Guide and the directions are not remappable.
+typedef ControllerButton = String;
+
+/// 0.20: a button pressed during input.capture: a ControllerButton or a direction (up, down, left, right).
+typedef CapturedButton = String;
+
+/// 0.20: an action a button or key can do: the remappable NavActions (accept, back, context, secondary, menu, view, page_left, page_right, trigger_left, trigger_right); for keyboard-mode apps also up, down, left, right.
+typedef ControllerAction = String;
+
+/// 0.20: a key with optional modifiers, modifiers first: 'enter', 'alt+left', 'ctrl+shift+t'; or 'none' (the action sends nothing).
+typedef KeyComboName = String;
+
+/// 0.20: action to button.
+typedef ButtonMap = Map<String, Object?>;
+
+/// 0.20: action to key of a keyboard-mode app.
+typedef Keymap = Map<String, Object?>;
+
 /// Absolute path of an image file in Steam's library cache (readable by the session user), or null if Steam has not cached it.
 typedef ArtworkPath = String;
 
@@ -456,6 +478,7 @@ enum EventName {
   greeterPrompt('greeter_prompt'),
   greeterResult('greeter_result'),
   timeZoneChanged('time_zone_changed'),
+  inputCaptured('input_captured'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -827,6 +850,301 @@ class AppDisplays {
 
   @override
   String toString() => 'AppDisplays(${jsonEncode(toJson())})';
+}
+
+/// 0.20: the pointer of pointer apps. speed: percent of the configured pointer speed. swap_sticks: the left stick moves the pointer, the right stick gives the directions. left_click, right_click: physical buttons (before the general map), never the same.
+class PointerSettings {
+  const PointerSettings({
+    this.speed,
+    this.swapSticks,
+    this.leftClick,
+    this.rightClick,
+  });
+
+  final int? speed;
+  final bool? swapSticks;
+
+  /// 0.20: a remappable controller button, by its Xbox label: a, b, x, y, lb, rb, lt, rt, view, menu (input.settings.get buttons). Guide and the directions are not remappable.
+  final String? leftClick;
+
+  /// 0.20: a remappable controller button, by its Xbox label: a, b, x, y, lb, rb, lt, rt, view, menu (input.settings.get buttons). Guide and the directions are not remappable.
+  final String? rightClick;
+
+  factory PointerSettings.fromJson(Map<String, dynamic> json) =>
+      PointerSettings(
+        speed: json['speed'] == null ? null : json['speed'] as int,
+        swapSticks: json['swap_sticks'] == null
+            ? null
+            : json['swap_sticks'] as bool,
+        leftClick: json['left_click'] == null
+            ? null
+            : json['left_click'] as String,
+        rightClick: json['right_click'] == null
+            ? null
+            : json['right_click'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'speed': ?speed,
+    'swap_sticks': ?swapSticks,
+    'left_click': ?leftClick,
+    'right_click': ?rightClick,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is PointerSettings &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'PointerSettings(${jsonEncode(toJson())})';
+}
+
+/// 0.20: the stored controller settings of a profile: only what the user changed. general: over defaults.general, the result one button per action and one action per button. keyboard: the keys of every keyboard-mode app. apps: per app id, over everything else for that app.
+class ControllerSettings {
+  const ControllerSettings({
+    this.general,
+    this.keyboard,
+    this.apps,
+    this.pointer,
+  });
+
+  /// 0.20: action to button.
+  final Map<String, Object?>? general;
+
+  /// 0.20: action to key of a keyboard-mode app.
+  final Map<String, Object?>? keyboard;
+  final Map<String, Object?>? apps;
+
+  /// 0.20: the pointer of pointer apps. speed: percent of the configured pointer speed. swap_sticks: the left stick moves the pointer, the right stick gives the directions. left_click, right_click: physical buttons (before the general map), never the same.
+  final PointerSettings? pointer;
+
+  factory ControllerSettings.fromJson(Map<String, dynamic> json) =>
+      ControllerSettings(
+        general: json['general'] == null
+            ? null
+            : (json['general'] as Map).cast<String, Object?>(),
+        keyboard: json['keyboard'] == null
+            ? null
+            : (json['keyboard'] as Map).cast<String, Object?>(),
+        apps: json['apps'] == null
+            ? null
+            : (json['apps'] as Map).cast<String, Object?>(),
+        pointer: json['pointer'] == null
+            ? null
+            : PointerSettings.fromJson(
+                (json['pointer'] as Map).cast<String, dynamic>(),
+              ),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'general': ?general,
+    'keyboard': ?keyboard,
+    'apps': ?apps,
+    if (pointer != null) 'pointer': pointer!.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ControllerSettings &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'ControllerSettings(${jsonEncode(toJson())})';
+}
+
+/// 0.20: the built-in controller settings. pointer has all four fields.
+class ControllerDefaults {
+  const ControllerDefaults({
+    required this.general,
+    required this.keyboard,
+    required this.pointer,
+  });
+
+  /// 0.20: action to button.
+  final Map<String, Object?> general;
+
+  /// 0.20: action to key of a keyboard-mode app.
+  final Map<String, Object?> keyboard;
+
+  /// 0.20: the pointer of pointer apps. speed: percent of the configured pointer speed. swap_sticks: the left stick moves the pointer, the right stick gives the directions. left_click, right_click: physical buttons (before the general map), never the same.
+  final PointerSettings pointer;
+
+  factory ControllerDefaults.fromJson(Map<String, dynamic> json) =>
+      ControllerDefaults(
+        general: (json['general'] as Map).cast<String, Object?>(),
+        keyboard: (json['keyboard'] as Map).cast<String, Object?>(),
+        pointer: PointerSettings.fromJson(
+          (json['pointer'] as Map).cast<String, dynamic>(),
+        ),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'general': general,
+    'keyboard': keyboard,
+    'pointer': pointer.toJson(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ControllerDefaults &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'ControllerDefaults(${jsonEncode(toJson())})';
+}
+
+/// 0.20: a keyboard-mode app of the profile. keymap: only the app's own catalog or config entries (back key, keymap, address bar keys).
+class KeyboardApp {
+  const KeyboardApp({
+    required this.id,
+    required this.name,
+    required this.keymap,
+  });
+
+  /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'. 'steam' is Steam itself (Big Picture and its other windows).
+  final String id;
+  final String name;
+
+  /// 0.20: action to key of a keyboard-mode app.
+  final Map<String, Object?> keymap;
+
+  factory KeyboardApp.fromJson(Map<String, dynamic> json) => KeyboardApp(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    keymap: (json['keymap'] as Map).cast<String, Object?>(),
+  );
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'keymap': keymap};
+
+  @override
+  bool operator ==(Object other) =>
+      other is KeyboardApp &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'KeyboardApp(${jsonEncode(toJson())})';
+}
+
+class InputSettingsSpeed {
+  const InputSettingsSpeed({
+    required this.min,
+    required this.max,
+    required this.step,
+  });
+
+  final int min;
+  final int max;
+  final int step;
+
+  factory InputSettingsSpeed.fromJson(Map<String, dynamic> json) =>
+      InputSettingsSpeed(
+        min: json['min'] as int,
+        max: json['max'] as int,
+        step: json['step'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {'min': min, 'max': max, 'step': step};
+
+  @override
+  bool operator ==(Object other) =>
+      other is InputSettingsSpeed &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'InputSettingsSpeed(${jsonEncode(toJson())})';
+}
+
+/// 0.20: the controller settings of this profile (input.settings.get).
+class InputSettings {
+  const InputSettings({
+    required this.settings,
+    required this.defaults,
+    required this.buttons,
+    required this.actions,
+    required this.keyActions,
+    required this.keys,
+    required this.modifiers,
+    required this.speed,
+    required this.apps,
+  });
+
+  /// 0.20: the stored controller settings of a profile: only what the user changed. general: over defaults.general, the result one button per action and one action per button. keyboard: the keys of every keyboard-mode app. apps: per app id, over everything else for that app.
+  final ControllerSettings settings;
+
+  /// 0.20: the built-in controller settings. pointer has all four fields.
+  final ControllerDefaults defaults;
+  final List<String> buttons;
+
+  /// The actions of general, in display order.
+  final List<String> actions;
+
+  /// The actions of a keymap, in display order.
+  final List<String> keyActions;
+
+  /// Key names a KeyComboName may end with.
+  final List<String> keys;
+  final List<String> modifiers;
+  final InputSettingsSpeed speed;
+  final List<KeyboardApp> apps;
+
+  factory InputSettings.fromJson(Map<String, dynamic> json) => InputSettings(
+    settings: ControllerSettings.fromJson(
+      (json['settings'] as Map).cast<String, dynamic>(),
+    ),
+    defaults: ControllerDefaults.fromJson(
+      (json['defaults'] as Map).cast<String, dynamic>(),
+    ),
+    buttons: (json['buttons'] as List).map((x) => x as String).toList(),
+    actions: (json['actions'] as List).map((x) => x as String).toList(),
+    keyActions: (json['key_actions'] as List).map((x) => x as String).toList(),
+    keys: (json['keys'] as List).map((x) => x as String).toList(),
+    modifiers: (json['modifiers'] as List).map((x) => x as String).toList(),
+    speed: InputSettingsSpeed.fromJson(
+      (json['speed'] as Map).cast<String, dynamic>(),
+    ),
+    apps: (json['apps'] as List)
+        .map((x) => KeyboardApp.fromJson((x as Map).cast<String, dynamic>()))
+        .toList(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'settings': settings.toJson(),
+    'defaults': defaults.toJson(),
+    'buttons': buttons,
+    'actions': actions,
+    'key_actions': keyActions,
+    'keys': keys,
+    'modifiers': modifiers,
+    'speed': speed.toJson(),
+    'apps': apps.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is InputSettings &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'InputSettings(${jsonEncode(toJson())})';
 }
 
 /// A game's install state, from its manifest's StateFlags: 'installed' (ready), 'update_required' (installed; Steam updates it before it starts, launching works), 'updating' (installed; an update is downloading or being applied), 'installing' (not fully installed yet: first download in progress or paused), 'uninstalling'. Clients must treat unknown values like 'updating' (installed, but maybe not launchable right now).
@@ -12239,6 +12557,315 @@ class StoreListResult {
   String toString() => 'StoreListResult(${jsonEncode(toJson())})';
 }
 
+class InputSettingsGetParams {
+  const InputSettingsGetParams();
+
+  factory InputSettingsGetParams.fromJson(Map<String, dynamic> json) =>
+      InputSettingsGetParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is InputSettingsGetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'InputSettingsGetParams(${jsonEncode(toJson())})';
+}
+
+class InputSettingsGetResultSpeed {
+  const InputSettingsGetResultSpeed({
+    required this.min,
+    required this.max,
+    required this.step,
+  });
+
+  final int min;
+  final int max;
+  final int step;
+
+  factory InputSettingsGetResultSpeed.fromJson(Map<String, dynamic> json) =>
+      InputSettingsGetResultSpeed(
+        min: json['min'] as int,
+        max: json['max'] as int,
+        step: json['step'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {'min': min, 'max': max, 'step': step};
+
+  @override
+  bool operator ==(Object other) =>
+      other is InputSettingsGetResultSpeed &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'InputSettingsGetResultSpeed(${jsonEncode(toJson())})';
+}
+
+/// 0.20: the controller settings of this profile (input.settings.get).
+class InputSettingsGetResult {
+  const InputSettingsGetResult({
+    required this.settings,
+    required this.defaults,
+    required this.buttons,
+    required this.actions,
+    required this.keyActions,
+    required this.keys,
+    required this.modifiers,
+    required this.speed,
+    required this.apps,
+  });
+
+  /// 0.20: the stored controller settings of a profile: only what the user changed. general: over defaults.general, the result one button per action and one action per button. keyboard: the keys of every keyboard-mode app. apps: per app id, over everything else for that app.
+  final ControllerSettings settings;
+
+  /// 0.20: the built-in controller settings. pointer has all four fields.
+  final ControllerDefaults defaults;
+  final List<String> buttons;
+
+  /// The actions of general, in display order.
+  final List<String> actions;
+
+  /// The actions of a keymap, in display order.
+  final List<String> keyActions;
+
+  /// Key names a KeyComboName may end with.
+  final List<String> keys;
+  final List<String> modifiers;
+  final InputSettingsGetResultSpeed speed;
+  final List<KeyboardApp> apps;
+
+  factory InputSettingsGetResult.fromJson(
+    Map<String, dynamic> json,
+  ) => InputSettingsGetResult(
+    settings: ControllerSettings.fromJson(
+      (json['settings'] as Map).cast<String, dynamic>(),
+    ),
+    defaults: ControllerDefaults.fromJson(
+      (json['defaults'] as Map).cast<String, dynamic>(),
+    ),
+    buttons: (json['buttons'] as List).map((x) => x as String).toList(),
+    actions: (json['actions'] as List).map((x) => x as String).toList(),
+    keyActions: (json['key_actions'] as List).map((x) => x as String).toList(),
+    keys: (json['keys'] as List).map((x) => x as String).toList(),
+    modifiers: (json['modifiers'] as List).map((x) => x as String).toList(),
+    speed: InputSettingsGetResultSpeed.fromJson(
+      (json['speed'] as Map).cast<String, dynamic>(),
+    ),
+    apps: (json['apps'] as List)
+        .map((x) => KeyboardApp.fromJson((x as Map).cast<String, dynamic>()))
+        .toList(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'settings': settings.toJson(),
+    'defaults': defaults.toJson(),
+    'buttons': buttons,
+    'actions': actions,
+    'key_actions': keyActions,
+    'keys': keys,
+    'modifiers': modifiers,
+    'speed': speed.toJson(),
+    'apps': apps.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is InputSettingsGetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'InputSettingsGetResult(${jsonEncode(toJson())})';
+}
+
+class InputSettingsSetParams {
+  const InputSettingsSetParams({required this.settings});
+
+  /// 0.20: the stored controller settings of a profile: only what the user changed. general: over defaults.general, the result one button per action and one action per button. keyboard: the keys of every keyboard-mode app. apps: per app id, over everything else for that app.
+  final ControllerSettings settings;
+
+  factory InputSettingsSetParams.fromJson(Map<String, dynamic> json) =>
+      InputSettingsSetParams(
+        settings: ControllerSettings.fromJson(
+          (json['settings'] as Map).cast<String, dynamic>(),
+        ),
+      );
+
+  Map<String, dynamic> toJson() => {'settings': settings.toJson()};
+
+  @override
+  bool operator ==(Object other) =>
+      other is InputSettingsSetParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'InputSettingsSetParams(${jsonEncode(toJson())})';
+}
+
+class InputSettingsSetResultSpeed {
+  const InputSettingsSetResultSpeed({
+    required this.min,
+    required this.max,
+    required this.step,
+  });
+
+  final int min;
+  final int max;
+  final int step;
+
+  factory InputSettingsSetResultSpeed.fromJson(Map<String, dynamic> json) =>
+      InputSettingsSetResultSpeed(
+        min: json['min'] as int,
+        max: json['max'] as int,
+        step: json['step'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {'min': min, 'max': max, 'step': step};
+
+  @override
+  bool operator ==(Object other) =>
+      other is InputSettingsSetResultSpeed &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'InputSettingsSetResultSpeed(${jsonEncode(toJson())})';
+}
+
+/// 0.20: the controller settings of this profile (input.settings.get).
+class InputSettingsSetResult {
+  const InputSettingsSetResult({
+    required this.settings,
+    required this.defaults,
+    required this.buttons,
+    required this.actions,
+    required this.keyActions,
+    required this.keys,
+    required this.modifiers,
+    required this.speed,
+    required this.apps,
+  });
+
+  /// 0.20: the stored controller settings of a profile: only what the user changed. general: over defaults.general, the result one button per action and one action per button. keyboard: the keys of every keyboard-mode app. apps: per app id, over everything else for that app.
+  final ControllerSettings settings;
+
+  /// 0.20: the built-in controller settings. pointer has all four fields.
+  final ControllerDefaults defaults;
+  final List<String> buttons;
+
+  /// The actions of general, in display order.
+  final List<String> actions;
+
+  /// The actions of a keymap, in display order.
+  final List<String> keyActions;
+
+  /// Key names a KeyComboName may end with.
+  final List<String> keys;
+  final List<String> modifiers;
+  final InputSettingsSetResultSpeed speed;
+  final List<KeyboardApp> apps;
+
+  factory InputSettingsSetResult.fromJson(
+    Map<String, dynamic> json,
+  ) => InputSettingsSetResult(
+    settings: ControllerSettings.fromJson(
+      (json['settings'] as Map).cast<String, dynamic>(),
+    ),
+    defaults: ControllerDefaults.fromJson(
+      (json['defaults'] as Map).cast<String, dynamic>(),
+    ),
+    buttons: (json['buttons'] as List).map((x) => x as String).toList(),
+    actions: (json['actions'] as List).map((x) => x as String).toList(),
+    keyActions: (json['key_actions'] as List).map((x) => x as String).toList(),
+    keys: (json['keys'] as List).map((x) => x as String).toList(),
+    modifiers: (json['modifiers'] as List).map((x) => x as String).toList(),
+    speed: InputSettingsSetResultSpeed.fromJson(
+      (json['speed'] as Map).cast<String, dynamic>(),
+    ),
+    apps: (json['apps'] as List)
+        .map((x) => KeyboardApp.fromJson((x as Map).cast<String, dynamic>()))
+        .toList(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'settings': settings.toJson(),
+    'defaults': defaults.toJson(),
+    'buttons': buttons,
+    'actions': actions,
+    'key_actions': keyActions,
+    'keys': keys,
+    'modifiers': modifiers,
+    'speed': speed.toJson(),
+    'apps': apps.map((x) => x.toJson()).toList(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is InputSettingsSetResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'InputSettingsSetResult(${jsonEncode(toJson())})';
+}
+
+class InputCaptureParams {
+  const InputCaptureParams();
+
+  factory InputCaptureParams.fromJson(Map<String, dynamic> json) =>
+      InputCaptureParams();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is InputCaptureParams &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'InputCaptureParams(${jsonEncode(toJson())})';
+}
+
+class InputCaptureResult {
+  const InputCaptureResult();
+
+  factory InputCaptureResult.fromJson(Map<String, dynamic> json) =>
+      InputCaptureResult();
+
+  Map<String, dynamic> toJson() => {};
+
+  @override
+  bool operator ==(Object other) =>
+      other is InputCaptureResult &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'InputCaptureResult(${jsonEncode(toJson())})';
+}
+
 /// The global Home button was pressed. The launcher brings itself to the front.
 final class HomePressedEvent extends SessionEvent {
   const HomePressedEvent();
@@ -13504,6 +14131,37 @@ final class ProfilesChangedEvent extends SessionEvent {
 
   @override
   String toString() => 'ProfilesChangedEvent(${jsonEncode(toJson())})';
+}
+
+/// 0.20: the button pressed during input.capture (the physical button: a, b, x, y, lb, rb, lt, rt, view, menu, or a direction up, down, left, right), or null when capture ended without one (Guide, 10 s).
+final class InputCapturedEvent extends SessionEvent {
+  const InputCapturedEvent({required this.button});
+
+  final String? button;
+
+  factory InputCapturedEvent.fromJson(Map<String, dynamic> json) =>
+      InputCapturedEvent(
+        button: json['button'] == null ? null : json['button'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'button': button};
+
+  @override
+  String get name => 'input_captured';
+
+  @override
+  Map<String, dynamic> get params => toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is InputCapturedEvent &&
+      jsonEncode(toJson()) == jsonEncode(other.toJson());
+
+  @override
+  int get hashCode => jsonEncode(toJson()).hashCode;
+
+  @override
+  String toString() => 'InputCapturedEvent(${jsonEncode(toJson())})';
 }
 
 class InvalidParamsData {
@@ -15228,6 +15886,32 @@ mixin SessionApiMethods {
     StoreListParams params = const StoreListParams(),
   ]) async =>
       StoreListResult.fromJson(await rpc('store.list', params.toJson()));
+
+  /// 0.20: this profile's controller settings: the button map, the keys of keyboard-mode apps, the pointer.
+  ///
+  /// settings: what the user changed, exactly as stored ($XDG_STATE_HOME/hinteros/controller.json; missing or unreadable = {}). defaults: the built-in values. The effective button map is defaults.general with settings.general over it. An app's effective keymap is, lowest to highest: defaults.keyboard, settings.keyboard, the app's own keymap (apps[].keymap), settings.apps[id]. buttons, actions, key_actions, keys, modifiers and speed list what set accepts. apps: the profile's keyboard-mode apps. Guide and the directions are never remappable.
+  Future<InputSettingsGetResult> inputSettingsGet([
+    InputSettingsGetParams params = const InputSettingsGetParams(),
+  ]) async => InputSettingsGetResult.fromJson(
+    await rpc('input.settings.get', params.toJson()),
+  );
+
+  /// 0.20: replace this profile's controller settings (the stored form of input.settings.get) and apply them at once.
+  ///
+  /// Answers with input.settings.get's result. invalid_params (data.field names the part) for unknown buttons, actions or app ids, keys that do not parse, a general map that is not one button per action and one action per button, equal click buttons, or a speed outside speed.min..max or off speed.step. Written atomically; the running session uses it at once.
+  Future<InputSettingsSetResult> inputSettingsSet(
+    InputSettingsSetParams params,
+  ) async => InputSettingsSetResult.fromJson(
+    await rpc('input.settings.set', params.toJson()),
+  );
+
+  /// 0.20: the next button press goes to the launcher as input_captured instead of being acted on (press to assign).
+  ///
+  /// The next press of one of the ten buttons or a direction (up, down, left, right) is not acted on: it is sent as input_captured {button} (the physical button, before the general map) and capture ends. Guide during capture ends it with {button: null} and goes Home as usual; so does 10 s without a press. A second call while one runs restarts the 10 s. Launcher only.
+  Future<InputCaptureResult> inputCapture([
+    InputCaptureParams params = const InputCaptureParams(),
+  ]) async =>
+      InputCaptureResult.fromJson(await rpc('input.capture', params.toJson()));
 }
 
 /// A server-pushed notification of the session API.
@@ -15272,6 +15956,7 @@ sealed class SessionEvent {
     'greeter_prompt' => GreeterPromptEvent.fromJson(params),
     'greeter_result' => GreeterResultEvent.fromJson(params),
     'profiles_changed' => ProfilesChangedEvent.fromJson(params),
+    'input_captured' => InputCapturedEvent.fromJson(params),
     _ => UnknownSessionEvent(name, params),
   };
 }

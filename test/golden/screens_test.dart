@@ -377,6 +377,7 @@ void main() {
     'network',
     'display_sound',
     'accessibility',
+    'controller',
     'system',
   ];
   for (final (i, id) in groups.indexed) {

@@ -11,6 +11,7 @@ import 'dart:io';
 
 import '../api/mock_store.dart' show mockCatalogDir;
 import 'catalog.dart';
+import 'mock_controller.dart';
 import 'mock_profiles.dart';
 import 'mock_server.dart';
 import 'mock_storage.dart';
@@ -1661,6 +1662,7 @@ class MockSystemServices extends SystemServices {
     required this.mockStorage,
     required this.mockTimeZone,
     required this.mockServer,
+    required this.mockController,
   }) : super(
          jobs: mockJobs,
          system: mockSystem,
@@ -1674,6 +1676,7 @@ class MockSystemServices extends SystemServices {
          storage: mockStorage,
          timeZone: mockTimeZone,
          server: mockServer,
+         controller: mockController,
        );
 
   /// [autoRunJobs]: jobs step through their stages by themselves (`--mock`);
@@ -1731,6 +1734,7 @@ class MockSystemServices extends SystemServices {
         zone: timeZone,
       ),
       mockServer: MockServer(jobs, box: box, iconDir: iconDir),
+      mockController: MockController(autoAnswer: autoRunJobs),
     );
   }
 
@@ -1746,6 +1750,7 @@ class MockSystemServices extends SystemServices {
   final MockStorage mockStorage;
   final MockTimeZone mockTimeZone;
   final MockServer mockServer;
+  final MockController mockController;
 
   void dispose() {
     mockJobs.dispose();

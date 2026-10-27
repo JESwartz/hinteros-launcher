@@ -306,6 +306,17 @@ class _UnavailableTimeZone implements TimeZoneRepository {
   Stream<TimeZoneInfo> get changes => const Stream.empty();
 }
 
+class _UnavailableController implements ControllerRepository {
+  @override
+  Future<ControllerState> get() => Future.error(_gone);
+  @override
+  Future<ControllerState> set(StoredController settings) => Future.error(_gone);
+  @override
+  Stream<ControllerState> get changes => const Stream.empty();
+  @override
+  Future<String?> capture() => Future.error(_gone);
+}
+
 class _UnavailableServer implements ServerRepository {
   @override
   Future<ServerList> list() => Future.error(_gone);
@@ -365,4 +376,5 @@ SystemServices unavailableSystemServices() => SystemServices(
   storage: _UnavailableStorage(),
   timeZone: _UnavailableTimeZone(),
   server: _UnavailableServer(),
+  controller: _UnavailableController(),
 );

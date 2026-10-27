@@ -6,6 +6,7 @@ import '../settings/launcher_settings.dart';
 import '../theme/hinter_theme.dart';
 import '../system/repositories.dart';
 import 'system/common.dart';
+import 'system/controller_sections.dart';
 import 'system/hardware_sections.dart';
 import 'system/network_sections.dart';
 import 'system/storage_section.dart';
@@ -54,6 +55,12 @@ const _groups = [
     _Setting('focus', 'Focus marker'),
     _Setting('motion', 'Reduce motion'),
     _Setting('osk_text', 'Show typed passwords on the on-screen keyboard'),
+  ]),
+  _Group('controller', 'Controller', [
+    _Setting('buttons', 'Buttons'),
+    _Setting('pointer', 'Pointer'),
+    _Setting('keyboard_keys', 'Keyboard apps'),
+    _Setting('app_keys', 'App keys'),
   ]),
   _Group('system', 'System', [
     _Setting('time', 'Time zone'),
@@ -508,6 +515,10 @@ class _Detail extends StatelessWidget {
         onShow: onShowScreenSaver,
       ),
       'power' => PowerSection(env),
+      'buttons' => ButtonsSection(env),
+      'pointer' => PointerSection(env),
+      'keyboard_keys' => KeyboardKeysSection(env),
+      'app_keys' => AppKeysSection(env),
       'app_displays' => AppDisplaysSection(env),
       'time' => TimeZoneSection(env),
       'ssh' => RemoteAccessSection(env),
