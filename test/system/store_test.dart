@@ -63,6 +63,33 @@ void main() {
     expect(focusLabel(), 'store-cats/c3:0');
   });
 
+  group('storeChanges off (the browser demo)', () {
+    Harness demo() => Harness(
+      services: MockSystemServices(iconDir: iconDir(), now: fixedNow),
+      storeChanges: false,
+    );
+    const note = 'The demo cannot install or remove apps.';
+
+    testWidgets('Install is off', (t) async {
+      setView(t);
+      await demo().pump(t);
+      await openApp(t, 1); // Games: Moonlight, not installed
+      expect(buttonEnabled(t, 'Install'), isFalse);
+      expect(find.text(note), findsOneWidget);
+    });
+
+    testWidgets('Remove and Clear user data are off', (t) async {
+      setView(t);
+      final h = demo();
+      h.services.mockStore.setInstalled({'moonlight'});
+      await h.pump(t);
+      await openApp(t, 1); // Games: Moonlight, installed
+      expect(buttonEnabled(t, 'Remove'), isFalse);
+      expect(buttonEnabled(t, 'Clear user data'), isFalse);
+      expect(find.text(note), findsOneWidget);
+    });
+  });
+
   testWidgets('the Server tab comes after the Store', (t) async {
     setView(t);
     await harness().pump(t);

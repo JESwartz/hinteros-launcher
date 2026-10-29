@@ -49,6 +49,7 @@ class Harness {
     this.realServices,
     this.now = fixedNow,
     this.leaveApp,
+    this.storeChanges = true,
   }) : services =
            services ?? MockSystemServices(iconDir: iconDir(), now: fixedNow),
        mock = mock ?? MockDaemon(apps: appsWithIcons(), games: gamesWithArt()),
@@ -73,12 +74,16 @@ class Harness {
   /// See [LauncherShell.leaveApp] (the browser demo).
   final VoidCallback? leaveApp;
 
+  /// See [LauncherShell.storeChanges] (the browser demo: false).
+  final bool storeChanges;
+
   Widget get app => LauncherApp(
     data: data,
     settings: settings,
     services: realServices ?? services,
     now: now,
     leaveApp: leaveApp,
+    storeChanges: storeChanges,
   );
 
   /// Pumps the app and lets everything settle.

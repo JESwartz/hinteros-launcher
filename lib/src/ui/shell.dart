@@ -83,6 +83,7 @@ class LauncherShell extends StatefulWidget {
     this.showServer = true,
     this.gamesNeedSteam = true,
     this.leaveApp,
+    this.storeChanges = true,
   });
 
   final LauncherData data;
@@ -110,6 +111,10 @@ class LauncherShell extends StatefulWidget {
   /// the focus, a stand-in screen covers the launcher, and B or a click on
   /// it call this (the Home button).
   final VoidCallback? leaveApp;
+
+  /// The Store installs, removes and clears data (the browser demo shows
+  /// the Store only).
+  final bool storeChanges;
 
   @override
   State<LauncherShell> createState() => _LauncherShellState();
@@ -931,6 +936,7 @@ class _LauncherShellState extends State<LauncherShell> {
       cats: _store,
       grid: _storeGrid,
       onPopulated: _contentReady,
+      changes: widget.storeChanges,
     ),
     Section.apps => AppsScreen(data: widget.data, region: _apps),
     Section.settings => SettingsScreen(

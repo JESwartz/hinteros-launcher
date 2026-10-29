@@ -36,9 +36,13 @@ class StoreScreen extends StatefulWidget {
     required this.grid,
     this.data,
     this.onPopulated,
+    this.changes = true,
   });
 
   final SystemServices services;
+
+  /// Install, Remove and Clear user data work (false: the browser demo).
+  final bool changes;
 
   /// Which apps run (a running app is closed before it is removed).
   final LauncherData? data;
@@ -310,6 +314,7 @@ class _StoreScreenState extends State<StoreScreen> {
         catalog: catalog,
         iconPath: _icons[app.id],
         data: widget.data,
+        changes: widget.changes,
       ),
     );
   }
@@ -464,9 +469,13 @@ class AppDetailPage extends StatefulWidget {
     required this.catalog,
     this.iconPath,
     this.data,
+    this.changes = true,
   });
 
   final LauncherData? data;
+
+  /// See [StoreScreen.changes].
+  final bool changes;
   final ModalHandle<void> modal;
   final SystemServices services;
   final StoreApp app;
@@ -663,13 +672,16 @@ class _AppDetailPageState extends State<AppDetailPage> {
         ),
       );
     }
+    if (!widget.changes) {
+      p.add(Text('The demo cannot install or remove apps.', style: t.bodyDim));
+    }
     final cat = widget.catalog;
     final data = widget.data;
     final running = data?.isRunning(app.id) ?? false;
     final clear = btn(
       'Clear user data',
       () => clearDataFlow(context, widget.services, app, data: data),
-      enabled: app.hasData,
+      enabled: app.hasData && widget.changes,
     );
     p.buttons('actions', [
       if (state.busy)
@@ -686,13 +698,14 @@ class _AppDetailPageState extends State<AppDetailPage> {
           'Remove',
           () => removeFlow(context, widget.services, app, data: data),
           danger: true,
+          enabled: widget.changes,
         ),
       ] else ...[
         btn(
           'Install',
           () => installFlow(context, widget.services, app, cat),
           primary: true,
-          enabled: needs.isEmpty,
+          enabled: needs.isEmpty && widget.changes,
         ),
         // Data a remove left behind.
         if (app.hasData) clear,
