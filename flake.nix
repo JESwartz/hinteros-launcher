@@ -13,6 +13,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.git-hooks.follows = "git-hooks";
     };
+    # The Store index the browser demo shows (its free-software entries).
+    hinteros-catalog = {
+      url = "git+https://justsomeshed.com/JSwartz/HinterOS/hinteros-catalog.git";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.git-hooks.follows = "git-hooks";
+    };
   };
 
   outputs =
@@ -21,6 +27,7 @@
       nixpkgs,
       git-hooks,
       hinteros-daemon,
+      hinteros-catalog,
     }:
     let
       system = "x86_64-linux";
@@ -28,6 +35,46 @@
         inherit system;
         overlays = [ self.overlays.default ];
       };
+
+      # The Store entries of the browser demo: free software only (no
+      # commercial services, nothing that needs another product's games or
+      # an account). The rest of the live catalog is left out.
+      demoCatalogIds = [
+        "extremetuxracer"
+        "firefox"
+        "freedoom-phase1"
+        "freedoom-phase2"
+        "jellyfin"
+        "moonlight"
+        "neverball"
+        "neverputt"
+        "openarena"
+        "shattered-pixel-dungeon"
+        "supertuxkart"
+        "taisei"
+      ];
+
+      # The pinned catalog's index, cut to [demoCatalogIds]: catalog.json
+      # (entries unchanged) and the READMEs and terms they name. Committed
+      # as assets/demo/catalog/ (`nix run .#update-demo-catalog`).
+      demoCatalog =
+        pkgs.runCommand "hinteros-launcher-demo-catalog"
+          {
+            nativeBuildInputs = [ pkgs.jq ];
+            index = "${hinteros-catalog.packages.${system}.index}/share/hinteros";
+            ids = builtins.toJSON demoCatalogIds;
+          }
+          ''
+            mkdir -p $out
+            jq --argjson ids "$ids" \
+              '.apps |= map(select(.id as $i | $ids | index($i)))' \
+              "$index/catalog.json" > $out/catalog.json
+            [ "$(jq '.apps | length' $out/catalog.json)" = "$(jq length <<<"$ids")" ] \
+              || { echo "an id in demoCatalogIds is not in the catalog" >&2; exit 1; }
+            for f in $(jq -r '.apps[] | (.readme.file, .terms.file) | values' $out/catalog.json); do
+              install -D -m 644 "$index/$f" "$out/$f"
+            done
+          '';
 
       # Sources that matter to the build; keeps build/ and .dart_tool/ out.
       src = pkgs.lib.fileset.toSource {
@@ -153,6 +200,7 @@
         inherit (pkgs) hinteros-launcher hinteros-osk;
         default = pkgs.hinteros-launcher;
         web-demo = pkgs.hinteros-launcher-web-demo;
+        demo-catalog = demoCatalog;
 
         # Golden PNGs rendered inside the Nix sandbox, the same environment as
         # the `test` check (which compares against the committed ones).
@@ -194,6 +242,19 @@
         # The browser demo compiles (dart2js).
         web-demo = pkgs.hinteros-launcher-web-demo;
         pre-commit = hooksFor false;
+
+        # The demo's catalog must equal the pinned catalog's (cut to
+        # demoCatalogIds).
+        demo-catalog-vendored = pkgs.runCommand "hinteros-launcher-demo-catalog-vendored" { } ''
+          if ! diff -ru ${demoCatalog} ${./assets/demo/catalog}; then
+            echo
+            echo "assets/demo/catalog differs from the pinned hinteros-catalog. Run"
+            echo "    nix run .#update-demo-catalog"
+            echo "and commit assets/demo/catalog."
+            exit 1
+          fi
+          touch "$out"
+        '';
 
         # The vendored schema must equal the one the pinned daemon ships.
         schema-vendored =
@@ -368,6 +429,24 @@
               rm -f test/golden/goldens/*.png
               install -m 644 "$out"/goldens/*.png test/golden/goldens/
               echo "Updated test/golden/goldens; review the images and commit them."
+            '';
+          }
+        );
+      };
+
+      # Copies the pinned catalog's demo entries into assets/demo/catalog.
+      apps.x86_64-linux.update-demo-catalog = {
+        type = "app";
+        meta.description = "Copy the browser demo's entries of the pinned catalog into assets/demo/catalog";
+        program = pkgs.lib.getExe (
+          pkgs.writeShellApplication {
+            name = "update-demo-catalog";
+            runtimeInputs = [ pkgs.coreutils ];
+            text = ''
+              [ -f flake.nix ] || { echo "run from the launcher repo root" >&2; exit 1; }
+              rm -rf assets/demo/catalog
+              cp -r --no-preserve=mode ${demoCatalog} assets/demo/catalog
+              echo "Updated assets/demo/catalog; commit it."
             '';
           }
         );

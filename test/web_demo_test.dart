@@ -7,17 +7,22 @@ import 'package:hinteros_launcher/src/system/profiles.dart';
 /// The browser demo's content (assets/demo, lib/src/demo/web_demo.dart),
 /// read from the repo as the desktop reads files.
 void main() {
-  test('the catalog parses: free apps, no terms, READMEs where vendored', () {
+  test('the catalog: the free-software entries, no terms, READMEs', () {
     final c = demoCatalog();
+    // demoCatalogIds in flake.nix (`nix run .#update-demo-catalog`).
     expect(c.map((a) => a.id), [
+      'extremetuxracer',
       'firefox',
       'freedoom-phase1',
+      'freedoom-phase2',
       'jellyfin',
       'moonlight',
       'neverball',
+      'neverputt',
       'openarena',
       'shattered-pixel-dungeon',
       'supertuxkart',
+      'taisei',
     ]);
     expect(c.every((a) => a.free && a.terms == null), isTrue);
     expect(
@@ -25,21 +30,34 @@ void main() {
         for (final a in c)
           if (a.readme != null) a.id,
       ],
-      ['firefox', 'freedoom-phase1', 'jellyfin', 'neverball', 'supertuxkart'],
+      [
+        'firefox',
+        'freedoom-phase1',
+        'freedoom-phase2',
+        'jellyfin',
+        'moonlight',
+        'neverball',
+        'neverputt',
+        'shattered-pixel-dungeon',
+        'supertuxkart',
+      ],
     );
   });
 
-  test('icons for all but Firefox and OpenArena, art for every game', () {
+  test('icons for all but Firefox, OpenArena and Extreme Tux Racer', () {
     final icons = Directory(demoIconDir)
         .listSync()
         .map((f) => f.uri.pathSegments.last);
     expect(icons.toSet(), {
       'freedoom-phase1.png',
+      'freedoom-phase2.png',
       'jellyfin.svg',
       'moonlight.svg',
       'neverball.png',
+      'neverputt.png',
       'shattered-pixel-dungeon.png',
       'supertuxkart.png',
+      'taisei.png',
     });
     for (final id in demoGameIds) {
       for (final kind in ['portrait', 'header']) {
@@ -55,6 +73,9 @@ void main() {
     );
     for (final f in Directory(demoDir).listSync(recursive: true)) {
       if (f is! File || !RegExp(r'\.(json|md)$').hasMatch(f.path)) continue;
+      // Upstream READMEs are copied unchanged (they may name other
+      // products, as Moonlight's names Steam Link).
+      if (f.path.contains('/catalog/readme/')) continue;
       expect(banned.hasMatch(f.readAsStringSync()), isFalse, reason: f.path);
     }
     expect(demoProfiles().map((p) => p.name), ['Alex', 'Sam', 'Robin']);

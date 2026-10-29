@@ -38,7 +38,7 @@ const demoGameIds = [
 /// The Apps tab's order.
 const demoAppIds = ['jellyfin', 'moonlight', 'firefox'];
 
-/// Installed at the start; OpenArena and Freedoom wait in the Store.
+/// Installed at the start (the demo Store cannot install or remove).
 const demoInstalled = {
   'jellyfin',
   'moonlight',
@@ -239,6 +239,8 @@ class WebDemo {
     );
     services.mockAuth.adminPassword = demoAdminPassword;
     services.mockProfiles.steam = false;
+    // The Store shows the catalog as it is: nothing waits for an update.
+    services.mockStore.moreAfterUpdate = false;
     services.mockProfiles.starter =
         starter ??
         StarterSet(const [

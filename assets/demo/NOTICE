@@ -9,7 +9,8 @@ project, as stated here. They are reproduced unmodified.
 Trademarks: the names and logos are those of their projects. The demo shows
 them to name the apps; it does not mean that the projects endorse HinterOS.
 Firefox is shown by name only (no logo), under the Mozilla trademark policy.
-OpenArena has no icon: its repositories have none of its own.
+OpenArena and Extreme Tux Racer have no icon: their repositories have none
+of their own that the demo can use.
 
 
 Icons (icons/)
@@ -64,6 +65,27 @@ icons/freedoom-phase1.png
   License: CC BY-SA 4.0 (branding/BRANDING-LICENSE.md of UZDoom/UZDoom),
   https://creativecommons.org/licenses/by-sa/4.0/
 
+icons/freedoom-phase2.png
+  The same file as icons/freedoom-phase1.png (UZDoom app icon), under the
+  same terms.
+
+icons/neverputt.png
+  Neverputt icon (dist/modern-icons/png/neverputt-modern-512.png).
+  Source: https://raw.githubusercontent.com/Neverball/neverball/86bcdf5f8933de48adc997eb5c5ff860e71e4492/dist/modern-icons/png/neverputt-modern-512.png
+  SHA-256: 1d8a2a9a056316315b9de4daf4ad3b7921394ce9d8f077d82d1c3a37debb1257
+  Author: creepertron95 (dist/modern-icons/README.txt).
+  License: GPL-2.0-or-later (LICENSE.md of Neverball/neverball, which lists
+  no exception for these icons), https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+
+icons/taisei.png
+  Taisei icon (xdg/icons/taisei-512.png).
+  Source: https://raw.githubusercontent.com/taisei-project/taisei/5668c41b41f7227d21fc80cf56997d4d30356ce7/xdg/icons/taisei-512.png
+  SHA-256: d2e21648a7b9677d015a6502afbc2817e1c06e6bc2d14574c70ac750b3c6665e
+  Copyright: 2011-2026 Lukas Weber, 2012-2026 Andrei Alexeyev.
+  License: MIT (COPYING.txt of taisei-project/taisei, which names other
+  terms only for the soundtrack, the portraits and the photos),
+  https://opensource.org/license/mit
+
 
 Store READMEs (catalog/readme/)
 -------------------------------
@@ -92,9 +114,29 @@ catalog/readme/freedoom-phase1.md
   Source: https://github.com/UZDoom/UZDoom/blob/62afe5f0a914610bd70ea9302da992ede38a36ad/README.md
   License: GPL-3.0, https://www.gnu.org/licenses/gpl-3.0.html
 
+catalog/readme/freedoom-phase2.md
+  UZDoom's README, as for freedoom-phase1.md.
+  Source: https://github.com/UZDoom/UZDoom/blob/62afe5f0a914610bd70ea9302da992ede38a36ad/README.md
+  License: GPL-3.0, https://www.gnu.org/licenses/gpl-3.0.html
+
+catalog/readme/moonlight.md
+  Source: https://github.com/moonlight-stream/moonlight-qt/blob/ac296864ace96f51ad75f78b90644bdbca76c332/README.md
+  License: GPL-3.0, https://www.gnu.org/licenses/gpl-3.0.html
+
+catalog/readme/neverputt.md
+  Neverball's README (Neverball and Neverputt share one repository).
+  Source: https://github.com/Neverball/neverball/blob/86bcdf5f8933de48adc997eb5c5ff860e71e4492/README.md
+  License: GPL-2.0-or-later, https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+
+catalog/readme/shattered-pixel-dungeon.md
+  Source: https://github.com/00-Evan/shattered-pixel-dungeon/blob/57a4e06a4caf162446d1c28caa7983f0493fecf0/README.md
+  License: GPL-3.0, https://www.gnu.org/licenses/gpl-3.0.html
+
 
 Store texts (catalog/catalog.json)
 ----------------------------------
 
 The names, summaries and descriptions come from hinteros-catalog
-(apps/<id>.nix, GPL-3.0-only).
+(apps/<id>.nix, GPL-3.0-only), copied unchanged from its Store index (only
+the entries listed in demoCatalogIds of flake.nix; `nix run
+.#update-demo-catalog`).

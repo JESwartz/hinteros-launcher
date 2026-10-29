@@ -94,6 +94,7 @@ class _Box {
             showServer: false,
             gamesNeedSteam: false,
             leaveApp: () => _home(),
+            storeChanges: false,
           ),
         ),
       ),

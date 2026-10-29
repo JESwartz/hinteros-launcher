@@ -98,16 +98,20 @@ flutter run -d linux --dart-entrypoint-args=--mock
 ./result/bin/hinteros-launcher --mock --windowed
 ```
 
-**Browser demo** (`lib/web_main.dart`, `nix build .#web-demo`, served at `/demo/` on the website).
-The same mock in the browser, built with dart2js and CanvasKit from the bundle
-(`--no-web-resources-cdn`); every request stays on the page's origin. The content is its own, not
-the `--mock` fixtures: free apps and games only (Jellyfin, Moonlight, Firefox by name without a
-logo; SuperTuxKart, Neverball, Shattered Pixel Dungeon, OpenArena, Freedoom), a catalog in the
-real index format with upstream READMEs, project icons where their licence allows (Firefox and
-OpenArena get letter tiles), placeholder cover art, and the profiles Alex (admin, PIN 2580), Sam
-(PIN 1593) and Robin (PIN 7410), admin password `blue harbour`. These live in `assets/demo/`,
-declared with `platforms: [web]`, so the desktop bundle does not have them. Store installs and
-removals show in Apps and Games. There is no Server tab and no dev keys (F2 to F6, W/A/S/D):
+**Browser demo** (this `web-demo` branch: `lib/web_main.dart`, `nix build .#web-demo`, served at
+`/demo/` on the website). `main` merges into this branch; it never merges back. The same mock in
+the browser, built with dart2js and CanvasKit from the bundle (`--no-web-resources-cdn`); every
+request stays on the page's origin. The content is its own, not the `--mock` fixtures. The Store
+is the live catalog's: the free-software entries of the pinned `hinteros-catalog` (`demoCatalogIds`
+in `flake.nix`), copied unchanged with their upstream READMEs into `assets/demo/catalog/` by
+`nix run .#update-demo-catalog` (the `demo-catalog-vendored` check compares them). Install,
+Remove and Clear user data are off (`storeChanges: false`). Installed at the start: Jellyfin,
+Moonlight, Firefox (by name, without a logo), SuperTuxKart, Neverball, Shattered Pixel Dungeon.
+Project icons where their licence allows (Firefox, OpenArena and Extreme Tux Racer get letter
+tiles), placeholder cover art, and the profiles Alex (admin, PIN 2580), Sam (PIN 1593) and Robin
+(PIN 7410), admin password `blue harbour`. These live in `assets/demo/`, declared with
+`platforms: [web]`, so the desktop bundle does not have them. An opened app gets a stand-in
+screen (`leaveApp`). There is no Server tab and no dev keys (F2 to F6, W/A/S/D):
 Home is the Home key. A gamepad works through the Gamepad API (standard mapping: A, B, X, Y,
 bumpers, D-pad and left stick; View or Guide is Home; held directions repeat as in the daemon).
 Settings and the mock's state last for the page only. A profile switch ends as on a box: after
