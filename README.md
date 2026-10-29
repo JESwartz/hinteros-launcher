@@ -13,13 +13,10 @@ flutter run -d linux          # desktop window; arrow keys stand in for the D-pa
 flutter test                  # widget tests
 gamescope --steam -- flutter run -d linux   # nested gamescope, closer to the real session
 nix build && ./result/bin/hinteros-launcher
-nix build .#web-demo          # the browser demo: a static bundle for /demo/
-flutter run -d chrome -t lib/web_main.dart   # the browser demo (or -d web-server)
 nix flake check               # nixfmt, dart format, dart analyze, flutter test, package build
 ```
 
-The browser demo is the mock daemon with its own free content as web-only assets
-(`assets/demo/`); see "Browser demo" under "Mock daemon".
+The browser demo is on the `web-demo` branch; see "Browser demo" under "Mock daemon".
 
 The same binary is also the on-screen keyboard: `./result/bin/hinteros-osk` (see "On-screen keyboard").
 
@@ -58,13 +55,8 @@ launcher installed, or without those variables (`--mock`, development), it stays
 | `lib/src/api/client.dart` | `DaemonClient`: handshake, request correlation, events, subscribe, reconnect |
 | `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.11 methods and events: the relayed `system.*` API, the runtime settings, the admin password prompt, `session.restart` and the Store) |
 | `lib/src/osk/` | The on-screen keyboard: `OskBackend` (+ mock), layouts, state, UI |
-| `tool/gen_mock_art.dart` | Draws the placeholder cover art in `test/fixtures/art/` (with `--demo`: the browser demo's, in `assets/demo/art/`; committed; no network, no third-party pictures) |
-| `lib/web_main.dart` | Browser demo entry: the mock daemon with the demo content, Home key, gamepad |
-| `lib/src/demo/web_demo.dart` | The browser demo's content: catalog, apps, games, profiles, from `assets/demo/` |
+| `tool/gen_mock_art.dart` | Draws the placeholder cover art in `test/fixtures/art/` (with `--demo`: the browser demo's, on the `web-demo` branch; committed; no network, no third-party pictures) |
 | `lib/src/platform/local_files*.dart` | Local files: from disk on the desktop, from the bundled assets in the browser |
-| `lib/src/platform/gamepad_web.dart` | Browser demo: the Gamepad API (standard mapping) as `input_nav` |
-| `web/` | The demo's page and bootstrap: self-hosted (no CDN), no service worker |
-| `assets/demo/` | The demo's icons, placeholder art, catalog and READMEs; web only; sources and licences in `assets/demo/NOTICE` |
 | `tool/gen_mock_icons.dart` | Draws the generic placeholder app icons in `test/fixtures/icons/` (plain shapes, PNG and one SVG; no logos, no network) |
 | `tool/gen_time_zone_map.dart` | Makes the time zone map asset `assets/maps/time_zones.bin` from Natural Earth data (see "Map data") |
 | `lib/src/data/app_icons.dart` | `AppIconCache`: loads, decodes (PNG, SVG via `flutter_svg`) and remembers app icons, computes their dominant colour |
@@ -98,25 +90,15 @@ flutter run -d linux --dart-entrypoint-args=--mock
 ./result/bin/hinteros-launcher --mock --windowed
 ```
 
-**Browser demo** (`lib/web_main.dart`, `nix build .#web-demo`, served at `/demo/` on the website).
-The same mock in the browser, built with dart2js and CanvasKit from the bundle
-(`--no-web-resources-cdn`); every request stays on the page's origin. The content is its own, not
-the `--mock` fixtures: free apps and games only (Jellyfin, Moonlight, Firefox by name without a
-logo; SuperTuxKart, Neverball, Shattered Pixel Dungeon, OpenArena, Freedoom), a catalog in the
-real index format with upstream READMEs, project icons where their licence allows (Firefox and
-OpenArena get letter tiles), placeholder cover art, and the profiles Alex (admin, PIN 2580), Sam
-(PIN 1593) and Robin (PIN 7410), admin password `blue harbour`. These live in `assets/demo/`,
-declared with `platforms: [web]`, so the desktop bundle does not have them. Store installs and
-removals show in Apps and Games. There is no Server tab and no dev keys (F2 to F6, W/A/S/D):
-Home is the Home key. A gamepad works through the Gamepad API (standard mapping: A, B, X, Y,
-bumpers, D-pad and left stick; View or Guide is Home; held directions repeat as in the daemon).
-Settings and the mock's state last for the page only. A profile switch ends as on a box: after
-"Opening <name>..." a fresh launcher starts as that profile (`MockProfiles.onSwitched`), and
-ending the guest session opens the boot picker (`GreeterApp`); the profiles, the installed apps
-and each profile's settings carry over. In the browser a local path is an asset key
-(`lib/src/platform/local_files.dart`); the texts are loaded before the app starts.
-`lib/src/installer/evdev_ioctl_web.dart` stands in for the `dart:ffi` ioctl the picker's import
-chain reaches (no evdev in the browser).
+**Browser demo**: on the `web-demo` branch (`lib/web_main.dart`, its content in `assets/demo/`,
+`nix build .#web-demo`, served at `/demo/` on the website). `main` merges into that branch; the
+branch never merges back. `main` keeps only what the demo hooks into: `LauncherApp.showServer`,
+`gamesNeedSteam`, `leaveApp` (a stand-in screen for an app that has the focus) and
+`storeChanges` (the Store without Install, Remove and Clear user data);
+`MockProfiles.onSwitched` and `steam`; `MockDaemon.focused`; the local files seam
+(`lib/src/platform/local_files*.dart`: in the browser a local path is an asset key); and
+`lib/src/installer/evdev_ioctl_web.dart`, which stands in for the `dart:ffi` ioctl the picker's
+import chain reaches.
 
 ### Session API 0.19: the Server tab
 

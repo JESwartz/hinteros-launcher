@@ -39,7 +39,6 @@
           ./lib
           ./assets
           ./linux
-          ./web
           ./test
           ./schema
           ./tool
@@ -102,35 +101,6 @@
           };
         };
 
-        # The browser demo (lib/web_main.dart: the mock daemon with the
-        # content in assets/demo), served from /demo/ on the website. Fully
-        # self-hosted: CanvasKit and the Roboto fallback are in the bundle
-        # (--no-web-resources-cdn); web/ has no service worker.
-        hinteros-launcher-web-demo = final.flutter.buildFlutterApplication {
-          pname = "hinteros-launcher-web-demo";
-          version = "0.1.0";
-          inherit src;
-          autoPubspecLock = src + "/pubspec.lock";
-          targetFlutterPlatform = "web";
-          flutterBuildFlags = [
-            "--target=lib/web_main.dart"
-            "--base-href=/demo/"
-            "--no-web-resources-cdn"
-          ];
-          # Only canvaskit/ (other browsers) and canvaskit/chromium/ load in a
-          # dart2js build; skwasm and wimp are for --wasm, *.symbols for
-          # debugging.
-          postInstall = ''
-            rm -rf $out/canvaskit/{skwasm*,wimp*,webparagraph} $out/canvaskit/*.symbols \
-              $out/canvaskit/*/*.symbols
-          '';
-          meta = {
-            description = "HinterOS launcher browser demo (static files for /demo/)";
-            license = final.lib.licenses.gpl3Only;
-            platforms = [ "x86_64-linux" ];
-          };
-        };
-
         # Just bin/hinteros-osk, for systems that want the keyboard on its own
         # (it is the launcher package underneath: one copy of the app).
         hinteros-osk =
@@ -152,7 +122,6 @@
       packages.${system} = {
         inherit (pkgs) hinteros-launcher hinteros-osk;
         default = pkgs.hinteros-launcher;
-        web-demo = pkgs.hinteros-launcher-web-demo;
 
         # Golden PNGs rendered inside the Nix sandbox, the same environment as
         # the `test` check (which compares against the committed ones).
@@ -191,8 +160,6 @@
 
       checks.${system} = {
         inherit (pkgs) hinteros-launcher hinteros-osk;
-        # The browser demo compiles (dart2js).
-        web-demo = pkgs.hinteros-launcher-web-demo;
         pre-commit = hooksFor false;
 
         # The vendored schema must equal the one the pinned daemon ships.

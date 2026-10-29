@@ -14,7 +14,7 @@ import 'generated.dart';
 /// The directory of the real-format catalog fixture (`catalog.json` plus
 /// `terms/`): `$HINTEROS_MOCK_CATALOG`, else `test/fixtures/catalog` found
 /// from the working directory upwards. None in the browser: the demo brings
-/// its own catalog (`lib/web_main.dart`).
+/// its own catalog (`lib/web_main.dart`, on the `web-demo` branch).
 String? mockCatalogDir() {
   if (localFilesAreAssets) return null;
   final env = Platform.environment['HINTEROS_MOCK_CATALOG'];

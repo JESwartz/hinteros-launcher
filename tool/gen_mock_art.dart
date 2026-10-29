@@ -1,7 +1,8 @@
 // Draws the placeholder game artwork used by the mock daemon in tests and
 // goldens (test/fixtures/art/*.png): sky, sun and mountain layers, no text, no
 // network, no third-party pictures. Deterministic; the PNGs are committed.
-// With --demo: the browser demo's games instead (assets/demo/art/*.png).
+// With --demo: the browser demo's games instead (assets/demo/art/*.png, on the
+// web-demo branch).
 //
 //   dart tool/gen_mock_art.dart [--demo]
 import 'dart:io';
@@ -159,7 +160,8 @@ const games = <String, Palette>{
   ),
 };
 
-/// The browser demo's games (lib/web_main.dart), by catalog id.
+/// The browser demo's games (lib/web_main.dart on the web-demo branch), by
+/// catalog id.
 const demoGames = <String, Palette>{
   'supertuxkart': Palette(
     (0x0d, 0x3b, 0x66),
