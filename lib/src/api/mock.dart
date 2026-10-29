@@ -840,6 +840,9 @@ class MockDaemon extends DaemonConnection {
   /// The running apps (for dev keys and tests).
   List<RunningApp> get running => List.unmodifiable(_running);
 
+  /// The running app that has the focus; null: the launcher.
+  String? get focused => _focused;
+
   @override
   Future<void> close() async {
     if (_closed) return;

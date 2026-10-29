@@ -299,11 +299,12 @@ class LauncherData extends ChangeNotifier {
   }
 
   /// The launch answer came: follow the id the daemon uses, and finish if it
-  /// already reported that app focused.
+  /// already reported that app focused (or it had the focus already: then no
+  /// `focus_changed` comes).
   void _launched(RunningApp app) {
     final l = launching;
     if (l == null) return;
-    if (_focusedSince.contains(app.id)) {
+    if (_focusedSince.contains(app.id) || focusedApp == app.id) {
       _endLaunching();
     } else if (app.id != l.id) {
       launching = (id: app.id, name: l.name, iconPath: l.iconPath);

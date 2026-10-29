@@ -27,6 +27,7 @@ import 'home_screen.dart';
 import 'jobs.dart';
 import 'modal_host.dart';
 import 'overlays.dart';
+import 'app_stand_in.dart';
 import 'launching.dart';
 import 'settings_screen.dart';
 import 'store_flows.dart';
@@ -81,6 +82,7 @@ class LauncherShell extends StatefulWidget {
     this.startup,
     this.showServer = true,
     this.gamesNeedSteam = true,
+    this.leaveApp,
   });
 
   final LauncherData data;
@@ -103,6 +105,11 @@ class LauncherShell extends StatefulWidget {
   /// Games shows "Steam is not installed" while `steam` is not an app (the
   /// browser demo's games are not Steam's).
   final bool gamesNeedSteam;
+
+  /// Null on a box. The browser demo has no app windows: while an app has
+  /// the focus, a stand-in screen covers the launcher, and B or a click on
+  /// it call this (the Home button).
+  final VoidCallback? leaveApp;
 
   @override
   State<LauncherShell> createState() => _LauncherShellState();
@@ -434,6 +441,10 @@ class _LauncherShellState extends State<LauncherShell> {
       _launchShown = d.launching != null;
       setState(() {});
     }
+    if (_standIn != _standInShown) {
+      _standInShown = _standIn;
+      setState(() {});
+    }
     final wantBanner = d.steamAttention.isNotEmpty && d.status is Connected;
     final wantDialog = d.closeRequest != null;
     if (wantBanner == _bannerVisible && wantDialog == _dialogOpen) return;
@@ -465,6 +476,14 @@ class _LauncherShellState extends State<LauncherShell> {
   }
 
   bool _launchShown = false;
+
+  /// The browser demo: the focused app the stand-in screen is for, if any.
+  String? get _standIn {
+    final d = widget.data;
+    return widget.leaveApp != null && d.launching == null ? d.focusedApp : null;
+  }
+
+  String? _standInShown;
 
   /// The loading page is up (see [LauncherShell.startup]).
   late bool _loading = widget.startup != null;
@@ -846,6 +865,13 @@ class _LauncherShellState extends State<LauncherShell> {
       }
       return;
     }
+    if (_standIn != null) {
+      // The browser demo's stand-in for the app has the screen.
+      if (action == NavAction.back && phase == NavPhase.press) {
+        widget.leaveApp!();
+      }
+      return;
+    }
     _nav.dispatch(action, phase);
   }
 
@@ -1006,6 +1032,23 @@ class _LauncherShellState extends State<LauncherShell> {
                 region: _dialog,
                 onCancel: widget.data.cancelClose,
                 onConfirm: () => unawaited(widget.data.confirmClose()),
+              ),
+            if (_standIn case final id?)
+              Positioned.fill(
+                child: AppStandIn(
+                  key: ValueKey('stand-in-$id'),
+                  name:
+                      widget.data.running
+                          .where((a) => a.id == id)
+                          .firstOrNull
+                          ?.name ??
+                      id,
+                  iconPath: widget.data.appList
+                      ?.where((a) => a.id == id)
+                      .firstOrNull
+                      ?.icon,
+                  onLeave: widget.leaveApp!,
+                ),
               ),
             if (widget.data.launching case final l?)
               Positioned.fill(

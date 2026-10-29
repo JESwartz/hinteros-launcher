@@ -26,6 +26,7 @@ class LauncherApp extends StatelessWidget {
     this.startup,
     this.showServer = true,
     this.gamesNeedSteam = true,
+    this.leaveApp,
   });
 
   final LauncherData data;
@@ -39,6 +40,9 @@ class LauncherApp extends StatelessWidget {
 
   /// See [LauncherShell.gamesNeedSteam].
   final bool gamesNeedSteam;
+
+  /// See [LauncherShell.leaveApp].
+  final VoidCallback? leaveApp;
 
   /// See [LauncherShell.startup].
   final LoadingIdentity? startup;
@@ -73,6 +77,7 @@ class LauncherApp extends StatelessWidget {
             startup: startup,
             showServer: showServer,
             gamesNeedSteam: gamesNeedSteam,
+            leaveApp: leaveApp,
           ),
         );
       },

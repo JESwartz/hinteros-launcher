@@ -48,6 +48,7 @@ class Harness {
     MockSystemServices? services,
     this.realServices,
     this.now = fixedNow,
+    this.leaveApp,
   }) : services =
            services ?? MockSystemServices(iconDir: iconDir(), now: fixedNow),
        mock = mock ?? MockDaemon(apps: appsWithIcons(), games: gamesWithArt()),
@@ -69,11 +70,15 @@ class Harness {
   /// The clock of the app (the top bar, job times).
   final DateTime Function() now;
 
+  /// See [LauncherShell.leaveApp] (the browser demo).
+  final VoidCallback? leaveApp;
+
   Widget get app => LauncherApp(
     data: data,
     settings: settings,
     services: realServices ?? services,
     now: now,
+    leaveApp: leaveApp,
   );
 
   /// Pumps the app and lets everything settle.

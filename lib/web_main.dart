@@ -65,7 +65,15 @@ class _Box {
         target.isEmpty ? picker() : start(target);
       });
     };
-    _nav = (a, p) => demo.daemon.emitNav(a, p);
+    _nav = (a, p) {
+      // An app has the focus: the daemon sends it no input, so B on the
+      // stand-in screen goes Home here.
+      if (demo.daemon.focused != null) {
+        if (a == NavAction.back && p == NavPhase.press) _home();
+        return;
+      }
+      demo.daemon.emitNav(a, p);
+    };
     _home = demo.daemon.pressHome;
     // A guest starts fresh every time; a profile keeps its settings.
     final storage = profileId == CurrentProfile.guestId
@@ -85,6 +93,7 @@ class _Box {
             services: services,
             showServer: false,
             gamesNeedSteam: false,
+            leaveApp: () => _home(),
           ),
         ),
       ),

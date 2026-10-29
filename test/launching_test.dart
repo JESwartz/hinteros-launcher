@@ -46,6 +46,80 @@ void main() {
     expect(view, findsNothing);
   });
 
+  testWidgets('launching the app that has the focus does not wait', (t) async {
+    final h = await start(t, slow: false);
+    await h.data.launchApp('jellyfin', 'Jellyfin');
+    await frames(t);
+    expect(h.data.focusedApp, 'jellyfin');
+    // Already focused: the daemon sends no focus_changed this time.
+    await h.data.launchApp('jellyfin', 'Jellyfin');
+    await frames(t);
+    expect(h.data.launching, isNull);
+    expect(view, findsNothing);
+  });
+
+  group('the browser demo stand-in for the focused app', () {
+    final standIn = find.byKey(const ValueKey('stand-in'));
+
+    Future<(Harness, List<String>)> demo(WidgetTester t) async {
+      setView(t);
+      final left = <String>[];
+      late final Harness h;
+      h = Harness(
+        leaveApp: () {
+          left.add('home');
+          h.mock.pressHome();
+        },
+      );
+      await h.pump(t);
+      return (h, left);
+    }
+
+    testWidgets('covers the launcher while the app has the focus', (t) async {
+      final (h, _) = await demo(t);
+      expect(standIn, findsNothing);
+      await h.data.launchApp('jellyfin', 'Jellyfin');
+      await frames(t);
+      expect(standIn, findsOneWidget);
+      expect(find.text('Jellyfin is open'), findsOneWidget);
+      h.mock.pressHome();
+      await frames(t);
+      expect(standIn, findsNothing);
+    });
+
+    testWidgets('B goes Home; Enter does not start the app again', (t) async {
+      final (h, left) = await demo(t);
+      await h.data.launchApp('jellyfin', 'Jellyfin');
+      await frames(t);
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await frames(t);
+      expect(view, findsNothing);
+      expect(left, isEmpty);
+      await t.sendKeyEvent(LogicalKeyboardKey.escape);
+      await frames(t);
+      expect(left, hasLength(1));
+      expect(standIn, findsNothing);
+      expect(h.mock.running.map((a) => a.id), contains('jellyfin'));
+    });
+
+    testWidgets('a click goes Home', (t) async {
+      final (h, left) = await demo(t);
+      await h.data.launchApp('jellyfin', 'Jellyfin');
+      await frames(t);
+      await t.tap(find.byKey(const ValueKey('stand-in-leave')));
+      await frames(t);
+      expect(left, hasLength(1));
+      expect(standIn, findsNothing);
+    });
+
+    testWidgets('none on a box', (t) async {
+      final h = await start(t, slow: false);
+      await h.data.launchApp('jellyfin', 'Jellyfin');
+      await frames(t);
+      expect(standIn, findsNothing);
+    });
+  });
+
   testWidgets('after 10 s it says it can take a while; Steam says why', (
     t,
   ) async {
