@@ -83,6 +83,36 @@ void main() {
         );
       });
     }
+    testWidgets('settings controller pointer', (t) async {
+      await shot(
+        t,
+        'settings_sys_pointer_1080p',
+        harness(),
+        run: (t) => enterSettingsEntry(t, 'pointer'),
+      );
+    });
+    testWidgets('settings controller: press a button', (t) async {
+      await shot(
+        t,
+        'settings_sys_controller_capture_1080p',
+        harness(),
+        run: (t) async {
+          await enterSettingsEntry(t, 'buttons');
+          await press(t, [kEnter]);
+        },
+      );
+    });
+    testWidgets('settings controller: the key picker', (t) async {
+      await shot(
+        t,
+        'settings_sys_controller_keys_1080p',
+        harness(),
+        run: (t) async {
+          await enterSettingsEntry(t, 'keyboard_keys');
+          await press(t, [kDown, kDown, kDown, kDown, kDown, kEnter]);
+        },
+      );
+    });
     testWidgets('settings bluetooth after a scan', (t) async {
       await shot(
         t,

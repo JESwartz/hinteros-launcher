@@ -9,11 +9,13 @@
 library;
 
 import 'models.dart';
+import 'controller.dart';
 import 'profiles.dart';
 import 'server.dart';
 import 'storage.dart';
 import 'time_zone.dart';
 
+export 'controller.dart';
 export 'profiles.dart';
 export 'server.dart';
 export 'storage.dart';
@@ -340,6 +342,7 @@ class SystemServices {
     required this.storage,
     required this.timeZone,
     required this.server,
+    required this.controller,
   });
 
   final JobsRepository jobs;
@@ -363,4 +366,8 @@ class SystemServices {
 
   /// The Server tab (0.19): the box-wide services and their setup.
   final ServerRepository server;
+
+  /// Settings -> Controller (0.20): the button map, keyboard-app keys, the
+  /// pointer.
+  final ControllerRepository controller;
 }

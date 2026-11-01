@@ -100,6 +100,28 @@ branch never merges back. `main` keeps only what the demo hooks into: `LauncherA
 `lib/src/installer/evdev_ioctl_web.dart`, which stands in for the `dart:ffi` ioctl the picker's
 import chain reaches.
 
+### Session API 0.20: Settings > Controller
+
+Per profile: which button does which action, the keys of keyboard-mode apps, the pointer
+(`input.settings.get` / `input.settings.set`, `input.capture` and `input_captured`).
+`ControllerRepository` (`lib/src/system/controller.dart`: the models, the changes as
+`ControllerState.with...`, the labels; `daemon_controller.dart`, `mock_controller.dart` over the wire
+mock `lib/src/api/mock_input.dart`), the sections in `lib/src/ui/system/controller_sections.dart`.
+Every change is stored at once (the whole stored form) and the four sections follow
+`ControllerRepository.changes`.
+
+- **Buttons:** one row per action with its button. Select, "Press a button" (`input.capture`), and
+  the pressed button goes to the action; the action that had it gets the old one, so the map stays
+  one button per action. A direction, Guide or 10 s without a press changes nothing.
+- **Pointer:** Speed (left and right, in `speed.step`), Swap sticks, Left click and Right click
+  (press to set; the other click's button swaps them).
+- **Keyboard apps:** one row per keymap action ("A (Accept)", "Up") with its key. Select opens the
+  key picker: Ctrl, Alt, Shift and Meta as switches, None, then every key as a grid (no keyboard
+  needed).
+- **App keys:** the keyboard-mode apps; each opens a page with the keys it gets (defaults, shared,
+  the app's own, then its own changes); a change there is stored for that app only.
+- Each section has "Reset to defaults" (App keys: on the app's page).
+
 ### Session API 0.19: the Server tab
 
 Design: `hinteros-docs/design/server.md` ("Launcher: Server tab") and `design/system-api.md` (system
@@ -814,7 +836,8 @@ UI. Focus on a tab selects its section (like console UIs); Down enters the secti
   6. Accessibility: Text size (100/120/140/160%), High contrast, Focus marker (ring/glow/bar),
      Reduce motion, "Show typed passwords on the on-screen keyboard" (privacy; off = in password
      fields the keyboard's preview shows dots)
-  7. System: Time zone, Power, Remote access, About
+  7. Controller: Buttons, Pointer, Keyboard apps, App keys
+  8. System: Time zone, Power, Remote access, About
 
   A group of several settings shows them in one scrolling pane, one under the other, each under
   its heading; Up and Down walk through the rows of all of them, the pane scrolls with the focus,
@@ -1028,12 +1051,12 @@ Atkinson Hyperlegible Regular and Bold (`assets/fonts/`), SIL Open Font License 
 
 `test/golden/screens_test.dart` captures every screen at 1920x1080 and Home and Games at 3840x2160
 (1920x1080 logical at DPR 2), plus Home in high contrast at 1.6x text, into
-`test/golden/goldens/`; for Settings each of the seven groups (`settings_group_*_1080p.png`),
+`test/golden/goldens/`; for Settings each of the eight groups (`settings_group_*_1080p.png`),
 Focus marker in the Accessibility pane with the glow style (`settings_focus_detail`) and that pane
 scrolled to its last setting (`settings_osk_text`). `test/golden/osk_test.dart` renders the on-screen keyboard at 1920x1080 over
 a checkerboard (so the transparent area and the panel's rounded corners show): letters, symbols with dots in the preview,
 the masked preview with its newest character readable, the preview with the setting on, high contrast at 1.6x with caps lock, and the bar focus marker with one-shot shift
-(`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. `test/golden/runtime_test.dart` covers the runtime settings on the real repositories over the mock daemon (`bt_pair_*` for the passkey modal, `wifi_wrong_password`, `settings_bt_unavailable`, `settings_display_cannot_set`, `display_keep_daemon`, `power_inhibited`, `settings_power_restricted`, `settings_net_no_internet`). `test/golden/system_test.dart` covers the system screens (`settings_sys_*`, `auth_prompt_*` (the admin password prompt: masked, and after a wrong password in high contrast at 1.6x; also over the real repositories), `ssh_cancelled`, `wifi_password`, `display_*`), the progress page (`progress_*`: building with its count, name and time also in high contrast at 1.6x), the job left running (`topbar_job_indicator_*`, also high contrast at 1.6x), the notices when it ends (`job_notice_failed`, `job_notice_restart`), the security notice (`security_notice_*`, also high contrast at 1.6x, locked and unlocked), the Home reminder, the Store (`store_*`; `store_install_permissions`, `store_app_permissions`; over the real repository: `store_retired_detail`, `store_install_conflict`, `store_installing_progress`, `store_no_space`, `store_more_apps_highcontrast_text160`), the terms page (`terms_*`, also high contrast at 1.6x, from the top and scrolled to the end), `games_steam_missing` and `installer_app_selection`. `test/golden/installer_test.dart` has `installer_*_1080p.png` for every installer screen (welcome, network, disk, the disk warning and the second confirmation, the warning in high contrast at 1.4x text, account, keyboard, options, apps offline and online, summary, progress with the system stage and with the apps stage, both failures, done, done with failed apps). Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
+(`osk_*_1080p.png`). `home_games_row_text160_1080p.png` shows the install badges at 1.6x. `test/golden/runtime_test.dart` covers the runtime settings on the real repositories over the mock daemon (`bt_pair_*` for the passkey modal, `wifi_wrong_password`, `settings_bt_unavailable`, `settings_display_cannot_set`, `display_keep_daemon`, `power_inhibited`, `settings_power_restricted`, `settings_net_no_internet`). `test/golden/system_test.dart` covers the system screens (`settings_sys_*`, the Controller pointer pane, "Press a button" and the key picker (`settings_sys_pointer`, `settings_sys_controller_capture`, `settings_sys_controller_keys`), `auth_prompt_*` (the admin password prompt: masked, and after a wrong password in high contrast at 1.6x; also over the real repositories), `ssh_cancelled`, `wifi_password`, `display_*`), the progress page (`progress_*`: building with its count, name and time also in high contrast at 1.6x), the job left running (`topbar_job_indicator_*`, also high contrast at 1.6x), the notices when it ends (`job_notice_failed`, `job_notice_restart`), the security notice (`security_notice_*`, also high contrast at 1.6x, locked and unlocked), the Home reminder, the Store (`store_*`; `store_install_permissions`, `store_app_permissions`; over the real repository: `store_retired_detail`, `store_install_conflict`, `store_installing_progress`, `store_no_space`, `store_more_apps_highcontrast_text160`), the terms page (`terms_*`, also high contrast at 1.6x, from the top and scrolled to the end), `games_steam_missing` and `installer_app_selection`. `test/golden/installer_test.dart` has `installer_*_1080p.png` for every installer screen (welcome, network, disk, the disk warning and the second confirmation, the warning in high contrast at 1.4x text, account, keyboard, options, apps offline and online, summary, progress with the system stage and with the apps stage, both failures, done, done with failed apps). Further goldens cover the Games grid (unscrolled, scrolled to the last row, with artwork), Home with a
 running game, the attention banner, the close confirm and the app tiles at text 1.3x/1.6x (also high
 contrast). Tests load the bundled font explicitly (`flutter_test_config.dart`, no
 Ahem), use a fixed clock, the in-process mock, the committed placeholder art

@@ -404,11 +404,11 @@ void main() {
       expect(find.text('60%'), findsOneWidget);
       // Left and right change the volume there: Back leaves the pane.
       await downToSection(t, 'audio');
-      await press(t, [kEscape, kDown, kDown, kRight]);
+      await press(t, [kEscape, kDown, kDown, kDown, kRight]);
       expect(find.text('Sleep'), findsOneWidget);
       // Bluetooth comes back: Try again recovers.
       h.mock.runtime.setUnavailable('bluez', gone: false);
-      await press(t, [kLeft, kUp, kUp, kUp, kRight]);
+      await press(t, [kLeft, kUp, kUp, kUp, kUp, kRight]);
       await downToSection(t, 'bt');
       await press(t, [kEnter]);
       expect(find.text('Xbox Wireless Controller'), findsOneWidget);
@@ -432,7 +432,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text("Audio isn't available on this box."), findsOneWidget);
-      await press(t, [kLeft, kDown, kDown, kRight]);
+      await press(t, [kLeft, kDown, kDown, kDown, kRight]);
       expect(
         find.text("Power control isn't available on this box."),
         findsOneWidget,
