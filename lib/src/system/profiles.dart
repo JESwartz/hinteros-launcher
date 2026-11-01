@@ -365,7 +365,7 @@ abstract class ProfilesRepository {
   /// profile's name, colour, lock flag).
   Stream<List<ProfileInfo>> get changes;
 
-  /// `lock_state`: the sleep lock went up (true) or down.
+  /// `lock_changed`: the sleep lock went up (true) or down.
   Stream<bool> get lockChanges;
 
   /// `profiles.create` (a job of about a minute; the revision is fetched).

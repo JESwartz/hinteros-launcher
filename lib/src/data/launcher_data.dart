@@ -114,7 +114,7 @@ class LauncherData extends ChangeNotifier {
   StreamSubscription<ConnectionStatus>? _statusSub;
   StreamSubscription<SessionEvent>? _eventSub;
 
-  /// The on-screen keyboard is up (`osk_visibility`). The daemon then sends
+  /// The on-screen keyboard is up (`osk_changed`). The daemon then sends
   /// `input_nav` only to the keyboard, so this is a second line of defence.
   bool oskVisible = false;
   bool _disposed = false;
@@ -139,7 +139,7 @@ class LauncherData extends ChangeNotifier {
             EventName.gamesChanged,
             EventName.appsChanged,
             EventName.steamAttention,
-            EventName.oskVisibility,
+            EventName.oskChanged,
           ])
           .catchError((_) {}),
     );
@@ -159,7 +159,7 @@ class LauncherData extends ChangeNotifier {
     switch (e) {
       case HomePressedEvent():
         _homePressed.add(null);
-      case OskVisibilityEvent():
+      case OskChangedEvent():
         oskVisible = e.visible;
       case InputNavEvent():
         if (!oskVisible) _nav.add(e);
@@ -283,7 +283,7 @@ class LauncherData extends ChangeNotifier {
     final m = RegExp(r'^steam-(\d+)$').firstMatch(id);
     if (m == null) return null;
     final appid = int.parse(m[1]!);
-    return gameList.where((g) => g.appid == appid).firstOrNull;
+    return gameList.where((g) => g.steamAppId == appid).firstOrNull;
   }
 
   void _beginLaunching(String id, String name, String? iconPath) {

@@ -62,6 +62,7 @@ void main() {
         StorageKind.profile,
         StorageKind.profile,
         StorageKind.guest,
+        StorageKind.media,
         StorageKind.other,
         StorageKind.free,
       ],

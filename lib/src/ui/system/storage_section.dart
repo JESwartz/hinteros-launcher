@@ -34,6 +34,7 @@ String storageName(StorageNode n, ProfileNames who, {StorageNode? parent}) {
     StorageKind.apps => 'Apps',
     StorageKind.profile => profile(n.id),
     StorageKind.guest => 'Guest',
+    StorageKind.media => 'Media',
     StorageKind.other => 'Other',
     StorageKind.free => 'Free space',
     StorageKind.generation => 'Generation ${n.generation ?? '?'}',
@@ -71,6 +72,7 @@ String measuredAgo(DateTime at, DateTime now) {
 const _systemColor = Color(0xFF4C8DF6);
 const _appsColor = Color(0xFF2BB3A3);
 const _guestColor = Color(0xFF8E97AA);
+const _mediaColor = Color(0xFFD4AF37);
 const _otherColor = Color(0xFF5C6478);
 
 /// A segment's colour: the top level by kind (a profile in its own colour),
@@ -88,6 +90,7 @@ Color storageColor(
     StorageKind.profile =>
       who[n.id] == null ? _guestColor : profileColor(who[n.id]!.color),
     StorageKind.guest => _guestColor,
+    StorageKind.media => _mediaColor,
     StorageKind.free => t.surfaceHigh,
     _ => _otherColor,
   };

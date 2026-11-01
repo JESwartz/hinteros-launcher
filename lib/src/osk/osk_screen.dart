@@ -144,7 +144,7 @@ class OskScreen extends StatefulWidget {
   final bool showTyped;
 
   /// The field is a password (masked preview). The daemon-backed keyboard
-  /// learns it from `osk_visibility` instead ([OskBackend.passwordField]).
+  /// learns it from `osk_changed` instead ([OskBackend.passwordField]).
   final bool password;
 
   /// A physical keyboard types into the field (the installer, where the

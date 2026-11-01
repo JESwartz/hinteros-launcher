@@ -1,7 +1,7 @@
 /// Profiles over session API 0.12: `profile.current`, the relayed
 /// `system.profiles.*`, `system.guest.set` and `system.starter_set.*`, the
 /// switch (`session.switch_*`, `switch_progress`, `switch_blocked`), the sleep
-/// lock (`lock_state`, `session.unlock`), and the greeter-mode methods
+/// lock (`lock_changed`, `session.unlock`), and the greeter-mode methods
 /// (`greeter.*`, `greeter_prompt`, `greeter_result`).
 library;
 
@@ -51,7 +51,7 @@ class DaemonProfiles implements ProfilesRepository {
       _conn
           .subscribeTo(const [
             api.EventName.profilesChanged,
-            api.EventName.lockState,
+            api.EventName.lockChanged,
             api.EventName.switchProgress,
             api.EventName.switchBlocked,
           ])
@@ -77,7 +77,7 @@ class DaemonProfiles implements ProfilesRepository {
     switch (e) {
       case api.ProfilesChangedEvent():
         _changes.add([for (final p in e.profiles) _profile(p)]);
-      case api.LockStateEvent():
+      case api.LockChangedEvent():
         _lock.add(e.locked);
       case api.SwitchProgressEvent():
         _switch.add(
@@ -416,7 +416,7 @@ class DaemonGreeter implements GreeterRepository {
   LoginOutcome _result(api.GreeterResultEvent r) {
     _prompted = null;
     if (r.ok) return const LoginStarted();
-    final s = r.lockedSeconds;
+    final s = r.lockedS;
     return LoginRefused(
       retryAt: s == null || s == 0 ? null : _now().add(Duration(seconds: s)),
       rebootRequired: r.rebootRequired ?? false,

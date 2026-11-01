@@ -169,6 +169,54 @@ void main() {
     },
   );
 
+  test('a newer minor of the same major connects', () async {
+    server = await FakeServer.bind(path);
+    final version = ApiVersionNumber.parse(apiVersion);
+    final newer = '${version.major}.${version.minor + 1}';
+    server!.onRequest = (c, req) => helloOk(req['id'], newer);
+    final c = mk()..start();
+    await c.waitConnected(timeout: const Duration(seconds: 5));
+    expect((c.status as Connected).apiVersion, newer);
+  });
+
+  test('a new event is one to ignore, and the stream goes on', () async {
+    server = await FakeServer.bind(path);
+    server!.onRequest = (c, req) {
+      if (req['method'] == 'hello') return helloOk(req['id']);
+      c.send({
+        'jsonrpc': '2.0',
+        'method': 'added_by_a_later_minor',
+        'params': {'a': 1},
+      });
+      c.send({
+        'jsonrpc': '2.0',
+        'method': 'home_pressed',
+        'params': <String, dynamic>{},
+      });
+      return ok(req['id'], {'nonce': 'n'});
+    };
+    final c = mk()..start();
+    await c.waitConnected(timeout: const Duration(seconds: 5));
+    final seen = c.events.take(2).toList();
+    await c.ping(const PingParams(nonce: 'n'));
+    final got = await seen.timeout(const Duration(seconds: 5));
+    expect(got.first, isA<UnknownSessionEvent>());
+    expect(got.last, isA<HomePressedEvent>());
+  });
+
+  test('an unknown error code is an ApiException like any other', () async {
+    server = await FakeServer.bind(path);
+    server!.onRequest = (c, req) => req['method'] == 'hello'
+        ? helloOk(req['id'])
+        : err(req['id'], 9999, 'new', {'a': 1});
+    final c = mk()..start();
+    await c.waitConnected(timeout: const Duration(seconds: 5));
+    await expectLater(
+      c.ping(const PingParams(nonce: 'n')),
+      throwsA(isA<ApiException>().having((e) => e.code, 'code', 9999)),
+    );
+  });
+
   test(
     'version_mismatch (1002) becomes a typed status and is retried',
     () async {

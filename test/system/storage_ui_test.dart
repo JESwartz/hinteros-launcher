@@ -142,6 +142,7 @@ void main() {
           true, // Sam
           true, // Robin
           true, // Guest
+          false, // Media
           false, // Other
           false, // Free space
         ],
@@ -247,7 +248,7 @@ void main() {
 
     testWidgets('the guest opens its own home without a PIN', (t) async {
       await openStorage(t, current: 'guest');
-      await press(t, [kLeft, kLeft, kLeft]);
+      await press(t, [kLeft, kLeft, kLeft, kLeft]);
       expect(selectedName, 'Guest');
       await press(t, [kEnter]);
       expect(find.text(_askPin), findsNothing);
@@ -256,7 +257,7 @@ void main() {
 
     testWidgets('the guest\'s home asks the admin PIN of a profile', (t) async {
       await openStorage(t);
-      await press(t, [kLeft, kLeft, kLeft, kEnter]);
+      await press(t, [kLeft, kLeft, kLeft, kLeft, kEnter]);
       expect(find.text('Open Guest'), findsOneWidget);
       await enterPin(t, '2468');
       expect(level, 'Guest');

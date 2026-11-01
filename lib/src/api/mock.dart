@@ -77,7 +77,7 @@ List<Game> mockGames({String? artDir}) {
     double gb = 4.2,
     int? lastPlayed,
   }) => Game(
-    appid: appid,
+    steamAppId: appid,
     name: name,
     installState: state,
     sizeBytes: (gb * 1e9).round(),
@@ -247,7 +247,7 @@ class MockDaemon extends DaemonConnection {
 
   bool _oskVisible = false;
 
-  /// Whether the on-screen keyboard is shown (`osk.show`, `osk_visibility`).
+  /// Whether the on-screen keyboard is shown (`osk.show`, `osk_changed`).
   bool get oskVisible => _oskVisible;
 
   final List<String> _keyLog = [];
@@ -288,6 +288,15 @@ class MockDaemon extends DaemonConnection {
   @override
   Stream<SessionEvent> get events => _eventController.stream;
 
+  /// A closed enum refuses a value it does not know, as the daemon does.
+  static T _readClosed<T>(T Function() parse) {
+    try {
+      return parse();
+    } on FormatException catch (e) {
+      throw ApiException(ApiErrorCode.invalidParams, e.message);
+    }
+  }
+
   void _setStatus(ConnectionStatus s) {
     _status = s;
     if (!_statusController.isClosed) _statusController.add(s);
@@ -300,7 +309,7 @@ class MockDaemon extends DaemonConnection {
       'hello',
       HelloParams(
         apiVersion: apiVersion,
-        client: Peer(name: clientName, version: '0.1.0'),
+        client: Peer(name: clientName, version: apiVersion),
       ).toJson(),
     ).then((_) {
       if (_desired.isNotEmpty) {
@@ -336,10 +345,7 @@ class MockDaemon extends DaemonConnection {
         );
       }
       _handshaken = true;
-      return HelloResult(
-        apiVersion: mine.negotiate(theirs).toString(),
-        server: serverPeer,
-      ).toJson();
+      return HelloResult(apiVersion: p.apiVersion, server: serverPeer).toJson();
     }
     if (!_handshaken) {
       throw const ApiException(
@@ -434,27 +440,14 @@ class MockDaemon extends DaemonConnection {
       case 'keys.type':
         return _keysType(KeysTypeParams.fromJson(params)).toJson();
       case 'keys.key':
-        final k = KeysKeyParams.fromJson(params);
-        if (k.key == Key.unknown ||
-            (k.modifiers ?? []).contains(Modifier.unknown)) {
-          throw const ApiException(
-            ApiErrorCode.invalidParams,
-            'unknown key or modifier',
-          );
-        }
+        final k = _readClosed(() => KeysKeyParams.fromJson(params));
         _needKeyboard();
         _keyLog.add(
           'key:${[k.key.value, ...?k.modifiers?.map((m) => m.value)].join('+')}',
         );
         return const KeysKeyResult().toJson();
       case 'keys.action':
-        final a = KeysActionParams.fromJson(params).action;
-        if (a == KeyAction.unknown) {
-          throw const ApiException(
-            ApiErrorCode.invalidParams,
-            'unknown action',
-          );
-        }
+        final a = _readClosed(() => KeysActionParams.fromJson(params)).action;
         _needKeyboard();
         _keyLog.add('action:${a.value}');
         return const KeysActionResult().toJson();
@@ -481,7 +474,7 @@ class MockDaemon extends DaemonConnection {
   void _setOsk(bool visible) {
     if (_oskVisible == visible) return;
     _oskVisible = visible;
-    emitRaw('osk_visibility', OskVisibilityEvent(visible: visible).toJson());
+    emitRaw('osk_changed', OskChangedEvent(visible: visible).toJson());
   }
 
   void _needKeyboard() {
@@ -576,7 +569,7 @@ class MockDaemon extends DaemonConnection {
       }
       app = _newRunning(
         id,
-        _games.where((g) => g.appid == appid).firstOrNull?.name ??
+        _games.where((g) => g.steamAppId == appid).firstOrNull?.name ??
             'Steam game $appid',
         AppSource.steam,
         gamescopeAppId: appid,
@@ -781,7 +774,7 @@ class MockDaemon extends DaemonConnection {
     final g = _games[j];
     final next = List.of(_games);
     next[j] = Game(
-      appid: g.appid,
+      steamAppId: g.steamAppId,
       name: g.name,
       installState: i >= 0
           ? InstallState.installed

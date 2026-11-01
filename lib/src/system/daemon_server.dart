@@ -44,7 +44,7 @@ UnitStatus? _unit(api.UnitState? s) => switch (s) {
   api.UnitState.deactivating => UnitStatus.deactivating,
   api.UnitState.maintenance => UnitStatus.maintenance,
   api.UnitState.refreshing => UnitStatus.refreshing,
-  api.UnitState.unknown || api.UnitState.unknown_ => UnitStatus.unknown,
+  api.UnitState.unknown => UnitStatus.unknown,
 };
 
 ServiceSetup _setup(api.Setup? s) => switch (s) {
@@ -61,8 +61,7 @@ LibraryKind _kind(api.LibraryKindShown k) => switch (k) {
   api.LibraryKindShown.shows => LibraryKind.shows,
   api.LibraryKindShown.music => LibraryKind.music,
   api.LibraryKindShown.mixed => LibraryKind.mixed,
-  api.LibraryKindShown.other ||
-  api.LibraryKindShown.unknown => LibraryKind.other,
+  api.LibraryKindShown.other => LibraryKind.other,
 };
 
 api.LibraryKind _wireKind(LibraryKind k) => switch (k) {

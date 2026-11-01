@@ -11,7 +11,7 @@ extension GameState on Game {
       : installState;
 
   /// The id the daemon gives this game while it runs.
-  String get runningId => 'steam-$appid';
+  String get runningId => 'steam-$steamAppId';
 
   /// Short badge text for the card, null for an installed game.
   String? get badge => switch (effectiveState) {
@@ -45,6 +45,6 @@ class GamesRepository {
 
   /// Starts [game] through Steam (or focuses it when it already runs).
   Future<RunningApp> launch(Game game) async => (await connection.appsLaunch(
-    AppsLaunchParams(url: 'steam://rungameid/${game.appid}'),
+    AppsLaunchParams(url: 'steam://rungameid/${game.steamAppId}'),
   )).app;
 }

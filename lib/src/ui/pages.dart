@@ -537,7 +537,10 @@ class _JobProgressScreenState extends State<JobProgressScreen> with JobTicker {
   /// A rollback that turned box features back on (`features_readded`).
   static bool _readded(JobSnapshot s) =>
       s.kind == JobKind.rollback &&
-      (s.result?['features_readded'] as List?)?.isNotEmpty == true;
+      switch (s.result?['features_readded']) {
+        final List<Object?> l => l.isNotEmpty,
+        _ => false,
+      };
 
   static List<JobStage> _stagesOf(JobSnapshot s) {
     final base = s.kind.stages;

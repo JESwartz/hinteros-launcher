@@ -55,9 +55,11 @@ List<WifiNetwork> _networks(List<api.WifiNetwork> list) => [
       secured: n.security != api.WifiSecurity.open,
       connected: n.connected,
       saved: n.known,
-      supported:
-          n.security != api.WifiSecurity.wep &&
-          n.security != api.WifiSecurity.enterprise,
+      supported: const {
+        api.WifiSecurity.open,
+        api.WifiSecurity.wpa,
+        api.WifiSecurity.wpa3,
+      }.contains(n.security),
     ),
 ];
 

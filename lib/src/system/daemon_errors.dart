@@ -213,8 +213,8 @@ SystemException systemExceptionFrom(Object e) {
           },
           data: data,
         );
-      // apps.set_permission (0.18).
-      case api.ApiErrorCode.unknownApp:
+      // apps.set_permission.
+      case api.ApiErrorCode.appNotFound:
         return SystemException(
           SystemErrorKind.notFound,
           'That app is not there any more.',

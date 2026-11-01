@@ -32,8 +32,8 @@ class DaemonTimeZone implements TimeZoneRepository {
         _changes.add(
           _info(
             zone: e.zone,
-            offsetSeconds: e.offsetSeconds,
-            standardOffsetSeconds: e.standardOffsetSeconds,
+            offsetSeconds: e.offsetS,
+            standardOffsetSeconds: e.standardOffsetS,
             offsetValidUntil: e.offsetValidUntil,
           ),
         );
@@ -65,8 +65,8 @@ class DaemonTimeZone implements TimeZoneRepository {
     final r = await _conn.systemTimeZoneGet();
     return _info(
       zone: r.zone,
-      offsetSeconds: r.offsetSeconds,
-      standardOffsetSeconds: r.standardOffsetSeconds,
+      offsetSeconds: r.offsetS,
+      standardOffsetSeconds: r.standardOffsetS,
       offsetValidUntil: r.offsetValidUntil,
     );
   });
@@ -78,8 +78,8 @@ class DaemonTimeZone implements TimeZoneRepository {
       for (final z in r.zones)
         TimeZoneEntry(
           zone: z.zone,
-          offset: Duration(seconds: z.offsetSeconds),
-          standardOffset: Duration(seconds: z.standardOffsetSeconds),
+          offset: Duration(seconds: z.offsetS),
+          standardOffset: Duration(seconds: z.standardOffsetS),
         ),
     ];
   });
@@ -92,8 +92,8 @@ class DaemonTimeZone implements TimeZoneRepository {
         );
         return _info(
           zone: r.zone,
-          offsetSeconds: r.offsetSeconds,
-          standardOffsetSeconds: r.standardOffsetSeconds,
+          offsetSeconds: r.offsetS,
+          standardOffsetSeconds: r.standardOffsetS,
           offsetValidUntil: r.offsetValidUntil,
         );
       });

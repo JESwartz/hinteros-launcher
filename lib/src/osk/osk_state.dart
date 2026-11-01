@@ -74,7 +74,7 @@ class OskState extends ChangeNotifier {
   }
 
   /// Whether the field being typed into is a password (the daemon says so in
-  /// `osk_visibility`; the installer knows its own fields). Unknown counts as
+  /// `osk_changed`; the installer knows its own fields). Unknown counts as
   /// not a password. A change of field starts the preview afresh, so what was
   /// typed into a password never shows unmasked.
   bool get password => _password;

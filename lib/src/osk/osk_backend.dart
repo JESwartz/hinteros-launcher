@@ -15,7 +15,7 @@ enum OskAction {
 }
 
 /// What the on-screen keyboard needs from the daemon (API 0.4: `osk.hide`,
-/// `keys.type`, `keys.key`, `keys.action`, the `osk_visibility` event, and
+/// `keys.type`, `keys.key`, `keys.action`, the `osk_changed` event, and
 /// `input_nav` while the OSK is up). The UI only ever sees this interface:
 /// [DaemonOskBackend] is the real one, [MockOskBackend] stands in for `--mock`
 /// and tests.
@@ -24,12 +24,12 @@ abstract class OskBackend {
   /// the OSK is visible.
   Stream<InputNavEvent> get nav;
 
-  /// `osk_visibility {visible}`, only when it changes. The OSK process stays
+  /// `osk_changed {visible}`, only when it changes. The OSK process stays
   /// resident; the daemon shows and hides its window.
   Stream<bool> get visibility;
 
-  /// `osk_visibility {password}` (API 0.10): whether the keyboard is up for a
-  /// password field. Sent with every `osk_visibility`, also when only the
+  /// `osk_changed {password}` (API 0.10): whether the keyboard is up for a
+  /// password field. Sent with every `osk_changed`, also when only the
   /// field changed (false while hidden). The preview is masked only for
   /// passwords.
   Stream<bool> get passwordField;
@@ -88,7 +88,7 @@ class MockOskBackend implements OskBackend {
   void emitNav(NavAction action, [NavPhase phase = NavPhase.press]) =>
       _nav.add(InputNavEvent(action: action, phase: phase));
 
-  /// As if the daemon sent `osk_visibility` (`password` for a password field).
+  /// As if the daemon sent `osk_changed` (`password` for a password field).
   void setVisible(bool visible, {bool password = false}) {
     _visibility.add(visible);
     _password.add(visible && password);
@@ -146,13 +146,13 @@ class DaemonOskBackend implements OskBackend {
     connection.start();
     unawaited(
       connection
-          .subscribeTo([EventName.inputNav, EventName.oskVisibility])
+          .subscribeTo([EventName.inputNav, EventName.oskChanged])
           .catchError((_) {}),
     );
   }
 
   /// The hello client name the daemon recognises as the on-screen keyboard.
-  static const oskPeer = Peer(name: 'hinteros-osk', version: '0.1.0');
+  static const oskPeer = Peer(name: 'hinteros-osk', version: apiVersion);
 
   final DaemonConnection connection;
 
@@ -160,12 +160,12 @@ class DaemonOskBackend implements OskBackend {
   Stream<InputNavEvent> get nav =>
       connection.events.where((e) => e is InputNavEvent).cast();
 
-  Stream<OskVisibilityEvent> get _oskEvents =>
-      connection.events.where((e) => e is OskVisibilityEvent).cast();
+  Stream<OskChangedEvent> get _oskEvents =>
+      connection.events.where((e) => e is OskChangedEvent).cast();
 
   @override
   Stream<bool> get visibility {
-    // The daemon sends osk_visibility again (still visible) when the field
+    // The daemon sends osk_changed again (still visible) when the field
     // kind changes: only changes count here.
     bool? last;
     return _oskEvents.map((e) => e.visible).where((v) {

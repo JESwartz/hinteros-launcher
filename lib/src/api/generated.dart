@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// Source: schema/session-api.json (session API 0.20).
+// Source: schema/session-api.json (session API 1.0).
 // Regenerate: dart tool/gen_api.dart  (or: nix run .#update-schema)
 //
 // ignore_for_file: unnecessary_this, unnecessary_cast, prefer_null_aware_operators, prefer_if_null_operators
@@ -7,7 +7,7 @@
 import 'dart:convert';
 
 /// API version this client was generated for (sent in `hello`).
-const apiVersion = '0.20';
+const apiVersion = '1.0';
 
 /// Method names in the schema.
 const apiMethodNames = <String>[
@@ -60,8 +60,6 @@ const apiMethodNames = <String>[
   'system.profiles.set_locked',
   'system.profiles.reset_pin',
   'system.profiles.remove',
-  'system.profiles.switch',
-  'system.profiles.switch_cancel',
   'system.profiles.unlock',
   'system.guest.set',
   'system.display.save_mode',
@@ -94,7 +92,6 @@ const apiMethodNames = <String>[
   'system.jobs.get',
   'system.jobs.list',
   'system.jobs.cancel',
-  'system.guest.end',
   'network.status',
   'wifi.scan',
   'wifi.list',
@@ -154,7 +151,7 @@ const apiEventNames = <String>[
   'games_changed',
   'apps_changed',
   'steam_attention',
-  'osk_visibility',
+  'osk_changed',
   'time_zone_changed',
   'job_started',
   'job_progress',
@@ -169,7 +166,7 @@ const apiEventNames = <String>[
   'store_changed',
   'switch_progress',
   'switch_blocked',
-  'lock_state',
+  'lock_changed',
   'greeter_prompt',
   'greeter_result',
   'profiles_changed',
@@ -191,7 +188,6 @@ const apiErrorCodesByName = <String, int>{
   'steam_no_windows': 2003,
   'keyboard_unavailable': 2004,
   'osk_unavailable': 2005,
-  'unknown_app': 2006,
   'unknown_permission': 2007,
   'permission_required': 2008,
   'no_app_display': 2009,
@@ -244,7 +240,7 @@ abstract final class ApiErrorCode {
   /// 'hello' was called twice on one connection.
   static const alreadyHandshaken = 1003;
 
-  /// No such app (apps.launch: not in apps.list; apps.focus, apps.close: not running).
+  /// No such app (apps.launch: not in apps.list; apps.focus, apps.close: not running; apps.set_permission: not installed and not in the catalog).
   static const appNotFound = 2001;
 
   /// The app could not be started (spawn failed, or it has nothing to launch).
@@ -259,9 +255,6 @@ abstract final class ApiErrorCode {
   /// osk.show: the on-screen keyboard is disabled in the daemon's config.
   static const oskUnavailable = 2005;
 
-  /// apps.set_permission: the app is not installed and not in the catalog.
-  static const unknownApp = 2006;
-
   /// apps.set_permission: the app does not declare this permission (or it is not enforced on this box).
   static const unknownPermission = 2007;
 
@@ -274,7 +267,7 @@ abstract final class ApiErrorCode {
   /// Not allowed: the caller does not own seat0's active session (seat), polkit said no (polkit), or the peer cannot be identified safely (peer: no SO_PEERPIDFD, or the process is gone).
   static const permissionDenied = 3002;
 
-  /// Only in job_finished.error and jobs.get: the job failed (or was cancelled) at stage; log_hint is the last relevant log line. 0.19: reason says why a Server section job failed: unreachable (the service does not answer), not_ready (its setup is not done), refused (the service or tool said no; log_hint says why), timeout (nobody signed in in time), not_connected (the Cloudflare tunnel did not connect).
+  /// Only in job_finished.error and jobs.get: the job failed (or was cancelled) at stage; log_hint is the last relevant log line. Reason says why a Server section job failed: unreachable (the service does not answer), not_ready (its setup is not done), refused (the service or tool said no; log_hint says why), timeout (nobody signed in in time), not_connected (the Cloudflare tunnel did not connect).
   static const jobFailed = 3003;
 
   /// Not enough memory or free disk space for a rebuild.
@@ -286,19 +279,19 @@ abstract final class ApiErrorCode {
   /// Too many mutating requests from this user (10 per minute, burst 3).
   static const rateLimited = 3006;
 
-  /// Stale settings revision, update.apply's rev is not the last verified check result (update_rev), or (0.9) channel.set's rev is not the last verified channel.check result for that channel (channel_rev).
+  /// Stale settings revision, update.apply's rev is not the last verified check result (update_rev), or channel.set's rev is not the last verified channel.check result for that channel (channel_rev).
   static const stateConflict = 3007;
 
   /// The update server cannot be reached (the 'home lab unreachable' screen).
   static const updateUnreachable = 3008;
 
-  /// The channel tip is unsigned, signed by an unknown signer, does not descend from the locked revision (not_fast_forward), or (0.9) does not descend from the newest verified tip this box saw on that channel branch (older_than_seen: an older signed release served again).
+  /// The channel tip is unsigned, signed by an unknown signer, does not descend from the locked revision (not_fast_forward), or does not descend from the newest verified tip this box saw on that channel branch (older_than_seen: an older signed release served again).
   static const updateVerificationFailed = 3009;
 
   /// Unknown generation or job; for runtime settings: a Wi-Fi network not in range, a Bluetooth device, an audio output or a display mode that does not exist, or a bluetooth.confirm with nothing waiting; system.apps.install: an id not in the running generation's catalog; system.apps.remove: an id that is not installed; auth.respond, auth.cancel: no such authentication request (or it is over).
   static const notFound = 3010;
 
-  /// A downgrading base switch without acknowledge_downgrade: true. (Before 0.9 also channel.set; since 0.9 channel.set takes the rev the owner confirmed after channel.check instead.)
+  /// A downgrading base switch without acknowledge_downgrade: true. (channel.set takes the rev the owner confirmed after channel.check instead.)
   static const needsAcknowledgement = 3011;
 
   /// polkit would allow the action only after interactive authentication (auth_admin: the admin password), and it did not happen: no authentication agent is registered for the caller (no session daemon agent, or another client than the session daemon called), or the user cancelled the prompt or did not answer in time.
@@ -310,7 +303,7 @@ abstract final class ApiErrorCode {
   /// profiles.create with the most profiles there may be (8; the guest does not count).
   static const profileLimit = 3015;
 
-  /// A PIN is missing or wrong: the caller's own (self), the admin profile's (admin) or the profile being entered (target). retry_after_ms while the backoff lock is on (3 free failures, then 1 s doubling to 5 min, per profile). The admin profile's PIN has no wait but 10 wrong tries a boot (counted from every path, the greeter's included): after them every check of it, also with the right PIN, is refused with reboot_required: true until the box restarts (since 0.17; a new PIN, the admin password's profiles.reset_pin or root's reset-pin clears it).
+  /// A PIN is missing or wrong: the caller's own (self), the admin profile's (admin) or the profile being entered (target). retry_after_ms while the backoff lock is on (3 free failures, then 1 s doubling to 5 min, per profile). The admin profile's PIN has no wait but 10 wrong tries a boot (counted from every path, the greeter's included): after them every check of it, also with the right PIN, is refused with reboot_required: true until the box restarts (a new PIN, the admin password's profiles.reset_pin or root's reset-pin clears it).
   static const pinRequired = 3016;
 
   /// apps.install: app id has vendor terms and accepted_terms does not name their current version (show the terms, then retry with it).
@@ -319,7 +312,7 @@ abstract final class ApiErrorCode {
   /// A relayed method could not reach the system service: it is down (reason down) or speaks another system API version (reason version_mismatch, e.g. after a switch until the session restarts). The session API keeps working.
   static const systemUnavailable = 3001;
 
-  /// A runtime-settings method needs a service that is not there (not installed, not running, no permission to reach it, or no such hardware). Also store.list without a readable catalog index (service catalog), session.restart without a greetd session on seat0 (service logind), and auth.respond when polkit's agent helper cannot be run (service polkit). 0.19: the relayed Server section methods: service jellyfin, plex, tailscale or cloudflare with reason off or not_ready.
+  /// A runtime-settings method needs a service that is not there (not installed, not running, no permission to reach it, or no such hardware). Also store.list without a readable catalog index (service catalog), session.restart without a greetd session on seat0 (service logind), and auth.respond when polkit's agent helper cannot be run (service polkit). The relayed Server section methods: service jellyfin, plex, tailscale or cloudflare with reason off or not_ready. System.base.set to a base that is not built: service base, reason not_built.
   static const unavailable = 4001;
 
   /// The service accepted the request but the operation failed (a connection or pairing attempt, a mode change). The message says why in words; reason is for code.
@@ -344,25 +337,25 @@ typedef AppId = String;
 /// A running app's id, or null for the launcher.
 typedef FocusTarget = String;
 
-/// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder), lan (the local network: other devices at home and this box's own services). More may come; show unknown names as they are.
+/// A sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder), lan (the local network: other devices at home and this box's own services). More may come; show unknown names as they are.
 typedef PermissionName = String;
 
-/// 0.20: a remappable controller button, by its Xbox label: a, b, x, y, lb, rb, lt, rt, view, menu (input.settings.get buttons). Guide and the directions are not remappable.
+/// A remappable controller button, by its Xbox label: a, b, x, y, lb, rb, lt, rt, view, menu (input.settings.get buttons). Guide and the directions are not remappable.
 typedef ControllerButton = String;
 
-/// 0.20: a button pressed during input.capture: a ControllerButton or a direction (up, down, left, right).
+/// A button pressed during input.capture: a ControllerButton or a direction (up, down, left, right).
 typedef CapturedButton = String;
 
-/// 0.20: an action a button or key can do: the remappable NavActions (accept, back, context, secondary, menu, view, page_left, page_right, trigger_left, trigger_right); for keyboard-mode apps also up, down, left, right.
+/// An action a button or key can do: the remappable NavActions (accept, back, context, secondary, menu, view, page_left, page_right, trigger_left, trigger_right); for keyboard-mode apps also up, down, left, right.
 typedef ControllerAction = String;
 
-/// 0.20: a key with optional modifiers, modifiers first: 'enter', 'alt+left', 'ctrl+shift+t'; or 'none' (the action sends nothing).
+/// A key with optional modifiers, modifiers first: 'enter', 'alt+left', 'ctrl+shift+t'; or 'none' (the action sends nothing).
 typedef KeyComboName = String;
 
-/// 0.20: action to button.
+/// Action to button.
 typedef ButtonMap = Map<String, Object?>;
 
-/// 0.20: action to key of a keyboard-mode app.
+/// Action to key of a keyboard-mode app.
 typedef Keymap = Map<String, Object?>;
 
 /// Absolute path of an image file in Steam's library cache (readable by the session user), or null if Steam has not cached it.
@@ -459,7 +452,7 @@ enum EventName {
   gamesChanged('games_changed'),
   appsChanged('apps_changed'),
   steamAttention('steam_attention'),
-  oskVisibility('osk_visibility'),
+  oskChanged('osk_changed'),
   jobStarted('job_started'),
   jobProgress('job_progress'),
   jobFinished('job_finished'),
@@ -473,22 +466,19 @@ enum EventName {
   storeChanged('store_changed'),
   switchProgress('switch_progress'),
   switchBlocked('switch_blocked'),
-  lockState('lock_state'),
+  lockChanged('lock_changed'),
   profilesChanged('profiles_changed'),
   greeterPrompt('greeter_prompt'),
   greeterResult('greeter_result'),
   timeZoneChanged('time_zone_changed'),
-  inputCaptured('input_captured'),
-
-  /// A value this client does not know (newer daemon).
-  unknown('unknown');
+  inputCaptured('input_captured');
 
   const EventName(this.value);
   final String value;
 
   factory EventName.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
+    (e) => e.value == value,
+    orElse: () => throw FormatException('not a EventName', value),
   );
 
   String toJson() => value;
@@ -506,10 +496,8 @@ enum AppSource {
   const AppSource(this.value);
   final String value;
 
-  factory AppSource.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory AppSource.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -578,10 +566,8 @@ enum ExitReason {
   const ExitReason(this.value);
   final String value;
 
-  factory ExitReason.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory ExitReason.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -611,10 +597,8 @@ enum NavAction {
   const NavAction(this.value);
   final String value;
 
-  factory NavAction.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory NavAction.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -630,10 +614,8 @@ enum NavPhase {
   const NavPhase(this.value);
   final String value;
 
-  factory NavPhase.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory NavPhase.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -649,15 +631,13 @@ enum AppKind {
   const AppKind(this.value);
   final String value;
 
-  factory AppKind.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory AppKind.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
 
-/// 0.12: the app came with the starter set and this profile has not accepted its vendor terms yet. Show the full text (file) on first launch; accept with system.apps.accept_terms {id, version}, decline leaves it installed and unlaunched (offer Remove). apps.launch refuses it with terms_required meanwhile.
+/// The app came with the starter set and this profile has not accepted its vendor terms yet. Show the full text (file) on first launch; accept with system.apps.accept_terms {id, version}, decline leaves it installed and unlaunched (offer Remove). apps.launch refuses it with terms_required meanwhile.
 class AppNeedsTerms {
   const AppNeedsTerms({
     required this.title,
@@ -705,7 +685,7 @@ class AppNeedsTerms {
   String toString() => 'AppNeedsTerms(${jsonEncode(toJson())})';
 }
 
-/// 0.18: a permission the app declares in the catalog, and this profile's choice. Only permissions this box enforces are listed.
+/// A permission the app declares in the catalog, and this profile's choice. Only permissions this box enforces are listed.
 class AppPermission {
   const AppPermission({
     required this.name,
@@ -713,7 +693,7 @@ class AppPermission {
     required this.granted,
   });
 
-  /// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder), lan (the local network: other devices at home and this box's own services). More may come; show unknown names as they are.
+  /// A sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder), lan (the local network: other devices at home and this box's own services). More may come; show unknown names as they are.
   final String name;
 
   /// Cannot be switched off (no switch).
@@ -768,10 +748,10 @@ class App {
   /// Absolute path to a local icon image file (PNG, SVG, ICO, JPEG, WebP), if any. Resolved by the daemon at runtime: an explicit path from the config, else the icon the app's .desktop file names, found in the installed icon themes, else (web apps) a cached download of the site's own icon. It may appear later (see apps_changed) or change. Absent: draw a placeholder, e.g. the first letter of the name.
   final String? icon;
 
-  /// 0.12: the app came with the starter set and this profile has not accepted its vendor terms yet. Show the full text (file) on first launch; accept with system.apps.accept_terms {id, version}, decline leaves it installed and unlaunched (offer Remove). apps.launch refuses it with terms_required meanwhile.
+  /// The app came with the starter set and this profile has not accepted its vendor terms yet. Show the full text (file) on first launch; accept with system.apps.accept_terms {id, version}, decline leaves it installed and unlaunched (offer Remove). apps.launch refuses it with terms_required meanwhile.
   final AppNeedsTerms? needsTerms;
 
-  /// 0.18: what the app may use in its sandbox, in catalog order. Empty for Steam and for apps that run without a sandbox.
+  /// What the app may use in its sandbox, in catalog order. Empty for Steam and for apps that run without a sandbox.
   final List<AppPermission> permissions;
 
   factory App.fromJson(Map<String, dynamic> json) => App(
@@ -809,7 +789,7 @@ class App {
   String toString() => 'App(${jsonEncode(toJson())})';
 }
 
-/// 0.18: how many apps can run at once (apps.displays.get).
+/// How many apps can run at once (apps.displays.get).
 class AppDisplays {
   const AppDisplays({
     required this.count,
@@ -852,7 +832,7 @@ class AppDisplays {
   String toString() => 'AppDisplays(${jsonEncode(toJson())})';
 }
 
-/// 0.20: the pointer of pointer apps. speed: percent of the configured pointer speed. swap_sticks: the left stick moves the pointer, the right stick gives the directions. left_click, right_click: physical buttons (before the general map), never the same.
+/// The pointer of pointer apps. speed: percent of the configured pointer speed. swap_sticks: the left stick moves the pointer, the right stick gives the directions. left_click, right_click: physical buttons (before the general map), never the same.
 class PointerSettings {
   const PointerSettings({
     this.speed,
@@ -864,10 +844,10 @@ class PointerSettings {
   final int? speed;
   final bool? swapSticks;
 
-  /// 0.20: a remappable controller button, by its Xbox label: a, b, x, y, lb, rb, lt, rt, view, menu (input.settings.get buttons). Guide and the directions are not remappable.
+  /// A remappable controller button, by its Xbox label: a, b, x, y, lb, rb, lt, rt, view, menu (input.settings.get buttons). Guide and the directions are not remappable.
   final String? leftClick;
 
-  /// 0.20: a remappable controller button, by its Xbox label: a, b, x, y, lb, rb, lt, rt, view, menu (input.settings.get buttons). Guide and the directions are not remappable.
+  /// A remappable controller button, by its Xbox label: a, b, x, y, lb, rb, lt, rt, view, menu (input.settings.get buttons). Guide and the directions are not remappable.
   final String? rightClick;
 
   factory PointerSettings.fromJson(Map<String, dynamic> json) =>
@@ -903,7 +883,7 @@ class PointerSettings {
   String toString() => 'PointerSettings(${jsonEncode(toJson())})';
 }
 
-/// 0.20: the stored controller settings of a profile: only what the user changed. general: over defaults.general, the result one button per action and one action per button. keyboard: the keys of every keyboard-mode app. apps: per app id, over everything else for that app.
+/// The stored controller settings of a profile: only what the user changed. general: over defaults.general, the result one button per action and one action per button. keyboard: the keys of every keyboard-mode app. apps: per app id, over everything else for that app.
 class ControllerSettings {
   const ControllerSettings({
     this.general,
@@ -912,14 +892,14 @@ class ControllerSettings {
     this.pointer,
   });
 
-  /// 0.20: action to button.
+  /// Action to button.
   final Map<String, Object?>? general;
 
-  /// 0.20: action to key of a keyboard-mode app.
+  /// Action to key of a keyboard-mode app.
   final Map<String, Object?>? keyboard;
   final Map<String, Object?>? apps;
 
-  /// 0.20: the pointer of pointer apps. speed: percent of the configured pointer speed. swap_sticks: the left stick moves the pointer, the right stick gives the directions. left_click, right_click: physical buttons (before the general map), never the same.
+  /// The pointer of pointer apps. speed: percent of the configured pointer speed. swap_sticks: the left stick moves the pointer, the right stick gives the directions. left_click, right_click: physical buttons (before the general map), never the same.
   final PointerSettings? pointer;
 
   factory ControllerSettings.fromJson(Map<String, dynamic> json) =>
@@ -959,7 +939,7 @@ class ControllerSettings {
   String toString() => 'ControllerSettings(${jsonEncode(toJson())})';
 }
 
-/// 0.20: the built-in controller settings. pointer has all four fields.
+/// The built-in controller settings. pointer has all four fields.
 class ControllerDefaults {
   const ControllerDefaults({
     required this.general,
@@ -967,13 +947,13 @@ class ControllerDefaults {
     required this.pointer,
   });
 
-  /// 0.20: action to button.
+  /// Action to button.
   final Map<String, Object?> general;
 
-  /// 0.20: action to key of a keyboard-mode app.
+  /// Action to key of a keyboard-mode app.
   final Map<String, Object?> keyboard;
 
-  /// 0.20: the pointer of pointer apps. speed: percent of the configured pointer speed. swap_sticks: the left stick moves the pointer, the right stick gives the directions. left_click, right_click: physical buttons (before the general map), never the same.
+  /// The pointer of pointer apps. speed: percent of the configured pointer speed. swap_sticks: the left stick moves the pointer, the right stick gives the directions. left_click, right_click: physical buttons (before the general map), never the same.
   final PointerSettings pointer;
 
   factory ControllerDefaults.fromJson(Map<String, dynamic> json) =>
@@ -1003,7 +983,7 @@ class ControllerDefaults {
   String toString() => 'ControllerDefaults(${jsonEncode(toJson())})';
 }
 
-/// 0.20: a keyboard-mode app of the profile. keymap: only the app's own catalog or config entries (back key, keymap, address bar keys).
+/// A keyboard-mode app of the profile. keymap: only the app's own catalog or config entries (back key, keymap, address bar keys).
 class KeyboardApp {
   const KeyboardApp({
     required this.id,
@@ -1015,7 +995,7 @@ class KeyboardApp {
   final String id;
   final String name;
 
-  /// 0.20: action to key of a keyboard-mode app.
+  /// Action to key of a keyboard-mode app.
   final Map<String, Object?> keymap;
 
   factory KeyboardApp.fromJson(Map<String, dynamic> json) => KeyboardApp(
@@ -1070,7 +1050,7 @@ class InputSettingsSpeed {
   String toString() => 'InputSettingsSpeed(${jsonEncode(toJson())})';
 }
 
-/// 0.20: the controller settings of this profile (input.settings.get).
+/// The controller settings of this profile (input.settings.get).
 class InputSettings {
   const InputSettings({
     required this.settings,
@@ -1084,10 +1064,10 @@ class InputSettings {
     required this.apps,
   });
 
-  /// 0.20: the stored controller settings of a profile: only what the user changed. general: over defaults.general, the result one button per action and one action per button. keyboard: the keys of every keyboard-mode app. apps: per app id, over everything else for that app.
+  /// The stored controller settings of a profile: only what the user changed. general: over defaults.general, the result one button per action and one action per button. keyboard: the keys of every keyboard-mode app. apps: per app id, over everything else for that app.
   final ControllerSettings settings;
 
-  /// 0.20: the built-in controller settings. pointer has all four fields.
+  /// The built-in controller settings. pointer has all four fields.
   final ControllerDefaults defaults;
   final List<String> buttons;
 
@@ -1161,10 +1141,8 @@ enum InstallState {
   const InstallState(this.value);
   final String value;
 
-  factory InstallState.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory InstallState.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -1225,7 +1203,7 @@ class GameArtwork {
 /// An installed Steam game.
 class Game {
   const Game({
-    required this.appid,
+    required this.steamAppId,
     required this.name,
     required this.installState,
     required this.sizeBytes,
@@ -1234,7 +1212,7 @@ class Game {
   });
 
   /// Steam app id. Launch with apps.launch {url: 'steam://rungameid/&lt;appid&gt;'}; it then runs as 'steam-&lt;appid&gt;'.
-  final int appid;
+  final int steamAppId;
 
   /// Display name from the manifest.
   final String name;
@@ -1252,7 +1230,7 @@ class Game {
   final GameArtwork artwork;
 
   factory Game.fromJson(Map<String, dynamic> json) => Game(
-    appid: json['appid'] as int,
+    steamAppId: json['steam_app_id'] as int,
     name: json['name'] as String,
     installState: InstallState.fromJson(json['install_state'] as String),
     sizeBytes: json['size_bytes'] as int,
@@ -1263,7 +1241,7 @@ class Game {
   );
 
   Map<String, dynamic> toJson() => {
-    'appid': appid,
+    'steam_app_id': steamAppId,
     'name': name,
     'install_state': installState.toJson(),
     'size_bytes': sizeBytes,
@@ -1369,17 +1347,14 @@ enum Key {
   previousTrack('previous_track'),
   volumeUp('volume_up'),
   volumeDown('volume_down'),
-  mute('mute'),
-
-  /// A value this client does not know (newer daemon).
-  unknown('unknown');
+  mute('mute');
 
   const Key(this.value);
   final String value;
 
   factory Key.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
+    (e) => e.value == value,
+    orElse: () => throw FormatException('not a Key', value),
   );
 
   String toJson() => value;
@@ -1390,17 +1365,14 @@ enum Modifier {
   shift('shift'),
   ctrl('ctrl'),
   alt('alt'),
-  meta('meta'),
-
-  /// A value this client does not know (newer daemon).
-  unknown('unknown');
+  meta('meta');
 
   const Modifier(this.value);
   final String value;
 
   factory Modifier.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
+    (e) => e.value == value,
+    orElse: () => throw FormatException('not a Modifier', value),
   );
 
   String toJson() => value;
@@ -1419,17 +1391,14 @@ enum KeyAction {
   up('up'),
   down('down'),
   home('home'),
-  end('end'),
-
-  /// A value this client does not know (newer daemon).
-  unknown('unknown');
+  end('end');
 
   const KeyAction(this.value);
   final String value;
 
   factory KeyAction.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
+    (e) => e.value == value,
+    orElse: () => throw FormatException('not a KeyAction', value),
   );
 
   String toJson() => value;
@@ -1474,17 +1443,14 @@ class SteamWindow {
 
 enum Channel {
   stable('stable'),
-  beta('beta'),
-
-  /// A value this client does not know (newer daemon).
-  unknown('unknown');
+  beta('beta');
 
   const Channel(this.value);
   final String value;
 
   factory Channel.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
+    (e) => e.value == value,
+    orElse: () => throw FormatException('not a Channel', value),
   );
 
   String toJson() => value;
@@ -1492,17 +1458,14 @@ enum Channel {
 
 enum Base {
   stable('stable'),
-  unstable('unstable'),
-
-  /// A value this client does not know (newer daemon).
-  unknown('unknown');
+  unstable('unstable');
 
   const Base(this.value);
   final String value;
 
   factory Base.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
+    (e) => e.value == value,
+    orElse: () => throw FormatException('not a Base', value),
   );
 
   String toJson() => value;
@@ -1522,7 +1485,6 @@ enum JobKind {
   appsRemove('apps_remove'),
   appsRollback('apps_rollback'),
   starterSet('starter_set'),
-  migrateApps('migrate_apps'),
   profilesCreate('profiles_create'),
   profilesRemove('profiles_remove'),
   guestSet('guest_set'),
@@ -1549,10 +1511,8 @@ enum JobKind {
   const JobKind(this.value);
   final String value;
 
-  factory JobKind.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory JobKind.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -1573,10 +1533,8 @@ enum ProfileColor {
   const ProfileColor(this.value);
   final String value;
 
-  factory ProfileColor.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory ProfileColor.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -1628,10 +1586,8 @@ enum SwitchStage {
   const SwitchStage(this.value);
   final String value;
 
-  factory SwitchStage.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory SwitchStage.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -1723,10 +1679,8 @@ enum BoxFeature {
   const BoxFeature(this.value);
   final String value;
 
-  factory BoxFeature.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory BoxFeature.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -1798,10 +1752,8 @@ enum AuthOutcome {
   const AuthOutcome(this.value);
   final String value;
 
-  factory AuthOutcome.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory AuthOutcome.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -1820,10 +1772,8 @@ enum StoreState {
   const StoreState(this.value);
   final String value;
 
-  factory StoreState.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory StoreState.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -1839,10 +1789,8 @@ enum CatalogStatus {
   const CatalogStatus(this.value);
   final String value;
 
-  factory CatalogStatus.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory CatalogStatus.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -1862,7 +1810,7 @@ class StoreAppIcon {
   final String? iconUrl;
   final bool firefoxProfile;
 
-  /// 0.9: the resolved icon on this box (absolute path to an image), when there is one: the installed app's desktop file and icon theme, or downloaded from icon_url / site_url and cached (https only; same cache, size limits and refresh as apps.list icons). Absent until resolved; store_changed is sent when it appears.
+  /// The resolved icon on this box (absolute path to an image), when there is one: the installed app's desktop file and icon theme, or downloaded from icon_url / site_url and cached (https only; same cache, size limits and refresh as apps.list icons). Absent until resolved; store_changed is sent when it appears.
   final String? path;
 
   factory StoreAppIcon.fromJson(Map<String, dynamic> json) => StoreAppIcon(
@@ -1940,7 +1888,7 @@ class StoreAppTerms {
   String toString() => 'StoreAppTerms(${jsonEncode(toJson())})';
 }
 
-/// 0.19: the upstream project's README (Markdown, at most 64 KiB), shown on the app's Store page. Absent when the app has none.
+/// The upstream project's README (Markdown, at most 64 KiB), shown on the app's Store page. Absent when the app has none.
 class StoreAppReadme {
   const StoreAppReadme({
     required this.url,
@@ -2042,7 +1990,7 @@ class StoreApp {
   /// The vendor's terms, shown in full before install; null if none.
   final StoreAppTerms? terms;
 
-  /// 0.19: the upstream project's README (Markdown, at most 64 KiB), shown on the app's Store page. Absent when the app has none.
+  /// The upstream project's README (Markdown, at most 64 KiB), shown on the app's Store page. Absent when the app has none.
   final StoreAppReadme? readme;
 
   /// Fetched from the vendor and prepared on this box during install (a few minutes, needs internet).
@@ -2053,13 +2001,13 @@ class StoreApp {
   final String? statusReason;
   final StoreState state;
 
-  /// 0.18: what the app may use in its sandbox, in catalog order. Not installed: the stored choice for its install (default granted). Empty for Steam, apps without a sandbox and tombstones.
+  /// What the app may use in its sandbox, in catalog order. Not installed: the stored choice for its install (default granted). Empty for Steam, apps without a sandbox and tombstones.
   final List<AppPermission> permissions;
 
-  /// 0.19: one of the app's dataPaths exists in this profile's home, installed or not (a remove can leave data behind): system.apps.clear_data has something to delete.
+  /// One of the app's dataPaths exists in this profile's home, installed or not (a remove can leave data behind): system.apps.clear_data has something to delete.
   final bool hasData;
 
-  /// 0.18: runs without the app sandbox (Steam, apps with sandbox = false, or every app while the sandbox is off on this box): it can use everything the profile can. The install sheet warns. False for tombstones.
+  /// Runs without the app sandbox (Steam, apps with sandbox = false, or every app while the sandbox is off on this box): it can use everything the profile can. The install sheet warns. False for tombstones.
   final bool fullAccess;
 
   factory StoreApp.fromJson(Map<String, dynamic> json) => StoreApp(
@@ -2157,10 +2105,8 @@ enum JobState {
   const JobState(this.value);
   final String value;
 
-  factory JobState.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory JobState.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -2188,10 +2134,8 @@ enum Stage {
   const Stage(this.value);
   final String value;
 
-  factory Stage.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory Stage.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -2208,10 +2152,8 @@ enum Severity {
   const Severity(this.value);
   final String value;
 
-  factory Severity.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory Severity.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -2286,10 +2228,10 @@ class Generation {
   final bool current;
   final bool booted;
 
-  /// The accounts in that generation's state.json with their current names (null: no longer a profile); absent if its state.json cannot be read (since 0.4). The rollback screen lists the profiles a rollback would drop or bring back empty.
+  /// The accounts in that generation's state.json with their current names (null: no longer a profile); absent if its state.json cannot be read. The rollback screen lists the profiles a rollback would drop or bring back empty.
   final List<GenerationProfile>? profiles;
 
-  /// 0.5: box features a rollback to this generation would turn back on: the profiles' apps need them and its state.json lacks them (the rollback job re-adds them in a box stage; the rollback screen says so). Absent when there are none or it is unknown (schema 1, unreadable state.json).
+  /// Box features a rollback to this generation would turn back on: the profiles' apps need them and its state.json lacks them (the rollback job re-adds them in a box stage; the rollback screen says so). Absent when there are none or it is unknown (schema 1, unreadable state.json).
   final List<BoxFeature>? readdsFeatures;
 
   factory Generation.fromJson(Map<String, dynamic> json) => Generation(
@@ -2366,10 +2308,10 @@ class AvailableUpdate {
   final Severity? security;
   final int commits;
 
-  /// Apps the update makes installable (in the target's catalog, not available in the running one), by id; null if the target's catalog could not be read (since 0.3). The Store says 'More apps are available after the next update'.
+  /// Apps the update makes installable (in the target's catalog, not available in the running one), by id; null if the target's catalog could not be read. The Store says 'More apps are available after the next update'.
   final List<CatalogApp>? newApps;
 
-  /// Installed apps the update takes away (removed from, or missing in, the target's catalog); null if unknown (since 0.3). The update screen names them with the reason.
+  /// Installed apps the update takes away (removed from, or missing in, the target's catalog); null if unknown. The update screen names them with the reason.
   final List<RemovedApp>? removedApps;
 
   /// (Session API 0.11; optional in system API 0.3.) The release rev carries: its release/version file if that matches ^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$ (at most 32 characters), otherwise the first 12 hex digits of rev. The launcher shows 'HinterOS &lt;version&gt;'. Absent from older services: show the short rev.
@@ -2485,7 +2427,7 @@ class UpdateCheckResult {
   String toString() => 'UpdateCheckResult(${jsonEncode(toJson())})';
 }
 
-/// 0.9: a channel_check job's result: the verified tip of the target channel.
+/// A channel_check job's result: the verified tip of the target channel.
 class ChannelCheckResult {
   const ChannelCheckResult({
     required this.channel,
@@ -2590,7 +2532,7 @@ class AppliedResult {
   final int? generation;
   final String? rev;
 
-  /// 0.4: app envs the final apps stage could not rebuild; each keeps its previous generation, which still works. Absent when there were none.
+  /// App envs the final apps stage could not rebuild; each keeps its previous generation, which still works. Absent when there were none.
   final List<AppliedResultAppsNotUpdatedItem>? appsNotUpdated;
 
   /// 0.5 (rollback jobs): box features turned back on after the rollback, because the profiles' apps need them and the restored generation lacked them. Absent when there were none.
@@ -2667,17 +2609,14 @@ class CleanupParams {
 enum CleanupFrequency {
   daily('daily'),
   weekly('weekly'),
-  monthly('monthly'),
-
-  /// A value this client does not know (newer daemon).
-  unknown('unknown');
+  monthly('monthly');
 
   const CleanupFrequency(this.value);
   final String value;
 
   factory CleanupFrequency.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
+    (e) => e.value == value,
+    orElse: () => throw FormatException('not a CleanupFrequency', value),
   );
 
   String toJson() => value;
@@ -2686,8 +2625,8 @@ enum CleanupFrequency {
 class TimeZoneInfo {
   const TimeZoneInfo({
     required this.zone,
-    required this.offsetSeconds,
-    required this.standardOffsetSeconds,
+    required this.offsetS,
+    required this.standardOffsetS,
     required this.offsetValidUntil,
   });
 
@@ -2695,18 +2634,18 @@ class TimeZoneInfo {
   final String zone;
 
   /// Seconds east of UTC.
-  final int offsetSeconds;
+  final int offsetS;
 
   /// Seconds east of UTC.
-  final int standardOffsetSeconds;
+  final int standardOffsetS;
 
   /// Unix time of the next offset change; null when there is none.
   final int? offsetValidUntil;
 
   factory TimeZoneInfo.fromJson(Map<String, dynamic> json) => TimeZoneInfo(
     zone: json['zone'] as String,
-    offsetSeconds: json['offset_seconds'] as int,
-    standardOffsetSeconds: json['standard_offset_seconds'] as int,
+    offsetS: json['offset_s'] as int,
+    standardOffsetS: json['standard_offset_s'] as int,
     offsetValidUntil: json['offset_valid_until'] == null
         ? null
         : json['offset_valid_until'] as int,
@@ -2714,8 +2653,8 @@ class TimeZoneInfo {
 
   Map<String, dynamic> toJson() => {
     'zone': zone,
-    'offset_seconds': offsetSeconds,
-    'standard_offset_seconds': standardOffsetSeconds,
+    'offset_s': offsetS,
+    'standard_offset_s': standardOffsetS,
     'offset_valid_until': offsetValidUntil,
   };
 
@@ -2734,29 +2673,29 @@ class TimeZoneInfo {
 class TimeZoneEntry {
   const TimeZoneEntry({
     required this.zone,
-    required this.offsetSeconds,
-    required this.standardOffsetSeconds,
+    required this.offsetS,
+    required this.standardOffsetS,
   });
 
   /// An IANA time zone name (UTC, America/Chicago): '/'-separated parts that each start with an ASCII capital letter, followed by ASCII letters, digits, '_', '+' and '-' (the system repo's rule; it keeps out '..', absolute paths and tzdata's other files).
   final String zone;
 
   /// Seconds east of UTC.
-  final int offsetSeconds;
+  final int offsetS;
 
   /// Seconds east of UTC.
-  final int standardOffsetSeconds;
+  final int standardOffsetS;
 
   factory TimeZoneEntry.fromJson(Map<String, dynamic> json) => TimeZoneEntry(
     zone: json['zone'] as String,
-    offsetSeconds: json['offset_seconds'] as int,
-    standardOffsetSeconds: json['standard_offset_seconds'] as int,
+    offsetS: json['offset_s'] as int,
+    standardOffsetS: json['standard_offset_s'] as int,
   );
 
   Map<String, dynamic> toJson() => {
     'zone': zone,
-    'offset_seconds': offsetSeconds,
-    'standard_offset_seconds': standardOffsetSeconds,
+    'offset_s': offsetS,
+    'standard_offset_s': standardOffsetS,
   };
 
   @override
@@ -2773,13 +2712,13 @@ class TimeZoneEntry {
 
 class CleanupSettings {
   const CleanupSettings({
-    required this.enable,
+    required this.enabled,
     required this.frequency,
     required this.keepSystem,
     required this.keepProfiles,
   });
 
-  final bool enable;
+  final bool enabled;
   final CleanupFrequency frequency;
 
   /// Generations to keep (the running, booted and current ones always stay).
@@ -2790,14 +2729,14 @@ class CleanupSettings {
 
   factory CleanupSettings.fromJson(Map<String, dynamic> json) =>
       CleanupSettings(
-        enable: json['enable'] as bool,
+        enabled: json['enabled'] as bool,
         frequency: CleanupFrequency.fromJson(json['frequency'] as String),
         keepSystem: json['keep_system'] as int,
         keepProfiles: json['keep_profiles'] as int,
       );
 
   Map<String, dynamic> toJson() => {
-    'enable': enable,
+    'enabled': enabled,
     'frequency': frequency.toJson(),
     'keep_system': keepSystem,
     'keep_profiles': keepProfiles,
@@ -2815,13 +2754,14 @@ class CleanupSettings {
   String toString() => 'CleanupSettings(${jsonEncode(toJson())})';
 }
 
-/// What a storage node stands for: disk (the top-level root), system, apps, profile (id), guest, other (what none of the others explains: other store paths, garbage, filesystem overhead), free; generation (what only that generation holds), common (what two or more generations of the parent hold), app_env (one owner's app envs outside the system; id: a profile id, starter or guest), shared (app store paths in two or more owners' envs, counted once); dir (name), files (loose files and folders too small or deep to show), steam (the installed games), steam_game (name, app_id).
+/// What a storage node stands for: disk (the top-level root), system, apps, profile (id), guest, media (/srv: its total, no children; only when not empty), other (what none of the others explains: other store paths, garbage, filesystem overhead), free; generation (what only that generation holds), common (what two or more generations of the parent hold), app_env (one owner's app envs outside the system; id: a profile id, starter or guest), shared (app store paths in two or more owners' envs, counted once); dir (name), files (loose files and folders too small or deep to show), steam (the installed games), steam_game (name, app_id).
 enum NodeKind {
   disk('disk'),
   system('system'),
   apps('apps'),
   profile('profile'),
   guest('guest'),
+  media('media'),
   other('other'),
   free('free'),
   generation('generation'),
@@ -2839,10 +2779,8 @@ enum NodeKind {
   const NodeKind(this.value);
   final String value;
 
-  factory NodeKind.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory NodeKind.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -2862,7 +2800,7 @@ class StorageNode {
     this.appId,
   });
 
-  /// What a storage node stands for: disk (the top-level root), system, apps, profile (id), guest, other (what none of the others explains: other store paths, garbage, filesystem overhead), free; generation (what only that generation holds), common (what two or more generations of the parent hold), app_env (one owner's app envs outside the system; id: a profile id, starter or guest), shared (app store paths in two or more owners' envs, counted once); dir (name), files (loose files and folders too small or deep to show), steam (the installed games), steam_game (name, app_id).
+  /// What a storage node stands for: disk (the top-level root), system, apps, profile (id), guest, media (/srv: its total, no children; only when not empty), other (what none of the others explains: other store paths, garbage, filesystem overhead), free; generation (what only that generation holds), common (what two or more generations of the parent hold), app_env (one owner's app envs outside the system; id: a profile id, starter or guest), shared (app store paths in two or more owners' envs, counted once); dir (name), files (loose files and folders too small or deep to show), steam (the installed games), steam_game (name, app_id).
   final NodeKind kind;
   final int bytes;
   final List<StorageNode> children;
@@ -3151,7 +3089,7 @@ class CleanedResult {
   String toString() => 'CleanedResult(${jsonEncode(toJson())})';
 }
 
-/// 0.7: the most recently started derivation that is still building. name and version from the .drv name (nix's rule: the version starts at the first dash followed by a non-letter); phase is nix's build phase without the Phase suffix (unpack, patch, configure, build, check, install, fixup, ...), absent until nix reports one.
+/// The most recently started derivation that is still building. name and version from the .drv name (nix's rule: the version starts at the first dash followed by a non-letter); phase is nix's build phase without the Phase suffix (unpack, patch, configure, build, check, install, fixup, ...), absent until nix reports one.
 class Building {
   const Building({required this.name, this.version, this.phase, this.percent});
 
@@ -3159,7 +3097,7 @@ class Building {
   final String? version;
   final String? phase;
 
-  /// System API 0.10, session API 0.18: how far this derivation is, from the last standard stdenv phase it started (unpack 0, patch 5, updateAutotoolsGnuConfigScripts 8, configure 10, build 20, check 80, install 88, fixup 94, installCheck 98, dist 99; other phases keep the value); never goes back; below 100. Absent before the first standard phase and for builders without phases.
+  /// How far this derivation is, from the last standard stdenv phase it started (unpack 0, patch 5, updateAutotoolsGnuConfigScripts 8, configure 10, build 20, check 80, install 88, fixup 94, installCheck 98, dist 99; other phases keep the value); never goes back; below 100. Absent before the first standard phase and for builders without phases.
   final int? percent;
 
   factory Building.fromJson(Map<String, dynamic> json) => Building(
@@ -3205,19 +3143,19 @@ class ProgressDetail {
   final int? bytesDone;
   final int? bytesTotal;
 
-  /// 0.7: derivations built so far in this nix run.
+  /// Derivations built so far in this nix run.
   final int? buildsDone;
 
-  /// 0.7: derivations nix expects to build (may grow while nix discovers more).
+  /// Derivations nix expects to build (may grow while nix discovers more).
   final int? buildsTotal;
 
-  /// 0.7: derivations building at once.
+  /// Derivations building at once.
   final int? buildsRunning;
 
-  /// 0.7: the most recently started derivation that is still building. name and version from the .drv name (nix's rule: the version starts at the first dash followed by a non-letter); phase is nix's build phase without the Phase suffix (unpack, patch, configure, build, check, install, fixup, ...), absent until nix reports one.
+  /// The most recently started derivation that is still building. name and version from the .drv name (nix's rule: the version starts at the first dash followed by a non-letter); phase is nix's build phase without the Phase suffix (unpack, patch, configure, build, check, install, fixup, ...), absent until nix reports one.
   final Building? building;
 
-  /// 0.11: tailscale_login, stage signing_in: the URL to sign in at (https, printable ASCII; shown as a QR code).
+  /// Tailscale_login, stage signing_in: the URL to sign in at (https, printable ASCII; shown as a QR code).
   final String? authUrl;
 
   factory ProgressDetail.fromJson(Map<String, dynamic> json) => ProgressDetail(
@@ -3262,7 +3200,7 @@ class ProgressDetail {
   String toString() => 'ProgressDetail(${jsonEncode(toJson())})';
 }
 
-/// 0.7: a profile a job is for, with its display name when the job started (the id when it has none).
+/// A profile a job is for, with its display name when the job started (the id when it has none).
 class SubjectProfile {
   const SubjectProfile({required this.id, required this.name});
 
@@ -3286,28 +3224,25 @@ class SubjectProfile {
   String toString() => 'SubjectProfile(${jsonEncode(toJson())})';
 }
 
-/// 0.11: what a new Jellyfin library holds (mixed: movies and shows).
+/// What a new Jellyfin library holds (mixed: movies and shows).
 enum LibraryKind {
   movies('movies'),
   shows('shows'),
   music('music'),
-  mixed('mixed'),
-
-  /// A value this client does not know (newer daemon).
-  unknown('unknown');
+  mixed('mixed');
 
   const LibraryKind(this.value);
   final String value;
 
   factory LibraryKind.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
+    (e) => e.value == value,
+    orElse: () => throw FormatException('not a LibraryKind', value),
   );
 
   String toJson() => value;
 }
 
-/// 0.11: the library a Jellyfin job is about (id: known for a removal, and for an addition once Jellyfin made it).
+/// The library a Jellyfin job is about (id: known for a removal, and for an addition once Jellyfin made it).
 class SubjectLibrary {
   const SubjectLibrary({this.id, required this.name, this.kind, this.folder});
 
@@ -3315,7 +3250,7 @@ class SubjectLibrary {
   final String? id;
   final String name;
 
-  /// 0.11: what a new Jellyfin library holds (mixed: movies and shows).
+  /// What a new Jellyfin library holds (mixed: movies and shows).
   final LibraryKind? kind;
 
   /// A folder below /srv/media, as its path relative to it (media.folders).
@@ -3349,7 +3284,7 @@ class SubjectLibrary {
   String toString() => 'SubjectLibrary(${jsonEncode(toJson())})';
 }
 
-/// 0.7: what a job is about. Every field optional; which ones each kind sets: README, What a job is about.
+/// What a job is about. Every field optional; which ones each kind sets: README, What a job is about.
 class JobSubject {
   const JobSubject({
     this.owner,
@@ -3379,10 +3314,10 @@ class JobSubject {
   /// Apps jobs: whose apps (a profile id, guest or starter).
   final String? owner;
 
-  /// 0.7: a profile a job is for, with its display name when the job started (the id when it has none).
+  /// A profile a job is for, with its display name when the job started (the id when it has none).
   final SubjectProfile? profile;
 
-  /// Apps installed (the new ones), removed, the new starter set or the migrated apps; names from the running catalog.
+  /// Apps installed (the new ones), removed or the new starter set; names from the running catalog.
   final List<CatalogApp>? apps;
   final bool? deleteData;
 
@@ -3416,10 +3351,10 @@ class JobSubject {
   final int? keepSystem;
   final int? keepProfiles;
 
-  /// 0.11: services turned on or off (services_enable, services_disable).
+  /// Services turned on or off (services_enable, services_disable).
   final List<CatalogApp>? services;
 
-  /// 0.11: the library a Jellyfin job is about (id: known for a removal, and for an addition once Jellyfin made it).
+  /// The library a Jellyfin job is about (id: known for a removal, and for an addition once Jellyfin made it).
   final SubjectLibrary? library;
 
   factory JobSubject.fromJson(Map<String, dynamic> json) => JobSubject(
@@ -3519,7 +3454,7 @@ class JobSubject {
   String toString() => 'JobSubject(${jsonEncode(toJson())})';
 }
 
-/// 0.11: a service's setup flow in the Server section (catalog setup).
+/// A service's setup flow in the Server section (catalog setup).
 enum Setup {
   jellyfin('jellyfin'),
   plex('plex'),
@@ -3532,15 +3467,13 @@ enum Setup {
   const Setup(this.value);
   final String value;
 
-  factory Setup.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory Setup.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
 
-/// 0.11: systemd's ActiveState of a service's unit (unknown: a value this daemon does not know).
+/// Systemd's ActiveState of a service's unit (unknown: a value this daemon does not know).
 enum UnitState {
   active('active'),
   reloading('reloading'),
@@ -3550,23 +3483,18 @@ enum UnitState {
   deactivating('deactivating'),
   maintenance('maintenance'),
   refreshing('refreshing'),
-  unknown('unknown'),
-
-  /// A value this client does not know (newer daemon).
-  unknown_('unknown');
+  unknown('unknown');
 
   const UnitState(this.value);
   final String value;
 
-  factory UnitState.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown_ && e.value == value,
-    orElse: () => unknown_,
-  );
+  factory UnitState.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
 
-/// 0.11: a service's vendor terms; file is the absolute path of the text on the box.
+/// A service's vendor terms; file is the absolute path of the text on the box.
 class ServiceTerms {
   const ServiceTerms({
     required this.title,
@@ -3608,7 +3536,7 @@ class ServiceTerms {
   String toString() => 'ServiceTerms(${jsonEncode(toJson())})';
 }
 
-/// 0.11: where a service's real icon is (HinterOS ships no logos): the catalog entry's desktopId, iconUrl (with sha256: a download with another SHA-256 is not kept) or siteUrl (discovery on the site).
+/// Where a service's real icon is (HinterOS ships no logos): the catalog entry's desktopId, iconUrl (with sha256: a download with another SHA-256 is not kept) or siteUrl (discovery on the site).
 class ServiceIcon {
   const ServiceIcon({
     this.desktopId,
@@ -3658,7 +3586,7 @@ class ServiceIcon {
   String toString() => 'ServiceIcon(${jsonEncode(toJson())})';
 }
 
-/// 0.11: one service of the Server section.
+/// One service of the Server section.
 class ServiceInfo {
   const ServiceInfo({
     required this.id,
@@ -3741,24 +3669,19 @@ class ServiceInfo {
   String toString() => 'ServiceInfo(${jsonEncode(toJson())})';
 }
 
-/// 0.11: what a Jellyfin library holds; other: a type made in Jellyfin's dashboard (books, photos, music videos, ...).
+/// What a Jellyfin library holds; other: a type made in Jellyfin's dashboard (books, photos, music videos, ...).
 enum LibraryKindShown {
   movies('movies'),
   shows('shows'),
   music('music'),
   mixed('mixed'),
-  other('other'),
-
-  /// A value this client does not know (newer daemon).
-  unknown('unknown');
+  other('other');
 
   const LibraryKindShown(this.value);
   final String value;
 
-  factory LibraryKindShown.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory LibraryKindShown.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => other);
 
   String toJson() => value;
 }
@@ -3775,7 +3698,7 @@ class JellyfinLibrary {
   final String id;
   final String name;
 
-  /// 0.11: what a Jellyfin library holds; other: a type made in Jellyfin's dashboard (books, photos, music videos, ...).
+  /// What a Jellyfin library holds; other: a type made in Jellyfin's dashboard (books, photos, music videos, ...).
   final LibraryKindShown kind;
 
   /// The media.folders id of its first folder; null when that is not in /srv/media.
@@ -4037,7 +3960,7 @@ class PlexDetail {
   String toString() => 'PlexDetail(${jsonEncode(toJson())})';
 }
 
-/// 0.11: needs_login: not signed in; needs_approval: the tailnet's admin must approve the device; unavailable: tailscaled does not answer.
+/// Needs_login: not signed in; needs_approval: the tailnet's admin must approve the device; unavailable: tailscaled does not answer.
 enum TailscaleState {
   needsLogin('needs_login'),
   needsApproval('needs_approval'),
@@ -4052,10 +3975,8 @@ enum TailscaleState {
   const TailscaleState(this.value);
   final String value;
 
-  factory TailscaleState.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory TailscaleState.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -4070,7 +3991,7 @@ class TailscaleDetail {
     required this.keyExpiry,
   });
 
-  /// 0.11: needs_login: not signed in; needs_approval: the tailnet's admin must approve the device; unavailable: tailscaled does not answer.
+  /// Needs_login: not signed in; needs_approval: the tailnet's admin must approve the device; unavailable: tailscaled does not answer.
   final TailscaleState state;
   final String? name;
   final String? ip4;
@@ -4222,19 +4143,19 @@ class Job {
   final Object? result;
   final bool sessionRestartRequired;
 
-  /// 0.7: what a job is about. Every field optional; which ones each kind sets: README, What a job is about.
+  /// What a job is about. Every field optional; which ones each kind sets: README, What a job is about.
   final JobSubject subject;
 
-  /// 0.7: when the job was started (equals created_at).
+  /// When the job was started (equals created_at).
   final int startedAt;
 
-  /// 0.7: the latest percent of a running job (null when finished or unknown).
+  /// The latest percent of a running job (null when finished or unknown).
   final int? percent;
 
-  /// 0.7: the latest progress detail of a running job.
+  /// The latest progress detail of a running job.
   final ProgressDetail? detail;
 
-  /// 0.7: the last time a running job's process printed anything.
+  /// The last time a running job's process printed anything.
   final int? lastActivityAt;
 
   factory Job.fromJson(Map<String, dynamic> json) => Job(
@@ -4301,18 +4222,13 @@ enum Connectivity {
   none('none'),
   portal('portal'),
   limited('limited'),
-  full('full'),
-
-  /// A value this client does not know (newer daemon).
-  unknown_('unknown');
+  full('full');
 
   const Connectivity(this.value);
   final String value;
 
-  factory Connectivity.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown_ && e.value == value,
-    orElse: () => unknown_,
-  );
+  factory Connectivity.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -4391,10 +4307,8 @@ enum WifiSecurity {
   const WifiSecurity(this.value);
   final String value;
 
-  factory WifiSecurity.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory WifiSecurity.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -4489,10 +4403,8 @@ enum BtKind {
   const BtKind(this.value);
   final String value;
 
-  factory BtKind.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory BtKind.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -4602,10 +4514,8 @@ enum AudioKind {
   const AudioKind(this.value);
   final String value;
 
-  factory AudioKind.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory AudioKind.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -4821,10 +4731,8 @@ enum PowerCapability {
   const PowerCapability(this.value);
   final String value;
 
-  factory PowerCapability.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory PowerCapability.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -5143,7 +5051,7 @@ class AppsSetPermissionParams {
   /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'. 'steam' is Steam itself (Big Picture and its other windows).
   final String id;
 
-  /// 0.18: a sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder), lan (the local network: other devices at home and this box's own services). More may come; show unknown names as they are.
+  /// A sandbox permission: gamepad (controllers), mic (a sound socket that may record), downloads (the profile's Downloads folder), lan (the local network: other devices at home and this box's own services). More may come; show unknown names as they are.
   final String permission;
   final bool granted;
 
@@ -5212,7 +5120,7 @@ class AppsDisplaysGetParams {
   String toString() => 'AppsDisplaysGetParams(${jsonEncode(toJson())})';
 }
 
-/// 0.18: how many apps can run at once (apps.displays.get).
+/// How many apps can run at once (apps.displays.get).
 class AppsDisplaysGetResult {
   const AppsDisplaysGetResult({
     required this.count,
@@ -5278,7 +5186,7 @@ class AppsDisplaysSetParams {
   String toString() => 'AppsDisplaysSetParams(${jsonEncode(toJson())})';
 }
 
-/// 0.18: how many apps can run at once (apps.displays.get).
+/// How many apps can run at once (apps.displays.get).
 class AppsDisplaysSetResult {
   const AppsDisplaysSetResult({
     required this.count,
@@ -5634,7 +5542,7 @@ class AppsCloseParams {
   /// App identifier: an apps.list id, or for running apps started by command or Steam URL 'cmd-&lt;n&gt;' / 'steam-&lt;appid&gt;'. 'steam' is Steam itself (Big Picture and its other windows).
   final String id;
 
-  /// 0.19: Force Stop: SIGKILL now, no request to quit first (also while a close is under way). Steam ('steam_client'): every process of the Steam client and all below it, not just Big Picture.
+  /// Force Stop: SIGKILL now, no request to quit first (also while a close is under way). Steam ('steam_client'): every process of the Steam client and all below it, not just Big Picture.
   final bool? force;
 
   factory AppsCloseParams.fromJson(Map<String, dynamic> json) =>
@@ -5702,7 +5610,7 @@ class OskShowResult {
   /// Whether the on-screen keyboard is now visible.
   final bool visible;
 
-  /// (0.10) The keyboard is up for a password field (see osk_visibility). Absent when false.
+  /// The keyboard is up for a password field (see osk_changed). Absent when false.
   final bool? password;
 
   factory OskShowResult.fromJson(Map<String, dynamic> json) => OskShowResult(
@@ -5749,7 +5657,7 @@ class OskHideResult {
   /// Whether the on-screen keyboard is now visible.
   final bool visible;
 
-  /// (0.10) The keyboard is up for a password field (see osk_visibility). Absent when false.
+  /// The keyboard is up for a password field (see osk_changed). Absent when false.
   final bool? password;
 
   factory OskHideResult.fromJson(Map<String, dynamic> json) => OskHideResult(
@@ -6088,31 +5996,22 @@ class SystemSettingsGetResultSettingsSsh {
 class SystemSettingsGetResultSettings {
   const SystemSettingsGetResultSettings({
     required this.base,
-    this.apps,
-    this.requirements,
+    required this.requirements,
     required this.ssh,
   });
 
   final Base base;
 
-  /// Schema-1 boxes: catalog app ids installed box-wide from the Store (state.json apps), in install order (since 0.3). Absent on schema-2 boxes (0.4: apps are per profile, see apps.list).
-  final List<String>? apps;
-
-  /// Schema-2 boxes (0.4): the box features that are on (read-only).
-  final List<BoxFeature>? requirements;
+  /// The box features that are on (read-only).
+  final List<BoxFeature> requirements;
   final SystemSettingsGetResultSettingsSsh ssh;
 
   factory SystemSettingsGetResultSettings.fromJson(Map<String, dynamic> json) =>
       SystemSettingsGetResultSettings(
         base: Base.fromJson(json['base'] as String),
-        apps: json['apps'] == null
-            ? null
-            : (json['apps'] as List).map((x) => x as String).toList(),
-        requirements: json['requirements'] == null
-            ? null
-            : (json['requirements'] as List)
-                  .map((x) => BoxFeature.fromJson(x as String))
-                  .toList(),
+        requirements: (json['requirements'] as List)
+            .map((x) => BoxFeature.fromJson(x as String))
+            .toList(),
         ssh: SystemSettingsGetResultSettingsSsh.fromJson(
           (json['ssh'] as Map).cast<String, dynamic>(),
         ),
@@ -6120,9 +6019,7 @@ class SystemSettingsGetResultSettings {
 
   Map<String, dynamic> toJson() => {
     'base': base.toJson(),
-    'apps': ?apps,
-    if (requirements != null)
-      'requirements': requirements!.map((x) => x.toJson()).toList(),
+    'requirements': requirements.map((x) => x.toJson()).toList(),
     'ssh': ssh.toJson(),
   };
 
@@ -7289,7 +7186,7 @@ class SystemProfilesListResultProfilesItem {
   final int? lastUsedAt;
   final ProfileUsage? usage;
 
-  /// false: a migrated profile without a PIN yet (show 'Set your PIN'). Always true on a schema-1 box (before the migration there are no PINs).
+  /// false: a profile without a PIN yet (show 'Set your PIN').
   final bool pinSet;
 
   factory SystemProfilesListResultProfilesItem.fromJson(
@@ -7986,98 +7883,6 @@ class SystemProfilesRemoveResult {
   String toString() => 'SystemProfilesRemoveResult(${jsonEncode(toJson())})';
 }
 
-class SystemProfilesSwitchParams {
-  const SystemProfilesSwitchParams({required this.id, this.pin});
-
-  final Object id;
-
-  /// 4 to 8 digits. Never logged.
-  final String? pin;
-
-  factory SystemProfilesSwitchParams.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesSwitchParams(
-        id: json['id'],
-        pin: json['pin'] == null ? null : json['pin'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {'id': id, 'pin': ?pin};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesSwitchParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemProfilesSwitchParams(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesSwitchResult {
-  const SystemProfilesSwitchResult();
-
-  factory SystemProfilesSwitchResult.fromJson(Map<String, dynamic> json) =>
-      SystemProfilesSwitchResult();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesSwitchResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemProfilesSwitchResult(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesSwitchCancelParams {
-  const SystemProfilesSwitchCancelParams();
-
-  factory SystemProfilesSwitchCancelParams.fromJson(
-    Map<String, dynamic> json,
-  ) => SystemProfilesSwitchCancelParams();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesSwitchCancelParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() =>
-      'SystemProfilesSwitchCancelParams(${jsonEncode(toJson())})';
-}
-
-class SystemProfilesSwitchCancelResult {
-  const SystemProfilesSwitchCancelResult();
-
-  factory SystemProfilesSwitchCancelResult.fromJson(
-    Map<String, dynamic> json,
-  ) => SystemProfilesSwitchCancelResult();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemProfilesSwitchCancelResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() =>
-      'SystemProfilesSwitchCancelResult(${jsonEncode(toJson())})';
-}
-
 class SystemProfilesUnlockParams {
   const SystemProfilesUnlockParams({required this.pin});
 
@@ -8683,13 +8488,13 @@ class SystemCleanupGetParams {
 
 class SystemCleanupGetResult {
   const SystemCleanupGetResult({
-    required this.enable,
+    required this.enabled,
     required this.frequency,
     required this.keepSystem,
     required this.keepProfiles,
   });
 
-  final bool enable;
+  final bool enabled;
   final CleanupFrequency frequency;
 
   /// Generations to keep (the running, booted and current ones always stay).
@@ -8700,14 +8505,14 @@ class SystemCleanupGetResult {
 
   factory SystemCleanupGetResult.fromJson(Map<String, dynamic> json) =>
       SystemCleanupGetResult(
-        enable: json['enable'] as bool,
+        enabled: json['enabled'] as bool,
         frequency: CleanupFrequency.fromJson(json['frequency'] as String),
         keepSystem: json['keep_system'] as int,
         keepProfiles: json['keep_profiles'] as int,
       );
 
   Map<String, dynamic> toJson() => {
-    'enable': enable,
+    'enabled': enabled,
     'frequency': frequency.toJson(),
     'keep_system': keepSystem,
     'keep_profiles': keepProfiles,
@@ -8727,14 +8532,14 @@ class SystemCleanupGetResult {
 
 class SystemCleanupSetParams {
   const SystemCleanupSetParams({
-    required this.enable,
+    required this.enabled,
     required this.frequency,
     required this.keepSystem,
     required this.keepProfiles,
     this.adminPin,
   });
 
-  final bool enable;
+  final bool enabled;
   final CleanupFrequency frequency;
 
   /// Generations to keep (the running, booted and current ones always stay).
@@ -8748,7 +8553,7 @@ class SystemCleanupSetParams {
 
   factory SystemCleanupSetParams.fromJson(Map<String, dynamic> json) =>
       SystemCleanupSetParams(
-        enable: json['enable'] as bool,
+        enabled: json['enabled'] as bool,
         frequency: CleanupFrequency.fromJson(json['frequency'] as String),
         keepSystem: json['keep_system'] as int,
         keepProfiles: json['keep_profiles'] as int,
@@ -8758,7 +8563,7 @@ class SystemCleanupSetParams {
       );
 
   Map<String, dynamic> toJson() => {
-    'enable': enable,
+    'enabled': enabled,
     'frequency': frequency.toJson(),
     'keep_system': keepSystem,
     'keep_profiles': keepProfiles,
@@ -8825,8 +8630,8 @@ class SystemTimeZoneGetParams {
 class SystemTimeZoneGetResult {
   const SystemTimeZoneGetResult({
     required this.zone,
-    required this.offsetSeconds,
-    required this.standardOffsetSeconds,
+    required this.offsetS,
+    required this.standardOffsetS,
     required this.offsetValidUntil,
   });
 
@@ -8834,10 +8639,10 @@ class SystemTimeZoneGetResult {
   final String zone;
 
   /// Seconds east of UTC.
-  final int offsetSeconds;
+  final int offsetS;
 
   /// Seconds east of UTC.
-  final int standardOffsetSeconds;
+  final int standardOffsetS;
 
   /// Unix time of the next offset change; null when there is none.
   final int? offsetValidUntil;
@@ -8845,8 +8650,8 @@ class SystemTimeZoneGetResult {
   factory SystemTimeZoneGetResult.fromJson(Map<String, dynamic> json) =>
       SystemTimeZoneGetResult(
         zone: json['zone'] as String,
-        offsetSeconds: json['offset_seconds'] as int,
-        standardOffsetSeconds: json['standard_offset_seconds'] as int,
+        offsetS: json['offset_s'] as int,
+        standardOffsetS: json['standard_offset_s'] as int,
         offsetValidUntil: json['offset_valid_until'] == null
             ? null
             : json['offset_valid_until'] as int,
@@ -8854,8 +8659,8 @@ class SystemTimeZoneGetResult {
 
   Map<String, dynamic> toJson() => {
     'zone': zone,
-    'offset_seconds': offsetSeconds,
-    'standard_offset_seconds': standardOffsetSeconds,
+    'offset_s': offsetS,
+    'standard_offset_s': standardOffsetS,
     'offset_valid_until': offsetValidUntil,
   };
 
@@ -8955,8 +8760,8 @@ class SystemTimeZoneSetParams {
 class SystemTimeZoneSetResult {
   const SystemTimeZoneSetResult({
     required this.zone,
-    required this.offsetSeconds,
-    required this.standardOffsetSeconds,
+    required this.offsetS,
+    required this.standardOffsetS,
     required this.offsetValidUntil,
   });
 
@@ -8964,10 +8769,10 @@ class SystemTimeZoneSetResult {
   final String zone;
 
   /// Seconds east of UTC.
-  final int offsetSeconds;
+  final int offsetS;
 
   /// Seconds east of UTC.
-  final int standardOffsetSeconds;
+  final int standardOffsetS;
 
   /// Unix time of the next offset change; null when there is none.
   final int? offsetValidUntil;
@@ -8975,8 +8780,8 @@ class SystemTimeZoneSetResult {
   factory SystemTimeZoneSetResult.fromJson(Map<String, dynamic> json) =>
       SystemTimeZoneSetResult(
         zone: json['zone'] as String,
-        offsetSeconds: json['offset_seconds'] as int,
-        standardOffsetSeconds: json['standard_offset_seconds'] as int,
+        offsetS: json['offset_s'] as int,
+        standardOffsetS: json['standard_offset_s'] as int,
         offsetValidUntil: json['offset_valid_until'] == null
             ? null
             : json['offset_valid_until'] as int,
@@ -8984,8 +8789,8 @@ class SystemTimeZoneSetResult {
 
   Map<String, dynamic> toJson() => {
     'zone': zone,
-    'offset_seconds': offsetSeconds,
-    'standard_offset_seconds': standardOffsetSeconds,
+    'offset_s': offsetS,
+    'standard_offset_s': standardOffsetS,
     'offset_valid_until': offsetValidUntil,
   };
 
@@ -9276,7 +9081,7 @@ class SystemJellyfinLibrariesAddParams {
   /// 1 to 64 characters after trimming, without control or format characters or /\:*?"&lt;&gt;|.
   final String name;
 
-  /// 0.11: what a new Jellyfin library holds (mixed: movies and shows).
+  /// What a new Jellyfin library holds (mixed: movies and shows).
   final LibraryKind kind;
 
   /// A folder below /srv/media, as its path relative to it (media.folders).
@@ -9933,51 +9738,6 @@ class SystemJobsCancelResult {
 
   @override
   String toString() => 'SystemJobsCancelResult(${jsonEncode(toJson())})';
-}
-
-class SystemGuestEndParams {
-  const SystemGuestEndParams();
-
-  factory SystemGuestEndParams.fromJson(Map<String, dynamic> json) =>
-      SystemGuestEndParams();
-
-  Map<String, dynamic> toJson() => {};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemGuestEndParams &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemGuestEndParams(${jsonEncode(toJson())})';
-}
-
-/// A started job, or null when there was nothing to do.
-class SystemGuestEndResult {
-  const SystemGuestEndResult({required this.jobId});
-
-  final String? jobId;
-
-  factory SystemGuestEndResult.fromJson(Map<String, dynamic> json) =>
-      SystemGuestEndResult(
-        jobId: json['job_id'] == null ? null : json['job_id'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {'job_id': jobId};
-
-  @override
-  bool operator ==(Object other) =>
-      other is SystemGuestEndResult &&
-      jsonEncode(toJson()) == jsonEncode(other.toJson());
-
-  @override
-  int get hashCode => jsonEncode(toJson()).hashCode;
-
-  @override
-  String toString() => 'SystemGuestEndResult(${jsonEncode(toJson())})';
 }
 
 class NetworkStatusParams {
@@ -12609,7 +12369,7 @@ class InputSettingsGetResultSpeed {
   String toString() => 'InputSettingsGetResultSpeed(${jsonEncode(toJson())})';
 }
 
-/// 0.20: the controller settings of this profile (input.settings.get).
+/// The controller settings of this profile (input.settings.get).
 class InputSettingsGetResult {
   const InputSettingsGetResult({
     required this.settings,
@@ -12623,10 +12383,10 @@ class InputSettingsGetResult {
     required this.apps,
   });
 
-  /// 0.20: the stored controller settings of a profile: only what the user changed. general: over defaults.general, the result one button per action and one action per button. keyboard: the keys of every keyboard-mode app. apps: per app id, over everything else for that app.
+  /// The stored controller settings of a profile: only what the user changed. general: over defaults.general, the result one button per action and one action per button. keyboard: the keys of every keyboard-mode app. apps: per app id, over everything else for that app.
   final ControllerSettings settings;
 
-  /// 0.20: the built-in controller settings. pointer has all four fields.
+  /// The built-in controller settings. pointer has all four fields.
   final ControllerDefaults defaults;
   final List<String> buttons;
 
@@ -12691,7 +12451,7 @@ class InputSettingsGetResult {
 class InputSettingsSetParams {
   const InputSettingsSetParams({required this.settings});
 
-  /// 0.20: the stored controller settings of a profile: only what the user changed. general: over defaults.general, the result one button per action and one action per button. keyboard: the keys of every keyboard-mode app. apps: per app id, over everything else for that app.
+  /// The stored controller settings of a profile: only what the user changed. general: over defaults.general, the result one button per action and one action per button. keyboard: the keys of every keyboard-mode app. apps: per app id, over everything else for that app.
   final ControllerSettings settings;
 
   factory InputSettingsSetParams.fromJson(Map<String, dynamic> json) =>
@@ -12747,7 +12507,7 @@ class InputSettingsSetResultSpeed {
   String toString() => 'InputSettingsSetResultSpeed(${jsonEncode(toJson())})';
 }
 
-/// 0.20: the controller settings of this profile (input.settings.get).
+/// The controller settings of this profile (input.settings.get).
 class InputSettingsSetResult {
   const InputSettingsSetResult({
     required this.settings,
@@ -12761,10 +12521,10 @@ class InputSettingsSetResult {
     required this.apps,
   });
 
-  /// 0.20: the stored controller settings of a profile: only what the user changed. general: over defaults.general, the result one button per action and one action per button. keyboard: the keys of every keyboard-mode app. apps: per app id, over everything else for that app.
+  /// The stored controller settings of a profile: only what the user changed. general: over defaults.general, the result one button per action and one action per button. keyboard: the keys of every keyboard-mode app. apps: per app id, over everything else for that app.
   final ControllerSettings settings;
 
-  /// 0.20: the built-in controller settings. pointer has all four fields.
+  /// The built-in controller settings. pointer has all four fields.
   final ControllerDefaults defaults;
   final List<String> buttons;
 
@@ -13062,7 +12822,7 @@ final class GamesChangedEvent extends SessionEvent {
   String toString() => 'GamesChangedEvent(${jsonEncode(toJson())})';
 }
 
-/// The apps.list result changed: an app's resolved icon became available or changed (for example a web app's icon finished downloading), or (0.9) the daemon reloaded its app list after a switch installed or removed apps, or (0.18) apps.set_permission changed a permission. Call apps.list again.
+/// The apps.list result changed: an app's resolved icon became available or changed (for example a web app's icon finished downloading), or the daemon reloaded its app list after a switch installed or removed apps, or apps.set_permission changed a permission. Call apps.list again.
 final class AppsChangedEvent extends SessionEvent {
   const AppsChangedEvent();
 
@@ -13127,16 +12887,16 @@ final class SteamAttentionEvent extends SessionEvent {
 }
 
 /// The on-screen keyboard was shown or hidden (osk.show/osk.hide, the controller chord, A on a focused text field, B while it is visible, Home, or a focus change).
-final class OskVisibilityEvent extends SessionEvent {
-  const OskVisibilityEvent({required this.visible, this.password});
+final class OskChangedEvent extends SessionEvent {
+  const OskChangedEvent({required this.visible, this.password});
 
   final bool visible;
 
   /// The keyboard is up for a password field. Absent when false.
   final bool? password;
 
-  factory OskVisibilityEvent.fromJson(Map<String, dynamic> json) =>
-      OskVisibilityEvent(
+  factory OskChangedEvent.fromJson(Map<String, dynamic> json) =>
+      OskChangedEvent(
         visible: json['visible'] as bool,
         password: json['password'] == null ? null : json['password'] as bool,
       );
@@ -13144,29 +12904,29 @@ final class OskVisibilityEvent extends SessionEvent {
   Map<String, dynamic> toJson() => {'visible': visible, 'password': ?password};
 
   @override
-  String get name => 'osk_visibility';
+  String get name => 'osk_changed';
 
   @override
   Map<String, dynamic> get params => toJson();
 
   @override
   bool operator ==(Object other) =>
-      other is OskVisibilityEvent &&
+      other is OskChangedEvent &&
       jsonEncode(toJson()) == jsonEncode(other.toJson());
 
   @override
   int get hashCode => jsonEncode(toJson()).hashCode;
 
   @override
-  String toString() => 'OskVisibilityEvent(${jsonEncode(toJson())})';
+  String toString() => 'OskChangedEvent(${jsonEncode(toJson())})';
 }
 
 /// Relayed from the system service. The box's time zone changed (time_zone.set, or a rollback restored another zone): the new zone and its offsets, as time_zone.get.
 final class TimeZoneChangedEvent extends SessionEvent {
   const TimeZoneChangedEvent({
     required this.zone,
-    required this.offsetSeconds,
-    required this.standardOffsetSeconds,
+    required this.offsetS,
+    required this.standardOffsetS,
     required this.offsetValidUntil,
   });
 
@@ -13174,10 +12934,10 @@ final class TimeZoneChangedEvent extends SessionEvent {
   final String zone;
 
   /// Seconds east of UTC.
-  final int offsetSeconds;
+  final int offsetS;
 
   /// Seconds east of UTC.
-  final int standardOffsetSeconds;
+  final int standardOffsetS;
 
   /// Unix time of the next offset change; null when there is none.
   final int? offsetValidUntil;
@@ -13185,8 +12945,8 @@ final class TimeZoneChangedEvent extends SessionEvent {
   factory TimeZoneChangedEvent.fromJson(Map<String, dynamic> json) =>
       TimeZoneChangedEvent(
         zone: json['zone'] as String,
-        offsetSeconds: json['offset_seconds'] as int,
-        standardOffsetSeconds: json['standard_offset_seconds'] as int,
+        offsetS: json['offset_s'] as int,
+        standardOffsetS: json['standard_offset_s'] as int,
         offsetValidUntil: json['offset_valid_until'] == null
             ? null
             : json['offset_valid_until'] as int,
@@ -13194,8 +12954,8 @@ final class TimeZoneChangedEvent extends SessionEvent {
 
   Map<String, dynamic> toJson() => {
     'zone': zone,
-    'offset_seconds': offsetSeconds,
-    'standard_offset_seconds': standardOffsetSeconds,
+    'offset_s': offsetS,
+    'standard_offset_s': standardOffsetS,
     'offset_valid_until': offsetValidUntil,
   };
 
@@ -13217,7 +12977,7 @@ final class TimeZoneChangedEvent extends SessionEvent {
   String toString() => 'TimeZoneChangedEvent(${jsonEncode(toJson())})';
 }
 
-/// Relayed from the system service. A job was started (by any caller). 0.15 (system 0.7): subject (what the job is about) and started_at.
+/// Relayed from the system service. A job was started (by any caller). Subject (what the job is about) and started_at.
 final class JobStartedEvent extends SessionEvent {
   const JobStartedEvent({
     required this.jobId,
@@ -13232,7 +12992,7 @@ final class JobStartedEvent extends SessionEvent {
   final JobKind kind;
   final int uid;
 
-  /// 0.7: what a job is about. Every field optional; which ones each kind sets: README, What a job is about.
+  /// What a job is about. Every field optional; which ones each kind sets: README, What a job is about.
   final JobSubject subject;
   final int startedAt;
 
@@ -13273,7 +13033,7 @@ final class JobStartedEvent extends SessionEvent {
   String toString() => 'JobStartedEvent(${jsonEncode(toJson())})';
 }
 
-/// Relayed from the system service. A job reached a stage or made progress (at most 4 per second), and 0.15 (system 0.7): at least every 2 s while the job runs (a heartbeat repeats the latest values). percent where meaningful: downloading and building (0.15; never goes back within a stage run, below 100 while nix runs), measuring. last_activity_at: the last time the job's process printed anything (nix log lines included). subject only when it changed during the job (it replaces the one from job_started).
+/// Relayed from the system service. A job reached a stage or made progress (at most 4 per second), and at least every 2 s while the job runs (a heartbeat repeats the latest values). percent where meaningful: downloading and building (never goes back within a stage run, below 100 while nix runs), measuring. last_activity_at: the last time the job's process printed anything (nix log lines included). subject only when it changed during the job (it replaces the one from job_started).
 final class JobProgressEvent extends SessionEvent {
   const JobProgressEvent({
     required this.jobId,
@@ -13295,7 +13055,7 @@ final class JobProgressEvent extends SessionEvent {
   final int startedAt;
   final int? lastActivityAt;
 
-  /// 0.7: what a job is about. Every field optional; which ones each kind sets: README, What a job is about.
+  /// What a job is about. Every field optional; which ones each kind sets: README, What a job is about.
   final JobSubject? subject;
 
   factory JobProgressEvent.fromJson(Map<String, dynamic> json) =>
@@ -13349,7 +13109,7 @@ final class JobProgressEvent extends SessionEvent {
   String toString() => 'JobProgressEvent(${jsonEncode(toJson())})';
 }
 
-/// Relayed from the system service. A job ended. session_restart_required: the switch replaced the system service's API or the session daemon, so the launcher should offer a session restart. 0.15 (system 0.7): subject (as the job last knew it), started_at, finished_at.
+/// Relayed from the system service. A job ended. session_restart_required: the switch replaced the system service's API or the session daemon, so the launcher should offer a session restart. Subject (as the job last knew it), started_at, finished_at.
 final class JobFinishedEvent extends SessionEvent {
   const JobFinishedEvent({
     required this.jobId,
@@ -13371,11 +13131,11 @@ final class JobFinishedEvent extends SessionEvent {
   /// A JSON-RPC error object (codes from this document's errors).
   final ErrorObject? error;
 
-  /// update_check jobs: an UpdateCheckResult; jobs that change the system: an AppliedResult; storage_measure (0.6): a MeasuredResult; cleanup_system and cleanup_profiles (0.6): a CleanedResult; channel_check (0.9): a ChannelCheckResult.
+  /// update_check jobs: an UpdateCheckResult; jobs that change the system: an AppliedResult; storage_measure: a MeasuredResult; cleanup_system and cleanup_profiles: a CleanedResult; channel_check: a ChannelCheckResult.
   final Object? result;
   final bool sessionRestartRequired;
 
-  /// 0.7: what a job is about. Every field optional; which ones each kind sets: README, What a job is about.
+  /// What a job is about. Every field optional; which ones each kind sets: README, What a job is about.
   final JobSubject subject;
   final int startedAt;
   final int finishedAt;
@@ -13586,10 +13346,8 @@ enum BluetoothConfirmEventMode {
   const BluetoothConfirmEventMode(this.value);
   final String value;
 
-  factory BluetoothConfirmEventMode.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory BluetoothConfirmEventMode.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -13816,7 +13574,7 @@ final class AuthenticationFinishedEvent extends SessionEvent {
   String toString() => 'AuthenticationFinishedEvent(${jsonEncode(toJson())})';
 }
 
-/// What store.list returns may have changed: an apps job started or finished, any other job that switched the system finished, or an update check changed more_after_update, or (0.9) a catalog app's icon was resolved (icon.path), or (0.18) apps.set_permission changed a permission. Query store.list again.
+/// What store.list returns may have changed: an apps job started or finished, any other job that switched the system finished, or an update check changed more_after_update, or a catalog app's icon was resolved (icon.path), or apps.set_permission changed a permission. Query store.list again.
 final class StoreChangedEvent extends SessionEvent {
   const StoreChangedEvent();
 
@@ -13870,7 +13628,7 @@ class SwitchProgressEventApp {
   String toString() => 'SwitchProgressEventApp(${jsonEncode(toJson())})';
 }
 
-/// 0.12: a profile switch is closing apps, closing Steam, ending the session, or was cancelled. app: the app being closed.
+/// A profile switch is closing apps, closing Steam, ending the session, or was cancelled. app: the app being closed.
 final class SwitchProgressEvent extends SessionEvent {
   const SwitchProgressEvent({required this.stage, this.app});
 
@@ -13937,7 +13695,7 @@ class SwitchBlockedEventApp {
   String toString() => 'SwitchBlockedEventApp(${jsonEncode(toJson())})';
 }
 
-/// 0.12: an app has not closed after waited_s seconds. Show 'X isn't responding (N s). Force-closing it may lose unsaved data.' with Keep waiting (session.switch_wait), Force close (session.switch_force_close) and Cancel switch (session.switch_cancel). Nothing is killed until Force close.
+/// An app has not closed after waited_s seconds. Show 'X isn't responding (N s). Force-closing it may lose unsaved data.' with Keep waiting (session.switch_wait), Force close (session.switch_force_close) and Cancel switch (session.switch_cancel). Nothing is killed until Force close.
 final class SwitchBlockedEvent extends SessionEvent {
   const SwitchBlockedEvent({required this.app, required this.waitedS});
 
@@ -13972,33 +13730,33 @@ final class SwitchBlockedEvent extends SessionEvent {
   String toString() => 'SwitchBlockedEvent(${jsonEncode(toJson())})';
 }
 
-/// 0.12: the sleep lock went up (before the box sleeps, for a locked profile) or down (session.unlock).
-final class LockStateEvent extends SessionEvent {
-  const LockStateEvent({required this.locked});
+/// The sleep lock went up (before the box sleeps, for a locked profile) or down (session.unlock).
+final class LockChangedEvent extends SessionEvent {
+  const LockChangedEvent({required this.locked});
 
   final bool locked;
 
-  factory LockStateEvent.fromJson(Map<String, dynamic> json) =>
-      LockStateEvent(locked: json['locked'] as bool);
+  factory LockChangedEvent.fromJson(Map<String, dynamic> json) =>
+      LockChangedEvent(locked: json['locked'] as bool);
 
   Map<String, dynamic> toJson() => {'locked': locked};
 
   @override
-  String get name => 'lock_state';
+  String get name => 'lock_changed';
 
   @override
   Map<String, dynamic> get params => toJson();
 
   @override
   bool operator ==(Object other) =>
-      other is LockStateEvent &&
+      other is LockChangedEvent &&
       jsonEncode(toJson()) == jsonEncode(other.toJson());
 
   @override
   int get hashCode => jsonEncode(toJson()).hashCode;
 
   @override
-  String toString() => 'LockStateEvent(${jsonEncode(toJson())})';
+  String toString() => 'LockChangedEvent(${jsonEncode(toJson())})';
 }
 
 enum GreeterPromptEventKind {
@@ -14010,10 +13768,8 @@ enum GreeterPromptEventKind {
   const GreeterPromptEventKind(this.value);
   final String value;
 
-  factory GreeterPromptEventKind.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory GreeterPromptEventKind.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -14049,24 +13805,22 @@ final class GreeterPromptEvent extends SessionEvent {
   String toString() => 'GreeterPromptEvent(${jsonEncode(toJson())})';
 }
 
-/// Greeter mode: the login ended: ok (the session starts, the greeter goes away) or not (wrong PIN; locked_seconds during the backoff: 'Too many tries. Try again in N seconds'). 0.17: reboot_required: true when the admin profile's PIN is refused until the box restarts (10 wrong tries this boot).
+/// Greeter mode: the login ended: ok (the session starts, the greeter goes away) or not (wrong PIN; locked_s during the backoff: 'Too many tries. Try again in N seconds'). Reboot_required: true when the admin profile's PIN is refused until the box restarts (10 wrong tries this boot).
 final class GreeterResultEvent extends SessionEvent {
   const GreeterResultEvent({
     required this.ok,
-    this.lockedSeconds,
+    this.lockedS,
     this.rebootRequired,
   });
 
   final bool ok;
-  final int? lockedSeconds;
+  final int? lockedS;
   final bool? rebootRequired;
 
   factory GreeterResultEvent.fromJson(Map<String, dynamic> json) =>
       GreeterResultEvent(
         ok: json['ok'] as bool,
-        lockedSeconds: json['locked_seconds'] == null
-            ? null
-            : json['locked_seconds'] as int,
+        lockedS: json['locked_s'] == null ? null : json['locked_s'] as int,
         rebootRequired: json['reboot_required'] == null
             ? null
             : json['reboot_required'] as bool,
@@ -14074,7 +13828,7 @@ final class GreeterResultEvent extends SessionEvent {
 
   Map<String, dynamic> toJson() => {
     'ok': ok,
-    'locked_seconds': ?lockedSeconds,
+    'locked_s': ?lockedS,
     'reboot_required': ?rebootRequired,
   };
 
@@ -14096,7 +13850,7 @@ final class GreeterResultEvent extends SessionEvent {
   String toString() => 'GreeterResultEvent(${jsonEncode(toJson())})';
 }
 
-/// 0.12: the profiles changed (a profile job, a rename, a PIN, lock or appearance change); profiles as system.profiles.list's.
+/// The profiles changed (a profile job, a rename, a PIN, lock or appearance change); profiles as system.profiles.list's.
 final class ProfilesChangedEvent extends SessionEvent {
   const ProfilesChangedEvent({required this.profiles});
 
@@ -14133,7 +13887,7 @@ final class ProfilesChangedEvent extends SessionEvent {
   String toString() => 'ProfilesChangedEvent(${jsonEncode(toJson())})';
 }
 
-/// 0.20: the button pressed during input.capture (the physical button: a, b, x, y, lb, rb, lt, rt, view, menu, or a direction up, down, left, right), or null when capture ended without one (Guide, 10 s).
+/// The button pressed during input.capture (the physical button: a, b, x, y, lb, rb, lt, rt, view, menu, or a direction up, down, left, right), or null when capture ended without one (Guide, 10 s).
 final class InputCapturedEvent extends SessionEvent {
   const InputCapturedEvent({required this.button});
 
@@ -14266,10 +14020,7 @@ enum PermissionDeniedDataReason {
   final String value;
 
   factory PermissionDeniedDataReason.fromJson(String value) =>
-      values.firstWhere(
-        (e) => e != unknown && e.value == value,
-        orElse: () => unknown,
-      );
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -14316,10 +14067,8 @@ enum JobFailedDataReason {
   const JobFailedDataReason(this.value);
   final String value;
 
-  factory JobFailedDataReason.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory JobFailedDataReason.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -14372,10 +14121,7 @@ enum InsufficientResourcesDataKind {
   final String value;
 
   factory InsufficientResourcesDataKind.fromJson(String value) =>
-      values.firstWhere(
-        (e) => e != unknown && e.value == value,
-        orElse: () => unknown,
-      );
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -14472,10 +14218,8 @@ enum StateConflictDataReason {
   const StateConflictDataReason(this.value);
   final String value;
 
-  factory StateConflictDataReason.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory StateConflictDataReason.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -14539,10 +14283,7 @@ enum UpdateVerificationFailedDataReason {
   final String value;
 
   factory UpdateVerificationFailedDataReason.fromJson(String value) =>
-      values.firstWhere(
-        (e) => e != unknown && e.value == value,
-        orElse: () => unknown,
-      );
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -14657,10 +14398,8 @@ enum PinRequiredDataPin {
   const PinRequiredDataPin(this.value);
   final String value;
 
-  factory PinRequiredDataPin.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory PinRequiredDataPin.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -14745,10 +14484,7 @@ enum SystemUnavailableDataReason {
   final String value;
 
   factory SystemUnavailableDataReason.fromJson(String value) =>
-      values.firstWhere(
-        (e) => e != unknown && e.value == value,
-        orElse: () => unknown,
-      );
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -14785,7 +14521,7 @@ enum UnavailableDataService {
   logind('logind'),
   catalog('catalog'),
   polkit('polkit'),
-  profiles('profiles'),
+  base('base'),
   jellyfin('jellyfin'),
   plex('plex'),
   tailscale('tailscale'),
@@ -14797,10 +14533,8 @@ enum UnavailableDataService {
   const UnavailableDataService(this.value);
   final String value;
 
-  factory UnavailableDataService.fromJson(String value) => values.firstWhere(
-    (e) => e != unknown && e.value == value,
-    orElse: () => unknown,
-  );
+  factory UnavailableDataService.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -14891,7 +14625,7 @@ mixin SessionApiMethods {
 
   /// Version handshake. Must be the first request on a connection.
   ///
-  /// The client sends the API version it was built against. Majors must match (during 0.x the minor must match too). The result carries the negotiated version: min(client, server). On a mismatch the server answers with version_mismatch and closes the connection. The client name 'hinteros-osk' is reserved for the on-screen keyboard: such connections receive input_nav while the keyboard is visible, and only then.
+  /// The client sends the API version it was built against. The server takes the same major and an equal or lower minor. The result carries the negotiated version: the client's. On a mismatch the server answers with version_mismatch and closes the connection. The client name 'hinteros-osk' is reserved for the on-screen keyboard: such connections receive input_nav while the keyboard is visible, and only then.
   Future<HelloResult> hello(HelloParams params) async =>
       HelloResult.fromJson(await rpc('hello', params.toJson()));
 
@@ -14907,23 +14641,23 @@ mixin SessionApiMethods {
   Future<UnsubscribeResult> unsubscribe(UnsubscribeParams params) async =>
       UnsubscribeResult.fromJson(await rpc('unsubscribe', params.toJson()));
 
-  /// Apps the launcher can show and launch: the built-in 'steam' entry (Steam's Big Picture mode, since 0.3), then the apps from the daemon's config, or a fixed stub list when none are configured.
+  /// Apps the launcher can show and launch: the built-in 'steam' entry (Steam's Big Picture mode), then the apps from the daemon's config, or a fixed stub list when none are configured.
   ///
   /// Installed Steam games are listed by games.list, not here.
   Future<AppsListResult> appsList([
     AppsListParams params = const AppsListParams(),
   ]) async => AppsListResult.fromJson(await rpc('apps.list', params.toJson()));
 
-  /// 0.18: grant or deny one optional permission of an app, for this profile. Applies the next time the app starts.
+  /// Grant or deny one optional permission of an app, for this profile. Applies the next time the app starts.
   ///
-  /// id: an installed app (apps.list) or a catalog app that is not installed yet (store.list): the launcher calls this for each permission switched off on the install sheet, then system.apps.install. The choice is kept per profile ($XDG_STATE_HOME/hinteros/permissions.json); only denials are stored, so an app without a stored choice has every permission. Emits apps_changed and store_changed. Errors: unknown_app (not installed and not in the catalog), unknown_permission (the app does not declare it, or it is not enforced on this box), permission_required (granted false for a required one). Granting a required one is accepted and changes nothing.
+  /// id: an installed app (apps.list) or a catalog app that is not installed yet (store.list): the launcher calls this for each permission switched off on the install sheet, then system.apps.install. The choice is kept per profile ($XDG_STATE_HOME/hinteros/permissions.json); only denials are stored, so an app without a stored choice has every permission. Emits apps_changed and store_changed. Errors: app_not_found (not installed and not in the catalog), unknown_permission (the app does not declare it, or it is not enforced on this box), permission_required (granted false for a required one). Granting a required one is accepted and changes nothing.
   Future<AppsSetPermissionResult> appsSetPermission(
     AppsSetPermissionParams params,
   ) async => AppsSetPermissionResult.fromJson(
     await rpc('apps.set_permission', params.toJson()),
   );
 
-  /// 0.18: how many apps can run at once. Each app the daemon starts gets an X display of its own, from a fixed set.
+  /// How many apps can run at once. Each app the daemon starts gets an X display of its own, from a fixed set.
   ///
   /// count: the setting, which the next session starts with (kept per profile in $XDG_STATE_HOME/hinteros/app-displays; default 4). active: the number this session started with (gamescope makes its Xwaylands at start only), null when apps do not get displays of their own (no gamescope; then nothing limits them). Steam and its games never use one. A display is free again once every process of its app has ended. apps.launch answers no_app_display while all are in use.
   Future<AppsDisplaysGetResult> appsDisplaysGet([
@@ -14932,7 +14666,7 @@ mixin SessionApiMethods {
     await rpc('apps.displays.get', params.toJson()),
   );
 
-  /// 0.18: set how many apps can run at once. Applies at the next session start (session.restart).
+  /// Set how many apps can run at once. Applies at the next session start (session.restart).
   ///
   /// Saves count for this profile and answers with apps.displays.get's result: active stays what this session started with, so count != active means a session restart is needed. invalid_params for a count outside min..max.
   Future<AppsDisplaysSetResult> appsDisplaysSet(
@@ -14968,7 +14702,7 @@ mixin SessionApiMethods {
 
   /// Start an app and give it focus. Returns once it is spawned, before it shows a window.
   ///
-  /// Exactly one of: 'id' (an app from apps.list), 'command' (argv, run as the session user), or 'url' (a Steam game, handed to the running Steam client; use it for games.list entries). If the app is already running it is focused instead and the result describes the running instance. Its windows are shown as soon as they appear; until then the launcher stays visible. Progress is reported through app_started, focus_changed and app_exited. The built-in id 'steam' opens Steam's Big Picture mode (steam://open/bigpicture, or 'steam -gamepadui' when Steam is not running) and shows Steam's own windows; it runs as the app 'steam' with source 'steam_client'. A Steam game's name comes from its Steam library manifest when it is installed. 0.18: an app the daemon starts itself (from apps.list, or a command) gets an X display of its own (apps.displays.get); while all are in use it is not started: no_app_display names the running apps that hold one (close one with apps.close, wait for its app_exited, then launch again).
+  /// Exactly one of: 'id' (an app from apps.list), 'command' (argv, run as the session user), or 'url' (a Steam game, handed to the running Steam client; use it for games.list entries). If the app is already running it is focused instead and the result describes the running instance. Its windows are shown as soon as they appear; until then the launcher stays visible. Progress is reported through app_started, focus_changed and app_exited. The built-in id 'steam' opens Steam's Big Picture mode (steam://open/bigpicture, or 'steam -gamepadui' when Steam is not running) and shows Steam's own windows; it runs as the app 'steam' with source 'steam_client'. A Steam game's name comes from its Steam library manifest when it is installed. An app the daemon starts itself (from apps.list, or a command) gets an X display of its own (apps.displays.get); while all are in use it is not started: no_app_display names the running apps that hold one (close one with apps.close, wait for its app_exited, then launch again).
   Future<AppsLaunchResult> appsLaunch([
     AppsLaunchParams params = const AppsLaunchParams(),
   ]) async =>
@@ -14996,14 +14730,14 @@ mixin SessionApiMethods {
 
   /// Show the on-screen keyboard over whatever has focus.
   ///
-  /// The on-screen keyboard is a separate client (hinteros-osk) whose window the daemon shows as a gamescope overlay; it never takes focus, so typed keys reach the focused app. While it is visible, InputPlumber is in intercept mode ALL and input_nav goes only to the connection whose hello client name is 'hinteros-osk' (not to the launcher). osk_visibility follows if the visibility changed. Showing it again does nothing. The user can also summon it with the controller (Guide + Y by default, or A on a focused text field in a keyboard-profile Firefox app), and B hides it whatever has focus (the keyboard client never receives back while visible).
+  /// The on-screen keyboard is a separate client (hinteros-osk) whose window the daemon shows as a gamescope overlay; it never takes focus, so typed keys reach the focused app. While it is visible, InputPlumber is in intercept mode ALL and input_nav goes only to the connection whose hello client name is 'hinteros-osk' (not to the launcher). osk_changed follows if the visibility changed. Showing it again does nothing. The user can also summon it with the controller (Guide + Y by default, or A on a focused text field in a keyboard-profile Firefox app), and B hides it whatever has focus (the keyboard client never receives back while visible).
   Future<OskShowResult> oskShow([
     OskShowParams params = const OskShowParams(),
   ]) async => OskShowResult.fromJson(await rpc('osk.show', params.toJson()));
 
   /// Hide the on-screen keyboard.
   ///
-  /// Restores the previous input routing: InputPlumber's mode for whatever has focus, input_nav to the launcher while it has focus. osk_visibility follows if the visibility changed. Home and focus changes also hide it.
+  /// Restores the previous input routing: InputPlumber's mode for whatever has focus, input_nav to the launcher while it has focus. osk_changed follows if the visibility changed. Home and focus changes also hide it.
   Future<OskHideResult> oskHide([
     OskHideParams params = const OskHideParams(),
   ]) async => OskHideResult.fromJson(await rpc('osk.hide', params.toJson()));
@@ -15041,7 +14775,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's settings.set. Change state.json settings (job). Action org.hinteros.system.settings.
   ///
-  /// changes is a closed, typed object: each settable state.json field is a property here (bool, enum, bounded integer), never free-form. It has no properties in 0.2 (SSH, base and channel have their own methods), so any field is invalid_params with data {field, reason: unknown_field}, and an empty changes object returns job_id null. revision must equal settings.get's, else state_conflict. The service writes state.json from its own typed state, never the caller's bytes.
+  /// changes is a closed, typed object: each settable state.json field is a property here (bool, enum, bounded integer), never free-form. It has no properties (SSH, base and channel have their own methods), so any field is invalid_params with data {field, reason: unknown_field}, and an empty changes object returns job_id null. revision must equal settings.get's, else state_conflict. The service writes state.json from its own typed state, never the caller's bytes.
   Future<SystemSettingsSetResult> systemSettingsSet(
     SystemSettingsSetParams params,
   ) async => SystemSettingsSetResult.fromJson(
@@ -15050,7 +14784,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's ssh.set. Turn SSH (sshd) on or off (job). Action org.hinteros.system.ssh, which needs the admin password (auth_admin).
   ///
-  /// Login over SSH is the admin account with its password; the system repo configures sshd. polkit's default for this action is auth_admin. The service checks it with AllowUserInteraction (since 0.3): polkit asks the authentication agent registered for the calling process (the session daemon's, which shows the launcher a password prompt) and the call waits until the user answered (at most 5 minutes). Without an agent the call gets authentication_required; a cancelled or timed-out prompt also gives authentication_required, too many wrong passwords permission_denied (reason polkit). Returns job_id null if SSH already is in that state.
+  /// Login over SSH is the admin account with its password; the system repo configures sshd. polkit's default for this action is auth_admin. The service checks it with AllowUserInteraction: polkit asks the authentication agent registered for the calling process (the session daemon's, which shows the launcher a password prompt) and the call waits until the user answered (at most 5 minutes). Without an agent the call gets authentication_required; a cancelled or timed-out prompt also gives authentication_required, too many wrong passwords permission_denied (reason polkit). Returns job_id null if SSH already is in that state.
   Future<SystemSshSetResult> systemSshSet(SystemSshSetParams params) async =>
       SystemSshSetResult.fromJson(await rpc('system.ssh.set', params.toJson()));
 
@@ -15070,7 +14804,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's hardware.redetect. Regenerate facter.json with nixos-facter and apply it (job). Action org.hinteros.system.rebuild.
   ///
-  /// On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root.
+  /// The admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed from root.
   Future<SystemHardwareRedetectResult> systemHardwareRedetect([
     SystemHardwareRedetectParams params = const SystemHardwareRedetectParams(),
   ]) async => SystemHardwareRedetectResult.fromJson(
@@ -15079,7 +14813,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's rollback. Switch to an earlier generation (default: the one before the current), then restore /etc/hinteros from its snapshot (job). Action org.hinteros.system.rollback.
   ///
-  /// On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root. After the switch and the apps stage (schema 2), box features that the owners' current app envs need and the restored generation lacks are turned back on in a box stage: the apply flow on the restored configuration with requirements = what the envs need (a second, mostly cached build; a new generation). The result then lists them in features_readded; generations.list names them beforehand per generation (readds_features). If that build fails the job fails at stage box (the rollback itself stays).
+  /// The admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed from root. After the switch and the apps stage, box features that the owners' current app envs need and the restored generation lacks are turned back on in a box stage: the apply flow on the restored configuration with requirements = what the envs need (a second, mostly cached build; a new generation). The result then lists them in features_readded; generations.list names them beforehand per generation (readds_features). If that build fails the job fails at stage box (the rollback itself stays).
   Future<SystemRollbackResult> systemRollback([
     SystemRollbackParams params = const SystemRollbackParams(),
   ]) async => SystemRollbackResult.fromJson(
@@ -15088,7 +14822,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's update.check. Look for a newer signed revision of the channel (job), or, within 60 s of the last check, return that result without a job. Action org.hinteros.system.update.check.
   ///
-  /// The job lists the channel branch (git ls-remote of the URL from the running generation's channel table), fetches it into a root-owned bare repo, verifies the tip's SSH signature against the allowed signers shipped in the running generation, requires it to descend from the locked revision, and reads the highest Security: &lt;low|medium|high|critical&gt; trailer among the new commits. (0.9) It also requires the tip to descend from the newest verified tip this box saw on the branch (older_than_seen), and fetches and verifies the other channels' branches of the table to record their newest verified tips (root-only state that rollbacks and channel switches never lower; their failures do not fail the check). The job's result is an UpdateCheckResult; failures are job_failed, update_unreachable or update_verification_failed in job_finished.error.
+  /// The job lists the channel branch (git ls-remote of the URL from the running generation's channel table), fetches it into a root-owned bare repo, verifies the tip's SSH signature against the allowed signers shipped in the running generation, requires it to descend from the locked revision, and reads the highest Security: &lt;low|medium|high|critical&gt; trailer among the new commits. It also requires the tip to descend from the newest verified tip this box saw on the branch (older_than_seen), and fetches and verifies the other channels' branches of the table to record their newest verified tips (root-only state that rollbacks and channel switches never lower; their failures do not fail the check). The job's result is an UpdateCheckResult; failures are job_failed, update_unreachable or update_verification_failed in job_finished.error.
   Future<SystemUpdateCheckResult> systemUpdateCheck([
     SystemUpdateCheckParams params = const SystemUpdateCheckParams(),
   ]) async => SystemUpdateCheckResult.fromJson(
@@ -15097,14 +14831,14 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's update.apply. Install the revision found by the last update.check (job). Action org.hinteros.system.update.apply.
   ///
-  /// rev must equal the last verified check result's available.rev for the current channel and locked revision, else state_conflict. The job re-verifies it, locks the hinteros input to ?rev=&lt;rev&gt; (never re-fetching the branch) and runs the apply flow. On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin, from every profile (the guest's included): pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet; an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root. The PIN is checked before rev is compared with the last check. system.update.check needs no PIN.
+  /// rev must equal the last verified check result's available.rev for the current channel and locked revision, else state_conflict. The job re-verifies it, locks the hinteros input to ?rev=&lt;rev&gt; (never re-fetching the branch) and runs the apply flow. The admin profile's PIN is needed in admin_pin, from every profile (the guest's included): pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet; an admin profile without a PIN yet passes. Not needed from root. The PIN is checked before rev is compared with the last check. system.update.check needs no PIN.
   Future<SystemUpdateApplyResult> systemUpdateApply(
     SystemUpdateApplyParams params,
   ) async => SystemUpdateApplyResult.fromJson(
     await rpc('system.update.apply', params.toJson()),
   );
 
-  /// 0.17: relayed to the system service's channel.check (system API 0.9). Verify the tip of another channel before switching to it (job). Action org.hinteros.system.update.check (no PIN).
+  /// Relayed to the system service's channel.check. Verify the tip of another channel before switching to it (job). Action org.hinteros.system.update.check (no PIN).
   ///
   /// The job fetches the target channel's branch (URL from the running generation's channel table), verifies the tip's SSH signature against the allowed signers shipped in the running generation, and requires it to descend from (or equal) the newest verified tip this box saw on that branch (update_verification_failed {reason: older_than_seen} otherwise). It does not need to descend from the locked revision: older is true when it does not (the switch may go back to an older version). The job's result is a ChannelCheckResult; the launcher shows target.version and target.date and asks the owner to confirm, then calls channel.set with target.rev. Returns job_id null if the channel is already the current one. Failures are job_failed, update_unreachable or update_verification_failed in job_finished.error.
   Future<SystemChannelCheckResult> systemChannelCheck(
@@ -15115,16 +14849,16 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's channel.set. Follow another channel (job), at the revision channel.check verified. Action org.hinteros.system.channel.
   ///
-  /// The URL comes from the running generation's channel table, never from params. Returns job_id null if the channel is already the current one. Otherwise (0.17) rev is needed and must equal the last channel.check result's target.rev for this channel and the locked revision, else state_conflict {reason: channel_rev}: the owner confirmed that version. The job re-verifies rev (an allowed signer; it must descend from the newest verified tip this box saw on the target branch, else update_verification_failed {reason: older_than_seen}), locks the hinteros input to it on the target branch and runs the apply flow. rev may be older than the locked revision (beta to stable). Before 0.17 the target was the branch tip and acknowledge_downgrade allowed any older signed tip. On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root. The PIN is checked first.
+  /// The URL comes from the running generation's channel table, never from params. Returns job_id null if the channel is already the current one. Otherwise rev is needed and must equal the last channel.check result's target.rev for this channel and the locked revision, else state_conflict {reason: channel_rev}: the owner confirmed that version. The job re-verifies rev (an allowed signer; it must descend from the newest verified tip this box saw on the target branch, else update_verification_failed {reason: older_than_seen}), locks the hinteros input to it on the target branch and runs the apply flow. rev may be older than the locked revision (beta to stable). The admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed from root. The PIN is checked first.
   Future<SystemChannelSetResult> systemChannelSet(
     SystemChannelSetParams params,
   ) async => SystemChannelSetResult.fromJson(
     await rpc('system.channel.set', params.toJson()),
   );
 
-  /// Relayed to the system service's base.set. Switch the nixpkgs base (job). Action org.hinteros.system.channel. unstable to stable needs acknowledge_downgrade: true.
+  /// Relayed to the system service's base.set. Switch the nixpkgs base (job). Action org.hinteros.system.channel. A base that is not built is refused: unavailable {service: base, reason: not_built} (only unstable today). unstable to stable needs acknowledge_downgrade: true.
   ///
-  /// On a schema-2 box (0.5) the admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed on a schema-1 box or from root. The PIN is checked before anything else, also when the base is already the requested one.
+  /// The admin profile's PIN is needed in admin_pin (pin_required {pin: admin} when it is missing or wrong, or when there is no admin profile yet); an admin profile without a PIN yet passes. Not needed from root. The PIN is checked before anything else, also when the base is already the requested one.
   Future<SystemBaseSetResult> systemBaseSet(SystemBaseSetParams params) async =>
       SystemBaseSetResult.fromJson(
         await rpc('system.base.set', params.toJson()),
@@ -15132,7 +14866,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's apps.install. Install Store apps (job). Action org.hinteros.system.apps.
   ///
-  /// ids (1 to 8 catalog ids) must be in the running generation's catalog index (/run/current-system/sw/share/hinteros/catalog.json, never the caller's copy) with status available; their depends are added (transitively). Ids already installed are skipped; if nothing is left the result is job_id null. A conflict between a new app and an installed or requested one is app_conflict. Every new app with vendor terms needs accepted_terms[id] equal to the catalog's terms.version, else terms_required (the box records the acceptance: id, version, time, uid and profile, in the audit log and /var/lib/hinteros/terms-accepted.json). revision must be settings.get's (state_conflict otherwise); 0.4, schema-2 boxes: the app revision from apps.list, and the apps are installed into the caller's own profile (a new generation of its Nix profile, no system rebuild unless a box feature must be turned on first: stage box). Free disk space must cover the new apps' sizeMiB plus the usual rebuild margin (insufficient_resources). The job writes state.json's apps from the service's typed state and runs the apply flow.
+  /// ids (1 to 8 catalog ids) must be in the running generation's catalog index (/run/current-system/sw/share/hinteros/catalog.json, never the caller's copy) with status available; their depends are added (transitively). Ids already installed are skipped; if nothing is left the result is job_id null. A conflict between a new app and an installed or requested one is app_conflict. Every new app with vendor terms needs accepted_terms[id] equal to the catalog's terms.version, else terms_required (the box records the acceptance: id, version, time, uid and profile, in the audit log and /var/lib/hinteros/terms-accepted.json). revision is the app revision from apps.list (state_conflict otherwise), and the apps are installed into the caller's own profile (a new generation of its Nix profile, no system rebuild unless a box feature must be turned on first: stage box). Free disk space must cover the new apps' sizeMiB plus the usual rebuild margin (insufficient_resources). The job writes state.json's apps from the service's typed state and runs the apply flow.
   Future<SystemAppsInstallResult> systemAppsInstall(
     SystemAppsInstallParams params,
   ) async => SystemAppsInstallResult.fromJson(
@@ -15148,16 +14882,16 @@ mixin SessionApiMethods {
     await rpc('system.apps.remove', params.toJson()),
   );
 
-  /// Relayed to the system service's apps.list. The caller's own apps (0.4, schema-2 boxes): its current app env.
+  /// Relayed to the system service's apps.list. The caller's own apps: its current app env.
   ///
-  /// Read-only. The caller is resolved from its uid: a profile (or the guest). revision stands for the current app generation; pass it to apps.install/apps.remove as revision. needs_terms: ids whose vendor terms this profile has not accepted at the catalog's current version (apps that came with the starter set); the launcher shows the terms on first launch and calls apps.accept_terms. A spare account gets an empty list. Schema-1 boxes (not migrated yet): unavailable {service: profiles, reason: schema1}.
+  /// Read-only. The caller is resolved from its uid: a profile (or the guest). revision stands for the current app generation; pass it to apps.install/apps.remove as revision. needs_terms: ids whose vendor terms this profile has not accepted at the catalog's current version (apps that came with the starter set); the launcher shows the terms on first launch and calls apps.accept_terms. A spare account gets an empty list.
   Future<SystemAppsListResult> systemAppsList([
     SystemAppsListParams params = const SystemAppsListParams(),
   ]) async => SystemAppsListResult.fromJson(
     await rpc('system.apps.list', params.toJson()),
   );
 
-  /// Relayed to the system service's apps.generations. The caller's app generations (0.4), newest first.
+  /// Relayed to the system service's apps.generations. The caller's app generations, newest first.
   ///
   /// Read-only. Every generation of the caller's Nix profile of apps (the newest 3 plus the current one are kept), with the ids of its env and the system revision it was built against. apps.rollback takes one of them.
   Future<SystemAppsGenerationsResult> systemAppsGenerations([
@@ -15166,7 +14900,7 @@ mixin SessionApiMethods {
     await rpc('system.apps.generations', params.toJson()),
   );
 
-  /// Relayed to the system service's apps.rollback. Switch the caller's apps back to an earlier generation (job, 0.4). Action org.hinteros.system.apps.
+  /// Relayed to the system service's apps.rollback. Switch the caller's apps back to an earlier generation (job). Action org.hinteros.system.apps.
   ///
   /// generation must be one of apps.generations and not the current one (not_found otherwise). If its env needs box features that are off, the job first runs the box stage (a system rebuild). Job kind apps_rollback.
   Future<SystemAppsRollbackResult> systemAppsRollback(
@@ -15175,7 +14909,7 @@ mixin SessionApiMethods {
     await rpc('system.apps.rollback', params.toJson()),
   );
 
-  /// Relayed to the system service's apps.accept_terms. Accept an installed app's vendor terms for the caller's profile (0.4). Action org.hinteros.system.apps.
+  /// Relayed to the system service's apps.accept_terms. Accept an installed app's vendor terms for the caller's profile. Action org.hinteros.system.apps.
   ///
   /// For apps that reached the profile without an acceptance (the starter set): id must be in the caller's env and have terms, version must be the running catalog's terms.version (invalid_params otherwise). Records {version, accepted_at, by: &lt;user&gt;, profile: &lt;id&gt;} in terms-accepted.json and the audit log; then the id leaves apps.list's needs_terms. Accepting what is already accepted is a no-op.
   Future<SystemAppsAcceptTermsResult> systemAppsAcceptTerms(
@@ -15184,7 +14918,7 @@ mixin SessionApiMethods {
     await rpc('system.apps.accept_terms', params.toJson()),
   );
 
-  /// Relayed to the system service's apps.clear_data. Delete a Store app's data in the caller's profile (job apps_clear_data, 0.19). Action org.hinteros.system.apps.
+  /// Relayed to the system service's apps.clear_data. Delete a Store app's data in the caller's profile (job apps_clear_data). Action org.hinteros.system.apps.
   ///
   /// id must be a catalog app (installed or not: data a remove left behind). The job deletes the app's dataPaths in the caller's own home, as system.apps.remove {delete_data} does; other profiles' data is never touched. Stop the app first (apps.close {force}). store_changed follows when the job ends (has_data).
   Future<SystemAppsClearDataResult> systemAppsClearData(
@@ -15193,9 +14927,9 @@ mixin SessionApiMethods {
     await rpc('system.apps.clear_data', params.toJson()),
   );
 
-  /// Relayed to the system service's profiles.list. The profiles (0.4). Read-only; starts a usage scan when the data is older than an hour.
+  /// Relayed to the system service's profiles.list. The profiles. Read-only; starts a usage scan when the data is older than an hour.
   ///
-  /// Every account of the running state.json that has metadata, with the caller (spares are not listed; first_boot: no admin profile exists). On a schema-1 box, p1 as an implicit profile after the migration created profiles.json.
+  /// Every account of the running state.json that has metadata, with the caller (spares are not listed; first_boot: no admin profile exists).
   Future<SystemProfilesListResult> systemProfilesList([
     SystemProfilesListParams params = const SystemProfilesListParams(),
   ]) async => SystemProfilesListResult.fromJson(
@@ -15211,7 +14945,7 @@ mixin SessionApiMethods {
     await rpc('system.profiles.create', params.toJson()),
   );
 
-  /// Relayed to the system service's profiles.setup_admin. First-boot mode: make the caller's spare account the admin profile (0.4). No job, no rebuild, no network.
+  /// Relayed to the system service's profiles.setup_admin. First-boot mode: make the caller's spare account the admin profile. No job, no rebuild, no network.
   ///
   /// Only a spare caller, only while no admin profile exists (else permission_denied {reason: profile}). Writes the metadata (admin) and the PIN hash; the account's app profile is set to the starter env right after (a short apps job when the box is idle).
   Future<SystemProfilesSetupAdminResult> systemProfilesSetupAdmin(
@@ -15220,7 +14954,7 @@ mixin SessionApiMethods {
     await rpc('system.profiles.setup_admin', params.toJson()),
   );
 
-  /// Relayed to the system service's profiles.rename. Rename a profile (0.4). Own: no PIN; another: the admin PIN.
+  /// Relayed to the system service's profiles.rename. Rename a profile. Own: no PIN; another: the admin PIN.
   ///
   /// pin_required {pin: admin} (with retry_after_ms during the backoff lock) when renaming another profile without the right admin PIN.
   Future<SystemProfilesRenameResult> systemProfilesRename(
@@ -15229,7 +14963,7 @@ mixin SessionApiMethods {
     await rpc('system.profiles.rename', params.toJson()),
   );
 
-  /// Relayed to the system service's profiles.set_appearance. The caller's colour and the appearance mirrored for the picker (0.4).
+  /// Relayed to the system service's profiles.set_appearance. The caller's colour and the appearance mirrored for the picker.
   ///
   /// text_scale 0.5 to 3.0. The picker uses the most accessible combination of all profiles' values.
   Future<SystemProfilesSetAppearanceResult> systemProfilesSetAppearance([
@@ -15239,7 +14973,7 @@ mixin SessionApiMethods {
     await rpc('system.profiles.set_appearance', params.toJson()),
   );
 
-  /// Relayed to the system service's profiles.set_pin. Change the caller's PIN (0.4). current_pin is required once a PIN is set (a migrated profile sets its first PIN without it).
+  /// Relayed to the system service's profiles.set_pin. Change the caller's PIN. current_pin is required once a PIN is set (a profile without one sets its first PIN without it).
   ///
   /// pin_required {pin: self} for a missing or wrong current_pin (with the backoff).
   Future<SystemProfilesSetPinResult> systemProfilesSetPin(
@@ -15248,14 +14982,14 @@ mixin SessionApiMethods {
     await rpc('system.profiles.set_pin', params.toJson()),
   );
 
-  /// Relayed to the system service's profiles.set_locked. Whether the caller's profile asks for its PIN to enter (0.4). Own PIN.
+  /// Relayed to the system service's profiles.set_locked. Whether the caller's profile asks for its PIN to enter. Own PIN.
   Future<SystemProfilesSetLockedResult> systemProfilesSetLocked(
     SystemProfilesSetLockedParams params,
   ) async => SystemProfilesSetLockedResult.fromJson(
     await rpc('system.profiles.set_locked', params.toJson()),
   );
 
-  /// Relayed to the system service's profiles.reset_pin. Set another profile's PIN with the admin PIN (0.4). The admin profile's own: the admin account's password (polkit org.hinteros.system.profiles.recover, interactive) instead.
+  /// Relayed to the system service's profiles.reset_pin. Set another profile's PIN with the admin PIN. The admin profile's own: the admin account's password (polkit org.hinteros.system.profiles.recover, interactive) instead.
   ///
   /// For the admin profile admin_pin is not used; the service asks polkit for org.hinteros.system.profiles.recover with the session daemon's agent (authentication_required when dismissed). The target's backoff is reset.
   Future<SystemProfilesResetPinResult> systemProfilesResetPin(
@@ -15273,26 +15007,7 @@ mixin SessionApiMethods {
     await rpc('system.profiles.remove', params.toJson()),
   );
 
-  /// Relayed to the system service's profiles.switch. Choose the next profile (0.4): writes the switch hint the greeter reads. A locked target needs its PIN here, before the caller's session closes anything.
-  ///
-  /// id is a profile id or guest. A locked profile (with a PIN) other than the caller's own needs pin = the target's PIN: wrong or missing is pin_required {pin: target, retry_after_ms?} and nothing is written; right, the hint carries a one-time token for the target (single use, bound to its user, valid 60 s), so the greeter enters it without any UI. The same caller may call again without pin while its token is live to extend hint and token by 60 s (a switch waiting for apps to close). The admin profile's PIN has no backoff wait, but 10 wrong tries a boot (then reboot_required). For the caller's own id it issues a one-time resume token (session.restart). Unlocked profiles and the guest need no PIN. The session daemon then ends the session (session.switch_profile).
-  Future<SystemProfilesSwitchResult> systemProfilesSwitch(
-    SystemProfilesSwitchParams params,
-  ) async => SystemProfilesSwitchResult.fromJson(
-    await rpc('system.profiles.switch', params.toJson()),
-  );
-
-  /// Relayed to the system service's profiles.switch_cancel. Drop the caller's switch hint and its token (0.4): the switch was cancelled and the session stays.
-  ///
-  /// Only a hint the caller wrote is removed; otherwise nothing happens.
-  Future<SystemProfilesSwitchCancelResult> systemProfilesSwitchCancel([
-    SystemProfilesSwitchCancelParams params =
-        const SystemProfilesSwitchCancelParams(),
-  ]) async => SystemProfilesSwitchCancelResult.fromJson(
-    await rpc('system.profiles.switch_cancel', params.toJson()),
-  );
-
-  /// Relayed to the system service's profiles.unlock. The caller's PIN after sleep (0.4): the lock screen of a locked profile.
+  /// Relayed to the system service's profiles.unlock. The caller's PIN after sleep: the lock screen of a locked profile.
   ///
   /// pin_required {pin: self, retry_after_ms?} when wrong or during the backoff lock.
   Future<SystemProfilesUnlockResult> systemProfilesUnlock(
@@ -15310,14 +15025,14 @@ mixin SessionApiMethods {
     await rpc('system.guest.set', params.toJson()),
   );
 
-  /// Relayed to the system service's display.save_mode. Make a display mode the box's (0.4): stored in runtime.json, published as /run/hinteros/gamescope-modes for every profile's session. Action org.hinteros.system.settings.
+  /// Relayed to the system service's display.save_mode. Make a display mode the box's: stored in runtime.json, published as /run/hinteros/gamescope-modes for every profile's session. Action org.hinteros.system.settings.
   Future<SystemDisplaySaveModeResult> systemDisplaySaveMode(
     SystemDisplaySaveModeParams params,
   ) async => SystemDisplaySaveModeResult.fromJson(
     await rpc('system.display.save_mode', params.toJson()),
   );
 
-  /// Relayed to the system service's audio.save_output. Make an audio output the box's (0.4): stored in runtime.json, published as /run/hinteros/audio-output. Action org.hinteros.system.settings.
+  /// Relayed to the system service's audio.save_output. Make an audio output the box's: stored in runtime.json, published as /run/hinteros/audio-output. Action org.hinteros.system.settings.
   ///
   /// node is a PipeWire node name.
   Future<SystemAudioSaveOutputResult> systemAudioSaveOutput(
@@ -15326,7 +15041,7 @@ mixin SessionApiMethods {
     await rpc('system.audio.save_output', params.toJson()),
   );
 
-  /// Relayed to the system service's starter_set.get. The starter set: the apps every new profile and guest session starts with (0.4). Read-only.
+  /// Relayed to the system service's starter_set.get. The starter set: the apps every new profile and guest session starts with. Read-only.
   Future<SystemStarterSetGetResult> systemStarterSetGet([
     SystemStarterSetGetParams params = const SystemStarterSetGetParams(),
   ]) async => SystemStarterSetGetResult.fromJson(
@@ -15362,7 +15077,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's storage.tree. one home's detailed tree from the last measurement: its folders and its Steam games. The caller's own home: open; another profile's or the guest's: the admin PIN. Action org.hinteros.system.settings.
   ///
-  /// id: a profile id or guest (else invalid_params {field: id, reason: bad_format}). The caller's own account (or the guest asking for guest) needs no PIN; anything else needs admin_pin, checked like every box-wide action (pin_required {pin: admin} when missing or wrong, or without an admin profile; an admin profile without a PIN yet passes; schema-1 boxes and root are exempt). not_found: nothing measured yet, or that home was not measured (measure again). The root is kind profile (with id) or guest; its bytes equal the top level's. Children: steam (its children: steam_game, one per installed game, named from appmanifest_&lt;appid&gt;.acf in each Steam library folder inside the home; the game folders are not counted again among the folders), dir (recursively) and files (files directly in a folder, and folders too small or deep to show). At most 6 folder levels, folders of at least max(1 MiB, 0.5 % of the home), at most 16 per folder, at most 400 nodes; names at most 128 characters, control characters replaced by U+FFFD.
+  /// id: a profile id or guest (else invalid_params {field: id, reason: bad_format}). The caller's own account (or the guest asking for guest) needs no PIN; anything else needs admin_pin, checked like every box-wide action (pin_required {pin: admin} when missing or wrong, or without an admin profile; an admin profile without a PIN yet passes; root is exempt). not_found: nothing measured yet, or that home was not measured (measure again). The root is kind profile (with id) or guest; its bytes equal the top level's. Children: steam (its children: steam_game, one per installed game, named from appmanifest_&lt;appid&gt;.acf in each Steam library folder inside the home; the game folders are not counted again among the folders), dir (recursively) and files (files directly in a folder, and folders too small or deep to show). At most 6 folder levels, folders of at least max(1 MiB, 0.5 % of the home), at most 16 per folder, at most 400 nodes; names at most 128 characters, control characters replaced by U+FFFD.
   Future<SystemStorageTreeResult> systemStorageTree(
     SystemStorageTreeParams params,
   ) async => SystemStorageTreeResult.fromJson(
@@ -15380,7 +15095,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's storage.cleanup_profiles. clean up profiles (job cleanup_profiles): in every profile's app env and the starter set's, remove the generations older than the newest keep (never the current one), then collect garbage. Admin PIN every time. Action org.hinteros.system.rebuild.
   ///
-  /// keep: 1 to 10. The guest's env (a single link) is not touched. Stages preparing, cleaning, collecting, finishing; result {freed_bytes, generations_removed}. Schema-1 boxes: unavailable {service: profiles, reason: schema1}. The estimate comes from storage.get's estimates.profiles. Below 2 the launcher warns that app rollback in those profiles is gone.
+  /// keep: 1 to 10. The guest's env (a single link) is not touched. Stages preparing, cleaning, collecting, finishing; result {freed_bytes, generations_removed}. The estimate comes from storage.get's estimates.profiles. Below 2 the launcher warns that app rollback in those profiles is gone.
   Future<SystemStorageCleanupProfilesResult> systemStorageCleanupProfiles(
     SystemStorageCleanupProfilesParams params,
   ) async => SystemStorageCleanupProfilesResult.fromJson(
@@ -15405,7 +15120,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's time_zone.get. the box's time zone (state.json settings.timeZone; UTC when absent) and its offsets now. Read-only.
   ///
-  /// Offsets come from the system's tzdata (/etc/zoneinfo), the same files /etc/localtime points into. offset_seconds: seconds east of UTC now (DST included). standard_offset_seconds: the zone's standard offset now: the lower of its two offsets while it observes DST (so tzdata's negative DST, e.g. Europe/Dublin, gives its winter offset, as the map's bands do), otherwise offset_seconds. offset_valid_until: Unix time of the next change of offset_seconds (the next DST change), null when the zone has none. The launcher's clock shows UTC plus offset_seconds and gets the zone again at offset_valid_until and on time_zone_changed. A zone in state.json that tzdata does not have (or a bad one) reads as UTC.
+  /// Offsets come from the system's tzdata (/etc/zoneinfo), the same files /etc/localtime points into. offset_s: seconds east of UTC now (DST included). standard_offset_s: the zone's standard offset now: the lower of its two offsets while it observes DST (so tzdata's negative DST, e.g. Europe/Dublin, gives its winter offset, as the map's bands do), otherwise offset_s. offset_valid_until: Unix time of the next change of offset_s (the next DST change), null when the zone has none. The launcher's clock shows UTC plus offset_s and gets the zone again at offset_valid_until and on time_zone_changed. A zone in state.json that tzdata does not have (or a bad one) reads as UTC.
   Future<SystemTimeZoneGetResult> systemTimeZoneGet([
     SystemTimeZoneGetParams params = const SystemTimeZoneGetParams(),
   ]) async => SystemTimeZoneGetResult.fromJson(
@@ -15441,7 +15156,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's services.enable. turn services on (job services_enable, a rebuild). Admin PIN. Action org.hinteros.system.services.
   ///
-  /// ids: 1 to 8 different catalog ids, each kind service with status available in the running generation's catalog (not_found: not in the catalog; invalid_params {field: ids, reason: not_a_service | not_available}). Ids already on are skipped; job_id null when nothing is left. revision: services.list's (state_conflict otherwise). A service with vendor terms (Plex) needs accepted_terms[id] equal to the catalog's terms.version (terms_required {id, version}; terms for ids not being turned on: invalid_params {field: accepted_terms, reason: not_requested}); the acceptance is audited and recorded in /var/lib/hinteros/terms-accepted.json by the caller's user, with the admin profile's id. Schema-1 boxes: unavailable {service: profiles, reason: schema1}. The job writes state.json's services and runs the apply flow (stages preparing, evaluating, downloading, building, activating, finishing); for jellyfin-server it then waits up to 3 minutes for HinterOS's first-run setup (stage configuring) and makes each profile's Jellyfin user (best effort: jellyfin.users.reveal and every Jellyfin job make missing users too). Result: the applied generation.
+  /// ids: 1 to 8 different catalog ids, each kind service with status available in the running generation's catalog (not_found: not in the catalog; invalid_params {field: ids, reason: not_a_service | not_available}). Ids already on are skipped; job_id null when nothing is left. revision: services.list's (state_conflict otherwise). A service with vendor terms (Plex) needs accepted_terms[id] equal to the catalog's terms.version (terms_required {id, version}; terms for ids not being turned on: invalid_params {field: accepted_terms, reason: not_requested}); the acceptance is audited and recorded in /var/lib/hinteros/terms-accepted.json by the caller's user, with the admin profile's id. The job writes state.json's services and runs the apply flow (stages preparing, evaluating, downloading, building, activating, finishing); for jellyfin-server it then waits up to 3 minutes for HinterOS's first-run setup (stage configuring) and makes each profile's Jellyfin user (best effort: jellyfin.users.reveal and every Jellyfin job make missing users too). Result: the applied generation.
   Future<SystemServicesEnableResult> systemServicesEnable(
     SystemServicesEnableParams params,
   ) async => SystemServicesEnableResult.fromJson(
@@ -15566,15 +15281,6 @@ mixin SessionApiMethods {
     SystemJobsCancelParams params,
   ) async => SystemJobsCancelResult.fromJson(
     await rpc('system.jobs.cancel', params.toJson()),
-  );
-
-  /// Relayed to the system service's guest.end. End guest session (0.5): end the guest's session and wipe the guest now (job). Only the guest itself. Action org.hinteros.system.profiles.
-  ///
-  /// Only a caller that is the guest account (hinteros-guest, while the guest is on) may call it; anyone else gets permission_denied {reason: profile}. The service checks the account first: the name hinteros-guest, the expected guest uid (20000 on a box), no other account with that uid, a home that is an absolute path ending in /hinteros-guest; otherwise internal_error and nothing is touched. The job (kind guest_end) hides the guest from the picker (profiles-public.json guest.enabled false; PAM refuses the guest) while it runs, ends the guest's session itself (logind TerminateUser, its user slice, then SIGKILL for anything left of the uid; it fails at stage preparing if processes remain, before anything is deleted), then deletes everything the guest uid owns in its home (the home directory itself stays), in /tmp, /var/tmp and /dev/shm (top-level entries owned by the uid; no symlink is followed, no other filesystem entered, nothing owned by another uid touched), the guest's app env link (then given the starter env again), its terms acceptances (by hinteros-guest), its usage entry and a switch hint that targets it. The boot-time wipe stays. The caller's own session ends while the job runs: call it last.
-  Future<SystemGuestEndResult> systemGuestEnd([
-    SystemGuestEndParams params = const SystemGuestEndParams(),
-  ]) async => SystemGuestEndResult.fromJson(
-    await rpc('system.guest.end', params.toJson()),
   );
 
   /// Wired and Wi-Fi state, the SSID joined and the IP address.
@@ -15784,14 +15490,14 @@ mixin SessionApiMethods {
   Future<AuthCancelResult> authCancel(AuthCancelParams params) async =>
       AuthCancelResult.fromJson(await rpc('auth.cancel', params.toJson()));
 
-  /// Who this session is (0.12). The launcher asks at start: setup_required starts the first-boot wizard; pin_set false shows the unskippable 'Set your PIN' screen; screen_locked shows the lock screen.
+  /// Who this session is. The launcher asks at start: setup_required starts the first-boot wizard; pin_set false shows the unskippable 'Set your PIN' screen; screen_locked shows the lock screen.
   Future<ProfileCurrentResult> profileCurrent([
     ProfileCurrentParams params = const ProfileCurrentParams(),
   ]) async => ProfileCurrentResult.fromJson(
     await rpc('profile.current', params.toJson()),
   );
 
-  /// Switch to another profile (0.12): writes the switch hint (system.profiles.switch with the PIN of a locked target; a wrong or missing PIN is pin_required {pin: target} and nothing closes), then closes every app (SIGTERM, no silent force-close) and Steam (steam -shutdown), and ends this session; the greeter takes over. Answers once the hint is written; progress comes as switch_progress, a stuck app as switch_blocked.
+  /// Switch to another profile: writes the switch hint (system.profiles.switch with the PIN of a locked target; a wrong or missing PIN is pin_required {pin: target} and nothing closes), then closes every app (SIGTERM, no silent force-close) and Steam (steam -shutdown), and ends this session; the greeter takes over. Answers once the hint is written; progress comes as switch_progress, a stuck app as switch_blocked.
   ///
   /// invalid_params {field: id, reason: same} for the own profile. While a switch runs a second one is invalid_params {reason: busy}. pin: the target's PIN, needed for a locked profile (asked in the session before anything closes); the hint then carries a one-time token, so the greeter enters the target with no UI. While closing takes long the daemon extends the token; switch_cancel drops it.
   Future<SessionSwitchProfileResult> sessionSwitchProfile(
@@ -15821,14 +15527,14 @@ mixin SessionApiMethods {
     await rpc('session.switch_cancel', params.toJson()),
   );
 
-  /// Whether the sleep lock is up (0.12).
+  /// Whether the sleep lock is up.
   Future<SessionLockStateResult> sessionLockState([
     SessionLockStateParams params = const SessionLockStateParams(),
   ]) async => SessionLockStateResult.fromJson(
     await rpc('session.lock_state', params.toJson()),
   );
 
-  /// The PIN on the sleep lock screen (relays system.profiles.unlock); lock_state {locked: false} follows.
+  /// The PIN on the sleep lock screen (relays system.profiles.unlock); lock_changed {locked: false} follows.
   Future<SessionUnlockResult> sessionUnlock(SessionUnlockParams params) async =>
       SessionUnlockResult.fromJson(
         await rpc('session.unlock', params.toJson()),
@@ -15836,7 +15542,7 @@ mixin SessionApiMethods {
 
   /// Guest only: end the guest session now (like a switch, to the picker) and wipe the guest now.
   ///
-  /// Answers {} at once; switch_progress events follow as on a switch (closing_apps, closing_steam, ending; switch_wait, switch_force_close and switch_cancel work the same). Once every app is closed the daemon calls system.guest.end (0.13): that job ends this session itself and wipes the guest's home, app env (back to the starter set), terms acceptances and usage; the boot-time wipe stays. While another job runs the daemon retries for 15 s; if the wipe cannot start it ends the session anyway and the guest is wiped at the next boot.
+  /// Answers {} at once; switch_progress events follow as on a switch (closing_apps, closing_steam, ending; switch_wait, switch_force_close and switch_cancel work the same). Once every app is closed the daemon calls system.guest.end: that job ends this session itself and wipes the guest's home, app env (back to the starter set), terms acceptances and usage; the boot-time wipe stays. While another job runs the daemon retries for 15 s; if the wipe cannot start it ends the session anyway and the guest is wiped at the next boot.
   Future<SessionEndGuestResult> sessionEndGuest([
     SessionEndGuestParams params = const SessionEndGuestParams(),
   ]) async => SessionEndGuestResult.fromJson(
@@ -15853,7 +15559,7 @@ mixin SessionApiMethods {
   Future<GreeterLoginResult> greeterLogin(GreeterLoginParams params) async =>
       GreeterLoginResult.fromJson(await rpc('greeter.login', params.toJson()));
 
-  /// Answer the PIN prompt. greeter_result follows: ok, or not ok with locked_seconds during the backoff (the greetd conversation is then over; log in again). Greeter mode only (hinteros-session --greeter); only the hinteros-launcher connection may call it (else not_authorized).
+  /// Answer the PIN prompt. greeter_result follows: ok, or not ok with locked_s during the backoff (the greetd conversation is then over; log in again). Greeter mode only (hinteros-session --greeter); only the hinteros-launcher connection may call it (else not_authorized).
   Future<GreeterPinResult> greeterPin(GreeterPinParams params) async =>
       GreeterPinResult.fromJson(await rpc('greeter.pin', params.toJson()));
 
@@ -15887,7 +15593,7 @@ mixin SessionApiMethods {
   ]) async =>
       StoreListResult.fromJson(await rpc('store.list', params.toJson()));
 
-  /// 0.20: this profile's controller settings: the button map, the keys of keyboard-mode apps, the pointer.
+  /// This profile's controller settings: the button map, the keys of keyboard-mode apps, the pointer.
   ///
   /// settings: what the user changed, exactly as stored ($XDG_STATE_HOME/hinteros/controller.json; missing or unreadable = {}). defaults: the built-in values. The effective button map is defaults.general with settings.general over it. An app's effective keymap is, lowest to highest: defaults.keyboard, settings.keyboard, the app's own keymap (apps[].keymap), settings.apps[id]. buttons, actions, key_actions, keys, modifiers and speed list what set accepts. apps: the profile's keyboard-mode apps. Guide and the directions are never remappable.
   Future<InputSettingsGetResult> inputSettingsGet([
@@ -15896,7 +15602,7 @@ mixin SessionApiMethods {
     await rpc('input.settings.get', params.toJson()),
   );
 
-  /// 0.20: replace this profile's controller settings (the stored form of input.settings.get) and apply them at once.
+  /// Replace this profile's controller settings (the stored form of input.settings.get) and apply them at once.
   ///
   /// Answers with input.settings.get's result. invalid_params (data.field names the part) for unknown buttons, actions or app ids, keys that do not parse, a general map that is not one button per action and one action per button, equal click buttons, or a speed outside speed.min..max or off speed.step. Written atomically; the running session uses it at once.
   Future<InputSettingsSetResult> inputSettingsSet(
@@ -15905,7 +15611,7 @@ mixin SessionApiMethods {
     await rpc('input.settings.set', params.toJson()),
   );
 
-  /// 0.20: the next button press goes to the launcher as input_captured instead of being acted on (press to assign).
+  /// The next button press goes to the launcher as input_captured instead of being acted on (press to assign).
   ///
   /// The next press of one of the ten buttons or a direction (up, down, left, right) is not acted on: it is sent as input_captured {button} (the physical button, before the general map) and capture ends. Guide during capture ends it with {button: null} and goes Home as usual; so does 10 s without a press. A second call while one runs restarts the 10 s. Launcher only.
   Future<InputCaptureResult> inputCapture([
@@ -15937,7 +15643,7 @@ sealed class SessionEvent {
     'games_changed' => GamesChangedEvent.fromJson(params),
     'apps_changed' => AppsChangedEvent.fromJson(params),
     'steam_attention' => SteamAttentionEvent.fromJson(params),
-    'osk_visibility' => OskVisibilityEvent.fromJson(params),
+    'osk_changed' => OskChangedEvent.fromJson(params),
     'time_zone_changed' => TimeZoneChangedEvent.fromJson(params),
     'job_started' => JobStartedEvent.fromJson(params),
     'job_progress' => JobProgressEvent.fromJson(params),
@@ -15952,7 +15658,7 @@ sealed class SessionEvent {
     'store_changed' => StoreChangedEvent.fromJson(params),
     'switch_progress' => SwitchProgressEvent.fromJson(params),
     'switch_blocked' => SwitchBlockedEvent.fromJson(params),
-    'lock_state' => LockStateEvent.fromJson(params),
+    'lock_changed' => LockChangedEvent.fromJson(params),
     'greeter_prompt' => GreeterPromptEvent.fromJson(params),
     'greeter_result' => GreeterResultEvent.fromJson(params),
     'profiles_changed' => ProfilesChangedEvent.fromJson(params),

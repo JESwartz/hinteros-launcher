@@ -258,7 +258,7 @@ icon = "$iconFixture"
       'Portal 2',
     ]);
     final portal = games.last;
-    expect(portal.appid, 620);
+    expect(portal.steamAppId, 620);
     expect(portal.installState, InstallState.installed);
     expect(portal.canLaunch, isTrue);
     expect(portal.lastPlayed, 1786300589);
@@ -353,14 +353,14 @@ icon = "$iconFixture"
     }
 
     test(
-      'hinteros-osk: show and hide reach every client as osk_visibility',
+      'hinteros-osk: show and hide reach every client as osk_changed',
       () async {
         final osk = DaemonOskBackend(
           DaemonClient(socketPath: sock, clientInfo: DaemonOskBackend.oskPeer),
         );
         addTearDown(osk.dispose);
         final launcher = client = DaemonClient(socketPath: sock);
-        await launcher.subscribeTo([EventName.oskVisibility]);
+        await launcher.subscribeTo([EventName.oskChanged]);
         await launcher.waitConnected();
         final oskHello = await osk.connection.waitConnected();
         expect(oskHello.apiVersion, apiVersion);
@@ -373,8 +373,8 @@ icon = "$iconFixture"
         osk.visibility.listen(oskSeen.add);
         final launcherSeen = <bool>[];
         launcher.events
-            .where((e) => e is OskVisibilityEvent)
-            .listen((e) => launcherSeen.add((e as OskVisibilityEvent).visible));
+            .where((e) => e is OskChangedEvent)
+            .listen((e) => launcherSeen.add((e as OskChangedEvent).visible));
         // Subscriptions are acknowledged before the first request returns.
         await launcher.ping(const PingParams(nonce: 'sync'));
 

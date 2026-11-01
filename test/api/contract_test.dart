@@ -263,7 +263,7 @@ Future<void> _prepareProfiles(
           file: '/run/current-system/sw/share/hinteros/terms/steam-2026-09-10.txt',
         ),
       );
-    case ('session.end_guest', _) || ('system.guest.end', 'started'):
+    case ('session.end_guest', _):
       p.current = 'guest';
     case ('greeter.pin', _):
       p.promptFor('p1');
@@ -281,7 +281,7 @@ Future<void> _prepareProfiles(
         ..setupRequired = true;
     case ('system.profiles.set_locked', 'too many tries'):
       p.byId('p1')!.failures = 3;
-    case ('system.profiles.set_pin', 'first PIN after the migration'):
+    case ('system.profiles.set_pin', 'first PIN'):
       p.byId('p1')!.pin = null;
     // The admin profile's PIN has no backoff: Sam's session, Sam's wait.
     case ('system.profiles.unlock', 'locked out'):
@@ -289,10 +289,9 @@ Future<void> _prepareProfiles(
         ..current = 'p3'
         ..byId('p3')!.lockedUntil =
             DateTime.now().millisecondsSinceEpoch ~/ 1000 + 4;
-    case ('system.profiles.switch' || 'session.switch_profile', 'to Sam'):
+    case ('session.switch_profile', 'to Sam'):
       p.byId('p3')!.locked = false;
-    case ('system.profiles.switch' || 'session.switch_profile', _)
-        when name.contains('Kim'):
+    case ('session.switch_profile', _) when name.contains('Kim'):
       p.profiles.add(
         MockWireProfile(
           id: 'p4',
@@ -733,9 +732,7 @@ void main() {
       setUp(() async {
         mock = MockDaemon();
         await mock.rpc('hello', _hello);
-        await mock.subscribeTo(
-          EventName.values.where((e) => e != EventName.unknown),
-        );
+        await mock.subscribeTo(EventName.values);
         seen = [];
         mock.events.listen(seen.add);
       });
@@ -900,16 +897,14 @@ void main() {
         },
       );
 
-      test('osk.show/hide emit osk_visibility once per change', () async {
+      test('osk.show/hide emit osk_changed once per change', () async {
         await mock.oskShow();
         await mock.oskShow();
         await settle();
-        expect(seen.whereType<OskVisibilityEvent>().map((e) => e.visible), [
-          true,
-        ]);
+        expect(seen.whereType<OskChangedEvent>().map((e) => e.visible), [true]);
         await mock.oskHide();
         await settle();
-        expect(seen.whereType<OskVisibilityEvent>().map((e) => e.visible), [
+        expect(seen.whereType<OskChangedEvent>().map((e) => e.visible), [
           true,
           false,
         ]);

@@ -10,21 +10,15 @@ void main() {
     }
   });
 
-  test('0.x needs an exact match', () {
-    expect(v('0.1').isCompatibleWith(v('0.1')), isTrue);
-    expect(v('0.1').isCompatibleWith(v('0.2')), isFalse);
-    expect(v('0.2').isCompatibleWith(v('0.1')), isFalse);
+  test('a server takes a client of its major and an equal or lower minor', () {
+    expect(v('1.0').isCompatibleWith(v('1.0')), isTrue);
+    expect(v('1.4').isCompatibleWith(v('1.0')), isTrue);
+    expect(v('1.0').isCompatibleWith(v('1.4')), isFalse);
   });
 
-  test('from 1.0 on only majors must match', () {
-    expect(v('1.0').isCompatibleWith(v('1.4')), isTrue);
+  test('another major is a mismatch', () {
     expect(v('1.0').isCompatibleWith(v('2.0')), isFalse);
-    expect(v('0.1').isCompatibleWith(v('1.0')), isFalse);
-  });
-
-  test('negotiated version is the lower one', () {
-    expect(v('1.4').negotiate(v('1.2')), v('1.2'));
-    expect(v('1.2').negotiate(v('1.4')), v('1.2'));
-    expect(v('0.1').negotiate(v('0.1')).toString(), '0.1');
+    expect(v('2.0').isCompatibleWith(v('1.0')), isFalse);
+    expect(v('0.20').isCompatibleWith(v('1.0')), isFalse);
   });
 }

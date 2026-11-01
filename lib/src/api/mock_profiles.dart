@@ -1,6 +1,6 @@
 /// The profiles side of [MockDaemon] (session API 0.12): `profile.current`,
 /// the switch (`session.switch_*`, `switch_progress`, `switch_blocked`), the
-/// sleep lock (`session.unlock`, `lock_state`), `session.end_guest`, the
+/// sleep lock (`session.unlock`, `lock_changed`), `session.end_guest`, the
 /// greeter-mode methods (`greeter.*`, `greeter_prompt`, `greeter_result`) and
 /// the relayed `system.profiles.*`, `system.guest.set`, `system.apps.list` /
 /// `generations` / `rollback` / `accept_terms` and `system.starter_set.*`,
@@ -139,7 +139,6 @@ class MockProfileSession {
       method.startsWith('greeter.') ||
       method.startsWith('system.profiles.') ||
       method == 'system.guest.set' ||
-      method == 'system.guest.end' ||
       method == 'system.apps.list' ||
       method == 'system.apps.generations' ||
       method == 'system.apps.rollback' ||
@@ -382,7 +381,7 @@ class MockProfileSession {
         _check(me, pin, 'self');
         screenLocked = false;
         log.add('unlock');
-        emit('lock_state', const LockStateEvent(locked: false).toJson());
+        emit('lock_changed', const LockChangedEvent(locked: false).toJson());
         return const SessionUnlockResult().toJson();
       case 'session.end_guest':
         if (current != 'guest') {
@@ -549,28 +548,6 @@ class MockProfileSession {
             },
           ),
         ).toJson();
-      case 'system.guest.end':
-        if (schema1) {
-          throw const ApiException(
-            ApiErrorCode.unavailable,
-            'there are no profiles before the migration',
-            {'service': 'profiles', 'reason': 'schema1'},
-          );
-        }
-        if (current != 'guest') {
-          throw const ApiException(
-            ApiErrorCode.permissionDenied,
-            'only the guest can end the guest session',
-            {'action': 'org.hinteros.system.profiles', 'reason': 'profile'},
-          );
-        }
-        log.add('guest_end');
-        return JobRef(
-          jobId: relay.startJob(
-            JobKind.guestEnd,
-            subject: const JobSubject(owner: 'guest'),
-          ),
-        ).toJson();
       case 'system.guest.set':
         final c = SystemGuestSetParams.fromJson(p);
         _check(admin, c.adminPin, 'admin');
@@ -675,15 +652,6 @@ class MockProfileSession {
         log.add('accept_terms:${c.id}');
         onTermsAccepted?.call(c.id);
         return const SystemAppsAcceptTermsResult().toJson();
-      case 'system.profiles.switch':
-        final c = SystemProfilesSwitchParams.fromJson(p);
-        final id = c.id as String;
-        if (id != 'guest') _lockedTarget(_profile(id), c.pin);
-        log.add('switch_hint:$id');
-        return const SystemProfilesSwitchResult().toJson();
-      case 'system.profiles.switch_cancel':
-        log.add('switch_hint_dropped');
-        return const SystemProfilesSwitchCancelResult().toJson();
       case 'system.profiles.unlock':
         final c = SystemProfilesUnlockParams.fromJson(p);
         _check(_profile(current), c.pin, 'self');
@@ -900,7 +868,7 @@ class MockProfileSession {
   void sleep() {
     if (byId(current)?.locked != true) return;
     screenLocked = true;
-    emit('lock_state', const LockStateEvent(locked: true).toJson());
+    emit('lock_changed', const LockChangedEvent(locked: true).toJson());
   }
 
   // ---- the greeter
@@ -986,7 +954,7 @@ class MockProfileSession {
         'greeter_result',
         GreeterResultEvent(
           ok: ok,
-          lockedSeconds: locked,
+          lockedS: locked,
           rebootRequired: reboot,
         ).toJson(),
       ),

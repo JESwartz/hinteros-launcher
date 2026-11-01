@@ -2,7 +2,7 @@
 library;
 
 /// A parsed `MAJOR.MINOR` API version.
-class ApiVersionNumber implements Comparable<ApiVersionNumber> {
+class ApiVersionNumber {
   const ApiVersionNumber(this.major, this.minor);
 
   factory ApiVersionNumber.parse(String s) {
@@ -14,19 +14,11 @@ class ApiVersionNumber implements Comparable<ApiVersionNumber> {
   final int major;
   final int minor;
 
-  /// Majors must be equal; while the major is 0 every minor is breaking, so
-  /// the minors must match too.
-  bool isCompatibleWith(ApiVersionNumber other) =>
-      major == other.major && (major != 0 || minor == other.minor);
-
-  /// The version both sides restrict themselves to: the lower of the two.
-  ApiVersionNumber negotiate(ApiVersionNumber other) =>
-      compareTo(other) <= 0 ? this : other;
-
-  @override
-  int compareTo(ApiVersionNumber other) => major != other.major
-      ? major.compareTo(other.major)
-      : minor.compareTo(other.minor);
+  /// Whether a client built against [client] can talk to a server of this
+  /// version: the same major and an equal or higher minor. A client ignores
+  /// what it does not know, so it reads a newer server of its major.
+  bool isCompatibleWith(ApiVersionNumber client) =>
+      major == client.major && minor >= client.minor;
 
   @override
   bool operator ==(Object other) =>

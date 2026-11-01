@@ -14,6 +14,7 @@ import 'repositories.dart';
 AuthOutcome _outcome(api.AuthOutcome o) => switch (o) {
   api.AuthOutcome.authorized => AuthOutcome.authorized,
   api.AuthOutcome.failed => AuthOutcome.failed,
+  // An outcome this launcher does not know is no authorization.
   api.AuthOutcome.cancelled || api.AuthOutcome.unknown => AuthOutcome.cancelled,
 };
 

@@ -216,7 +216,7 @@ class MockSystemRelay {
   void setPermission(AppsSetPermissionParams p) {
     final a = catalog.where((a) => a.id == p.id).firstOrNull;
     if (a == null) {
-      throw ApiException(ApiErrorCode.unknownApp, "no app with id '${p.id}'");
+      throw ApiException(ApiErrorCode.appNotFound, "no app with id '${p.id}'");
     }
     final perm = a.permissions.where((x) => x.name == p.permission).firstOrNull;
     if (perm == null) {
@@ -300,7 +300,7 @@ class MockSystemRelay {
 
   /// The automatic clean-up (`cleanup.get`).
   CleanupSettings cleanup = const CleanupSettings(
-    enable: true,
+    enabled: true,
     frequency: CleanupFrequency.weekly,
     keepSystem: 5,
     keepProfiles: 5,
@@ -339,8 +339,8 @@ class MockSystemRelay {
     final z = mockTimeZone(timeZone) ?? mockTimeZone('UTC')!;
     return SystemTimeZoneGetResult(
       zone: z.zone,
-      offsetSeconds: z.offset * 60,
-      standardOffsetSeconds: z.standard * 60,
+      offsetS: z.offset * 60,
+      standardOffsetS: z.standard * 60,
       offsetValidUntil: z.until,
     ).toJson();
   }
@@ -476,7 +476,7 @@ class MockSystemRelay {
           settings: SystemSettingsGetResultSettings(
             base: base,
             ssh: SystemSettingsGetResultSettingsSsh(enabled: sshEnabled),
-            apps: List.of(installedApps),
+            requirements: const [],
           ),
         ).toJson();
       case 'system.settings.set':
@@ -678,9 +678,6 @@ class MockSystemRelay {
       case 'system.channel.check':
         _closed(p, const ['channel']);
         final cc = SystemChannelCheckParams.fromJson(p);
-        if (cc.channel == Channel.unknown) {
-          throw const ApiException(ApiErrorCode.invalidParams, 'bad channel');
-        }
         _mutating('channel.check');
         if (cc.channel == channel) return const JobRef(jobId: null).toJson();
         final to = cc.channel;
@@ -709,9 +706,6 @@ class MockSystemRelay {
       case 'system.channel.set':
         _closed(p, const ['channel', 'rev', 'admin_pin']);
         final c = SystemChannelSetParams.fromJson(p);
-        if (c.channel == Channel.unknown) {
-          throw const ApiException(ApiErrorCode.invalidParams, 'bad channel');
-        }
         _mutating('channel.set');
         checkAdminPin?.call(c.adminPin);
         if (c.channel == channel) return const JobRef(jobId: null).toJson();
@@ -745,9 +739,6 @@ class MockSystemRelay {
       case 'system.base.set':
         _closed(p, const ['base', 'acknowledge_downgrade', 'admin_pin']);
         final b = SystemBaseSetParams.fromJson(p);
-        if (b.base == Base.unknown) {
-          throw const ApiException(ApiErrorCode.invalidParams, 'bad base');
-        }
         _mutating('base.set');
         checkAdminPin?.call(b.adminPin);
         if (b.base == base) return const JobRef(jobId: null).toJson();
@@ -830,7 +821,7 @@ class MockSystemRelay {
         return cleanup.toJson();
       case 'system.cleanup.set':
         _closed(p, const [
-          'enable',
+          'enabled',
           'frequency',
           'keep_system',
           'keep_profiles',
@@ -851,7 +842,7 @@ class MockSystemRelay {
         _mutating('cleanup.set');
         checkAdminPin?.call(cp.adminPin);
         final want = CleanupSettings(
-          enable: cp.enable,
+          enabled: cp.enabled,
           frequency: cp.frequency,
           keepSystem: cp.keepSystem,
           keepProfiles: cp.keepProfiles,
@@ -868,8 +859,8 @@ class MockSystemRelay {
             for (final z in mockTimeZones)
               TimeZoneEntry(
                 zone: z.zone,
-                offsetSeconds: z.offset * 60,
-                standardOffsetSeconds: z.standard * 60,
+                offsetS: z.offset * 60,
+                standardOffsetS: z.standard * 60,
               ),
           ],
         ).toJson();
@@ -1531,7 +1522,8 @@ Measurement mockWireMeasurement([int at = 1791300000]) {
             e.value.bytes,
             id: e.key == 'guest' ? null : e.key,
           ),
-        _node(NodeKind.other, 3990000000),
+        _node(NodeKind.media, 2000000000),
+        _node(NodeKind.other, 1990000000),
         _node(NodeKind.free, 491000000000),
       ],
     ),

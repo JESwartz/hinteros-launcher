@@ -67,7 +67,7 @@ void main() {
       t,
       'osk_masked_1080p',
       setup: (t, h) async {
-        // A password field (osk_visibility.password).
+        // A password field (osk_changed.password).
         h.backend.setVisible(true, password: true);
         await t.pumpAndSettle();
         for (final c in 'hunter2'.split('')) {

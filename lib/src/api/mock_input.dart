@@ -121,10 +121,7 @@ class MockInputSettings {
   Duration scriptDelay = Duration.zero;
 
   /// The keys a [KeyComboName] may end with: the virtual keyboard's.
-  static final keys = [
-    for (final k in Key.values)
-      if (k != Key.unknown) k.value,
-  ];
+  static final keys = [for (final k in Key.values) k.value];
 
   InputSettings state() => InputSettings(
     settings: settings,

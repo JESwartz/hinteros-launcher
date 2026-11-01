@@ -440,7 +440,7 @@ void main() {
       await c.waitConnected();
       expect((c.status as Connected).apiVersion, apiVersion);
       // state.json of the fake root lists steam as installed.
-      expect((await c.systemSettingsGet()).settings.apps, ['steam']);
+      expect((await c.systemSettingsGet()).settings.requirements, isEmpty);
       final l = await c.storeList();
       expect(l.indexVersion, 3);
       expect(l.moreAfterUpdate, isFalse);

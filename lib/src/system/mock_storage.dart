@@ -216,11 +216,13 @@ class MockStorage implements StorageRepository {
       ], id: 'starter'),
       _leaf(StorageKind.shared, 4.4),
     ]);
+    final media = _leaf(StorageKind.media, 18.4);
     final garbage = _g(2.4);
     final used =
         system.bytes +
         apps.bytes +
         homes.fold<int>(0, (a, h) => a + h.bytes) +
+        media.bytes +
         garbage +
         _g(6.2);
     final free = _total - used;
@@ -253,6 +255,7 @@ class MockStorage implements StorageRepository {
           system,
           apps,
           ...homes,
+          media,
           StorageNode(kind: StorageKind.other, bytes: garbage + _g(6.2)),
           StorageNode(kind: StorageKind.free, bytes: free),
         ],

@@ -14,6 +14,7 @@ StorageKind storageKind(api.NodeKind k) => switch (k) {
   api.NodeKind.apps => StorageKind.apps,
   api.NodeKind.profile => StorageKind.profile,
   api.NodeKind.guest => StorageKind.guest,
+  api.NodeKind.media => StorageKind.media,
   api.NodeKind.other => StorageKind.other,
   api.NodeKind.free => StorageKind.free,
   api.NodeKind.generation => StorageKind.generation,
@@ -139,7 +140,7 @@ class DaemonStorage implements StorageRepository {
   Future<CleanupSettings> cleanupSettings() => guardCall(() async {
     final r = await _conn.systemCleanupGet();
     return CleanupSettings(
-      enable: r.enable,
+      enable: r.enabled,
       frequency: _frequency(r.frequency),
       keepSystem: r.keepSystem,
       keepProfiles: r.keepProfiles,
@@ -152,7 +153,7 @@ class DaemonStorage implements StorageRepository {
         JobKind.cleanupSet,
         () async => (await _conn.systemCleanupSet(
           api.SystemCleanupSetParams(
-            enable: s.enable,
+            enabled: s.enable,
             frequency: _wireFrequency(s.frequency),
             keepSystem: s.keepSystem,
             keepProfiles: s.keepProfiles,

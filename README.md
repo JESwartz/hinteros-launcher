@@ -68,7 +68,7 @@ launcher installed, or without those variables (`--mock`, development), it stays
 Plex), a fake Steam library of 14 games in every install state (`games.list`, sorted by name),
 `apps.launch` (by id, command or `steam://rungameid/<appid>`), `apps.running`, `apps.focus`,
 `apps.close` (then `app_exited` with reason `closed`), `steam.attention` / `steam.focus`, and the
-`app_started`, `app_exited`, `focus_changed`, `games_changed`, `steam_attention` and `osk_visibility` events; a
+`app_started`, `app_exited`, `focus_changed`, `games_changed`, `steam_attention` and `osk_changed` events; a
 `command` launch of `does-not-exist` fails with 2002. 0.5: the apps have generic local icons (`test/fixtures/icons`, found from the repo root or `HINTEROS_MOCK_ICONS=<dir>`), except YouTube and Plex, whose icons arrive later (F6, `apps_changed`); `MockDaemon.setAppIcon` does the same in tests. 0.4: `osk.show` / `osk.hide` (event only on a change; Home and a focus change hide it; `oskEnabled = false` gives 2005), `keys.type` (printable ASCII types, anything else comes back as `untypeable`), `keys.key`, `keys.action` (all logged in `MockDaemon.keyLog`; `keyboardAvailable = false` gives 2004), and, while the keyboard is visible, `input_nav` only to a mock constructed with `clientName: 'hinteros-osk'`. 0.6: the relayed system service (`MockDaemon.system`, `lib/src/api/mock_system_relay.dart`): `system.info`, `settings.get` / `set`, `ssh.set` (to on it waits for the admin password, see 0.8 below; `system.adminAuthorized = true` skips that), `generations.list`, `rebuild`, `hardware.redetect`, `rollback`, `update.check` (a job, 60 s cache), `update.apply` (only the last checked rev), `channel.check` / `channel.set` (0.17: only the last checked rev) / `base.set` (`needs_acknowledgement` for downgrades), `jobs.get` / `list` / `cancel`, and the `job_started` / `job_progress` / `job_finished` events. One mutating job at a time (`job_busy`); jobs step through their stages by themselves with `systemStepDelay`, or a test drives them (`progressJob`, `finishJob`); `unavailable = SystemUnavailableDataReason.down` gives `system_unavailable`; `failNext` injects any error (rate limit, low memory...). 0.7: the runtime settings (`MockDaemon.runtime`, `lib/src/api/mock_runtime.dart`): `network.status`, `wifi.scan` / `list` / `connect` / `disconnect` / `forget` / `enable` (a stored network joins without a password, a wrong password is `wrong_password` and stores nothing, WEP and 802.1X are refused, `keyChanged` makes a stored password stale), `bluetooth.*` (devices appear on the first scan; a controller pairs without a prompt, a `confirm` device sends `bluetooth_confirm` and waits for `bluetooth.confirm`, a `display` device waits for `finishDisplayPairing()`), `audio.*` (every call returns the state and sends `audio_changed`), `display.modes` / `set_mode` / `keep` / `revert` (the replaced mode is remembered until kept or reverted; `displayCanSet`, `displayIgnoresMode`), `power.*` (`inhibited = true` gives `power_inhibited`, `powerCapabilities`, `notAuthorized`), and `network_changed`, `wifi_list_changed`, `bluetooth_changed`, `bluetooth_confirm`, `audio_changed` after every change. `runtime.setUnavailable('bluez')` (also `networkmanager`, `audio`, `display`, `logind`) makes one service answer `unavailable` and leaves the rest working. 0.8: the admin password agent (`MockDaemon.auth`, `lib/src/api/mock_auth.dart`): `system.ssh.set` to on waits like the real call, sends `authentication_requested` (to a mock named `hinteros-launcher` only) and ends with the job on `auth.respond` (3 tries, then `permission_denied`), with `authentication_required` on `auth.cancel` or when `auth.agentRegistered = false`; `auth.*` from another client is `not_authorized`; the answer to `auth.respond` comes before the waiting call's. `session.restart` (`sessionRestarts`, `sessionRestartAvailable = false` gives `unavailable {logind, not_greetd}`). `store.list` and `system.apps.install` / `remove` over a wire catalog (`lib/src/api/mock_store.dart`: the fixture in `test/fixtures/catalog` with absolute `terms.file` paths, plus RetroArch with its cores, a video player, Kodi (conflicts with Jellyfin) and a retired app): states `installing` / `removing` while the job runs, `store_changed` when an apps job starts and ends, `more_after_update` from the update check's `new_apps`, the service's checks (`state_conflict` for a stale revision, `not_available`, transitive depends, `app_conflict` both ways, `terms_required` per app, `insufficient_resources` from `freeDiskMib`, `app_conflict` when removing an app another needs). No daemon needed for desktop work. Dev keys,
 all going through the mock's event stream:
 
@@ -99,6 +99,16 @@ branch never merges back. `main` keeps only what the demo hooks into: `LauncherA
 (`lib/src/platform/local_files*.dart`: in the browser a local path is an asset key); and
 `lib/src/installer/evdev_ioctl_web.dart`, which stands in for the `dart:ffi` ioctl the picker's
 import chain reaches.
+
+### Session API 1.0
+
+The launcher works with a daemon of the same major and an equal or higher minor. `tool/gen_api.dart`
+gives every enum that grows a catch-all, so a value of a newer daemon reads as `unknown`
+(`LibraryKindShown`: `other`; `Connectivity` and `UnitState` have their own `unknown`). The enums the
+launcher also sends (`_closedEnums`) have none: a new value there is a new major. An unknown
+`AuthOutcome` is no authorization. Unknown fields are ignored, an unknown event is
+`UnknownSessionEvent`, an unknown error code is a plain failure, and a job `result` or a service
+`setup` or `detail` it cannot read is null. `test/api/forward_compat_test.dart` covers this.
 
 ### Session API 0.20: Settings > Controller
 
@@ -193,7 +203,7 @@ then `system.apps.install`; Cancel, Back or declined terms set nothing. An app w
 permissions keeps the old dialog. **App page:** an installed app has a "Permissions" section after
 its buttons, one switch per permission (required: locked, "Required"); A on an optional one calls
 `apps.set_permission`, a refusal is the usual "That didn't work" message, and while the app runs
-one line says "Restart the app to apply.". Errors: `unknown_app` and `unknown_permission` are
+one line says "Restart the app to apply.". Errors: `app_not_found` and `unknown_permission` are
 `notFound`, `permission_required` is `invalidParams`. Both mocks follow the rules (`MockStore.denied`,
 `MockDaemon.system.deniedPermissions`; the mock Video player declares a required controller, a
 microphone and the Downloads folder).
@@ -265,7 +275,7 @@ Design: `hinteros-docs/design/time-zone.md`. The box's zone (`TimeZoneRepository
 - **Settings > Time zone** (`lib/src/ui/system/time_zone_section.dart`): the picker; a choice
   asks for the admin PIN on the admin-PIN pad (`withBoxAdminPin`: a wrong PIN asks again, Back
   changes nothing) and applies at once (no job). The zone it is on again asks nothing.
-- **The clock** in the top bar is UTC plus the daemon's `offset_seconds`, not the process's own
+- **The clock** in the top bar is UTC plus the daemon's `offset_s`, not the process's own
   zone (glibc reads that once). The shell gets the zone again at `offset_valid_until` (the next
   daylight saving time change), on `time_zone_changed`, and after a reconnect.
 - **Map asset**: `assets/maps/time_zones.bin` (76 KB) from Natural Earth, made by
@@ -411,7 +421,7 @@ launcher's proposal until the daemon's M7 schema is vendored (see `m7/DECISIONS.
 - **In a profile's session** (`lib/src/ui/profiles/session_profile.dart`): `profile.current`
   decides first-boot mode (`setup_required`: the wizard ends with "Create your profile",
   `system.profiles.setup_admin`), the one-time "Set your PIN" (`pin_set` false) and the sleep
-  lock screen (`screen_locked`, `lock_state`, `session.unlock`). The profile chip (last item of
+  lock screen (`screen_locked`, `lock_changed`, `session.unlock`). The profile chip (last item of
   the tab row) opens Switch profile / Profile settings (End guest session for the guest).
   Switch profile (chip, lock screen) opens the boot picker's screen over the session:
   the open profile is marked "Open" and focused, choosing it (or B) goes back to where you were
@@ -592,7 +602,7 @@ params/result schemas that are a `$ref` (the relayed `system.*` results; `displa
   `steam.attention` and `steam.focus` (2003) without Steam windows.
   The keyboard part runs the real `DaemonOskBackend` as client `hinteros-osk` with `--fake-keyboard <file>`
   and `[osk] command = []` (no keyboard process): `osk.show` / `osk.hide` reach every client as
-  `osk_visibility`, `keys.type`, `keys.key` and `keys.action` write the expected key events
+  `osk_changed`, `keys.type`, `keys.key` and `keys.action` write the expected key events
   (`down 30`, `up 30`...) into the fake keyboard log, `untypeable` for a character without a key,
   2004 without a virtual keyboard (`--no-uinput`), 2005 with `[osk] enable = false`. What it cannot
   cover is `input_nav` routing to the `hinteros-osk` connection: that needs a fake InputPlumber on a
@@ -748,7 +758,7 @@ RGBA (32-bit ARGB) visual, `app-paintable`, a Flutter clear colour of `#00000000
 never takes focus, covers the whole output and sets `GAMESCOPE_EXTERNAL_OVERLAY=1` on itself. The
 Flutter side paints only the keyboard panel (bottom 40% of the height, solid, rounded top corners);
 everything else is transparent. Showing and hiding is the daemon's job (`_NET_WM_WINDOW_OPACITY`);
-the process stays resident, and on `osk_visibility {visible: true}` it re-reads `launcher.json` (text
+the process stays resident, and on `osk_changed {visible: true}` it re-reads `launcher.json` (text
 size, contrast, focus marker) and focuses `q`. A 4K screen at devicePixelRatio 1 gets the same
 keyboard scaled by height / 1080. Checked here under Xvfb: depth-32 window, class and atom set;
 
@@ -762,12 +772,12 @@ the arrow keys, Enter, Escape/Backspace, Y and X stand in for the pad.
 **Backend:** the UI only talks to `OskBackend` (`lib/src/osk/osk_backend.dart`): `type(text)`
 (`keys.type`; returns the `untypeable` characters), `action(backspace|enter|tab)` (`keys.action`),
 `key(key, modifiers)` (`keys.key`, unused so far), `hide()` (`osk.hide`), plus the streams `nav`
-(`input_nav`) and `visibility` (`osk_visibility`). `MockOskBackend` records every call
+(`input_nav`) and `visibility` (`osk_changed`). `MockOskBackend` records every call
 (`type:P`, `action:backspace`, `hide`...). `DaemonOskBackend` is the real one: it connects to
 `$HINTEROS_SESSION_SOCKET` (else the default socket) with the hello client name `hinteros-osk`,
 which is what makes the daemon send it `input_nav` while the keyboard is visible (and the launcher,
-client `hinteros-launcher`, not; it also drops any `input_nav` that arrives while `osk_visibility`
-says the keyboard is up). `osk_visibility {visible: false}` resets the keyboard (letters, shift
+client `hinteros-launcher`, not; it also drops any `input_nav` that arrives while `osk_changed`
+says the keyboard is up). `osk_changed {visible: false}` resets the keyboard (letters, shift
 off, empty preview). Errors show in the strip for a few seconds: 2004 `keyboard_unavailable` as
 "No keyboard available", and characters that `keys.type` reports as `untypeable` ("Cannot type:
 é"; with the preview masked (a password field) only their number). Anywhere else the
@@ -790,7 +800,7 @@ Shift was chosen for `context` rather than the page toggle because it is needed 
 page change is one key away and has L1/R1. Pages: letters (digits row, `'` and `.`), symbols 1,
 symbols 2 (`[ ] { }` and the backtick); together they cover every printable ASCII character. The
 strip above the keys is a preview of what was typed since opening (Backspace removes). **It is
-masked only for a password field** (`osk_visibility.password`, session API 0.10; a password must not
+masked only for a password field** (`osk_changed.password`, session API 0.10; a password must not
 appear on the TV): dots, with the newest character readable for about a second, like a phone
 password field. Any other field, or none reported (the Guide+Y chord), shows plain text. When the
 field kind changes while the keyboard is up, the preview starts afresh, so a password never shows

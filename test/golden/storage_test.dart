@@ -134,7 +134,7 @@ void main() {
       t,
       'storage_bar_1080p',
       harness(settings: const LauncherSettings(focusStyle: FocusStyle.bar)),
-      run: (t) => press(t, [kLeft, kLeft, kLeft]),
+      run: (t) => press(t, [kLeft, kLeft, kLeft, kLeft]),
     );
   });
 }

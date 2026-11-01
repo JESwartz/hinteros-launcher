@@ -52,7 +52,7 @@ void main() {
     expect(d.oskVisible, isFalse);
   });
 
-  testWidgets('osk_visibility.password masks; a repeat keeps the focus', (
+  testWidgets('osk_changed.password masks; a repeat keeps the focus', (
     t,
   ) async {
     final d = await start(t);
@@ -61,7 +61,7 @@ void main() {
     await t.pump(const Duration(seconds: 2));
     expect(_preview('w'), findsOneWidget, reason: 'not a password: plain');
     // A password field gets focus while the keyboard is up.
-    d.emitRaw('osk_visibility', {'visible': true, 'password': true});
+    d.emitRaw('osk_changed', {'visible': true, 'password': true});
     await t.pumpAndSettle();
     expect(focusLabel(), 'osk/r1:1', reason: 'still visible: no fresh start');
     await press(t, d, NavAction.accept);

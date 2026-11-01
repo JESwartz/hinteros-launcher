@@ -10,8 +10,9 @@
 // (format: hinteros-daemon/schema/api-doc.schema.json) and emits:
 //   * a class per object schema (`$defs`, method params/results, event params,
 //     error data, nested inline objects), with fromJson/toJson/==
-//   * an enum per string enum, each with an `unknown` fallback for values from
-//     a newer daemon (api.md: clients map unknown enum values to a fallback)
+//   * an enum per string enum: one that grows reads a value of a newer daemon
+//     of the same major as its catch-all (`unknown`, see [_ownCatchAll]); one
+//     in [_closedEnums] has no catch-all and throws on a value it does not know
 //   * `SessionApiMethods`: a typed stub per method on top of an abstract `rpc`
 //   * `SessionEvent`: a sealed class with one subclass per event + unknown
 //   * error code constants and the API version
@@ -124,6 +125,22 @@ const _reserved = {
 
 /// Extra names taken on event classes (they implement SessionEvent).
 const _eventReserved = {'name', 'params'};
+
+/// Enums a client also sends: a new value is a new major, and a catch-all
+/// would let an unknown value through to the daemon.
+const _closedEnums = {
+  'Channel',
+  'Base',
+  'CleanupFrequency',
+  'LibraryKind',
+  'Key',
+  'Modifier',
+  'KeyAction',
+  'EventName',
+};
+
+/// Enums whose catch-all is a value of the schema other than `unknown`.
+const _ownCatchAll = {'LibraryKindShown': 'other'};
 
 enum Kind { prim, enumeration, object, list, map, dynamic }
 
@@ -325,16 +342,22 @@ class Generator {
         }
         variants.add("$id('${v.replaceAll("'", r"\'")}')");
       }
-      var unknown = 'unknown';
-      while (used.contains(unknown)) {
-        unknown = '${unknown}_';
+      final closed = _closedEnums.contains(name);
+      final own = _ownCatchAll[name] ?? 'unknown';
+      final addCatchAll = !closed && !values.contains(own);
+      if (addCatchAll) {
+        variants.add(
+          "/// A value this client does not know (newer daemon).\n"
+          "  unknown('unknown')",
+        );
       }
+      final orElse = closed
+          ? "throw FormatException('not a $name', value)"
+          : camel(own);
       final b = StringBuffer()
         ..write(doc_(s['description'] as String?))
         ..writeln('enum $name {')
-        ..writeln('  ${variants.join(',\n  ')},')
-        ..writeln("  /// A value this client does not know (newer daemon).")
-        ..writeln("  $unknown('unknown');")
+        ..writeln('  ${variants.join(',\n  ')};')
         ..writeln()
         ..writeln('  const $name(this.value);')
         ..writeln('  final String value;')
@@ -342,8 +365,8 @@ class Generator {
         ..writeln(
           '  factory $name.fromJson(String value) => values.firstWhere(',
         )
-        ..writeln('    (e) => e != $unknown && e.value == value,')
-        ..writeln('    orElse: () => $unknown,')
+        ..writeln('    (e) => e.value == value,')
+        ..writeln('    orElse: () => $orElse,')
         ..writeln('  );')
         ..writeln()
         ..writeln('  String toJson() => value;')

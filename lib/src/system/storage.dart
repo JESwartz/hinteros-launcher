@@ -31,6 +31,9 @@ enum StorageKind {
   /// The guest's home.
   guest,
 
+  /// The media folders (`/srv`): no children, only when not empty.
+  media,
+
   /// What none of the others explains.
   other,
 

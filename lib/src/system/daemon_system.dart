@@ -58,8 +58,6 @@ JobKind _jobKind(api.JobKind k) => switch (k) {
   api.JobKind.cloudflareSetToken => JobKind.cloudflareSetToken,
   api.JobKind.cloudflareClearToken => JobKind.cloudflareClearToken,
   api.JobKind.appsClearData => JobKind.clearData,
-  // The v1 -> v2 apps migration (queued by the service itself).
-  api.JobKind.migrateApps => JobKind.rebuild,
   api.JobKind.unknown => JobKind.rebuild,
 };
 
@@ -85,7 +83,7 @@ JobStage? _stage(api.Stage? s) => switch (s) {
 UpdateChannel? _channel(api.Channel? c) => switch (c) {
   api.Channel.beta => UpdateChannel.beta,
   api.Channel.stable => UpdateChannel.stable,
-  api.Channel.unknown || null => null,
+  null => null,
 };
 
 NixBase _base(api.Base b) =>
@@ -180,10 +178,8 @@ JobSubject _subject(api.JobSubject? s) {
             s.fromRev,
             _channel(s.fromChannel ?? s.channel),
           ),
-    base: s.base == null || s.base == api.Base.unknown ? null : _base(s.base!),
-    fromBase: s.fromBase == null || s.fromBase == api.Base.unknown
-        ? null
-        : _base(s.fromBase!),
+    base: s.base == null ? null : _base(s.base!),
+    fromBase: s.fromBase == null ? null : _base(s.fromBase!),
     enabled: s.enabled,
     keep: s.keep,
     frequency: switch (s.frequency) {
@@ -314,6 +310,22 @@ bool _isCancel(api.ErrorObject? e) =>
 
 Map<String, dynamic>? _asMap(Object? o) =>
     o is Map ? o.cast<String, dynamic>() : null;
+
+/// [map] as a job result; null when there is none or when it is unreadable
+/// (a newer daemon).
+T? _readResult<T>(
+  Map<String, dynamic>? map,
+  T Function(Map<String, dynamic>) read,
+) {
+  if (map == null) return null;
+  try {
+    return read(map);
+  } on TypeError {
+    return null;
+  } on FormatException {
+    return null;
+  }
+}
 
 // ---------------------------------------------------------------- jobs
 
@@ -688,14 +700,13 @@ class DaemonUpdates implements UpdatesRepository {
           done.error?.message ?? 'The update check did not finish.',
         );
       }
-      final map = done.result;
-      if (map == null) {
+      result = _readResult(done.result, api.UpdateCheckResult.fromJson);
+      if (result == null) {
         throw const SystemException(
           SystemErrorKind.failed,
           'The update check gave no result.',
         );
       }
-      result = api.UpdateCheckResult.fromJson(map);
     }
     final info = await _conn.systemInfo();
     final channel = _channel(info.channel);
@@ -795,14 +806,13 @@ class DaemonUpdates implements UpdatesRepository {
             done.error?.message ?? 'The check did not finish.',
           );
         }
-        final map = done.result;
-        if (map == null) {
+        final r = _readResult(done.result, api.ChannelCheckResult.fromJson);
+        if (r == null) {
           throw const SystemException(
             SystemErrorKind.failed,
             'The check gave no result.',
           );
         }
-        final r = api.ChannelCheckResult.fromJson(map);
         final t = r.target;
         return ChannelTarget(
           channel: channel,

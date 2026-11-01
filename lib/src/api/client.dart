@@ -29,7 +29,10 @@ String? defaultSocketPath([Map<String, String>? env]) {
 class DaemonClient extends DaemonConnection {
   DaemonClient({
     required this.socketPath,
-    this.clientInfo = const Peer(name: 'hinteros-launcher', version: '0.1.0'),
+    this.clientInfo = const Peer(
+      name: 'hinteros-launcher',
+      version: apiVersion,
+    ),
     this.clientApiVersion = apiVersion,
     this.initialBackoff = const Duration(milliseconds: 250),
     this.maxBackoff = const Duration(seconds: 5),
@@ -160,7 +163,7 @@ class DaemonClient extends DaemonConnection {
     // incompatible version is still a mismatch.
     final mine = ApiVersionNumber.parse(clientApiVersion);
     final theirs = ApiVersionNumber.parse(hello.apiVersion);
-    if (!mine.isCompatibleWith(theirs)) {
+    if (!theirs.isCompatibleWith(mine)) {
       throw _Mismatch(clientApiVersion, hello.apiVersion);
     }
     if (_desired.isNotEmpty) {
