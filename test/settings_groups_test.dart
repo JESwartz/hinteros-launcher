@@ -34,6 +34,16 @@ const _groups = <(String, String, List<(String, String)>)>[
     ],
   ),
   (
+    'controller',
+    'Controller',
+    [
+      ('buttons', 'Buttons'),
+      ('pointer', 'Pointer'),
+      ('keyboard_keys', 'Keyboard apps'),
+      ('app_keys', 'App keys'),
+    ],
+  ),
+  (
     'system',
     'System',
     [
@@ -61,7 +71,7 @@ void main() {
     expect(settingsSectionIndexOf('updates'), 0);
   });
 
-  testWidgets('the list shows the seven groups in order', (t) async {
+  testWidgets('the list shows the eight groups in order', (t) async {
     setView(t);
     await Harness().pump(t);
     await openTab(t, 5);

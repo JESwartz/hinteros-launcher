@@ -7,6 +7,7 @@ export 'errors.dart';
 export 'generated.dart';
 export 'mock.dart';
 export 'mock_auth.dart' show MockAuthAgent;
+export 'mock_input.dart';
 export 'mock_profiles.dart' show MockProfileSession, MockWireProfile;
 export 'mock_runtime.dart';
 export 'mock_server_relay.dart' show MockServerRelay, MockWireService;

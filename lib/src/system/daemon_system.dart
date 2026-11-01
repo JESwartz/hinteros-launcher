@@ -11,6 +11,7 @@ import 'dart:async';
 import '../api/api.dart' as api;
 import '../log.dart';
 import 'daemon_auth.dart';
+import 'daemon_controller.dart';
 import 'daemon_errors.dart';
 import 'daemon_profiles.dart';
 import 'daemon_runtime.dart';
@@ -1028,5 +1029,6 @@ SystemServices daemonSystemServices(
     storage: DaemonStorage(connection, jobs),
     timeZone: DaemonTimeZone(connection),
     server: DaemonServer(connection, jobs),
+    controller: DaemonController(connection),
   );
 }

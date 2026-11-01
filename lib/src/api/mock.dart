@@ -5,6 +5,7 @@ import 'daemon.dart';
 import 'errors.dart';
 import 'generated.dart';
 import 'mock_auth.dart';
+import 'mock_input.dart';
 import 'mock_profiles.dart';
 import 'mock_runtime.dart';
 import 'mock_system_relay.dart';
@@ -160,6 +161,7 @@ class MockDaemon extends DaemonConnection {
       },
     );
     runtime = MockRuntime(emit: (name, params) => emitRaw(name, params));
+    input = MockInputSettings(emit: (name, params) => emitRaw(name, params));
     profiles = MockProfileSession(
       emit: (name, params) => emitRaw(name, params),
       relay: system,
@@ -194,6 +196,10 @@ class MockDaemon extends DaemonConnection {
   /// display and power, with switches for failures. Methods `network.*`,
   /// `wifi.*`, `bluetooth.*`, `audio.*`, `display.*` and `power.*` go here.
   late final MockRuntime runtime;
+
+  /// The controller settings (session API 0.20): `input.settings.*` and
+  /// `input.capture`; a test answers a capture with [MockInputSettings.press].
+  late final MockInputSettings input;
 
   final List<App> apps;
   List<Game> _games;
@@ -347,6 +353,7 @@ class MockDaemon extends DaemonConnection {
     }
     if (MockSystemRelay.handles(method)) return system.call(method, params);
     if (MockRuntime.handles(method)) return runtime.call(method, params);
+    if (MockInputSettings.handles(method)) return input.call(method, params);
     switch (method) {
       case 'session.restart':
         if (!sessionRestartAvailable) {
