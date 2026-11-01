@@ -137,7 +137,7 @@ class ProfileInfo {
   final ProfileColor color;
   final bool admin;
 
-  /// Has a PIN (`pin_set`; false: migrated without one, asks for nothing).
+  /// Has a PIN (`pin_set`; false: none yet, asks for nothing).
   final bool pinSet;
 
   /// Asks for its PIN to enter (picker, after sleep).
@@ -228,7 +228,7 @@ class CurrentProfile {
   /// First-boot mode: no admin profile exists; the wizard creates it.
   final bool setupRequired;
 
-  /// False: a profile migrated from a single-user box that has no PIN yet.
+  /// False: a profile without a PIN yet.
   final bool pinSet;
 
   /// The sleep lock is up.

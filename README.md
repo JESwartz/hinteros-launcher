@@ -386,16 +386,17 @@ Design: `hinteros-docs/design/storage.md`. Settings > Storage
   (`pin_required {pin: admin}`) stays on the pad, Back on the empty pad does nothing. With no PIN
   on the admin profile, or when `profiles.list` fails, the call goes without one, and a
   `pin_required {pin: admin}` answer still opens the pad; with no admin profile (first boot) the
-  service's message is shown. A base downgrade's second call (`acknowledge_downgrade`) reuses the PIN.
+  service's message is shown. Only `unstable` is built, so Settings offers no base; `setBase` stays in the repositories
+  and `system.base.set {base: stable}` is `unavailable {service: base, reason: not_built}`.
   `hardware.redetect` takes it too (`SystemRepository.redetectHardware`); no screen calls it yet.
 - **Rollback**: a generation with `readds_features` says on the confirmation that the box turns
   the parts the apps need on again; the job page shows the `box` stage after the switch and,
   from `features_readded`, that they are on again. A failed box stage says the rollback is done.
 - **End guest session** removes everything the guest did now (`session.end_guest` asks for
-  `system.guest.end`, job kind `guest_end`), not at the next restart.
+  job kind `guest_end`), not at the next restart.
 - **Mock**: the box-wide actions check the admin PIN (`MockProfileBox.checkBoxAdmin`,
-  `MockProfileSession.checkBoxAdminPin`; `schema1` or an admin without a PIN needs none),
-  `system.guest.end` (guest only), and `generations.list`'s generation 10 re-adds
+  `MockProfileSession.checkBoxAdminPin`; an admin without a PIN needs none), and
+  `generations.list`'s generation 10 re-adds
   `graphics32`/`steam-devices`.
 
 ### Session API 0.12: profiles (M7)

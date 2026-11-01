@@ -163,6 +163,9 @@ class MockSystemRelay {
   String version = '0.1.0';
   Channel? channel = Channel.stable;
   Base base = Base.unstable;
+
+  /// The bases that are built: `base.set` to another one is `unavailable`.
+  final builtBases = {Base.unstable};
   String? rev = '0f3c5a9e2b7d4c1a8e6f9b0d2c4e6a8b1d3f5a7c';
   int? generation = 42;
   String hostname = 'hinteros';
@@ -285,8 +288,8 @@ class MockSystemRelay {
 
   /// The admin PIN check of the box-wide actions (`update.apply`,
   /// `rollback`, `channel.set`, `base.set`, `hardware.redetect`; system API
-  /// 0.5): throws `pin_required` or `invalid_params`. Null: no PIN needed (a
-  /// schema-1 box). [MockDaemon] sets it to its profiles' check.
+  /// 0.5): throws `pin_required` or `invalid_params`. Null: no PIN needed.
+  /// [MockDaemon] sets it to its profiles' check.
   void Function(String? adminPin)? checkAdminPin;
 
   // ---- storage (0.14)
@@ -742,6 +745,13 @@ class MockSystemRelay {
         _mutating('base.set');
         checkAdminPin?.call(b.adminPin);
         if (b.base == base) return const JobRef(jobId: null).toJson();
+        if (!builtBases.contains(b.base)) {
+          throw const ApiException(
+            ApiErrorCode.unavailable,
+            'this base is not built',
+            {'service': 'base', 'reason': 'not_built'},
+          );
+        }
         if (base == Base.unstable &&
             b.base == Base.stable &&
             b.acknowledgeDowngrade != true) {

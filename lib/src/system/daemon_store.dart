@@ -224,7 +224,7 @@ class DaemonStore implements StoreRepository {
     }
   }
 
-  /// Runs [call] with `settings.get`'s revision. A stale one
+  /// Runs [call] with `apps.list`'s revision. A stale one
   /// (`state_conflict`: something else changed the settings in between) is
   /// fetched again and the call made once more, after the listing is
   /// refreshed.
@@ -243,20 +243,8 @@ class DaemonStore implements StoreRepository {
     }
   }
 
-  /// The profile's own revision (`apps.list`, per-profile apps), else, on a
-  /// box that still has box-wide apps, `settings.get`'s.
-  Future<String> _revision() async {
-    try {
-      return (await _conn.systemAppsList()).revision;
-    } on api.ApiException catch (e) {
-      final data = e.data is Map ? e.data! as Map : const {};
-      // `unavailable {service: profiles, reason: schema1}`.
-      final schema1 =
-          e.code == api.ApiErrorCode.unavailable && data['reason'] == 'schema1';
-      if (!schema1 && e.code != api.ApiErrorCode.methodNotFound) rethrow;
-      return (await _conn.systemSettingsGet()).revision;
-    }
-  }
+  /// The profile's own revision (`apps.list`).
+  Future<String> _revision() async => (await _conn.systemAppsList()).revision;
 
   @override
   Future<void> acceptTerms(String id, String version) async {

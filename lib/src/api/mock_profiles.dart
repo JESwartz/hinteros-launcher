@@ -34,7 +34,7 @@ class MockWireProfile {
   int failures = 0;
   int? lockedUntil;
 
-  String get user => id == 'p1' ? 'hinteros' : 'hinteros-$id';
+  String get user => 'hinteros-$id';
 }
 
 class MockProfileSession {
@@ -92,9 +92,6 @@ class MockProfileSession {
 
   /// The sleep lock is up.
   bool screenLocked = false;
-
-  /// The box still has box-wide apps (`system.apps.*` are unavailable).
-  bool schema1 = false;
 
   /// Starter-set apps whose terms this profile has not accepted.
   final Set<String> needsTerms = {};
@@ -235,8 +232,8 @@ class MockProfileSession {
   }
 
   /// The admin PIN of the box-wide actions (system API 0.5: `update.apply`,
-  /// `rollback`, `channel.set`, `base.set`, `hardware.redetect`): none on a
-  /// schema-1 box or for an admin profile without a PIN yet;
+  /// `rollback`, `channel.set`, `base.set`, `hardware.redetect`): none for an
+  /// admin profile without a PIN yet;
   /// `pin_required {pin: admin}` when it is missing or wrong, or when there
   /// is no admin profile.
   void checkBoxAdminPin(String? pin) {
@@ -247,7 +244,6 @@ class MockProfileSession {
         {'field': 'admin_pin', 'reason': 'bad_format'},
       );
     }
-    if (schema1) return;
     final a = profiles.where((x) => x.admin).firstOrNull;
     if (a == null) {
       throw ApiException(
@@ -291,16 +287,6 @@ class MockProfileSession {
         ApiErrorCode.systemUnavailable,
         'the system service is not running',
         SystemUnavailableData(reason: u).toJson(),
-      );
-    }
-  }
-
-  void _appsAvailable() {
-    if (schema1) {
-      throw const ApiException(
-        ApiErrorCode.unavailable,
-        'this box still has box-wide apps',
-        {'service': 'profiles', 'reason': 'schema1'},
       );
     }
   }
@@ -437,7 +423,7 @@ class MockProfileSession {
             id: current == 'guest' ? null : current,
             user: current == 'guest'
                 ? 'hinteros-guest'
-                : (byId(current)?.user ?? 'hinteros'),
+                : (byId(current)?.user ?? 'hinteros-$current'),
             guest: current == 'guest',
             spare: byId(current) == null && current != 'guest',
           ),
@@ -563,7 +549,6 @@ class MockProfileSession {
           ),
         ).toJson();
       case 'system.apps.list':
-        _appsAvailable();
         final ids = [...relay.installedApps]..sort();
         return SystemAppsListResult(
           generation: appGeneration,
@@ -578,7 +563,6 @@ class MockProfileSession {
               : const [],
         ).toJson();
       case 'system.apps.generations':
-        _appsAvailable();
         final earlier = appGenerations.keys.toList()..sort((a, b) => b - a);
         return SystemAppsGenerationsResult(
           generations: [
@@ -600,7 +584,6 @@ class MockProfileSession {
           ],
         ).toJson();
       case 'system.apps.rollback':
-        _appsAvailable();
         final g = SystemAppsRollbackParams.fromJson(p).generation;
         final ids = appGenerations[g];
         if (ids == null) {
@@ -630,7 +613,6 @@ class MockProfileSession {
           ),
         ).toJson();
       case 'system.apps.accept_terms':
-        _appsAvailable();
         final c = SystemAppsAcceptTermsParams.fromJson(p);
         final app = relay.catalog.where((a) => a.id == c.id).firstOrNull;
         if (!needsTerms.contains(c.id) || app?.terms == null) {

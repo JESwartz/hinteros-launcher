@@ -4,8 +4,6 @@ import '../../system/models.dart';
 import '../../system/profiles.dart';
 import '../../theme/hinter_theme.dart';
 import '../dialogs.dart';
-import '../pages.dart';
-import '../profiles/profile_ui.dart' show withBoxAdminPin;
 import '../widgets.dart';
 import 'common.dart';
 
@@ -107,48 +105,6 @@ class _UpdatesSectionState extends State<UpdatesSection> {
     if (!mounted) return;
     setState(() => _checking = false);
     await reload();
-  }
-
-  /// Starts a box-wide job that takes the admin PIN (asked on the pad
-  /// titled [title]) and may need an acknowledgement (a downgrade): then
-  /// [ackTitle] asks, and the same PIN goes with the second call.
-  Future<void> _withAck(
-    String title,
-    Future<JobHandle> Function(bool ack, String? adminPin) start,
-    String ackTitle,
-  ) async {
-    final c = context;
-    String? pin;
-    try {
-      final h = await withBoxAdminPin(
-        c,
-        env.services.profiles,
-        title: title,
-        action: (p) {
-          pin = p;
-          return start(false, p);
-        },
-      );
-      if (h == null || !c.mounted) return;
-      await showJobProgress(c, env.services, h);
-    } on SystemException catch (e) {
-      if (!c.mounted) return;
-      if (e.kind == SystemErrorKind.needsAcknowledgement) {
-        final r = await showConfirm(
-          c,
-          title: ackTitle,
-          body:
-              'Software on this box may go back to an older version. You can '
-              'roll back afterwards.',
-          confirmLabel: 'Switch anyway',
-          danger: true,
-        );
-        if (r == null || !c.mounted) return;
-        await runJob(c, env.services, () => start(true, pin));
-      } else {
-        await showMessage(c, title: "That didn't work", body: e.message);
-      }
-    }
   }
 
   /// A channel switch (session API 0.17): the box verifies the target
@@ -389,37 +345,6 @@ class _UpdatesSectionState extends State<UpdatesSection> {
             trailing: Text(info.channel?.label ?? 'None', style: t.bodyDim),
           ),
         );
-        if (info.channel == UpdateChannel.stable) {
-          p.item(
-            'base',
-            onSelect: () async {
-              final b = await showChoice<NixBase>(
-                context,
-                title: 'Software base',
-                choices: [
-                  for (final b in NixBase.values)
-                    Choice(
-                      '${b.label}${b == info.base ? ' (current)' : ''}',
-                      b,
-                    ),
-                ],
-              );
-              if (b == null || b == info.base) return;
-              await _withAck(
-                'Switch to the ${b.label} base',
-                (ack, pin) =>
-                    up.setBase(b, acknowledgeDowngrade: ack, adminPin: pin),
-                'Switch to the ${b.label} base?',
-              );
-              await reload();
-            },
-            builder: (f) => SettingRow(
-              title: 'Software base',
-              focused: f,
-              trailing: Text(info.base.label, style: t.bodyDim),
-            ),
-          );
-        }
         final canRoll = gens.any((g) => !g.current);
         p.item(
           'rollback',

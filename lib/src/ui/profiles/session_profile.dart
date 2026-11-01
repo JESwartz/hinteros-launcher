@@ -104,8 +104,7 @@ class ProfileSession extends ChangeNotifier {
     if (me == null) return;
     current = c.copyWith(name: me.name, color: me.color, locked: me.locked);
     notifyListeners();
-    // A schema-1 box reports no PIN to set until its migration ran; ask for
-    // one as soon as the migrated profile has none.
+    // The PIN was reset during the session: ask for a new one.
     if (c.pinSet && !c.guest && !_askingPin) unawaited(_recheckPin());
   }
 

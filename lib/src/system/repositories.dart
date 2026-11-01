@@ -129,8 +129,8 @@ abstract class UpdatesRepository {
 
   // The box-wide actions (update, rollback, channel, base, hardware) take
   // the admin profile's PIN (session API 0.13): missing or wrong gives
-  // [SystemErrorKind.pinRequired] with `pin: admin`. None is needed on a
-  // schema-1 box or while the admin profile has no PIN.
+  // [SystemErrorKind.pinRequired] with `pin: admin`. None is needed while
+  // the admin profile has no PIN.
 
   /// `rollback {generation?, admin_pin?}`; null: the previous generation.
   Future<JobHandle> rollback({int? generation, String? adminPin});
@@ -150,7 +150,9 @@ abstract class UpdatesRepository {
     String? adminPin,
   });
 
-  /// `base.set`; unstable -> stable needs [acknowledgeDowngrade].
+  /// `base.set`; unstable -> stable needs [acknowledgeDowngrade]. A base that
+  /// is not built is `unavailable`, and no screen offers this yet: only
+  /// unstable is built.
   Future<JobHandle> setBase(
     NixBase base, {
     bool acknowledgeDowngrade = false,

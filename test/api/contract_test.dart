@@ -301,8 +301,8 @@ Future<void> _prepareProfiles(
           locked: true,
         ),
       );
-    case ('system.apps.list', 'not migrated yet'):
-      p.schema1 = true;
+    case ('system.base.set', _):
+      mock.system.builtBases.add(Base.stable);
     case ('system.apps.accept_terms', _):
       p.needsTerms.add('steam');
     case ('system.starter_set.set', _):

@@ -668,6 +668,13 @@ void main() {
       mock.system.finishJob(h.jobId);
       expect((await s.system.info()).channel, UpdateChannel.stable);
 
+      final built = await _fails(
+        s.updates.setBase(NixBase.stable, adminPin: _pin),
+      );
+      expect(built.kind, SystemErrorKind.unavailable);
+      expect(built.message, "That software base isn't available on this box.");
+      expect(built.data, {'service': 'base', 'reason': 'not_built'});
+      mock.system.builtBases.add(api.Base.stable);
       final b = await _fails(s.updates.setBase(NixBase.stable, adminPin: _pin));
       expect(b.kind, SystemErrorKind.needsAcknowledgement);
       final hb = await s.updates.setBase(
@@ -806,6 +813,7 @@ void main() {
           adminPin: _pin,
         );
         mock.system.finishJob(c.jobId);
+        mock.system.builtBases.add(api.Base.stable);
         final b = await s.updates.setBase(
           NixBase.stable,
           acknowledgeDowngrade: true,
@@ -846,22 +854,14 @@ void main() {
       }
     });
 
-    test(
-      'none needed on a schema-1 box or for an admin without a PIN',
-      () async {
-        final (mock, s) = await _setup();
-        mock.profiles.schema1 = true;
-        final r = await s.updates.rollback();
-        mock.system.finishJob(r.jobId);
-        mock.profiles
-          ..schema1 = false
-          ..admin.pin = null;
-        expect(
-          (await s.system.redetectHardware()).kind,
-          JobKind.hardwareRedetect,
-        );
-      },
-    );
+    test('none needed for an admin without a PIN', () async {
+      final (mock, s) = await _setup();
+      mock.profiles.admin.pin = null;
+      expect(
+        (await s.system.redetectHardware()).kind,
+        JobKind.hardwareRedetect,
+      );
+    });
 
     test('no admin profile: pin_required even with a PIN', () async {
       final (mock, s) = await _setup();

@@ -957,9 +957,8 @@ Future<bool> withAdminPin(
 
 /// A box-wide action (update, rollback, channel, base, hardware; API 0.13)
 /// with the admin profile's PIN, on the same pad as [withAdminPin]. The pad
-/// comes first when the admin profile has a PIN; without one (a migrated
-/// admin profile, a box before profiles: `profiles.list` fails) or without
-/// an admin profile (first boot: the call says why) the action runs with no
+/// comes first when the admin profile has a PIN; without one (or when
+/// `profiles.list` fails) or without an admin profile (first boot: the call says why) the action runs with no
 /// PIN, and a `pin_required {pin: admin}` answer then still opens the pad.
 /// A wrong PIN stays on the pad; anything else the action throws closes it
 /// and is thrown from here. Resolves with the action's result, or null when
@@ -976,7 +975,7 @@ Future<T?> withBoxAdminPin<T extends Object>(
     admin = (await profiles.list()).admin;
     known = true;
   } on SystemException {
-    // A box before profiles (or no connection): try without a PIN.
+    // No connection: try without a PIN.
   }
   if (!known || admin == null || !admin.pinSet) {
     try {

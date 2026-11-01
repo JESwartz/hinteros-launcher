@@ -370,43 +370,11 @@ void main() {
     });
   });
 
-  group('software base', () {
-    /// On stable: Software base -> Stable (from unstable): the pad is up.
-    Future<Harness> toPad(WidgetTester t) async {
-      setView(t);
-      final h = harness(channel: UpdateChannel.stable);
-      await h.pump(t);
-      await openRow(t, 2); // check, channel, base
-      await press(t, [kDown, kEnter]); // Latest (current), Stable
-      expect(find.text('Switch to the Stable base'), findsOneWidget);
-      expect(find.text(_askPin), findsOneWidget);
-      return h;
-    }
-
-    testWidgets('the right PIN, then the downgrade question', (t) async {
-      final h = await toPad(t);
-      await enterPin(t, '2468');
-      expect(find.text('Switch to the Stable base?'), findsOneWidget);
-      await press(t, [kRight, kEnter]);
-      expect(h.services.mockJobs.started.single.kind, JobKind.base);
-    });
-
-    testWidgets('a wrong PIN asks again', (t) async {
-      final h = await toPad(t);
-      await enterPin(t, '1111');
-      expect(find.text('Wrong PIN.'), findsOneWidget);
-      expect(h.services.mockJobs.started, isEmpty);
-      await enterPin(t, '2468');
-      expect(find.text('Switch to the Stable base?'), findsOneWidget);
-    });
-
-    testWidgets('Back on the pad does nothing', (t) async {
-      final h = await toPad(t);
-      await press(t, [kEscape]);
-      expect(find.text(_askPin), findsNothing);
-      expect(h.services.mockJobs.started, isEmpty);
-      expect(h.services.mockUpdates.base, NixBase.unstable);
-    });
+  testWidgets('on the stable channel there is no base to choose', (t) async {
+    setView(t);
+    final h = harness(channel: UpdateChannel.stable);
+    await h.pump(t);
+    expect(find.text('Software base'), findsNothing);
   });
 
   group('hardware (no screen yet: the repository)', () {

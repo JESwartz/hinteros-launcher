@@ -9,7 +9,7 @@ import '../support/nav_helpers.dart';
 
 /// Profiles inside a session, against the mock repositories: the chip and
 /// its menu, switching (and the not-responding pop-up), the sleep lock,
-/// first-boot mode, the first PIN of a migrated profile, ending the guest
+/// first-boot mode, the first PIN of a profile without one, ending the guest
 /// session.
 Future<void> frames(WidgetTester t, [int n = 5]) async {
   for (var i = 0; i < n; i++) {
@@ -277,7 +277,7 @@ void main() {
     expect(find.text('3840 x 2160 at 60 Hz'), findsOneWidget);
   });
 
-  testWidgets('a migrated profile without a PIN sets one first', (t) async {
+  testWidgets('a profile without a PIN sets one first', (t) async {
     setView(t);
     final box = MockProfileBox(now: fixedNow);
     box.byId('p1')!.pin = null;

@@ -13,7 +13,7 @@ import '../support/harness.dart';
 /// has its data.
 const public = '''
 {"version": 1, "profiles": [
-  {"id": "p1", "user": "hinteros", "name": "James", "color": "teal", "locked": false, "admin": true, "locked_until": null},
+  {"id": "p1", "user": "hinteros-p1", "name": "James", "color": "teal", "locked": false, "admin": true, "locked_until": null},
   {"id": "p3", "user": "hinteros-p3", "name": "Sam", "color": "orange", "locked": true, "admin": false, "locked_until": null}],
  "guest": {"enabled": true, "user": "hinteros-guest"}, "first_boot": false}
 ''';
@@ -37,10 +37,10 @@ void main() {
     expect(guest.name, 'Guest');
     expect(guest.guest, isTrue);
     expect(LoadingIdentity.fromPublicJson(public, 'nobody').name, isNull);
-    expect(LoadingIdentity.fromPublicJson('{nope', 'hinteros').name, isNull);
+    expect(LoadingIdentity.fromPublicJson('{nope', 'hinteros-p1').name, isNull);
     expect(
       LoadingIdentity.fromPublicView(
-        'hinteros',
+        'hinteros-p1',
         path: '/nonexistent/profiles-public.json',
       ).name,
       isNull,
@@ -53,7 +53,7 @@ void main() {
     await h.precacheArt(t);
     await h.precacheIcons(t);
     await t.pumpWidget(
-      appWith(h, LoadingIdentity.fromPublicJson(public, 'hinteros')),
+      appWith(h, LoadingIdentity.fromPublicJson(public, 'hinteros-p1')),
     );
     expect(find.text('Loading James…'), findsOneWidget);
     expect(find.byKey(const ValueKey('profile-loading')), findsOneWidget);

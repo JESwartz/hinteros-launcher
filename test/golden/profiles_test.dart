@@ -190,7 +190,7 @@ void moreGoldens() {
     setView(t);
     final h = Harness(mock: StuckConnection(const Connecting()));
     await t.pumpWidget(
-      appWith(h, LoadingIdentity.fromPublicJson(public, 'hinteros')),
+      appWith(h, LoadingIdentity.fromPublicJson(public, 'hinteros-p1')),
     );
     await t.pump(const Duration(milliseconds: 300));
     await shot(t, 'startup_loading');

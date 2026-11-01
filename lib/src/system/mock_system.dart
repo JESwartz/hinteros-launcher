@@ -410,6 +410,9 @@ class MockUpdates implements UpdatesRepository {
   final DateTime Function() _now;
   UpdateChannel channel;
   NixBase base;
+
+  /// The bases that are built: [setBase] to another one is refused.
+  final builtBases = {NixBase.unstable};
   UpdateStatus _status;
   late List<Generation> _generations;
   final _changes = StreamController<UpdateStatus>.broadcast();
@@ -617,6 +620,13 @@ class MockUpdates implements UpdatesRepository {
     String? adminPin,
   }) async {
     box?.checkBoxAdmin(adminPin);
+    if (!builtBases.contains(b)) {
+      throw const SystemException(
+        SystemErrorKind.unavailable,
+        "That software base isn't available on this box.",
+        data: {'service': 'base', 'reason': 'not_built'},
+      );
+    }
     if (b == NixBase.stable &&
         base == NixBase.unstable &&
         !acknowledgeDowngrade) {

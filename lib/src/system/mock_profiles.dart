@@ -28,7 +28,7 @@ class MockProfile {
   String name;
   ProfileColor color;
 
-  /// Null: a profile migrated without a PIN.
+  /// Null: a profile without a PIN yet.
   String? pin;
   final bool admin;
   bool locked;
@@ -134,16 +134,11 @@ class MockProfileBox {
     throw _pinRequired(kind, null);
   }
 
-  /// No profiles or PINs yet (before the migration): the box-wide actions
-  /// need no PIN.
-  bool schema1 = false;
-
   /// The admin PIN of the box-wide actions (update, rollback, channel,
-  /// base, hardware; session API 0.13): none on a schema-1 box or while the
-  /// admin profile has no PIN; `pin_required {pin: admin}` when it is missing or
+  /// base, hardware; session API 0.13): none while the admin profile has no
+  /// PIN; `pin_required {pin: admin}` when it is missing or
   /// wrong, or when there is no admin profile.
   void checkBoxAdmin(String? pin) {
-    if (schema1) return;
     final a = profiles.where((p) => p.admin).firstOrNull;
     if (a == null) {
       throw const SystemException(

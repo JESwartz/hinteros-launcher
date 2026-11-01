@@ -13,11 +13,9 @@
 //    (`crates/hinteros-system/tests/common`), so they cannot be reused from
 //    here. That part (ssh.set -> authentication_required, jobs) is covered
 //    against the mock daemon's relay instead.
-// 3. The 0.8 Store: `store.list` over a real `hinteros-system` and the real
-//    session daemon, both reading the fixture catalog
-//    (`test/fixtures/catalog`, the real index format) : the daemon's merge of
-//    the index with the installed apps, the terms paths, and the launcher's
-//    `DaemonStore` reading them. `auth.respond` and `auth.cancel` with no
+// 3. The Store: `store.list` over a real `hinteros-system` and the real
+//    session daemon refuses a caller that is no profile, and the launcher's
+//    `DaemonStore` says so. `auth.respond` and `auth.cancel` with no
 //    pending request are `not_found`. `session.restart` runs with logind
 //    pointed at a bus that does not exist: it must never reach this machine's
 //    real logind (a greetd session would be ended). NOT covered: the polkit
@@ -30,8 +28,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hinteros_launcher/src/api/api.dart' hide StoreState;
-import 'package:hinteros_launcher/src/api/api.dart' as wire show StoreState;
+import 'package:hinteros_launcher/src/api/api.dart';
 import 'package:hinteros_launcher/src/system/daemon_system.dart';
 import 'package:hinteros_launcher/src/system/models.dart';
 
@@ -88,9 +85,11 @@ void _writeRoot(Directory root) {
       '{\n  inputs.hinteros.url = "git+file:///nonexistent?ref=stable";\n'
       '  outputs = { hinteros, ... }: {};\n}\n';
   const state =
-      '{\n  "schemaVersion": 1,\n  "base": "unstable",\n  "settings": '
-      '{ "ssh": { "enable": false } },\n  "apps": ["steam"],\n  '
-      '"profiles": [{ "id": "p1", "name": "Dev", "user": "hinteros" }]\n}\n';
+      '{\n  "schemaVersion": 2,\n  "base": "unstable",\n  '
+      '"stateVersion": "26.11",\n  "settings": '
+      '{ "ssh": { "enable": false }, "admin": { "user": "admin" } },\n  '
+      '"requirements": [],\n  "services": [],\n  '
+      '"profiles": [{ "id": "p1" }]\n}\n';
   for (final base in ['etc/hinteros', 'store/gen1/hinteros']) {
     write('$base/flake.nix', flake);
     write('$base/flake.lock', lock);
@@ -435,58 +434,24 @@ void main() {
       );
     }, skip: _skipNoSystem());
 
-    test('store.list: the index merged with the installed apps', () async {
+    // Apps are per profile, and the account of this test is no profile.
+    test('store.list: a caller that is no profile is refused', () async {
       final c = await withSystem(catalog: true);
       await c.waitConnected();
       expect((c.status as Connected).apiVersion, apiVersion);
-      // state.json of the fake root lists steam as installed.
-      expect((await c.systemSettingsGet()).settings.requirements, isEmpty);
-      final l = await c.storeList();
-      expect(l.indexVersion, 3);
-      expect(l.moreAfterUpdate, isFalse);
-      final names = l.apps.map((a) => a.name).toList();
-      expect(
-        names,
-        [...names]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase())),
-        reason: 'by name',
+      final e = await c.storeList().then<ApiException?>(
+        (_) => null,
+        onError: (Object e) => e as ApiException,
       );
-      expect(l.apps.map((a) => a.id), contains('moonlight'));
-      expect(
-        l.apps.map((a) => a.id),
-        isNot(contains('jellyfin-server')),
-        reason: 'a service, not an app',
-      );
-      final steam = l.apps.firstWhere((a) => a.id == 'steam');
-      expect(steam.state, wire.StoreState.installed);
-      expect(l.apps.where((a) => a.id != 'steam').map((a) => a.state).toSet(), {
-        wire.StoreState.available,
-      });
-      // The terms: the version, and the absolute path of the text.
-      expect(steam.terms!.version, '2026-09-10');
-      expect(steam.terms!.file, startsWith('/'));
-      expect(steam.terms!.file, endsWith('terms/steam-2026-09-10.txt'));
-      expect(
-        File(steam.terms!.file).readAsStringSync(),
-        contains('PLACEHOLDER TERMS'),
-      );
-      expect(l.apps.firstWhere((a) => a.id == 'youtube').kind, AppKind.web);
-    }, skip: _skipNoSystem());
-
-    test('the real DaemonStore reads it, terms text included', () async {
-      final c = await withSystem(catalog: true);
-      await c.waitConnected();
-      final store = daemonSystemServices(c).store;
-      final apps = await store.catalog();
-      expect(store.loaded, isTrue);
-      expect(store.installed, {'steam'});
-      expect(store.moreAfterUpdate, isFalse);
-      final steam = apps.firstWhere((a) => a.id == 'steam');
-      expect(steam.terms!.text, contains('PLACEHOLDER TERMS'));
-      expect(steam.removeDataWarning, contains('Games this profile installed'));
-      final plex = apps.firstWhere((a) => a.id == 'plex-htpc');
-      expect(plex.terms!.version, '2025-10-30');
-      expect(plex.free, isFalse);
-      expect(store.stateOf('plex-htpc'), StoreState.available);
+      expect(e?.code, ApiErrorCode.permissionDenied);
+      expect((e!.data! as Map)['reason'], 'profile');
+      final refused = await daemonSystemServices(c).store
+          .catalog()
+          .then<SystemException?>(
+            (_) => null,
+            onError: (Object e) => e as SystemException,
+          );
+      expect(refused?.kind, SystemErrorKind.permissionDenied);
     }, skip: _skipNoSystem());
 
     test(
