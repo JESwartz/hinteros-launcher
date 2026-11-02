@@ -1158,7 +1158,16 @@ String permissionLabel(String name) => switch (name) {
   _ => name,
 };
 
-/// One catalog index entry (format 2); see `catalog.dart` for the parser.
+/// How an app reaches the box.
+enum AppDelivery {
+  /// From the binary cache.
+  download,
+
+  /// Fetched from the vendor and built on the box during install.
+  build,
+}
+
+/// One catalog index entry; see `catalog.dart` for the parser.
 @immutable
 class StoreApp {
   const StoreApp({
@@ -1171,12 +1180,11 @@ class StoreApp {
     this.depends = const [],
     this.terms,
     this.readme,
-    this.free = true,
+    this.unfree = false,
     this.installer = true,
     this.installerDefault = false,
     this.onIso = false,
-    this.isWeb = false,
-    this.buildsOnDevice = false,
+    this.delivery = AppDelivery.download,
     this.icon = const StoreIcon(),
     this.dataPaths = const [],
     this.removeDataWarning,
@@ -1202,7 +1210,9 @@ class StoreApp {
   final List<String> depends;
   final VendorTerms? terms;
   final StoreReadme? readme;
-  final bool free;
+
+  /// Not free software: vendor terms are required.
+  final bool unfree;
 
   /// Listed in the installer's app selection (always true for [onIso]).
   final bool installer;
@@ -1213,12 +1223,8 @@ class StoreApp {
   /// Part of the installer ISO (no network download needed).
   final bool onIso;
 
-  /// A web (kiosk) app rather than a native one.
-  final bool isWeb;
-
-  /// Unfree and not in the binary cache: fetched from the vendor and built
-  /// on the box.
-  final bool buildsOnDevice;
+  /// How the app reaches the box.
+  final AppDelivery delivery;
   final StoreIcon icon;
 
   /// Paths in a profile's home that "remove and delete data" deletes.

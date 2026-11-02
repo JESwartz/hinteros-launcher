@@ -113,7 +113,9 @@ class _ServicePageState extends State<ServicePage> {
       final second = await showConfirm(
         context,
         title: 'Delete all data of ${s.name}?',
-        body: s.setup == ServiceSetup.jellyfin || s.setup == ServiceSetup.plex
+        body:
+            s.setup == ServiceSetup.jellyfinServer ||
+                s.setup == ServiceSetup.plexMediaServer
             ? "The media files stay. You can't undo this."
             : "You can't undo this.",
         confirmLabel: 'Delete data and turn off',
@@ -433,10 +435,10 @@ String librarySubtitle(JellyfinLibrary l) {
 
 /// What "Delete server data" removes, by setup.
 String _dataHint(ServerService s) => switch (s.setup) {
-  ServiceSetup.jellyfin => 'Libraries, accounts and settings.',
-  ServiceSetup.plex => 'Libraries, account link and settings.',
+  ServiceSetup.jellyfinServer => 'Libraries, accounts and settings.',
+  ServiceSetup.plexMediaServer => 'Libraries, account link and settings.',
   ServiceSetup.tailscale => 'Sign-in and settings.',
-  ServiceSetup.cloudflare => 'The tunnel token.',
+  ServiceSetup.cloudflareTunnel => 'The tunnel token.',
   ServiceSetup.none => 'All settings of the service.',
 };
 

@@ -16,7 +16,11 @@ void main() {
 
   group('AppIconCache', () {
     testWidgets('decodes a PNG and finds its colours', (t) async {
-      final e = await load(t, AppIconCache(), '${iconDir()}/jellyfin.png');
+      final e = await load(
+        t,
+        AppIconCache(),
+        '${iconDir()}/jellyfin-desktop.png',
+      );
       final icon = e.icon!;
       expect(icon.image.width, 256);
       // Green square: the tint is green, the icon is not dark.
@@ -48,7 +52,9 @@ void main() {
     testWidgets('a changed file behind the same path is picked up', (t) async {
       final dir = tempDir();
       final f = File('${dir.path}/app.png');
-      f.writeAsBytesSync(File('${iconDir()}/jellyfin.png').readAsBytesSync());
+      f.writeAsBytesSync(
+        File('${iconDir()}/jellyfin-desktop.png').readAsBytesSync(),
+      );
       final c = AppIconCache();
       final a = await load(t, c, f.path);
       // Same revision: served from memory.
@@ -103,7 +109,7 @@ void main() {
         mock: MockDaemon(
           apps: [
             App(
-              id: 'jellyfin',
+              id: 'jellyfin-desktop',
               name: 'Jellyfin',
               kind: AppKind.native,
               permissions: const [],

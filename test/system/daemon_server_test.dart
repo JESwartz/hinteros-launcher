@@ -57,7 +57,7 @@ void main() {
     );
     final j = l.byId('jellyfin-server')!;
     expect(j.state, ServiceState.running);
-    expect(j.setup, ServiceSetup.jellyfin);
+    expect(j.setup, ServiceSetup.jellyfinServer);
     final d = j.detail! as JellyfinDetail;
     expect(d.url, 'http://192.168.1.42:8096');
     expect(

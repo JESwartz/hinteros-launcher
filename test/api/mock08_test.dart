@@ -226,7 +226,10 @@ void main() {
         final rev2 = (await m.systemSettingsGet()).revision;
         await expectLater(
           m.systemAppsInstall(
-            SystemAppsInstallParams(ids: const ['jellyfin'], revision: rev2),
+            SystemAppsInstallParams(
+              ids: const ['jellyfin-desktop'],
+              revision: rev2,
+            ),
           ),
           throwsA(
             isA<ApiException>().having(

@@ -1,17 +1,15 @@
 {
-  "apps": [
+  "entries": [
     {
-      "box": [],
-      "buildsOnDevice": false,
-      "cache": false,
+      "boxFeatures": [],
       "category": "video",
       "conflicts": [],
       "dataPaths": [
         ".local/share/hinteros/firefox/crunchyroll"
       ],
+      "delivery": "download",
       "depends": [],
       "description": "Crunchyroll streams anime series and movies from Japan. Many new episodes come out soon after they show in Japan.",
-      "free": true,
       "homepage": "https://www.crunchyroll.com",
       "icon": {
         "firefoxProfile": true,
@@ -23,27 +21,24 @@
       "needsServices": [],
       "onIso": false,
       "readme": null,
-      "redistributable": true,
       "sizeMiB": 1,
       "starter": null,
       "status": "available",
       "statusReason": null,
       "summary": "Anime series and movies.",
       "terms": null,
-      "type": "web"
+      "unfree": false
     },
     {
-      "box": [],
-      "buildsOnDevice": false,
-      "cache": false,
+      "boxFeatures": [],
       "category": "utilities",
       "conflicts": [],
       "dataPaths": [
         ".local/share/hinteros/firefox/firefox"
       ],
+      "delivery": "download",
       "depends": [],
       "description": "Firefox is a free, open-source web browser from Mozilla. It has tabs, bookmarks and add-ons.",
-      "free": true,
       "homepage": "https://www.mozilla.org/firefox/",
       "icon": {
         "iconUrl": "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/browser/branding/official/content/about-logo@2x.png",
@@ -59,19 +54,16 @@
         "retrieved": "2026-10-25",
         "url": "https://github.com/mozilla-firefox/firefox/blob/efd2d1e6f77570ae6bc5294731a68101e45c81a3/README.md"
       },
-      "redistributable": true,
       "sizeMiB": 1,
       "starter": "ticked",
       "status": "available",
       "statusReason": null,
       "summary": "A web browser.",
       "terms": null,
-      "type": "web"
+      "unfree": false
     },
     {
-      "box": [],
-      "buildsOnDevice": false,
-      "cache": false,
+      "boxFeatures": [],
       "category": "video",
       "conflicts": [],
       "dataPaths": [
@@ -82,44 +74,41 @@
         ".config/Jellyfin Media Player",
         ".cache/Jellyfin Media Player"
       ],
+      "delivery": "download",
       "depends": [],
       "description": "Jellyfin plays the movies, series and music on a Jellyfin media server. The server can be on your home network or on this box.",
-      "free": true,
       "homepage": "https://jellyfin.org",
       "icon": {
         "desktopId": "org.jellyfin.JellyfinDesktop",
         "iconUrl": "https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/SVG/icon-transparent.svg",
         "siteUrl": "https://jellyfin.org"
       },
-      "id": "jellyfin",
+      "id": "jellyfin-desktop",
       "kind": "app",
       "name": "Jellyfin",
       "needsServices": [],
       "onIso": true,
       "readme": {
-        "file": "readme/jellyfin.md",
+        "file": "readme/jellyfin-desktop.md",
         "retrieved": "2026-10-25",
         "url": "https://github.com/jellyfin/jellyfin-desktop/blob/2cb4a4456fd29b5b62d825ef0e5df93ed6913328/README.md"
       },
-      "redistributable": true,
       "sizeMiB": 250,
       "starter": "offered",
       "status": "available",
       "statusReason": null,
       "summary": "An app for your Jellyfin media server.",
       "terms": null,
-      "type": "native"
+      "unfree": false
     },
     {
-      "box": [],
-      "buildsOnDevice": false,
-      "cache": false,
+      "boxFeatures": [],
       "category": "video",
       "conflicts": [],
       "dataPaths": [],
+      "delivery": "download",
       "depends": [],
       "description": "Jellyfin Server keeps your movies, series and music in one library. Jellyfin apps on your home network play from this library.",
-      "free": true,
       "homepage": "https://jellyfin.org",
       "icon": {
         "iconUrl": "https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/SVG/icon-transparent.svg",
@@ -131,19 +120,16 @@
       "needsServices": [],
       "onIso": false,
       "readme": null,
-      "redistributable": true,
       "sizeMiB": 600,
       "starter": null,
       "status": "available",
       "statusReason": null,
       "summary": "A media server for your movies, series and music.",
       "terms": null,
-      "type": "service"
+      "unfree": false
     },
     {
-      "box": [],
-      "buildsOnDevice": false,
-      "cache": false,
+      "boxFeatures": [],
       "category": "games",
       "conflicts": [],
       "dataPaths": [
@@ -151,9 +137,9 @@
         ".cache/Moonlight Game Streaming Project",
         ".local/share/Moonlight Game Streaming Project"
       ],
+      "delivery": "download",
       "depends": [],
       "description": "Moonlight plays games that stream from a PC on your network. The PC runs Sunshine or NVIDIA GameStream.",
-      "free": true,
       "homepage": "https://moonlight-stream.org",
       "icon": {
         "desktopId": "com.moonlight_stream.Moonlight",
@@ -170,19 +156,16 @@
         "retrieved": "2026-10-25",
         "url": "https://github.com/moonlight-stream/moonlight-qt/blob/ac296864ace96f51ad75f78b90644bdbca76c332/README.md"
       },
-      "redistributable": true,
       "sizeMiB": 150,
       "starter": null,
       "status": "available",
       "statusReason": null,
       "summary": "Game streaming from your PC.",
       "terms": null,
-      "type": "native"
+      "unfree": false
     },
     {
-      "box": [],
-      "buildsOnDevice": true,
-      "cache": false,
+      "boxFeatures": [],
       "category": "video",
       "conflicts": [],
       "dataPaths": [
@@ -194,9 +177,9 @@
         ".cache/plex-htpc",
         ".cache/Plex HTPC"
       ],
+      "delivery": "build",
       "depends": [],
       "description": "Plex HTPC is the Plex app for TV screens. It plays movies, series and music from your Plex Media Server and from servers that others share with you.",
-      "free": false,
       "homepage": "https://www.plex.tv",
       "icon": {
         "desktopId": "plex-htpc",
@@ -209,7 +192,6 @@
       "needsServices": [],
       "onIso": false,
       "readme": null,
-      "redistributable": false,
       "sizeMiB": 300,
       "starter": "offered",
       "status": "available",
@@ -222,24 +204,22 @@
         "url": "https://www.plex.tv/about/privacy-legal/plex-terms-of-service/",
         "version": "2025-10-30"
       },
-      "type": "native"
+      "unfree": true
     },
     {
-      "box": [
+      "boxFeatures": [
         "graphics32",
         "steam-devices"
       ],
-      "buildsOnDevice": false,
-      "cache": true,
       "category": "games",
       "conflicts": [],
       "dataPaths": [
         ".local/share/Steam",
         ".steam"
       ],
+      "delivery": "download",
       "depends": [],
       "description": "Steam is Valve's store and launcher for PC games. Big Picture mode shows the store, your games and settings on the TV.",
-      "free": false,
       "homepage": "https://store.steampowered.com",
       "icon": {
         "desktopId": "steam",
@@ -252,7 +232,6 @@
       "needsServices": [],
       "onIso": false,
       "readme": null,
-      "redistributable": true,
       "sandbox": false,
       "sizeMiB": 1000,
       "starter": "offered",
@@ -266,21 +245,19 @@
         "url": "https://store.steampowered.com/subscriber_agreement/",
         "version": "2026-09-10"
       },
-      "type": "native"
+      "unfree": true
     },
     {
-      "box": [],
-      "buildsOnDevice": false,
-      "cache": false,
+      "boxFeatures": [],
       "category": "video",
       "conflicts": [],
       "dataPaths": [
         ".config/VacuumTube",
         ".cache/VacuumTube"
       ],
+      "delivery": "download",
       "depends": [],
       "description": "VacuumTube shows YouTube's TV interface in its own app. You can use a game controller to watch videos and browse channels.",
-      "free": true,
       "homepage": "https://github.com/shy1132/VacuumTube",
       "icon": {
         "desktopId": "VacuumTube",
@@ -297,27 +274,24 @@
         "retrieved": "2026-10-25",
         "url": "https://github.com/shy1132/VacuumTube/blob/21ed770379deefc123c1026774b7d8fc1bc0d84b/README.md"
       },
-      "redistributable": true,
       "sizeMiB": 450,
       "starter": "offered",
       "status": "available",
       "statusReason": null,
       "summary": "An app for YouTube's TV interface.",
       "terms": null,
-      "type": "native"
+      "unfree": false
     },
     {
-      "box": [],
-      "buildsOnDevice": false,
-      "cache": false,
+      "boxFeatures": [],
       "category": "video",
       "conflicts": [],
       "dataPaths": [
         ".local/share/hinteros/firefox/youtube"
       ],
+      "delivery": "download",
       "depends": [],
       "description": "YouTube has videos, music and live streams from creators all over the world. This app shows YouTube's TV interface.",
-      "free": true,
       "homepage": "https://www.youtube.com",
       "icon": {
         "firefoxProfile": true,
@@ -330,15 +304,14 @@
       "needsServices": [],
       "onIso": true,
       "readme": null,
-      "redistributable": true,
       "sizeMiB": 1,
       "starter": "ticked",
       "status": "available",
       "statusReason": null,
       "summary": "Videos, music and live streams.",
       "terms": null,
-      "type": "web"
+      "unfree": false
     }
   ],
-  "indexVersion": 3
+  "indexVersion": 4
 }

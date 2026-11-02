@@ -132,7 +132,7 @@ void main() {
 
   group('vendor terms', () {
     Future<void> toTerms(WidgetTester t, Harness h) async {
-      h.services.mockStore.setInstalled({'plex-htpc', 'jellyfin'});
+      h.services.mockStore.setInstalled({'plex-htpc', 'jellyfin-desktop'});
       await h.pump(t);
       await openApp(t, 1, 1); // Steam (Moonlight comes first)
       await press(t, [kEnter]); // Install
@@ -322,7 +322,7 @@ void main() {
     ) async {
       setView(t);
       final h = harness();
-      h.services.mockStore.setInstalled({'jellyfin'});
+      h.services.mockStore.setInstalled({'jellyfin-desktop'});
       await h.pump(t);
       await openApp(t, 1, 1); // Steam
       expect(find.text('About'), findsOneWidget);
@@ -405,7 +405,7 @@ void main() {
     testWidgets('prompts to install Steam when it is missing', (t) async {
       setView(t);
       final h = harness();
-      h.services.mockStore.setInstalled({'jellyfin'});
+      h.services.mockStore.setInstalled({'jellyfin-desktop'});
       h.mock.apps.removeWhere((a) => a.id == 'steam');
       await h.pump(t);
       await openTab(t, 1);

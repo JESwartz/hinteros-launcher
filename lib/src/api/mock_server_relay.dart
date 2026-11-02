@@ -89,7 +89,7 @@ class MockServerRelay {
   final jellyfin = MockWireService(
     'jellyfin-server',
     'Jellyfin server',
-    Setup.jellyfin,
+    Setup.jellyfinServer,
     icon: const ServiceIcon(
       iconUrl: 'https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/SVG/icon-transparent.svg',
       sha256:
@@ -102,7 +102,7 @@ class MockServerRelay {
   final plex = MockWireService(
     'plex-media-server',
     'Plex Media Server',
-    Setup.plex,
+    Setup.plexMediaServer,
     terms: const ServiceTerms(
       title: 'Plex Terms of Service',
       version: '2025-10-30',
@@ -130,7 +130,7 @@ class MockServerRelay {
   final cloudflare = MockWireService(
     'cloudflare-tunnel',
     'Cloudflare Tunnel',
-    Setup.cloudflare,
+    Setup.cloudflareTunnel,
     icon: const ServiceIcon(
       siteUrl: 'https://www.cloudflare.com/products/tunnel/',
       firefoxProfile: false,
@@ -409,7 +409,7 @@ class MockServerRelay {
   Map<String, dynamic> _detail(MockWireService s) {
     final running = s.tailscale == TailscaleState.running;
     return switch (s.setup) {
-      Setup.jellyfin => JellyfinDetail(
+      Setup.jellyfinServer => JellyfinDetail(
         setupDone: s.setupDone,
         url: 'http://$localIp:8096',
         libraries: List.of(s.libraries),
@@ -419,7 +419,7 @@ class MockServerRelay {
               JellyfinDetailUsersItem(profileId: id, jellyfinUser: name),
         ],
       ).toJson(),
-      Setup.plex => PlexDetail(
+      Setup.plexMediaServer => PlexDetail(
         claimed: s.claimed,
         serverName: 'hinteros',
         url: 'http://$localIp:32400',

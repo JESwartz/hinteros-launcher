@@ -595,7 +595,7 @@ void main() {
 
       testWidgets('it waits while an app is in front', (t) async {
         final h = await updateNeedsRestart(t);
-        await h.launch(t, 'jellyfin');
+        await h.launch(t, 'jellyfin-desktop');
         await finish(t, h);
         expect(find.text('Done'), findsOneWidget);
         expect(countdown, findsNothing);
@@ -608,7 +608,7 @@ void main() {
         await t.pump(const Duration(seconds: 10));
         expect(restartsIn(20), findsOneWidget);
         // An app in front again: it stops, and starts again from 30.
-        await h.launch(t, 'jellyfin');
+        await h.launch(t, 'jellyfin-desktop');
         expect(countdown, findsNothing);
         await t.pump(const Duration(minutes: 1));
         expect(h.services.mockSystem.log, isEmpty);
@@ -668,7 +668,7 @@ void main() {
 
       testWidgets('it waits while an app is in front', (t) async {
         final h = await updateNeedsRestart(t, hide: true);
-        await h.launch(t, 'jellyfin');
+        await h.launch(t, 'jellyfin-desktop');
         await finish(t, h);
         expect(countdown, findsNothing);
         await t.pump(const Duration(minutes: 2));

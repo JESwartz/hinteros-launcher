@@ -546,7 +546,7 @@ void main() {
       await shot(
         t,
         'store_app_detail_1080p',
-        harness(installed: {'jellyfin'}),
+        harness(installed: {'jellyfin-desktop'}),
         run: (t) async {
           await openStore(t);
           await press(t, [kDown, kDown, kDown, kRight, kEnter]);
@@ -557,7 +557,7 @@ void main() {
       await shot(
         t,
         'store_app_readme_1080p',
-        harness(installed: {'jellyfin'}),
+        harness(installed: {'jellyfin-desktop'}),
         run: (t) async {
           await openStore(t);
           // Games: Moonlight, then into its README and a few lines down.
@@ -579,7 +579,7 @@ void main() {
       await shot(
         t,
         'store_app_terms_1080p',
-        harness(installed: {'jellyfin'}),
+        harness(installed: {'jellyfin-desktop'}),
         run: (t) async {
           await openStore(t);
           await press(t, [kDown, kDown, kDown, kRight, kRight, kEnter]);
@@ -590,7 +590,7 @@ void main() {
       await shot(
         t,
         'store_install_confirm_1080p',
-        harness(installed: {'jellyfin'}),
+        harness(installed: {'jellyfin-desktop'}),
         run: (t) async {
           await openStore(t);
           await press(t, [kDown, kDown, kDown, kRight, kDown, kEnter, kEnter]);
@@ -601,7 +601,7 @@ void main() {
       await shot(
         t,
         'store_install_permissions_1080p',
-        harness(installed: {'jellyfin'}),
+        harness(installed: {'jellyfin-desktop'}),
         run: (t) async {
           await openStore(t);
           // Video: the Video player (third row, second column), Install.
@@ -614,7 +614,7 @@ void main() {
       await shot(
         t,
         'store_install_full_access_1080p',
-        harness(installed: {'jellyfin'}),
+        harness(installed: {'jellyfin-desktop'}),
         run: (t) async {
           await openStore(t);
           // Games: Steam (Moonlight comes first), Install.
@@ -623,7 +623,7 @@ void main() {
       );
     });
     testWidgets('app page with permissions, running', (t) async {
-      final h = harness(installed: {'jellyfin', 'mpv'});
+      final h = harness(installed: {'jellyfin-desktop', 'mpv'});
       h.mock.apps.add(
         const App(
           id: 'mpv',
@@ -651,7 +651,7 @@ void main() {
       await shot(
         t,
         'terms_1080p',
-        harness(installed: {'jellyfin'}),
+        harness(installed: {'jellyfin-desktop'}),
         run: (t) async {
           await openStore(t);
           await press(t, [
@@ -675,7 +675,7 @@ void main() {
       await shot(
         t,
         'terms_end_highcontrast_text160_1080p',
-        harness(settings: hc160, installed: {'jellyfin'}),
+        harness(settings: hc160, installed: {'jellyfin-desktop'}),
         run: (t) async {
           await openStore(t);
           await press(t, [
@@ -702,7 +702,7 @@ void main() {
       await shot(
         t,
         'terms_highcontrast_text160_1080p',
-        harness(settings: hc160, installed: {'jellyfin'}),
+        harness(settings: hc160, installed: {'jellyfin-desktop'}),
         run: (t) async {
           await openStore(t);
           await press(t, [
@@ -808,7 +808,7 @@ void main() {
         );
       });
       testWidgets('an app that conflicts with an installed one', (t) async {
-        final h = daemonHarness(installed: {'jellyfin'});
+        final h = daemonHarness(installed: {'jellyfin-desktop'});
         await shot(
           t,
           'store_install_conflict_1080p',
@@ -899,7 +899,7 @@ void main() {
       await shot(
         t,
         'games_steam_missing_1080p',
-        harness(installed: {'jellyfin'}),
+        harness(installed: {'jellyfin-desktop'}),
         run: (t) => openTab(t, 1),
       );
     });

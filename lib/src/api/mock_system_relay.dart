@@ -1007,7 +1007,7 @@ class MockSystemRelay {
       return c != 0 ? c : a.id.compareTo(b.id);
     });
     return StoreListResult(
-      indexVersion: 2,
+      indexVersion: 4,
       apps: apps,
       moreAfterUpdate: _moreAfterUpdate,
     );

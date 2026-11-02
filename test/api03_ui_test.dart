@@ -99,7 +99,7 @@ void main() {
       setView(t);
       final h = Harness();
       await h.pump(t);
-      await h.launch(t, 'jellyfin');
+      await h.launch(t, 'jellyfin-desktop');
       await keys(t, [up]);
       expect(focusLabel(), 'home/continue:0');
       await keys(t, [escape]);
@@ -110,7 +110,7 @@ void main() {
       expect(focusLabel(), 'dialog/buttons:0');
       await keys(t, [enter]);
       expect(find.text('Close Jellyfin?'), findsNothing);
-      expect(h.mock.running.map((a) => a.id), ['jellyfin']);
+      expect(h.mock.running.map((a) => a.id), ['jellyfin-desktop']);
       expect(focusLabel(), 'home/continue:0');
       // Back cancels too.
       await keys(t, [escape, escape]);
@@ -124,7 +124,7 @@ void main() {
       setView(t);
       final h = Harness();
       await h.pump(t);
-      await h.launch(t, 'jellyfin');
+      await h.launch(t, 'jellyfin-desktop');
       final seen = <SessionEvent>[];
       h.mock.events.listen(seen.add);
       await keys(t, [up, escape, right, enter]);
@@ -152,7 +152,7 @@ void main() {
       setView(t);
       final h = Harness();
       await h.pump(t);
-      await h.launch(t, 'jellyfin');
+      await h.launch(t, 'jellyfin-desktop');
       await keys(t, [up, y]);
       expect(find.text('Close Jellyfin?'), findsNothing);
     });
@@ -169,10 +169,10 @@ void main() {
       setView(t);
       final h = Harness();
       await h.pump(t);
-      await h.launch(t, 'jellyfin');
+      await h.launch(t, 'jellyfin-desktop');
       await keys(t, [up, escape]);
       expect(find.text('Close Jellyfin?'), findsOneWidget);
-      h.mock.simulateExit('jellyfin');
+      h.mock.simulateExit('jellyfin-desktop');
       await t.pumpAndSettle();
       expect(find.text('Close Jellyfin?'), findsNothing);
     });

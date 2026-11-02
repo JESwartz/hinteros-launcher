@@ -158,7 +158,7 @@ class DaemonStore implements StoreRepository {
         );
       }
     }
-    if (state == StoreState.available && !a.free && terms == null) return null;
+    if (state == StoreState.available && a.unfree && terms == null) return null;
     final r = a.readme;
     final readmeText = r == null ? null : readReadme(r.file);
     return StoreApp(
@@ -169,18 +169,18 @@ class DaemonStore implements StoreRepository {
       category: StoreCategory.parse(a.category),
       sizeMiB: a.sizeMib,
       homepage: a.homepage,
-      isWeb: a.kind == api.AppKind.web,
       depends: a.depends,
       conflicts: a.conflicts,
       terms: terms,
       readme: readmeText == null
           ? null
           : StoreReadme(url: r!.url, text: readmeText),
-      free: a.free,
-      installer: a.installer,
-      installerDefault: a.installerDefault,
+      unfree: a.unfree,
+      installer: false,
       onIso: a.onIso,
-      buildsOnDevice: a.buildsOnDevice,
+      delivery: a.delivery == api.Delivery.download
+          ? AppDelivery.download
+          : AppDelivery.build,
       dataPaths: a.dataPaths,
       icon: StoreIcon(
         desktopId: a.icon.desktopId,

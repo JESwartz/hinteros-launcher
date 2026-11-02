@@ -39,5 +39,5 @@ const wifiFixture = r'''
 ''';
 
 /// The catalog index as the catalog repo's `index` package generates it
-/// (format 2) with placeholder terms text: `catalog.json` and `terms/`.
+/// with placeholder terms text: `catalog.json` and `terms/`.
 const catalogFixtureDir = 'test/fixtures/catalog';

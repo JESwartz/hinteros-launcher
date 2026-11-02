@@ -29,30 +29,30 @@ void main() {
   testWidgets('shows from the launch until focus_changed hides it', (t) async {
     final h = await start(t);
     expect(view, findsNothing);
-    await h.data.launchApp('jellyfin', 'Jellyfin');
+    await h.data.launchApp('jellyfin-desktop', 'Jellyfin');
     await frames(t);
     expect(view, findsOneWidget);
     expect(find.text('Starting Jellyfin…'), findsOneWidget);
     expect(hint, findsNothing);
-    h.mock.finishStart('jellyfin');
+    h.mock.finishStart('jellyfin-desktop');
     await frames(t);
     expect(view, findsNothing);
   });
 
   testWidgets('no flash when the focus event beats the answer', (t) async {
     final h = await start(t, slow: false);
-    await h.data.launchApp('jellyfin', 'Jellyfin');
+    await h.data.launchApp('jellyfin-desktop', 'Jellyfin');
     await frames(t);
     expect(view, findsNothing);
   });
 
   testWidgets('launching the app that has the focus does not wait', (t) async {
     final h = await start(t, slow: false);
-    await h.data.launchApp('jellyfin', 'Jellyfin');
+    await h.data.launchApp('jellyfin-desktop', 'Jellyfin');
     await frames(t);
-    expect(h.data.focusedApp, 'jellyfin');
+    expect(h.data.focusedApp, 'jellyfin-desktop');
     // Already focused: the daemon sends no focus_changed this time.
-    await h.data.launchApp('jellyfin', 'Jellyfin');
+    await h.data.launchApp('jellyfin-desktop', 'Jellyfin');
     await frames(t);
     expect(h.data.launching, isNull);
     expect(view, findsNothing);
@@ -78,7 +78,7 @@ void main() {
     testWidgets('covers the launcher while the app has the focus', (t) async {
       final (h, _) = await demo(t);
       expect(standIn, findsNothing);
-      await h.data.launchApp('jellyfin', 'Jellyfin');
+      await h.data.launchApp('jellyfin-desktop', 'Jellyfin');
       await frames(t);
       expect(standIn, findsOneWidget);
       expect(find.text('Jellyfin is open'), findsOneWidget);
@@ -89,7 +89,7 @@ void main() {
 
     testWidgets('B goes Home; Enter does not start the app again', (t) async {
       final (h, left) = await demo(t);
-      await h.data.launchApp('jellyfin', 'Jellyfin');
+      await h.data.launchApp('jellyfin-desktop', 'Jellyfin');
       await frames(t);
       await t.sendKeyEvent(LogicalKeyboardKey.enter);
       await frames(t);
@@ -99,12 +99,12 @@ void main() {
       await frames(t);
       expect(left, hasLength(1));
       expect(standIn, findsNothing);
-      expect(h.mock.running.map((a) => a.id), contains('jellyfin'));
+      expect(h.mock.running.map((a) => a.id), contains('jellyfin-desktop'));
     });
 
     testWidgets('a click goes Home', (t) async {
       final (h, left) = await demo(t);
-      await h.data.launchApp('jellyfin', 'Jellyfin');
+      await h.data.launchApp('jellyfin-desktop', 'Jellyfin');
       await frames(t);
       await t.tap(find.byKey(const ValueKey('stand-in-leave')));
       await frames(t);
@@ -114,7 +114,7 @@ void main() {
 
     testWidgets('none on a box', (t) async {
       final h = await start(t, slow: false);
-      await h.data.launchApp('jellyfin', 'Jellyfin');
+      await h.data.launchApp('jellyfin-desktop', 'Jellyfin');
       await frames(t);
       expect(standIn, findsNothing);
     });
@@ -124,13 +124,13 @@ void main() {
     t,
   ) async {
     final h = await start(t);
-    await h.data.launchApp('jellyfin', 'Jellyfin');
+    await h.data.launchApp('jellyfin-desktop', 'Jellyfin');
     await frames(t);
     await t.pump(launchingHintAfter - const Duration(seconds: 1));
     expect(hint, findsNothing);
     await t.pump(const Duration(seconds: 2));
     expect(find.text('The first start can take a minute.'), findsOneWidget);
-    h.mock.finishStart('jellyfin');
+    h.mock.finishStart('jellyfin-desktop');
     await frames(t);
 
     await h.data.launchApp('steam', 'Steam');
@@ -156,7 +156,7 @@ void main() {
 
   testWidgets('Home cancels the wait', (t) async {
     final h = await start(t);
-    await h.data.launchApp('jellyfin', 'Jellyfin');
+    await h.data.launchApp('jellyfin-desktop', 'Jellyfin');
     await frames(t);
     h.mock.pressHome();
     await frames(t);
@@ -173,9 +173,13 @@ void main() {
 
   testWidgets('an app that crashes while starting shows the error', (t) async {
     final h = await start(t);
-    await h.data.launchApp('jellyfin', 'Jellyfin');
+    await h.data.launchApp('jellyfin-desktop', 'Jellyfin');
     await frames(t);
-    h.mock.simulateExit('jellyfin', reason: ExitReason.crashed, exitCode: 1);
+    h.mock.simulateExit(
+      'jellyfin-desktop',
+      reason: ExitReason.crashed,
+      exitCode: 1,
+    );
     await frames(t);
     await frames(t);
     expect(view, findsNothing);
@@ -187,7 +191,7 @@ void main() {
     final h = Harness(settings: const LauncherSettings(reduceMotion: true));
     h.mock.slowStart = true;
     await h.pump(t);
-    await h.data.launchApp('jellyfin', 'Jellyfin');
+    await h.data.launchApp('jellyfin-desktop', 'Jellyfin');
     await t.pumpAndSettle();
     expect(view, findsOneWidget);
   });

@@ -84,7 +84,7 @@ void main() {
       'apps by name with their state, terms text and the installed set',
       () async {
         final (mock, s) = await _setup();
-        mock.system.installedApps.addAll(['jellyfin', 'old-player']);
+        mock.system.installedApps.addAll(['jellyfin-desktop', 'old-player']);
         expect(s.store.loaded, isFalse);
         final apps = await s.store.catalog();
         expect(s.store.loaded, isTrue);
@@ -95,14 +95,14 @@ void main() {
         );
         expect(_app(apps, 'steam').state, StoreState.installed);
         expect(_app(apps, 'moonlight').state, StoreState.available);
-        expect(_app(apps, 'jellyfin').state, StoreState.installed);
+        expect(_app(apps, 'jellyfin-desktop').state, StoreState.installed);
         // A retired app shows only because it is installed.
         expect(_app(apps, 'old-player').state, StoreState.retired);
         expect(
           _app(apps, 'old-player').statusReason,
           'Replaced by the Video player.',
         );
-        expect(s.store.installed, {'steam', 'jellyfin', 'old-player'});
+        expect(s.store.installed, {'steam', 'jellyfin-desktop', 'old-player'});
         expect(s.store.stateOf('steam'), StoreState.installed);
         expect(s.store.stateOf('nothing'), StoreState.available);
         // The terms text comes from the file the daemon names.
@@ -114,9 +114,8 @@ void main() {
           steam.removeDataWarning,
           contains('Games this profile installed'),
         );
-        expect(_app(apps, 'youtube').isWeb, isTrue);
         expect(_app(apps, 'retroarch').depends, ['retroarch-cores']);
-        expect(_app(apps, 'kodi').conflicts, ['jellyfin']);
+        expect(_app(apps, 'kodi').conflicts, ['jellyfin-desktop']);
       },
     );
 
@@ -355,7 +354,7 @@ void main() {
           a.id == 'retroarch-cores'
               ? api.StoreApp.fromJson({
                   ...a.toJson(),
-                  'free': false,
+                  'unfree': true,
                   'terms': {
                     'title': 'Cores terms',
                     'version': '1',
@@ -373,10 +372,10 @@ void main() {
 
     test('app_conflict names both apps', () async {
       final (mock, s) = await _setup();
-      mock.system.installedApps.add('jellyfin');
+      mock.system.installedApps.add('jellyfin-desktop');
       final e = await _fails(s.store.install('kodi'));
       expect(e.kind, SystemErrorKind.appConflict);
-      expect(e.data, {'id': 'kodi', 'conflicts_with': 'jellyfin'});
+      expect(e.data, {'id': 'kodi', 'conflicts_with': 'jellyfin-desktop'});
     });
 
     test('insufficient_resources carries the sizes', () async {

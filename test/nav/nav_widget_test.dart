@@ -30,7 +30,7 @@ void main() {
 
   testWidgets('home rows remember their column', (t) async {
     final h = await start(t);
-    await h.launch(t, 'jellyfin'); // Continue row appears (1 item)
+    await h.launch(t, 'jellyfin-desktop'); // Continue row appears (1 item)
     await h.launch(t, 'steam'); // and a second
     await keys(t, [right, right, right]); // apps:3
     expect(focusLabel(), 'home/apps:3');
@@ -291,7 +291,7 @@ void main() {
     await keys(t, [up, right, right, down]); // tabs, Apps, into the grid
     expect(focusLabel(), startsWith('apps/'));
     // Something starts while Home is not on screen: Home gains a Continue row.
-    await h.launch(t, 'jellyfin');
+    await h.launch(t, 'jellyfin-desktop');
     h.mock.pressHome();
     await t.pumpAndSettle();
     expect(focusLabel(), 'home/continue:0');

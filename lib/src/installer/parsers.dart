@@ -182,7 +182,7 @@ NetworkState parseNetwork(String deviceStatus, {bool reachable = false}) {
 // built without it: the free apps that are on the ISO, no terms needed.
 List<StoreApp> fallbackCatalog() => const [
   StoreApp(
-    id: 'jellyfin',
+    id: 'jellyfin-desktop',
     name: 'Jellyfin',
     summary: 'An app for your Jellyfin media server.',
     category: StoreCategory.video,

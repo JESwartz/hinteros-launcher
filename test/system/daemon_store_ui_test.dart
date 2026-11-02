@@ -182,7 +182,7 @@ void main() {
 
     testWidgets('app_conflict says which app is in the way', (t) async {
       setView(t);
-      final h = harness(installed: {'jellyfin'});
+      final h = harness(installed: {'jellyfin-desktop'});
       await h.pump(t);
       await endStartupCheck(t, h);
       await openApp(t, 2, rows: 1); // Video: Crunchyroll, Jellyfin / Kodi, Plex
@@ -310,11 +310,11 @@ void main() {
 
     testWidgets('a running app is closed first', (t) async {
       setView(t);
-      final h = harness(installed: {'jellyfin'});
+      final h = harness(installed: {'jellyfin-desktop'});
       await h.pump(t);
       await endStartupCheck(t, h);
-      await h.launch(t, 'jellyfin');
-      expect(h.mock.running.map((a) => a.id), ['jellyfin']);
+      await h.launch(t, 'jellyfin-desktop');
+      expect(h.mock.running.map((a) => a.id), ['jellyfin-desktop']);
       h.mock.pressHome();
       await t.pumpAndSettle();
       await openApp(t, 2, more: 1); // Video: Jellyfin
@@ -322,7 +322,7 @@ void main() {
       expect(find.textContaining('Jellyfin closes first'), findsOneWidget);
       await press(t, [kDown, kRight, kEnter]);
       expect(h.mock.running, isEmpty);
-      expect(appsLog(h), ['apps.remove:jellyfin:data=false']);
+      expect(appsLog(h), ['apps.remove:jellyfin-desktop:data=false']);
     });
 
     testWidgets('an app another one needs says which', (t) async {
@@ -541,7 +541,7 @@ void main() {
       await openStore(t);
       await press(t, [kDown]); // All
       final before = find.byType(AppIconImage).evaluate().length;
-      final path = '${iconDir()}/jellyfin.png';
+      final path = '${iconDir()}/jellyfin-desktop.png';
       h.mock.system.setStoreIcon('moonlight', path); // store_changed
       await t.pumpAndSettle();
       await loadIcons(t, [path]);

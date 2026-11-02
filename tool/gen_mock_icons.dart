@@ -185,7 +185,7 @@ final icons = <String, List<Shape>>{
     Shape(disc(0.5, 0.5, 0.13), flat((0x3f, 0xd0, 0xc6))),
   ],
   // Green rounded square with a white ring.
-  'jellyfin': [
+  'jellyfin-desktop': [
     Shape(
       roundRect(0.08, 0.08, 0.92, 0.92, 0.2),
       vgrad((0x5c, 0xc4, 0x6a), (0x2a, 0x8a, 0x46)),

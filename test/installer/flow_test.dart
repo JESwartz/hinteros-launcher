@@ -340,9 +340,11 @@ void main() {
       expect(h.flow.apps!.isSelected('steam'), isFalse);
       expect(find.text('Read and accept'), findsNothing);
       // The ISO's apps still work.
-      final jf = h.flow.apps!.apps.indexWhere((a) => a.id == 'jellyfin');
+      final jf = h.flow.apps!.apps.indexWhere(
+        (a) => a.id == 'jellyfin-desktop',
+      );
       await h.choose(t, 'a$jf');
-      expect(h.flow.apps!.isSelected('jellyfin'), isTrue);
+      expect(h.flow.apps!.isSelected('jellyfin-desktop'), isTrue);
     });
 
     testWidgets('online: Steam needs its terms accepted before Continue', (

@@ -15,7 +15,7 @@ void main() {
     final h = Harness();
     h.mock.appDisplays = 2;
     await h.pump(t);
-    await h.launch(t, 'jellyfin');
+    await h.launch(t, 'jellyfin-desktop');
     await h.launch(t, 'youtube');
     h.mock.pressHome();
     await t.pumpAndSettle();
@@ -34,13 +34,13 @@ void main() {
       expect(find.text('Jellyfin'), findsWidgets);
       expect(find.text('YouTube'), findsWidgets);
       expect(find.text('Cancel'), findsOneWidget);
-      expect(running(h), ['jellyfin', 'youtube']);
+      expect(running(h), ['jellyfin-desktop', 'youtube']);
       // Down to YouTube, A.
       await press(t, [kDown, kEnter]);
       await launch;
       await t.pumpAndSettle();
       expect(find.text('Close an app to open Crunchyroll'), findsNothing);
-      expect(running(h), ['jellyfin', 'crunchyroll']);
+      expect(running(h), ['jellyfin-desktop', 'crunchyroll']);
       expect(h.data.focusedApp, 'crunchyroll');
     },
   );
@@ -55,7 +55,7 @@ void main() {
     await launch;
     await t.pumpAndSettle();
     expect(find.text('Close an app to open Crunchyroll'), findsNothing);
-    expect(running(h), ['jellyfin', 'youtube']);
+    expect(running(h), ['jellyfin-desktop', 'youtube']);
     expect(h.data.launching, isNull);
 
     // Back works like Cancel.
@@ -63,20 +63,20 @@ void main() {
     await t.pumpAndSettle();
     await press(t, [kEscape]);
     await again;
-    expect(running(h), ['jellyfin', 'youtube']);
+    expect(running(h), ['jellyfin-desktop', 'youtube']);
   });
 
   testWidgets('a running app is only focused; Steam needs no display', (
     t,
   ) async {
     final h = await full(t);
-    await h.data.launchApp('jellyfin', 'Jellyfin');
+    await h.data.launchApp('jellyfin-desktop', 'Jellyfin');
     await t.pumpAndSettle();
     expect(find.textContaining('Close an app'), findsNothing);
     await h.data.launchApp('steam', 'Steam');
     await t.pumpAndSettle();
     expect(find.textContaining('Close an app'), findsNothing);
-    expect(running(h), ['jellyfin', 'youtube', 'steam']);
+    expect(running(h), ['jellyfin-desktop', 'youtube', 'steam']);
   });
 
   group('Settings: Apps open at once', () {
@@ -147,7 +147,7 @@ void main() {
       'api_version': apiVersion,
       'client': {'name': 'hinteros-launcher', 'version': '0'},
     });
-    await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin'));
+    await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin-desktop'));
     await mock.appsLaunch(const AppsLaunchParams(url: 'steam://rungameid/620'));
     final err = await mock
         .appsLaunch(const AppsLaunchParams(id: 'youtube'))
@@ -159,7 +159,7 @@ void main() {
     final data = NoAppDisplayData.fromJson(
       (err!.data! as Map).cast<String, dynamic>(),
     );
-    expect([for (final a in data.apps) a.id], ['jellyfin']);
+    expect([for (final a in data.apps) a.id], ['jellyfin-desktop']);
     expect(
       (await mock.appsDisplaysSet(const AppsDisplaysSetParams(count: 3)))
           .active,

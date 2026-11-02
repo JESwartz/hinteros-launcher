@@ -48,10 +48,10 @@ UnitStatus? _unit(api.UnitState? s) => switch (s) {
 };
 
 ServiceSetup _setup(api.Setup? s) => switch (s) {
-  api.Setup.jellyfin => ServiceSetup.jellyfin,
-  api.Setup.plex => ServiceSetup.plex,
+  api.Setup.jellyfinServer => ServiceSetup.jellyfinServer,
+  api.Setup.plexMediaServer => ServiceSetup.plexMediaServer,
   api.Setup.tailscale => ServiceSetup.tailscale,
-  api.Setup.cloudflare => ServiceSetup.cloudflare,
+  api.Setup.cloudflareTunnel => ServiceSetup.cloudflareTunnel,
   // A flow this launcher does not know: only on and off.
   api.Setup.unknown || null => ServiceSetup.none,
 };
@@ -87,7 +87,7 @@ ServiceDetail? _detail(ServiceSetup setup, Object? d) {
   final j = d.cast<String, dynamic>();
   try {
     switch (setup) {
-      case ServiceSetup.jellyfin:
+      case ServiceSetup.jellyfinServer:
         final w = api.JellyfinDetail.fromJson(j);
         return JellyfinDetail(
           setupDone: w.setupDone,
@@ -106,7 +106,7 @@ ServiceDetail? _detail(ServiceSetup setup, Object? d) {
               u.profileId: _line(u.jellyfinUser) ?? u.profileId,
           },
         );
-      case ServiceSetup.plex:
+      case ServiceSetup.plexMediaServer:
         final w = api.PlexDetail.fromJson(j);
         return PlexDetail(
           claimed: w.claimed,
@@ -125,7 +125,7 @@ ServiceDetail? _detail(ServiceSetup setup, Object? d) {
               ? null
               : DateTime.fromMillisecondsSinceEpoch(w.keyExpiry! * 1000),
         );
-      case ServiceSetup.cloudflare:
+      case ServiceSetup.cloudflareTunnel:
         final w = api.CloudflareDetail.fromJson(j);
         return CloudflareDetail(
           tokenSet: w.tokenSet,

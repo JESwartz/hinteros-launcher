@@ -1668,7 +1668,7 @@ class ProfileInfo {
   String toString() => 'ProfileInfo(${jsonEncode(toJson())})';
 }
 
-/// A box feature (catalog format 3): box-wide configuration an app needs, turned on when any owner has such an app.
+/// A box feature: box-wide configuration an app needs, turned on when any owner has such an app.
 enum BoxFeature {
   graphics32('graphics32'),
   steamDevices('steam-devices'),
@@ -1790,6 +1790,23 @@ enum CatalogStatus {
   final String value;
 
   factory CatalogStatus.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
+
+  String toJson() => value;
+}
+
+/// How an app reaches the box. download: from the binary cache. build: fetched from the vendor and prepared on this box during install (a few minutes, needs internet).
+enum Delivery {
+  download('download'),
+  build('build'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
+
+  const Delivery(this.value);
+  final String value;
+
+  factory Delivery.fromJson(String value) =>
       values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
@@ -1927,7 +1944,7 @@ class StoreAppReadme {
   String toString() => 'StoreAppReadme(${jsonEncode(toJson())})';
 }
 
-/// A catalog entry (hinteros-catalog index version 2, fields in snake_case) with its state on this box. Removed entries (tombstones) only have id, name and status_reason; the other fields are empty.
+/// A catalog entry (hinteros-catalog index version 4, fields in snake_case) with its state on this box. Removed entries (tombstones) only have id, name and status_reason; the other fields are empty.
 class StoreApp {
   const StoreApp({
     required this.id,
@@ -1936,21 +1953,17 @@ class StoreApp {
     required this.description,
     required this.category,
     required this.homepage,
-    required this.kind,
     required this.sizeMib,
     required this.icon,
-    required this.requires,
+    required this.boxFeatures,
     required this.depends,
     required this.conflicts,
-    required this.installer,
     required this.onIso,
-    required this.installerDefault,
     required this.dataPaths,
     required this.terms,
     this.readme,
-    required this.buildsOnDevice,
-    required this.free,
-    required this.redistributable,
+    required this.unfree,
+    required this.delivery,
     required this.status,
     required this.statusReason,
     required this.state,
@@ -1969,20 +1982,17 @@ class StoreApp {
   final String category;
   final String homepage;
 
-  /// How the app is launched. Clients must treat unknown values like 'native'.
-  final AppKind kind;
-
   /// Approximate download plus disk use.
   final int sizeMib;
 
   /// Where the real icon is (HinterOS ships no logos): the installed app's desktop file, the vendor's logo URL, discovery on site_url, or the kiosk profile's favicon.
   final StoreAppIcon icon;
-  final List<String> requires;
+
+  /// Box features the app needs.
+  final List<String> boxFeatures;
   final List<String> depends;
   final List<String> conflicts;
-  final bool installer;
   final bool onIso;
-  final bool installerDefault;
 
   /// Deleted in every profile's home by system.apps.remove {delete_data: true}.
   final List<String> dataPaths;
@@ -1993,10 +2003,11 @@ class StoreApp {
   /// The upstream project's README (Markdown, at most 64 KiB), shown on the app's Store page. Absent when the app has none.
   final StoreAppReadme? readme;
 
-  /// Fetched from the vendor and prepared on this box during install (a few minutes, needs internet).
-  final bool buildsOnDevice;
-  final bool free;
-  final bool redistributable;
+  /// Not free software: vendor terms are required.
+  final bool unfree;
+
+  /// How an app reaches the box. download: from the binary cache. build: fetched from the vendor and prepared on this box during install (a few minutes, needs internet).
+  final Delivery delivery;
   final CatalogStatus status;
   final String? statusReason;
   final StoreState state;
@@ -2017,15 +2028,14 @@ class StoreApp {
     description: json['description'] as String,
     category: json['category'] as String,
     homepage: json['homepage'] as String,
-    kind: AppKind.fromJson(json['kind'] as String),
     sizeMib: json['size_mib'] as int,
     icon: StoreAppIcon.fromJson((json['icon'] as Map).cast<String, dynamic>()),
-    requires: (json['requires'] as List).map((x) => x as String).toList(),
+    boxFeatures: (json['box_features'] as List)
+        .map((x) => x as String)
+        .toList(),
     depends: (json['depends'] as List).map((x) => x as String).toList(),
     conflicts: (json['conflicts'] as List).map((x) => x as String).toList(),
-    installer: json['installer'] as bool,
     onIso: json['on_iso'] as bool,
-    installerDefault: json['installer_default'] as bool,
     dataPaths: (json['data_paths'] as List).map((x) => x as String).toList(),
     terms: json['terms'] == null
         ? null
@@ -2037,9 +2047,8 @@ class StoreApp {
         : StoreAppReadme.fromJson(
             (json['readme'] as Map).cast<String, dynamic>(),
           ),
-    buildsOnDevice: json['builds_on_device'] as bool,
-    free: json['free'] as bool,
-    redistributable: json['redistributable'] as bool,
+    unfree: json['unfree'] as bool,
+    delivery: Delivery.fromJson(json['delivery'] as String),
     status: CatalogStatus.fromJson(json['status'] as String),
     statusReason: json['status_reason'] == null
         ? null
@@ -2059,21 +2068,17 @@ class StoreApp {
     'description': description,
     'category': category,
     'homepage': homepage,
-    'kind': kind.toJson(),
     'size_mib': sizeMib,
     'icon': icon.toJson(),
-    'requires': requires,
+    'box_features': boxFeatures,
     'depends': depends,
     'conflicts': conflicts,
-    'installer': installer,
     'on_iso': onIso,
-    'installer_default': installerDefault,
     'data_paths': dataPaths,
     'terms': terms == null ? null : terms!.toJson(),
     if (readme != null) 'readme': readme!.toJson(),
-    'builds_on_device': buildsOnDevice,
-    'free': free,
-    'redistributable': redistributable,
+    'unfree': unfree,
+    'delivery': delivery.toJson(),
     'status': status.toJson(),
     'status_reason': statusReason,
     'state': state.toJson(),
@@ -3456,10 +3461,10 @@ class JobSubject {
 
 /// A service's setup flow in the Server section (catalog setup).
 enum Setup {
-  jellyfin('jellyfin'),
-  plex('plex'),
+  jellyfinServer('jellyfin-server'),
+  plexMediaServer('plex-media-server'),
   tailscale('tailscale'),
-  cloudflare('cloudflare'),
+  cloudflareTunnel('cloudflare-tunnel'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');

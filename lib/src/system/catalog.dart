@@ -12,10 +12,8 @@ import 'models.dart';
 /// vendor terms are installed next to it, under `terms/`.
 const catalogIndexPath = '/run/current-system/sw/share/hinteros/catalog.json';
 
-/// The index versions this parser reads: 3 (catalog format 3: `type`,
-/// `starter`) and 2 (`kind`, `installer`, `installerDefault`), the one of
-/// older systems.
-const catalogIndexVersions = {2, 3};
+/// The index version this parser reads.
+const catalogIndexVersion = 4;
 
 /// Reads a terms file named by an index entry (`terms/<id>-<version>.txt`,
 /// relative to the index). Null when it is missing or unreadable.
@@ -65,7 +63,7 @@ String? readReadmeFile(String path) {
 
 /// The apps of an index, in its order: `status` available only (retired and
 /// removed entries are hidden), each with its terms text read through
-/// [readTerms]. An unfree entry (`free: false`) whose terms are missing,
+/// [readTerms]. An unfree entry (not `unfree: false`) whose terms are missing,
 /// malformed or unreadable is left out: it could not be accepted, so it is
 /// never offered. Unknown categories become Other, unknown fields are ignored.
 /// Throws [FormatException] for another index version or shape.
@@ -76,12 +74,12 @@ List<StoreApp> parseCatalogIndex(
 }) {
   final j = jsonDecode(source);
   if (j is! Map ||
-      !catalogIndexVersions.contains(j['indexVersion']) ||
-      j['apps'] is! List) {
+      j['indexVersion'] != catalogIndexVersion ||
+      j['entries'] is! List) {
     throw const FormatException('unknown catalog index');
   }
   final apps = <StoreApp>[];
-  for (final a in j['apps'] as List) {
+  for (final a in j['entries'] as List) {
     if (a is! Map<String, Object?>) continue;
     final app = _parseApp(a, readTerms, readReadme);
     if (app != null) apps.add(app);
@@ -112,7 +110,7 @@ StoreApp? _parseApp(
   if (id == null || name == null) return null;
   final status = a['status'];
   if (status != 'available') return null;
-  // Services (index 3, `kind: service`) are not apps of a profile.
+  // Services (`kind: service`) are not apps of a profile.
   if (a['kind'] == 'service') return null;
 
   VendorTerms? terms;
@@ -133,7 +131,8 @@ StoreApp? _parseApp(
     }
   }
   // The safety rule: unfree without readable terms is never offered.
-  if (a['free'] != true && terms == null) return null;
+  final unfree = a['unfree'] != false;
+  if (unfree && terms == null) return null;
 
   StoreReadme? readme;
   if (a['readme'] case {'file': final String file} && final r) {
@@ -154,18 +153,17 @@ StoreApp? _parseApp(
     category: StoreCategory.parse(_str(a['category'])),
     sizeMiB: size is num ? size.toInt() : 0,
     homepage: _str(a['homepage']) ?? '',
-    // Index 3 has `type` (web/native/service); index 2 had `kind`.
-    isWeb: (a['type'] ?? a['kind']) == 'web',
     depends: _strs(a['depends']),
     conflicts: _strs(a['conflicts']),
     terms: terms,
     readme: readme,
-    free: a['free'] == true,
-    // Index 3: `starter` offered/ticked; index 2: installer/installerDefault.
-    installer: a['starter'] != null || a['installer'] == true,
-    installerDefault: a['starter'] == 'ticked' || a['installerDefault'] == true,
+    unfree: unfree,
+    installer: a['starter'] != null,
+    installerDefault: a['starter'] == 'ticked',
     onIso: a['onIso'] == true,
-    buildsOnDevice: a['buildsOnDevice'] == true,
+    delivery: a['delivery'] == 'download' || a['delivery'] == null
+        ? AppDelivery.download
+        : AppDelivery.build,
     dataPaths: dataPaths,
     icon: icon is Map
         ? StoreIcon(
@@ -175,13 +173,13 @@ StoreApp? _parseApp(
             firefoxProfile: icon['firefoxProfile'] == true,
           )
         : const StoreIcon(),
-    // Index 3 (optional): `permissions`, name -> "required" / "optional".
+    // Optional: `permissions`, name -> "required" / "optional".
     permissions: [
       if (a['permissions'] case final Map<String, Object?> perms)
         for (final e in perms.entries)
           AppPermission(name: e.key, required: e.value == 'required'),
     ],
-    // Index 3 (optional, apps): `sandbox`, missing = true.
+    // Optional (apps): `sandbox`, missing = true.
     fullAccess: a['sandbox'] == false,
     removeDataWarning: removeDataWarningFor(dataPaths),
   );

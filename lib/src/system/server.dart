@@ -22,7 +22,13 @@ enum ServiceState {
 }
 
 /// The setup flow the catalog gives a service; [none]: only on and off.
-enum ServiceSetup { jellyfin, plex, tailscale, cloudflare, none }
+enum ServiceSetup {
+  jellyfinServer,
+  plexMediaServer,
+  tailscale,
+  cloudflareTunnel,
+  none,
+}
 
 /// systemd's `ActiveState` of the service's unit.
 enum UnitStatus {

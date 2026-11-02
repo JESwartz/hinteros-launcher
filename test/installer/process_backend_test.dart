@@ -105,7 +105,10 @@ exit 2
     final apps = await ProcessInstallerBackend(
       catalogPath: '${dir.path}/none.json',
     ).catalog();
-    expect([for (final a in apps) a.id], ['jellyfin', 'youtube', 'firefox']);
+    expect(
+      [for (final a in apps) a.id],
+      ['jellyfin-desktop', 'youtube', 'firefox'],
+    );
   });
 
   test('a catalog index on the ISO is read, with its terms', () async {

@@ -51,7 +51,7 @@ void _preparePermissions(MockDaemon mock) {
   declare('youtube', const [
     AppPermission(name: 'mic', required: false, granted: true),
   ]);
-  declare('jellyfin', const [
+  declare('jellyfin-desktop', const [
     AppPermission(name: 'gamepad', required: true, granted: true),
   ]);
 }
@@ -160,7 +160,7 @@ Future<void> _prepareSystem(
     case ('system.apps.install', 'already installed'):
       s.installedApps.add('moonlight');
     case ('system.apps.install', 'conflict'):
-      s.installedApps.add('jellyfin');
+      s.installedApps.add('jellyfin-desktop');
     case ('system.apps.remove', 'remove, keep data'):
       s.installedApps.add('moonlight');
     case ('system.apps.remove', 'needed by another app'):
@@ -306,7 +306,11 @@ Future<void> _prepareProfiles(
     case ('system.apps.accept_terms', _):
       p.needsTerms.add('steam');
     case ('system.starter_set.set', _):
-      mock.system.installedApps.addAll(['firefox', 'jellyfin', 'youtube']);
+      mock.system.installedApps.addAll([
+        'firefox',
+        'jellyfin-desktop',
+        'youtube',
+      ]);
   }
   if (err?['code'] == ApiErrorCode.systemUnavailable) {
     mock.system.unavailable = SystemUnavailableDataReason.down;
@@ -503,7 +507,9 @@ void main() {
             await mock.appsLaunch(
               const AppsLaunchParams(command: ['kodi'], name: 'Kodi'),
             );
-            await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin'));
+            await mock.appsLaunch(
+              const AppsLaunchParams(id: 'jellyfin-desktop'),
+            );
           }
           if (method == 'session.restart' && ex.containsKey('error')) {
             mock.sessionRestartAvailable = false;
@@ -739,22 +745,24 @@ void main() {
       Future<void> settle() => Future<void>.delayed(Duration.zero);
 
       test('launch emits app_started then focus_changed', () async {
-        final r = await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin'));
+        final r = await mock.appsLaunch(
+          const AppsLaunchParams(id: 'jellyfin-desktop'),
+        );
         await settle();
-        expect(r.app.id, 'jellyfin');
+        expect(r.app.id, 'jellyfin-desktop');
         expect(seen, [isA<AppStartedEvent>(), isA<FocusChangedEvent>()]);
-        expect((seen[1] as FocusChangedEvent).app, 'jellyfin');
+        expect((seen[1] as FocusChangedEvent).app, 'jellyfin-desktop');
         final running = await mock.appsRunning();
-        expect(running.apps.map((a) => a.id), ['jellyfin']);
-        expect(running.focused, 'jellyfin');
+        expect(running.apps.map((a) => a.id), ['jellyfin-desktop']);
+        expect(running.focused, 'jellyfin-desktop');
       });
 
       test('launching a running app only focuses it', () async {
-        await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin'));
+        await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin-desktop'));
         await mock.appsFocus(const AppsFocusParams(id: null));
         await settle();
         seen.clear();
-        await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin'));
+        await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin-desktop'));
         await settle();
         expect(seen, [isA<FocusChangedEvent>()]);
         expect((await mock.appsRunning()).apps, hasLength(1));
@@ -936,7 +944,7 @@ void main() {
         mock.pressHome();
         expect(mock.oskVisible, isFalse);
         await mock.oskShow();
-        await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin'));
+        await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin-desktop'));
         expect(mock.oskVisible, isFalse);
       });
 
@@ -958,7 +966,7 @@ void main() {
 
       test('input_nav is only sent while the launcher has focus', () async {
         mock.emitNav(NavAction.right);
-        await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin'));
+        await mock.appsLaunch(const AppsLaunchParams(id: 'jellyfin-desktop'));
         await settle();
         seen.clear();
         mock.emitNav(NavAction.right);

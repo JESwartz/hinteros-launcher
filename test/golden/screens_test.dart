@@ -52,7 +52,7 @@ void main() {
 
   // Something running, so Home has a Continue row.
   Future<void> running(WidgetTester t, Harness h) async {
-    await h.launch(t, 'jellyfin');
+    await h.launch(t, 'jellyfin-desktop');
     await h.launch(t, 'steam');
   }
 
@@ -98,7 +98,7 @@ void main() {
         settings: const LauncherSettings(textScale: 1.6, highContrast: true),
       ),
       setup: (t, h) async {
-        await h.launch(t, 'jellyfin');
+        await h.launch(t, 'jellyfin-desktop');
         h.mock.pressHome(); // back to the first card, now in Continue
         await t.pumpAndSettle();
       },
@@ -156,7 +156,7 @@ void main() {
         await h.mock.appsLaunch(
           const AppsLaunchParams(url: 'steam://rungameid/620'),
         );
-        await h.launch(t, 'jellyfin');
+        await h.launch(t, 'jellyfin-desktop');
         h.mock.pressHome();
         await t.pumpAndSettle();
       },
@@ -198,7 +198,7 @@ void main() {
       'launching_1080p',
       h: h,
       setup: (t, h) async {
-        await h.data.launchApp('jellyfin', 'Jellyfin');
+        await h.data.launchApp('jellyfin-desktop', 'Jellyfin');
         await t.pump();
         await t.pump(const Duration(milliseconds: 400));
       },
@@ -223,7 +223,7 @@ void main() {
       t,
       'close_confirm_1080p',
       setup: (t, h) async {
-        await h.launch(t, 'jellyfin');
+        await h.launch(t, 'jellyfin-desktop');
         await h.launch(t, 'steam');
         h.mock.pressHome();
         await t.pumpAndSettle();
@@ -239,7 +239,7 @@ void main() {
         settings: const LauncherSettings(textScale: 1.6, highContrast: true),
       ),
       setup: (t, h) async {
-        await h.launch(t, 'jellyfin');
+        await h.launch(t, 'jellyfin-desktop');
         h.mock.pressHome();
         await t.pumpAndSettle();
       },
@@ -254,7 +254,7 @@ void main() {
       'close_to_open_1080p',
       setup: (t, h) async {
         h.mock.appDisplays = 2;
-        await h.launch(t, 'jellyfin');
+        await h.launch(t, 'jellyfin-desktop');
         await h.launch(t, 'youtube');
         h.mock.pressHome();
         await t.pumpAndSettle();

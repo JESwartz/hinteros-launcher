@@ -15,7 +15,12 @@ import 'version.dart';
 /// entry first, then the default apps; Plex is a Store app).
 const mockApps = <App>[
   App(id: 'steam', name: 'Steam', kind: AppKind.native, permissions: []),
-  App(id: 'jellyfin', name: 'Jellyfin', kind: AppKind.native, permissions: []),
+  App(
+    id: 'jellyfin-desktop',
+    name: 'Jellyfin',
+    kind: AppKind.native,
+    permissions: [],
+  ),
   App(id: 'youtube', name: 'YouTube', kind: AppKind.web, permissions: []),
   App(
     id: 'crunchyroll',
@@ -148,7 +153,16 @@ class MockDaemon extends DaemonConnection {
         for (final a in added) {
           if (this.apps.any((x) => x.id == a.id)) continue;
           this.apps.add(
-            App(id: a.id, name: a.name, kind: a.kind, permissions: const []),
+            App(
+              id: a.id,
+              name: a.name,
+              // The index does not say; a web app always lists its Firefox profile.
+              kind:
+                  a.dataPaths.contains('.local/share/hinteros/firefox/${a.id}')
+                  ? AppKind.web
+                  : AppKind.native,
+              permissions: const [],
+            ),
           );
           changed = true;
         }

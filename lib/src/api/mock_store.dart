@@ -42,10 +42,9 @@ StoreApp mockStoreApp({
   List<String> conflicts = const [],
   List<String> dataPaths = const [],
   StoreAppTerms? terms,
-  bool free = true,
+  bool unfree = false,
   CatalogStatus status = CatalogStatus.available,
   String? statusReason,
-  AppKind kind = AppKind.native,
   StoreAppIcon icon = const StoreAppIcon(firefoxProfile: false),
   List<AppPermission> permissions = const [],
   bool fullAccess = false,
@@ -57,20 +56,16 @@ StoreApp mockStoreApp({
   description: description,
   category: category,
   homepage: 'https://example.invalid/$id',
-  kind: kind,
   sizeMib: sizeMib,
   icon: icon,
-  requires: const [],
+  boxFeatures: const [],
   depends: depends,
   conflicts: conflicts,
-  installer: false,
   onIso: false,
-  installerDefault: false,
   dataPaths: dataPaths,
   terms: terms,
-  buildsOnDevice: false,
-  free: free,
-  redistributable: true,
+  unfree: unfree,
+  delivery: Delivery.download,
   status: status,
   statusReason: statusReason,
   state: StoreState.available,
@@ -88,8 +83,8 @@ List<StoreApp> _fixtureApps(String? dir) {
   final index =
       jsonDecode(readLocalText('$root/catalog.json')!) as Map<String, dynamic>;
   return [
-    for (final a in (index['apps'] as List).cast<Map<String, dynamic>>())
-      // Services (index 3 `kind: service`) are not Store apps, as in the daemon.
+    for (final a in (index['entries'] as List).cast<Map<String, dynamic>>())
+      // Services (`kind: service`) are not Store apps, as in the daemon.
       if (a['kind'] != 'service')
         StoreApp(
           id: a['id'] as String,
@@ -98,9 +93,6 @@ List<StoreApp> _fixtureApps(String? dir) {
           description: a['description'] as String? ?? '',
           category: a['category'] as String? ?? 'other',
           homepage: a['homepage'] as String? ?? '',
-          kind: (a['type'] ?? a['kind']) == 'web'
-              ? AppKind.web
-              : AppKind.native,
           sizeMib: (a['sizeMiB'] as num?)?.toInt() ?? 0,
           icon: () {
             final i = (a['icon'] as Map?)?.cast<String, dynamic>() ?? {};
@@ -112,13 +104,10 @@ List<StoreApp> _fixtureApps(String? dir) {
               path: i['path'] as String?,
             );
           }(),
-          requires: [...(a['requires'] as List? ?? []).cast<String>()],
+          boxFeatures: [...(a['boxFeatures'] as List? ?? []).cast<String>()],
           depends: [...(a['depends'] as List? ?? []).cast<String>()],
           conflicts: [...(a['conflicts'] as List? ?? []).cast<String>()],
-          installer: a['starter'] != null || a['installer'] == true,
           onIso: a['onIso'] == true,
-          installerDefault:
-              a['starter'] == 'ticked' || a['installerDefault'] == true,
           dataPaths: [...(a['dataPaths'] as List? ?? []).cast<String>()],
           terms: a['terms'] is Map
               ? () {
@@ -142,13 +131,12 @@ List<StoreApp> _fixtureApps(String? dir) {
                   );
                 }()
               : null,
-          buildsOnDevice: a['buildsOnDevice'] == true,
-          free: a['free'] == true,
-          redistributable: a['redistributable'] == true,
+          unfree: a['unfree'] != false,
+          delivery: Delivery.fromJson(a['delivery'] as String? ?? 'download'),
           status: CatalogStatus.fromJson(a['status'] as String? ?? 'available'),
           statusReason: a['statusReason'] as String?,
           state: StoreState.available,
-          // Index 3 (optional): name -> "required" / "optional".
+          // Optional: name -> "required" / "optional".
           permissions: [
             for (final e in ((a['permissions'] as Map?) ?? const {}).entries)
               AppPermission(
@@ -205,7 +193,7 @@ List<StoreApp> mockStoreCatalog({String? dir}) => [
     summary: 'A media centre.',
     category: 'video',
     sizeMib: 200,
-    conflicts: const ['jellyfin'],
+    conflicts: const ['jellyfin-desktop'],
   ),
   mockStoreApp(
     id: 'old-player',

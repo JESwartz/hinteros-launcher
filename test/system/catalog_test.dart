@@ -21,7 +21,7 @@ void main() {
         [
           'crunchyroll',
           'firefox',
-          'jellyfin',
+          'jellyfin-desktop',
           'moonlight',
           'plex-htpc',
           'steam',
@@ -39,7 +39,14 @@ void main() {
           for (final a in by.values)
             if (a.installer) a.id,
         ],
-        ['firefox', 'jellyfin', 'plex-htpc', 'steam', 'vacuum-tube', 'youtube'],
+        [
+          'firefox',
+          'jellyfin-desktop',
+          'plex-htpc',
+          'steam',
+          'vacuum-tube',
+          'youtube',
+        ],
       );
       expect(
         [
@@ -53,14 +60,15 @@ void main() {
           for (final a in by.values)
             if (a.onIso) a.id,
         ],
-        ['firefox', 'jellyfin', 'youtube'],
+        ['firefox', 'jellyfin-desktop', 'youtube'],
       );
       expect(by['steam']!.onIso, isFalse);
-      expect(by['steam']!.free, isFalse);
-      expect(by['steam']!.buildsOnDevice, isFalse, reason: 'cache = true');
-      expect(by['plex-htpc']!.buildsOnDevice, isTrue);
-      expect(by['moonlight']!.isWeb, isFalse);
-      expect(by['youtube']!.isWeb, isTrue, reason: 'type web');
+      expect(by['steam']!.unfree, isTrue);
+      expect(by['steam']!.delivery, AppDelivery.download);
+      expect(by['plex-htpc']!.unfree, isTrue);
+      expect(by['plex-htpc']!.delivery, AppDelivery.build);
+      expect(by['moonlight']!.unfree, isFalse);
+      expect(by['moonlight']!.delivery, AppDelivery.download);
     });
 
     test('terms: title, version, url, retrieved, file and the text', () {
@@ -77,8 +85,11 @@ void main() {
 
     test('icon fields and the data paths', () {
       final by = {for (final a in load()) a.id: a};
-      expect(by['jellyfin']!.icon.desktopId, 'org.jellyfin.JellyfinDesktop');
-      expect(by['jellyfin']!.icon.iconUrl, startsWith('https://'));
+      expect(
+        by['jellyfin-desktop']!.icon.desktopId,
+        'org.jellyfin.JellyfinDesktop',
+      );
+      expect(by['jellyfin-desktop']!.icon.iconUrl, startsWith('https://'));
       expect(by['crunchyroll']!.icon.firefoxProfile, isTrue);
       expect(by['crunchyroll']!.icon.siteUrl, startsWith('https://'));
       expect(by['steam']!.dataPaths, contains('.local/share/Steam'));
@@ -90,17 +101,18 @@ void main() {
 
     test('the fixture matches the schema\'s required fields', () {
       final j = jsonDecode(File(index).readAsStringSync()) as Map;
-      expect(j['indexVersion'], 3);
-      for (final a in j['apps'] as List) {
+      expect(j['indexVersion'], 4);
+      for (final a in j['entries'] as List) {
         for (final k in [
           'id',
           'name',
           'kind',
-          'type',
           'starter',
           'onIso',
           'terms',
-          'free',
+          'unfree',
+          'delivery',
+          'boxFeatures',
           'dataPaths',
           'icon',
         ]) {
@@ -112,8 +124,8 @@ void main() {
 
   group('parser rules', () {
     String one(Map<String, Object?> extra) => jsonEncode({
-      'indexVersion': 2,
-      'apps': [
+      'indexVersion': 4,
+      'entries': [
         {
           'id': 'x',
           'name': 'X',
@@ -121,7 +133,7 @@ void main() {
           'category': 'video',
           'sizeMiB': 5,
           'status': 'available',
-          'free': true,
+          'unfree': false,
           'terms': null,
           ...extra,
         },
@@ -139,41 +151,41 @@ void main() {
       };
       // No terms at all.
       expect(
-        parseCatalogIndex(one({'free': false}), readTerms: noTerms),
+        parseCatalogIndex(one({'unfree': true}), readTerms: noTerms),
         isEmpty,
       );
       // Terms listed, file missing.
       expect(
         parseCatalogIndex(
-          one({'free': false, 'terms': terms}),
+          one({'unfree': true, 'terms': terms}),
           readTerms: noTerms,
         ),
         isEmpty,
       );
       // Terms listed and readable: offered.
       final apps = parseCatalogIndex(
-        one({'free': false, 'terms': terms}),
+        one({'unfree': true, 'terms': terms}),
         readTerms: (f) => f == 'terms/x-1.txt' ? 'TEXT' : null,
       );
       expect(apps.single.terms!.text, 'TEXT');
       // A field that is missing counts as unfree.
       expect(
-        parseCatalogIndex(one({'free': null}), readTerms: noTerms),
+        parseCatalogIndex(one({'unfree': null}), readTerms: noTerms),
         isEmpty,
       );
     });
 
     test('retired and removed entries are hidden', () {
       final src = jsonEncode({
-        'indexVersion': 2,
-        'apps': [
+        'indexVersion': 4,
+        'entries': [
           {
             'id': 'gone',
             'name': 'Gone',
             'status': 'removed',
             'statusReason': 'x',
           },
-          {'id': 'old', 'name': 'Old', 'status': 'retired', 'free': true},
+          {'id': 'old', 'name': 'Old', 'status': 'retired', 'unfree': false},
         ],
       });
       expect(parseCatalogIndex(src, readTerms: noTerms), isEmpty);
@@ -187,50 +199,54 @@ void main() {
       expect(apps.single.category, StoreCategory.other);
     });
 
-    test('an index 2 (older systems) still reads', () {
-      final app = parseCatalogIndex(
-        one({'kind': 'web', 'installer': true, 'installerDefault': true}),
-        readTerms: noTerms,
-      ).single;
-      expect(app.isWeb, isTrue);
-      expect(app.installer, isTrue);
-      expect(app.installerDefault, isTrue);
-    });
-
-    test('index 3: starter, type, and no services', () {
-      String v3(Map<String, Object?> a) =>
-          one(a).replaceFirst('"indexVersion":2', '"indexVersion":3');
+    test('starter, and no services', () {
       final offered = parseCatalogIndex(
-        v3({'kind': 'app', 'type': 'web', 'starter': 'offered'}),
+        one({'kind': 'app', 'starter': 'offered'}),
         readTerms: noTerms,
       ).single;
-      expect(offered.isWeb, isTrue);
       expect(offered.installer, isTrue);
       expect(offered.installerDefault, isFalse);
       final ticked = parseCatalogIndex(
-        v3({'kind': 'app', 'type': 'native', 'starter': 'ticked'}),
+        one({'kind': 'app', 'starter': 'ticked'}),
         readTerms: noTerms,
       ).single;
-      expect(ticked.isWeb, isFalse);
       expect(ticked.installerDefault, isTrue);
       final none = parseCatalogIndex(
-        v3({'kind': 'app', 'type': 'web', 'starter': null}),
+        one({'kind': 'app', 'starter': null}),
         readTerms: noTerms,
       ).single;
       expect(none.installer, isFalse);
       expect(
-        parseCatalogIndex(
-          v3({'kind': 'service', 'type': 'service'}),
-          readTerms: noTerms,
-        ),
+        parseCatalogIndex(one({'kind': 'service'}), readTerms: noTerms),
         isEmpty,
       );
     });
 
+    test('delivery: a value this code does not know is a build', () {
+      AppDelivery of(Object? d) => parseCatalogIndex(
+        one({'delivery': d}),
+        readTerms: noTerms,
+      ).single.delivery;
+      expect(of('download'), AppDelivery.download);
+      expect(of('build'), AppDelivery.build);
+      expect(of('later'), AppDelivery.build);
+      expect(of(null), AppDelivery.download);
+    });
+
     test('another index version is refused', () {
+      for (final v in [1, 2, 3, 5]) {
+        expect(
+          () => parseCatalogIndex(
+            '{"indexVersion":$v,"entries":[]}',
+            readTerms: noTerms,
+          ),
+          throwsFormatException,
+        );
+      }
+      // Index 4 keeps its entries under `entries`.
       expect(
         () => parseCatalogIndex(
-          '{"indexVersion":1,"apps":[]}',
+          '{"indexVersion":4,"apps":[]}',
           readTerms: noTerms,
         ),
         throwsFormatException,
@@ -255,7 +271,10 @@ void main() {
     'the fallback offers only what is on the ISO, preselecting defaults',
     () {
       final apps = fallbackCatalog();
-      expect([for (final a in apps) a.id], ['jellyfin', 'youtube', 'firefox']);
+      expect(
+        [for (final a in apps) a.id],
+        ['jellyfin-desktop', 'youtube', 'firefox'],
+      );
       expect(apps.every((a) => a.onIso && !a.hasTerms), isTrue);
       expect(
         [

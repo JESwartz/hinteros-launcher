@@ -26,7 +26,7 @@ String? _skip({bool needsSteam = false}) => _bin == null
 void main() {
   // A generic picture from the repo (tool/gen_mock_icons.dart).
   final iconFixture =
-      '${Directory.current.path}/test/fixtures/icons/jellyfin.png';
+      '${Directory.current.path}/test/fixtures/icons/jellyfin-desktop.png';
   late Directory dir;
   late String sock;
   late File keyLog;

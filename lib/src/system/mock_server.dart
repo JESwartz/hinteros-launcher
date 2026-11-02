@@ -89,12 +89,12 @@ class MockServer implements ServerRepository {
   final jellyfin = MockService(
     'jellyfin-server',
     'Jellyfin server',
-    ServiceSetup.jellyfin,
+    ServiceSetup.jellyfinServer,
   );
   final plex = MockService(
     'plex-media-server',
     'Plex Media Server',
-    ServiceSetup.plex,
+    ServiceSetup.plexMediaServer,
     terms: _plexTerms,
   );
   final tailscale = MockService(
@@ -105,7 +105,7 @@ class MockServer implements ServerRepository {
   final cloudflare = MockService(
     'cloudflare-tunnel',
     'Cloudflare Tunnel',
-    ServiceSetup.cloudflare,
+    ServiceSetup.cloudflareTunnel,
   );
 
   /// The box's address on the local network.
@@ -143,7 +143,7 @@ class MockServer implements ServerRepository {
   String get revision => _revision.toRadixString(16).padLeft(8, '0');
 
   ServiceDetail? _detail(MockService s) => switch (s.setup) {
-    ServiceSetup.jellyfin => JellyfinDetail(
+    ServiceSetup.jellyfinServer => JellyfinDetail(
       setupDone: s.setupDone,
       url: 'http://$localIp:8096',
       libraries: List.of(s.libraries),
@@ -152,7 +152,7 @@ class MockServer implements ServerRepository {
           if (s.setupDone) p.id: p.name,
       },
     ),
-    ServiceSetup.plex => PlexDetail(
+    ServiceSetup.plexMediaServer => PlexDetail(
       claimed: s.claimed,
       serverName: 'hinteros',
       url: 'http://$localIp:32400',
@@ -171,7 +171,7 @@ class MockServer implements ServerRepository {
           ? DateTime.utc(2027, 4, 18)
           : null,
     ),
-    ServiceSetup.cloudflare => CloudflareDetail(
+    ServiceSetup.cloudflareTunnel => CloudflareDetail(
       tokenSet: s.tokenSet,
       connected: s.connected,
       localIp: localIp,
@@ -234,7 +234,7 @@ class MockServer implements ServerRepository {
     final d = iconDir;
     if (d == null) return null;
     final name = switch (id) {
-      'jellyfin-server' => 'jellyfin',
+      'jellyfin-server' => 'jellyfin-desktop',
       'plex-media-server' => 'plex',
       _ => id,
     };
