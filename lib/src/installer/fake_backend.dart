@@ -431,15 +431,7 @@ class FakeInstallerBackend implements InstallerBackend {
   /// install it can keep. Null: it is fine, or does not keep the data.
   FakeScript? _keepRefusal(InstallPlan plan) {
     if (!plan.keepData) return null;
-    const notKept = {
-      'hostname',
-      'admin',
-      'ssh',
-      'base',
-      'apps',
-      'acceptedTerms',
-      'rev',
-    };
+    const notKept = {'base', 'apps', 'acceptedTerms', 'rev'};
     final field = plan.toJson().keys.where(notKept.contains).firstOrNull;
     if (field != null) {
       return FakeScript.refused(
@@ -588,7 +580,12 @@ List<DiskInfo> mockDisks() => const [
     sizeBytes: 1000204886016,
     model: 'Example SATA SSD 1TB',
     transport: 'sata',
-    existing: ExistingInstall(schemaOk: true, version: '0.6.0'),
+    existing: ExistingInstall(
+      schemaOk: true,
+      version: '0.6.0',
+      hostname: 'den',
+      admin: 'alex',
+    ),
   ),
   DiskInfo(
     path: '/dev/mmcblk0',

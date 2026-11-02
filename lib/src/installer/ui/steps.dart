@@ -202,22 +202,23 @@ class NetworkStep extends StatelessWidget {
           );
         } else if (net != null) {
           p.add(Text('Wi-Fi networks', style: t.label), gap: HinterTokens.s3);
+          // The flow scans again by itself while offline.
           if (f.wifi.isEmpty) {
             p.add(
-              f.scanning
+              f.wifiSearching
                   ? const StatusLine('Searching…', busy: true)
                   : Text(
-                      'No networks found. Choose "Search again".',
+                      'No networks found. Choose "Refresh".',
                       style: t.bodyDim,
                     ),
               gap: HinterTokens.s1,
             );
           }
-          for (var i = 0; i < f.wifi.length; i++) {
-            final ap = f.wifi[i];
+          // Keyed by name: a new scan does not move the focus.
+          for (final ap in f.wifi) {
             final connected = ap.inUse || ap.ssid == net.wifiSsid;
             p.item(
-              'w$i',
+              'w:${ap.ssid}',
               onSelect: ap.supported && !f.connecting ? () => _join(ap) : null,
               builder: (focused) => SettingRow(
                 title: ap.ssid,
@@ -240,17 +241,23 @@ class NetworkStep extends StatelessWidget {
             );
           }
         }
+        if (f.waitingForDisks) {
+          p.add(
+            const StatusLine('Looking for disks…', busy: true),
+            gap: HinterTokens.s3,
+          );
+        }
         p.buttons('actions', [
           if (net != null && net.wifiAvailable)
-            btn('Search again', () async {
+            btn('Refresh', () async {
               final scan = f.scanWifi();
               await f.refreshNetwork(force: true, plugWait: true);
               await scan;
               env.console.refocus();
-            }, enabled: !f.scanning && !f.connecting && !f.checking)
+            }, enabled: !f.connecting && !f.checking)
           else
             btn(
-              linkComing && f.checking ? 'Connecting…' : 'Check again',
+              linkComing && f.checking ? 'Connecting…' : 'Refresh',
               () => f.refreshNetwork(force: true, plugWait: true),
               enabled: !f.checking,
             ),
@@ -258,6 +265,7 @@ class NetworkStep extends StatelessWidget {
             f.online ? 'Continue' : 'Continue without internet',
             f.next,
             primary: true,
+            enabled: !f.waitingForDisks,
           ),
         ], gap: HinterTokens.s3);
         return StepPage(
@@ -440,7 +448,7 @@ class DiskStep extends StatelessWidget {
           }
         }
         p.buttons('actions', [
-          btn('Look again', f.loadDisks, enabled: !f.loadingDisks),
+          btn('Refresh', f.loadDisks, enabled: !f.loadingDisks),
           // Confirmed once, on the summary (hold to install).
           btn(
             'Continue',
@@ -476,6 +484,8 @@ class AccountStep extends StatelessWidget {
         final p = Pane(env.region);
         Widget value(String s, {bool dim = false}) =>
             Text(s, style: dim ? t.caption : t.bodyDim.copyWith(color: t.text));
+        // Keep data: an empty password keeps the one on the disk.
+        final unset = f.keepsPassword ? 'Not changed' : 'Not set';
         p.item(
           'user',
           onSelect: () async {
@@ -510,7 +520,7 @@ class AccountStep extends StatelessWidget {
             title: 'Password',
             focused: focused,
             trailing: f.password.isEmpty
-                ? value('Not set', dim: true)
+                ? value(unset, dim: true)
                 : value('•' * f.password.runes.length.clamp(0, 24)),
           ),
         );
@@ -528,7 +538,7 @@ class AccountStep extends StatelessWidget {
             title: 'Password again',
             focused: focused,
             trailing: f.repeat.isEmpty
-                ? value('Not set', dim: true)
+                ? value(unset, dim: true)
                 : value('•' * f.repeat.runes.length.clamp(0, 24)),
           ),
         );
@@ -564,38 +574,34 @@ class OptionsStep extends StatelessWidget {
         final f = env.flow;
         final t = HinterTheme.of(context);
         final p = Pane(env.region);
-        // A keepData plan keeps the computer name and SSH of the install.
-        final keep = f.keepData;
-        if (!keep) {
-          p.item(
-            'host',
-            onSelect: () async {
-              final v = await env.console.editText(
-                title: 'Computer name',
-                initial: f.hostname,
-                hint: 'Lowercase letters, digits and hyphens',
-                maxLength: 63,
-              );
-              if (v != null) f.setHostname(v);
-            },
-            builder: (focused) => SettingRow(
+        p.item(
+          'host',
+          onSelect: () async {
+            final v = await env.console.editText(
               title: 'Computer name',
-              focused: focused,
-              trailing: Text(f.hostname, style: t.body),
-            ),
-          );
-          p.item(
-            'ssh',
-            onSelect: f.toggleSsh,
-            builder: (focused) => SettingRow(
-              title: 'Enable SSH',
-              subtitle:
-                  'Lets other computers on your network log in as the admin.',
-              focused: focused,
-              trailing: ToggleMark(on: f.ssh),
-            ),
-          );
-        }
+              initial: f.hostname,
+              hint: 'Lowercase letters, digits and hyphens',
+              maxLength: 63,
+            );
+            if (v != null) f.setHostname(v);
+          },
+          builder: (focused) => SettingRow(
+            title: 'Computer name',
+            focused: focused,
+            trailing: Text(f.hostname, style: t.body),
+          ),
+        );
+        p.item(
+          'ssh',
+          onSelect: f.toggleSsh,
+          builder: (focused) => SettingRow(
+            title: 'Enable SSH',
+            subtitle:
+                'Lets other computers on your network log in as the admin.',
+            focused: focused,
+            trailing: ToggleMark(on: f.ssh),
+          ),
+        );
         p.item(
           'channel',
           onSelect: f.toggleChannel,
@@ -605,7 +611,7 @@ class OptionsStep extends StatelessWidget {
             trailing: Text(f.channel.label, style: t.body),
           ),
         );
-        final problem = keep ? null : f.hostnameProblem;
+        final problem = f.hostnameProblem;
         if (problem != null) {
           p.add(StatusLine(problem, error: true), gap: HinterTokens.s3);
         }
@@ -736,11 +742,14 @@ class SummaryStep extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               line('Version', f.planVersionLabel),
-              if (!keep) ...[
-                line('Admin user', f.username),
-                line('Computer name', f.hostname),
-                line('SSH', f.ssh ? 'On' : 'Off'),
-              ],
+              line('Admin user', f.username),
+              if (keep)
+                line(
+                  'Admin password',
+                  f.keepsPassword ? 'Not changed' : 'Changed',
+                ),
+              line('Computer name', f.hostname),
+              line('SSH', f.ssh ? 'On' : 'Off'),
               line('Update channel', f.channel.label),
               if (!keep)
                 line('Apps', appNames.isEmpty ? 'None' : appNames.join(', ')),

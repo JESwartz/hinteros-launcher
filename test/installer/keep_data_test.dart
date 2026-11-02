@@ -24,6 +24,9 @@ List<DiskInfo> disksWith(ExistingInstall? existing) {
 }
 
 void main() {
+  /// On the disk step: right after the internet when the disk holds an
+  /// install that can be kept, else (no such install) the last before the
+  /// summary.
   Future<InstallerHarness> toDisk(
     WidgetTester t, {
     FakeInstallerBackend? backend,
@@ -31,7 +34,13 @@ void main() {
     final h = InstallerHarness(backend: backend);
     await h.start(t);
     await h.choose(t, 'actions', 1);
-    expect(h.flow.step, InstallerStep.disk);
+    if (h.flow.diskFirst) {
+      expect(h.flow.step, InstallerStep.disk);
+    } else {
+      expect(h.flow.step, InstallerStep.account);
+      h.flow.go(InstallerStep.disk);
+      await t.pumpAndSettle();
+    }
     return h;
   }
 
@@ -45,13 +54,17 @@ void main() {
     return h;
   }
 
-  /// Keep data, all the way to the summary.
+  /// Keep data, all the way to the summary: the account and the options as
+  /// they come from the disk.
   Future<InstallerHarness> toKeepSummary(
     WidgetTester t, {
     FakeInstallerBackend? backend,
   }) async {
     final h = await toChoice(t, backend: backend);
     await h.choose(t, 'actions', 1);
+    expect(h.flow.step, InstallerStep.account);
+    await h.choose(t, 'actions');
+    expect(h.flow.step, InstallerStep.options);
     await h.choose(t, 'actions');
     expect(h.flow.step, InstallerStep.summary);
     return h;
@@ -106,8 +119,9 @@ void main() {
       expect(find.text('Cannot keep data on this disk.'), findsOneWidget);
       expect(find.textContaining('9.0.0'), findsNothing);
       expect(h.flow.keepData, isFalse);
+      expect(h.flow.diskFirst, isFalse);
       await h.choose(t, 'actions', 1);
-      expect(h.flow.step, InstallerStep.account);
+      expect(h.flow.step, InstallerStep.summary);
     });
 
     testWidgets('a newer install than the medium: both versions, once', (
@@ -240,7 +254,7 @@ void main() {
       await t.pump();
       expect(h.flow.loadingDisks, isTrue);
       expect(buttonEnabled(t, 'Continue'), isFalse);
-      expect(buttonEnabled(t, 'Look again'), isFalse);
+      expect(buttonEnabled(t, 'Refresh'), isFalse);
       expect(find.text('Looking for disks...'), findsOneWidget);
       gate.complete();
       h.backend.disksHold = null;
@@ -253,33 +267,74 @@ void main() {
   });
 
   group('the steps', () {
-    testWidgets('Keep data: only the options, and only the channel', (t) async {
+    testWidgets('Keep data: every step but apps, filled from the disk', (
+      t,
+    ) async {
       final h = await toChoice(t);
-      expect(find.text('Step 2 of 4'), findsOneWidget);
+      expect(find.text('Step 2 of 5'), findsOneWidget);
       await h.choose(t, 'actions', 1);
+      expect(h.flow.step, InstallerStep.account);
+      expect(find.text('Step 3 of 5'), findsOneWidget);
+      expect(find.text('alex'), findsOneWidget);
+      expect(find.text('Not changed'), findsNWidgets(2));
+      expect(buttonEnabled(t, 'Continue'), isTrue);
+      await h.choose(t, 'actions');
       expect(h.flow.step, InstallerStep.options);
-      expect(find.text('Step 3 of 4'), findsOneWidget);
+      expect(find.text('Step 4 of 5'), findsOneWidget);
+      expect(find.text('den'), findsOneWidget);
+      expect(find.text('Enable SSH'), findsOneWidget);
       expect(find.text('Update channel'), findsOneWidget);
-      expect(find.text('Computer name'), findsNothing);
-      expect(find.text('Enable SSH'), findsNothing);
       await h.choose(t, 'actions');
       expect(h.flow.step, InstallerStep.summary);
-      expect(find.text('Step 4 of 4'), findsOneWidget);
+      expect(find.text('Step 5 of 5'), findsOneWidget);
       // And back the same way.
       await h.back(t);
       expect(h.flow.step, InstallerStep.options);
       await h.back(t);
+      expect(h.flow.step, InstallerStep.account);
+      await h.back(t);
       expect(h.flow.step, InstallerStep.disk);
     });
 
-    testWidgets('a bad computer name does not stop Keep data', (t) async {
+    testWidgets('Keep data: a new password is checked as for Erase all', (
+      t,
+    ) async {
+      final h = await toChoice(t);
+      h.flow.setPassword('short');
+      expect(h.flow.accountValid, isFalse);
+      h.flow.setPassword('change-me-now');
+      expect(h.flow.accountValid, isFalse, reason: 'not repeated');
+      h.flow.setRepeat('change-me-now');
+      expect(h.flow.accountValid, isTrue);
+      expect(h.flow.buildPlan().toJson()['admin'], {
+        'user': 'alex',
+        'password': 'change-me-now',
+      });
+    });
+
+    testWidgets('Keep data on an install without an admin: a password', (
+      t,
+    ) async {
+      final h = await toChoice(
+        t,
+        backend: FakeInstallerBackend(
+          disks: disksWith(const ExistingInstall(schemaOk: true)),
+        ),
+      );
+      expect(h.flow.username, isEmpty);
+      expect(h.flow.keepsPassword, isFalse);
+      h.flow.setUsername('james');
+      expect(h.flow.ready, isFalse);
+    });
+
+    testWidgets('a bad computer name stops Keep data too', (t) async {
       final h = await toChoice(t);
       h.flow.setHostname('-bad-');
-      await t.pump();
-      expect(h.flow.ready, isTrue);
-      await h.choose(t, 'actions', 1);
-      expect(buttonEnabled(t, 'Continue'), isTrue);
-      expect(find.textContaining('hyphens'), findsNothing);
+      expect(h.flow.ready, isFalse);
+      h.flow.go(InstallerStep.options);
+      await t.pumpAndSettle();
+      expect(buttonEnabled(t, 'Continue'), isFalse);
+      expect(find.textContaining('hyphens'), findsOneWidget);
     });
 
     testWidgets('Erase all on the same disk: every step again', (t) async {
@@ -297,6 +352,7 @@ void main() {
       t,
     ) async {
       final h = await toKeepSummary(t);
+      await h.back(t);
       await h.back(t);
       await h.back(t);
       await h.choose(t, 'erase');
@@ -321,6 +377,9 @@ void main() {
         'disk': _sda,
         'diskSeq': 2,
         'keepData': true,
+        'hostname': 'den',
+        'admin': {'user': 'alex'},
+        'ssh': {'enable': false},
         'channel': 'stable',
         'network': 'offline',
       });
@@ -341,13 +400,18 @@ void main() {
         'disk': _sda,
         'diskSeq': 2,
         'keepData': true,
+        'hostname': 'den',
+        'admin': {'user': 'alex'},
+        'ssh': {'enable': false},
         'channel': 'beta',
         'network': 'auto',
         'wifi': {'ssid': 'Living Room', 'psk': 'correct horse'},
       });
     });
 
-    testWidgets('answers given for Erase all do not reach the plan', (t) async {
+    testWidgets('answers already given stay; apps and the newer do not', (
+      t,
+    ) async {
       final backend = FakeInstallerBackend(state: online, newer: mockNewer());
       final h = InstallerHarness(backend: backend);
       await h.start(t);
@@ -372,11 +436,15 @@ void main() {
       await h.choose(t, 'keep');
       await h.choose(t, 'actions', 1);
       await h.choose(t, 'actions');
+      await h.choose(t, 'actions');
       expect(h.flow.step, InstallerStep.summary);
       expect(h.flow.buildPlan().toJson(), {
         'disk': _sda,
         'diskSeq': 2,
         'keepData': true,
+        'hostname': 'tv-box',
+        'admin': {'user': 'james', 'password': 'change-me-now'},
+        'ssh': {'enable': true},
         'channel': 'stable',
         'network': 'auto',
       });
@@ -399,6 +467,7 @@ void main() {
       await h.choose(t, 'actions', 1);
       await h.choose(t, 'd1');
       await h.choose(t, 'actions', 1);
+      await h.choose(t, 'actions');
       await h.choose(t, 'channel');
       await h.choose(t, 'actions');
       expect(h.flow.step, InstallerStep.summary);
@@ -426,10 +495,19 @@ void main() {
       );
       expect(find.textContaining('Erase'), findsNothing);
       expect(find.textContaining('deleted'), findsNothing);
-      for (final s in ['Admin user', 'Computer name', 'SSH', 'Apps']) {
-        expect(find.text(s), findsNothing);
+      expect(find.text('Apps'), findsNothing);
+      for (final s in [
+        'Admin user',
+        'Admin password',
+        'Computer name',
+        'SSH',
+        'Update channel',
+      ]) {
+        expect(find.text(s), findsOneWidget);
       }
-      expect(find.text('Update channel'), findsOneWidget);
+      expect(find.text('alex'), findsOneWidget);
+      expect(find.text('Not changed'), findsOneWidget);
+      expect(find.text('den'), findsOneWidget);
     });
 
     testWidgets('Erase all on a disk with an install says it erases', (
@@ -482,7 +560,7 @@ void main() {
       );
     });
 
-    testWidgets('it needs neither an account nor the catalog', (t) async {
+    testWidgets('it needs no new account and no catalog', (t) async {
       final h = InstallerHarness();
       await h.pump(t);
       await h.flow.loadDisks();
@@ -566,6 +644,7 @@ void main() {
       await h.moveTo(t, 'actions', 1); // Change my choices
       await h.accept(t);
       expect(h.flow.step, InstallerStep.summary);
+      await h.back(t);
       await h.back(t);
       await h.back(t);
       expect(h.flow.step, InstallerStep.disk);

@@ -9,18 +9,39 @@ void main() {
       const plan = InstallPlan.keepData(
         disk: '/dev/nvme0n1',
         diskSeq: 1,
+        hostname: 'den',
+        adminUser: 'alex',
         channel: InstallChannel.beta,
       );
       expect(plan.toJson(), {
         'disk': '/dev/nvme0n1',
         'diskSeq': 1,
         'keepData': true,
+        'hostname': 'den',
+        'admin': {'user': 'alex'},
+        'ssh': {'enable': false},
         'channel': 'beta',
         'network': 'auto',
       });
+      const newPassword = InstallPlan.keepData(
+        disk: '/dev/nvme0n1',
+        diskSeq: 1,
+        hostname: 'den',
+        adminUser: 'alex',
+        adminPassword: 'change-me-now',
+        ssh: true,
+      );
+      expect(newPassword.toJson()['admin'], {
+        'user': 'alex',
+        'password': 'change-me-now',
+      });
+      expect(newPassword.toJson()['ssh'], {'enable': true});
+      expect(newPassword.toString(), isNot(contains('change-me-now')));
       const wifi = InstallPlan.keepData(
         disk: '/dev/nvme0n1',
         diskSeq: 1,
+        hostname: 'den',
+        adminUser: 'alex',
         network: PlanNetwork.offline,
         wifiSsid: 'Home',
         wifiPsk: 'secret',

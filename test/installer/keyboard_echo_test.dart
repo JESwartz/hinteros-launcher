@@ -36,7 +36,7 @@ Future<InstallerHarness> _keyboardUp(WidgetTester t) async {
   await h.pump(t);
   h.flow.go(InstallerStep.network);
   await t.pumpAndSettle();
-  await h.choose(t, 'w0');
+  await h.choose(t, 'w:Living Room');
   expect(h.console(t).keyboard, isNotNull);
   return h;
 }

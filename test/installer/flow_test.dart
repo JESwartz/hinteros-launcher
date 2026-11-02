@@ -65,14 +65,14 @@ void main() {
       expect(find.text('Not supported.'), findsOneWidget);
 
       // A wrong password: the error is shown, still offline.
-      await h.choose(t, 'w0');
+      await h.choose(t, 'w:Living Room');
       expect(find.text('Password for Living Room'), findsOneWidget);
       await h.type(t, 'wrong');
       expect(find.textContaining('Check the password'), findsOneWidget);
       expect(h.flow.online, isFalse);
 
       // The right one.
-      await h.choose(t, 'w0');
+      await h.choose(t, 'w:Living Room');
       await h.type(t, 'correct horse');
       expect(find.text('This computer is online.'), findsOneWidget);
       expect(find.text('Connected'), findsOneWidget);
@@ -82,7 +82,7 @@ void main() {
       );
 
       // An unsupported network cannot be chosen.
-      await h.moveTo(t, 'w3');
+      await h.moveTo(t, 'w:Office (802.1X)');
       await h.accept(t);
       expect(backend.calls.contains('connectWifi:Office (802.1X)'), isFalse);
       expect(h.console(t).typing, isFalse);
@@ -94,7 +94,7 @@ void main() {
       );
       final h = InstallerHarness(backend: backend);
       await h.start(t);
-      await h.choose(t, 'w2'); // Cafe Guest
+      await h.choose(t, 'w:Cafe Guest');
       expect(h.console(t).typing, isFalse);
       expect(h.flow.online, isTrue);
       expect(h.flow.joinedSsid, 'Cafe Guest');
@@ -146,14 +146,14 @@ void main() {
       expect(h.backend.calls, isNot(contains('install')));
     });
 
-    testWidgets('Look again: a disk plugged in again is not the chosen one', (
+    testWidgets('Refresh: a disk plugged in again is not the chosen one', (
       t,
     ) async {
       final h = await toDisk(t);
       await h.choose(t, 'd0');
       expect(h.flow.disk!.diskSeq, 1);
       h.backend.replug('/dev/nvme0n1');
-      await h.choose(t, 'actions', 0); // Look again
+      await h.choose(t, 'actions', 0); // Refresh
       expect(h.flow.disk, isNull, reason: 'same path, another disk');
       expect(buttonEnabled(t, 'Continue'), isFalse);
 
@@ -168,7 +168,11 @@ void main() {
         backend: FakeInstallerBackend(disks: [mockDisks()[3], mockDisks()[2]]),
       );
       await h.start(t);
+      // No install to keep: the disk step is the last before the summary.
       await h.choose(t, 'actions', 1);
+      expect(h.flow.step, InstallerStep.account);
+      h.flow.go(InstallerStep.disk);
+      await t.pumpAndSettle();
       expect(find.textContaining('No disk can be used'), findsOneWidget);
       expect(buttonEnabled(t, 'Continue'), isFalse);
     });
@@ -552,11 +556,11 @@ void main() {
       final h = await toSummary(t, backend: backend);
       await h.moveTo(t, 'actions', 1);
       await h.back(t);
-      expect(h.flow.step, InstallerStep.apps);
+      expect(h.flow.step, InstallerStep.disk);
       h.flow.go(InstallerStep.summary);
       await t.pumpAndSettle();
       await h.choose(t, 'actions'); // Back
-      expect(h.flow.step, InstallerStep.apps);
+      expect(h.flow.step, InstallerStep.disk);
       expect(backend.calls, isNot(contains('validate')));
     });
 

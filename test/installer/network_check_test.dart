@@ -16,7 +16,7 @@ const _wired = NetworkState(
 );
 
 /// On the Internet step with a first (instant) check done, then a slow
-/// second one started by "Check again".
+/// second one started by "Refresh".
 Future<(InstallerHarness, Completer<void>)> _slowCheck(WidgetTester t) async {
   final gate = Completer<void>();
   final h = InstallerHarness(backend: FakeInstallerBackend(state: _wired));
@@ -32,7 +32,8 @@ Future<(InstallerHarness, Completer<void>)> _slowCheck(WidgetTester t) async {
 
 void main() {
   liveTests();
-  testWidgets('while checking: spinner rows, Search again disabled', (t) async {
+  rescanTests();
+  testWidgets('while checking: spinner rows, Refresh disabled', (t) async {
     final (h, gate) = await _slowCheck(t);
     expect(h.flow.checking, isTrue);
     expect(find.byKey(const ValueKey('spinner')), findsNWidgets(3));
@@ -41,7 +42,7 @@ void main() {
     expect(find.text('Wi-Fi: Checking…'), findsOneWidget);
     expect(find.text('Network cable: connected.'), findsNothing);
     expect(find.text('This computer is online.'), findsNothing);
-    expect(buttonEnabled(t, 'Search again'), isFalse);
+    expect(buttonEnabled(t, 'Refresh'), isFalse);
 
     // A second request while one runs is ignored.
     final before = h.backend.calls.where((c) => c == 'network').length;
@@ -60,7 +61,7 @@ void main() {
     expect(find.text('Network cable: not connected.'), findsOneWidget);
     expect(find.text('This computer is not online.'), findsOneWidget);
     expect(find.text('Wi-Fi: not connected.'), findsOneWidget);
-    expect(buttonEnabled(t, 'Search again'), isTrue);
+    expect(buttonEnabled(t, 'Refresh'), isTrue);
   });
 
   testWidgets('a check that never answers times out after 10 s', (t) async {
@@ -72,10 +73,10 @@ void main() {
     expect(find.byKey(const ValueKey('spinner')), findsNothing);
     expect(find.textContaining('The check took too long.'), findsOneWidget);
     expect(find.text('This computer is not online.'), findsOneWidget);
-    expect(buttonEnabled(t, 'Check again'), isTrue);
+    expect(buttonEnabled(t, 'Refresh'), isTrue);
   });
 
-  testWidgets('Check again (no Wi-Fi adapter) is disabled while checking', (
+  testWidgets('Refresh (no Wi-Fi adapter) is disabled while checking', (
     t,
   ) async {
     final gate = Completer<void>();
@@ -84,18 +85,20 @@ void main() {
     h.flow.go(InstallerStep.network);
     await h.flow.refreshNetwork();
     await t.pumpAndSettle();
-    expect(buttonEnabled(t, 'Check again'), isTrue);
+    expect(buttonEnabled(t, 'Refresh'), isTrue);
     h.backend.networkHold = gate.future;
     unawaited(h.flow.refreshNetwork());
     await t.pump();
-    expect(buttonEnabled(t, 'Check again'), isFalse);
+    expect(buttonEnabled(t, 'Refresh'), isFalse);
     expect(find.text('Wi-Fi: Checking…'), findsNothing);
     gate.complete();
     await t.pumpAndSettle();
-    expect(buttonEnabled(t, 'Check again'), isTrue);
+    expect(buttonEnabled(t, 'Refresh'), isTrue);
   });
 
-  testWidgets('Wi-Fi scan: spinner, then timeout message', (t) async {
+  testWidgets('Wi-Fi scan: spinner, then timeout message after 35 s', (
+    t,
+  ) async {
     final h = InstallerHarness(
       backend: FakeInstallerBackend(state: _wired, wifi: const []),
     );
@@ -107,14 +110,15 @@ void main() {
     unawaited(h.flow.scanWifi());
     await t.pump();
     expect(find.text('Searching…'), findsOneWidget);
-    expect(buttonEnabled(t, 'Search again'), isFalse);
-    await t.pump(const Duration(seconds: 11));
+    await t.pump(const Duration(seconds: 34));
+    expect(h.flow.scanning, isTrue);
+    await t.pump(const Duration(seconds: 2));
     expect(h.flow.scanning, isFalse);
     expect(
       find.textContaining('The Wi-Fi search took too long.'),
       findsOneWidget,
     );
-    expect(buttonEnabled(t, 'Search again'), isTrue);
+    expect(buttonEnabled(t, 'Refresh'), isTrue);
   });
 }
 
@@ -167,7 +171,7 @@ void liveTests() {
     expect(h.backend.calls.where((c) => c == 'network').length, before + 1);
   });
 
-  testWidgets('Check again forces a connectivity check', (t) async {
+  testWidgets('Refresh forces a connectivity check', (t) async {
     final h = await _onStep(t, _wired);
     h.backend.calls.clear();
     h.backend.emitNetworkEvent();
@@ -179,7 +183,7 @@ void liveTests() {
     expect(h.backend.calls, contains('connectivity check'));
   });
 
-  testWidgets('Check again (no Wi-Fi adapter) forces it too', (t) async {
+  testWidgets('Refresh (no Wi-Fi adapter) forces it too', (t) async {
     final h = await _onStep(
       t,
       const NetworkState(wiredConnected: true, online: true),
@@ -224,5 +228,35 @@ void liveTests() {
     h.backend.emitNetworkEvent();
     await t.pump(const Duration(seconds: 1));
     expect(h.backend.calls.where((c) => c == 'network').length, n);
+  });
+}
+
+void rescanTests() {
+  testWidgets('offline: an empty Wi-Fi list is scanned again by itself', (
+    t,
+  ) async {
+    final backend = FakeInstallerBackend(
+      state: const NetworkState(wifiAvailable: true),
+      wifi: const [],
+    );
+    final h = InstallerHarness(backend: backend);
+    await h.pump(t);
+    // Not pumpAndSettle: the spinner turns while it searches.
+    h.flow.go(InstallerStep.network);
+    await t.pump(const Duration(seconds: 1));
+    final scans = backend.calls.where((c) => c == 'scanWifi').length;
+    expect(scans, greaterThan(0));
+    expect(find.text('Searching…'), findsOneWidget);
+    await t.pump(const Duration(seconds: 4));
+    expect(
+      backend.calls.where((c) => c == 'scanWifi').length,
+      greaterThan(scans),
+    );
+    // Not on another step.
+    h.flow.go(InstallerStep.account);
+    await t.pump();
+    final now = backend.calls.where((c) => c == 'scanWifi').length;
+    await t.pump(const Duration(seconds: 30));
+    expect(backend.calls.where((c) => c == 'scanWifi').length, now);
   });
 }

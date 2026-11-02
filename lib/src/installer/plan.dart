@@ -54,13 +54,14 @@ abstract final class PlanChecks {
   static String? username(String v) {
     if (v.isEmpty) return 'Choose a user name.';
     if (!_user.hasMatch(v)) {
-      return 'Use only lowercase letters, digits, - and _. Start with a '
-          'letter. Use at most 32 characters.';
+      return 'User name: use only lowercase letters, digits, - and _. Start '
+          'with a letter. Use at most 32 characters.';
     }
     if (_reservedUsers.contains(v) ||
         v.startsWith('systemd-') ||
         v.startsWith('nixbld')) {
-      return '"$v" is reserved for the system. Choose another name.';
+      return 'The user name "$v" is reserved for the system. Choose another '
+          'name.';
     }
     return null;
   }
@@ -105,20 +106,22 @@ class InstallPlan {
   }) : keepData = false;
 
   /// A new system on the HinterOS install that is on [disk]: nothing is
-  /// erased. All the rest comes from that install, and the backend refuses
-  /// a plan that has it (`keep-data-field`).
+  /// erased. [hostname], [adminUser] and [ssh] replace the settings of that
+  /// install; an empty [adminPassword] keeps its password. Apps come from
+  /// the install, and the backend refuses a plan that has them
+  /// (`keep-data-field`).
   const InstallPlan.keepData({
     required this.disk,
     required this.diskSeq,
+    required this.hostname,
+    required this.adminUser,
+    this.adminPassword = '',
+    this.ssh = false,
     this.channel = InstallChannel.stable,
     this.network = PlanNetwork.auto,
     this.wifiSsid,
     this.wifiPsk,
   }) : keepData = true,
-       hostname = '',
-       adminUser = '',
-       adminPassword = '',
-       ssh = false,
        apps = const [],
        acceptedTerms = const {},
        rev = null;
@@ -157,11 +160,12 @@ class InstallPlan {
     'disk': disk,
     'diskSeq': diskSeq,
     if (keepData) 'keepData': true,
-    if (!keepData) ...{
-      'hostname': hostname,
-      'admin': {'user': adminUser, 'password': adminPassword},
-      'ssh': {'enable': ssh},
+    'hostname': hostname,
+    'admin': {
+      'user': adminUser,
+      if (!keepData || adminPassword.isNotEmpty) 'password': adminPassword,
     },
+    'ssh': {'enable': ssh},
     'channel': channel.name,
     if (!keepData) 'base': 'unstable',
     'network': network.name,

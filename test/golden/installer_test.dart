@@ -73,7 +73,7 @@ void main() {
       setup: (h) async {
         h.flow.go(InstallerStep.network);
         await t.pumpAndSettle();
-        await h.choose(t, 'w0');
+        await h.choose(t, 'w:Living Room');
         await h.type(t, 'correct horse');
         await h.moveTo(t, 'actions', 1);
       },
@@ -126,8 +126,18 @@ void main() {
     );
   });
 
+  /// From the internet step on, as the installer goes: right to the disk
+  /// step when an install can be kept.
+  Future<void> leaveNetwork(InstallerHarness h, WidgetTester t) async {
+    h.flow.go(InstallerStep.network);
+    await t.pumpAndSettle();
+    h.flow.next();
+    await t.pumpAndSettle();
+  }
+
   /// The disk step with the disk that has HinterOS on it chosen.
   Future<void> toKeepChoice(InstallerHarness h, WidgetTester t) async {
+    await leaveNetwork(h, t);
     h.flow.go(InstallerStep.disk);
     await t.pumpAndSettle();
     await h.choose(t, 'd1');
@@ -223,6 +233,20 @@ void main() {
       setup: (h) async {
         await toKeepChoice(h, t);
         await h.accept(t);
+        await h.choose(t, 'actions');
+        expect(h.flow.step, InstallerStep.options);
+      },
+    );
+  });
+
+  testWidgets('account, Keep data', (t) async {
+    await shot(
+      t,
+      'account_keep',
+      setup: (h) async {
+        await toKeepChoice(h, t);
+        await h.accept(t);
+        expect(h.flow.step, InstallerStep.account);
       },
     );
   });
@@ -274,6 +298,7 @@ void main() {
 
   /// Keep data, on the summary screen.
   Future<void> keepSummary(InstallerHarness h, WidgetTester t) async {
+    await leaveNetwork(h, t);
     h.flow.chooseDisk(h.flow.disks![1]);
     h.flow.go(InstallerStep.summary);
     await t.pumpAndSettle();

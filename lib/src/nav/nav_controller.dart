@@ -108,10 +108,14 @@ class NavRegion extends ChangeNotifier {
 
   /// Removes the registration only if it is still [owner]'s: a section
   /// swapped for another with the same row keys registers its items before
-  /// the old ones are disposed, and must not lose them.
+  /// the old ones are disposed, and must not lose them. Compared by
+  /// identity: two tear-offs of one method (`flow.next` on two screens) are
+  /// equal, but not the same object.
   void releaseSelect(String rowKey, int col, VoidCallback? owner) {
     final k = '$rowKey:$col';
-    if (_selects.containsKey(k) && _selects[k] == owner) _selects.remove(k);
+    if (_selects.containsKey(k) && identical(_selects[k], owner)) {
+      _selects.remove(k);
+    }
   }
 
   /// Registered by items that have a context action (the `context` button,
@@ -124,7 +128,7 @@ class NavRegion extends ChangeNotifier {
   }) {
     if (onContext == null) {
       final k = '$rowKey:$col';
-      if (replacing == null || _contexts[k] == replacing) {
+      if (replacing == null || identical(_contexts[k], replacing)) {
         _contexts.remove(k);
       }
     } else {

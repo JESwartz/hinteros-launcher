@@ -47,9 +47,13 @@ void _mounts(Map<String, Object?> node, List<String> out) {
 ExistingInstall? _existing(Object? v) {
   if (v is! Map) return null;
   final version = v['version'];
+  String? text(Object? x) => x is String && x.isNotEmpty ? x : null;
   return ExistingInstall(
     schemaOk: v['schemaOk'] == true,
-    version: version is String && version.isNotEmpty ? version : null,
+    version: text(version),
+    hostname: text(v['hostname']),
+    admin: text(v['admin']),
+    ssh: v['ssh'] == true,
     channel: InstallChannel.values
         .where((c) => c.name == v['channel'])
         .firstOrNull,

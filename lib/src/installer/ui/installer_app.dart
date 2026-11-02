@@ -80,11 +80,14 @@ class _InstallerScreenState extends State<InstallerScreen> {
     _flow.loadInfo();
     // Needed by the offline rules of the app step.
     _flow.refreshNetwork().then((_) => _flow.loadCatalog());
+    // The order of the steps depends on what is on the disks.
+    _flow.loadDisks();
   }
 
   @override
   void dispose() {
     _flow.removeListener(_onFlow);
+    _flow.stopRescan();
     super.dispose();
   }
 

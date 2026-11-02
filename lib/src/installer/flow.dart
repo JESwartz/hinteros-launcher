@@ -35,10 +35,13 @@ enum InstallerStep {
 
   /// Only when a newer HinterOS than the installer's is on the channel.
   version('HinterOS version'),
-  disk('Disk'),
   account('Admin account'),
   options('Options'),
   apps('Apps'),
+
+  /// Last before the summary; right after the internet when an install
+  /// that can be kept was found ([InstallerFlow.diskFirst]).
+  disk('Disk'),
   summary('Summary'),
   install('Installing'),
   done('Done');
@@ -47,7 +50,7 @@ enum InstallerStep {
   final String title;
 
   /// The question screens (Internet .. Summary) show "Step 3 of 6": see
-  /// [InstallerFlow.questionNumber].
+  /// [InstallerFlow.questions].
   bool get isQuestion => index >= network.index && index <= summary.index;
 }
 
@@ -75,14 +78,26 @@ class InstallerFlow extends ChangeNotifier {
     this.connectTimeout = const Duration(seconds: 30),
     this.plugGrace = const Duration(seconds: 5),
     this.probeRetries = 3,
+    this.scanTimeout = const Duration(seconds: 35),
+    this.rescanEmpty = const Duration(seconds: 3),
+    this.rescanInterval = const Duration(seconds: 10),
     DateTime Function()? clock,
   }) : clock = clock ?? DateTime.now;
 
   /// The time now (tests fix it): how long a package has been building.
   final DateTime Function() clock;
 
-  /// How long a network check or Wi-Fi scan may take before it is given up.
+  /// How long a network check may take before it is given up.
   final Duration checkTimeout;
+
+  /// How long a Wi-Fi scan may take (the backend gives nmcli 30 s).
+  final Duration scanTimeout;
+
+  /// On the internet step, while offline: the Wi-Fi list is scanned again
+  /// after [rescanEmpty] while it is empty, else after [rescanInterval]
+  /// (a Wi-Fi adapter that just started finds networks only bit by bit).
+  final Duration rescanEmpty;
+  final Duration rescanInterval;
 
   /// While a connection is coming up: how often the network is looked at
   /// again, and how long to wait for it before saying "not connected".
@@ -105,48 +120,75 @@ class InstallerFlow extends ChangeNotifier {
   void go(InstallerStep s) {
     if (s == _step) return;
     _step = s;
+    if (s != InstallerStep.network) {
+      _rescan?.cancel();
+      _rescan = null;
+    }
     _syncWatch();
     notifyListeners();
   }
 
-  /// The step after the current one (apps are skipped never: they work
-  /// offline too). After the internet step, and after the options when the
-  /// channel changed, comes the version step if a newer HinterOS is there.
+  /// The question steps in the order they are asked. The disk step is
+  /// last, or right after the internet when an install that can be kept was
+  /// found ([diskFirst]); then the answers of the later steps start from
+  /// that install's. Keep data has no apps step. The version step counts
+  /// only when a newer HinterOS is offered.
+  List<InstallerStep> get questions => [
+    InstallerStep.network,
+    if (versionOffered) InstallerStep.version,
+    ..._order.skip(1),
+  ];
+
+  /// [questions] without the version step, which comes between others.
+  List<InstallerStep> get _order => [
+    InstallerStep.network,
+    if (diskFirst) InstallerStep.disk,
+    InstallerStep.account,
+    InstallerStep.options,
+    if (!keepData) InstallerStep.apps,
+    if (!diskFirst) InstallerStep.disk,
+    InstallerStep.summary,
+  ];
+
+  InstallerStep _after(InstallerStep s) {
+    final o = _order;
+    return o[o.indexOf(s) + 1];
+  }
+
+  /// The step after the current one. After the internet step, and after
+  /// the options when the channel changed, comes the version step if a
+  /// newer HinterOS is there.
   void next() {
     switch (_step) {
+      case InstallerStep.welcome:
+        go(InstallerStep.network);
       case InstallerStep.network:
-        unawaited(
-          _askVersion(
-            after: InstallerStep.disk,
-            before: InstallerStep.network,
-            fromNetwork: true,
-          ),
-        );
+        unawaited(_leaveNetwork());
       case InstallerStep.version:
         go(_versionNext);
-      case InstallerStep.disk when keepData:
-        go(InstallerStep.options);
-      case InstallerStep.options when keepData:
-        // A keepData plan installs the version on the USB stick.
-        go(InstallerStep.summary);
-      case InstallerStep.options:
+      case InstallerStep.options when !keepData:
         // Asks again for another channel, or when the offer was not answered.
+        // (A keepData plan installs the version on the USB stick.)
         if (online &&
             (_checkedChannel != channel ||
                 (versionOffered && _answeredRev != newer!.rev))) {
           unawaited(
             _askVersion(
-              after: InstallerStep.apps,
+              after: _after(InstallerStep.options),
               before: InstallerStep.options,
             ),
           );
         } else {
-          go(InstallerStep.apps);
+          go(_after(InstallerStep.options));
         }
+      case InstallerStep.summary:
+        go(InstallerStep.install);
+      case InstallerStep.install:
+        go(InstallerStep.done);
       case InstallerStep.done:
         break;
       default:
-        go(InstallerStep.values[_step.index + 1]);
+        go(_after(_step));
     }
   }
 
@@ -162,32 +204,62 @@ class InstallerFlow extends ChangeNotifier {
       case InstallerStep.version:
         _askToken++; // a check still running no longer moves on
         go(_versionBack);
-      case InstallerStep.disk:
-        go(versionOffered ? InstallerStep.version : InstallerStep.network);
-      case InstallerStep.options when keepData:
-        go(InstallerStep.disk);
-      case InstallerStep.summary when keepData:
-        go(InstallerStep.options);
+      case InstallerStep.network:
+        _diskToken++; // a wait for the disks no longer moves on
+        go(InstallerStep.welcome);
       default:
-        go(InstallerStep.values[_step.index - 1]);
+        final o = _order;
+        final prev = o[o.indexOf(_step) - 1];
+        go(
+          prev == InstallerStep.network && versionOffered
+              ? InstallerStep.version
+              : prev,
+        );
     }
   }
 
-  /// "Step n of N" on the question screens: the version step counts only
-  /// when a newer HinterOS is offered, and the steps [keepData] does not show
-  /// do not count.
-  int get questionCount => questionNumber(InstallerStep.summary);
+  /// "Step n of N" on the question screens. The version step, also when it
+  /// comes after the options, is step 2.
+  int get questionCount => questions.length;
 
   int questionNumber(InstallerStep s) {
-    var n = s.index - InstallerStep.network.index + 1;
-    if (!versionOffered && s.index > InstallerStep.version.index) n--;
-    if (keepData) {
-      n -= [
-        InstallerStep.account,
-        InstallerStep.apps,
-      ].where((x) => x.index < s.index).length;
+    final i = questions.indexOf(s);
+    return i < 0 ? 2 : i + 1;
+  }
+
+  // ---------------------------------------------------------------- order
+
+  /// The disk step comes right after the internet: an install that can be
+  /// kept was found. Decided once, when the internet step is first left
+  /// (after the first disk listing), so the order does not change while
+  /// the person answers.
+  bool get diskFirst => _diskFirst ?? false;
+  bool? _diskFirst;
+
+  /// Leaving the internet step waits for the first disk listing.
+  bool waitingForDisks = false;
+  int _diskToken = 0;
+
+  Future<void> _leaveNetwork() async {
+    if (waitingForDisks) return;
+    if (_diskFirst == null) {
+      final token = ++_diskToken;
+      if (disks == null || loadingDisks) {
+        waitingForDisks = true;
+        notifyListeners();
+        await loadDisks();
+        waitingForDisks = false;
+        if (_disposed) return;
+        notifyListeners();
+        if (token != _diskToken || _step != InstallerStep.network) return;
+      }
+      _diskFirst = disks!.any((d) => d.canKeep);
     }
-    return n;
+    await _askVersion(
+      after: _after(InstallerStep.network),
+      before: InstallerStep.network,
+      fromNetwork: true,
+    );
   }
 
   // ------------------------------------------------------------- version
@@ -232,7 +304,7 @@ class InstallerFlow extends ChangeNotifier {
   int _askToken = 0;
 
   /// Where the version step goes on to, and back to.
-  InstallerStep _versionNext = InstallerStep.disk;
+  InstallerStep _versionNext = InstallerStep.account;
   InstallerStep _versionBack = InstallerStep.network;
 
   /// The newer revision the person chose; null: the installer's own.
@@ -403,6 +475,7 @@ class InstallerFlow extends ChangeNotifier {
     _pollWake?.complete();
     _netSub?.cancel();
     _netDebounce?.cancel();
+    _rescan?.cancel();
     super.dispose();
   }
 
@@ -430,7 +503,7 @@ class InstallerFlow extends ChangeNotifier {
       networkMessage = e.message;
     } on TimeoutException {
       net = const NetworkState();
-      networkMessage = 'The check took too long. Choose "Check again".';
+      networkMessage = 'The check took too long. Choose "Refresh".';
     }
     checking = false;
     waitingForLink = false;
@@ -490,22 +563,52 @@ class InstallerFlow extends ChangeNotifier {
     }
   }
 
+  Timer? _rescan;
+
+  /// A scan runs, or another one comes soon.
+  bool get wifiSearching => scanning || _rescan != null;
+
   Future<void> scanWifi() async {
     if (scanning) return;
+    _rescan?.cancel();
     scanning = true;
     notifyListeners();
     try {
-      wifi = await backend.scanWifi().timeout(checkTimeout);
+      wifi = await backend.scanWifi().timeout(scanTimeout);
       networkMessage = null;
     } on InstallerException catch (e) {
       wifi = const [];
       networkMessage = e.message;
     } on TimeoutException {
       wifi = const [];
-      networkMessage = 'The Wi-Fi search took too long. Choose "Search again".';
+      networkMessage = 'The Wi-Fi search took too long. Choose "Refresh".';
     }
     scanning = false;
+    if (_disposed) return;
+    _scheduleRescan();
     notifyListeners();
+  }
+
+  /// The screens are gone: no more scans.
+  void stopRescan() {
+    _rescan?.cancel();
+    _rescan = null;
+  }
+
+  /// Scans again later while the internet step shows and the box is not
+  /// online.
+  void _scheduleRescan() {
+    _rescan?.cancel();
+    _rescan = null;
+    if (_step != InstallerStep.network || online) return;
+    if (net != null && !net!.wifiAvailable) return;
+    _rescan = Timer(wifi.isEmpty ? rescanEmpty : rescanInterval, () {
+      if (!_disposed && !connecting) {
+        unawaited(scanWifi());
+      } else if (!_disposed) {
+        _scheduleRescan();
+      }
+    });
   }
 
   /// Joins [ap]; false (with [networkMessage]) when it did not work.
@@ -589,6 +692,7 @@ class InstallerFlow extends ChangeNotifier {
     if (d != null) {
       _setDisk(disks!.where((x) => x.sameDisk(d) && x.usable).firstOrNull);
     }
+    _fillFromInstall();
   }
 
   /// A failed run leaves the disk mounted at /mnt, and the backend does not
@@ -609,6 +713,7 @@ class InstallerFlow extends ChangeNotifier {
 
   void chooseDisk(DiskInfo? d) {
     _setDisk(d);
+    _fillFromInstall();
     notifyListeners();
   }
 
@@ -616,7 +721,18 @@ class InstallerFlow extends ChangeNotifier {
   /// with the default again.
   void chooseKeepData(bool keep) {
     _eraseChosen = !keep;
+    _fillFromInstall();
     notifyListeners();
+  }
+
+  /// Keep data: the answers the person has not given yet start from the
+  /// settings of the install on the disk.
+  void _fillFromInstall() {
+    final e = keepData ? disk?.existing : null;
+    if (e == null) return;
+    if (!_usernameSet && e.admin != null) username = e.admin!;
+    if (!_hostnameSet && e.hostname != null) hostname = e.hostname!;
+    if (!_sshSet) ssh = e.ssh;
   }
 
   // ------------------------------------------------------------- account
@@ -624,9 +740,11 @@ class InstallerFlow extends ChangeNotifier {
   String username = '';
   String password = '';
   String repeat = '';
+  bool _usernameSet = false;
 
   void setUsername(String v) {
     username = v;
+    _usernameSet = true;
     notifyListeners();
   }
 
@@ -640,8 +758,17 @@ class InstallerFlow extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Keep data with no new password: the install keeps its admin password
+  /// (an install without an admin account has none to keep).
+  bool get keepsPassword =>
+      keepData &&
+      password.isEmpty &&
+      repeat.isEmpty &&
+      disk?.existing?.admin != null;
+
   String? get usernameProblem => PlanChecks.username(username);
-  String? get passwordProblem => PlanChecks.password(password);
+  String? get passwordProblem =>
+      keepsPassword ? null : PlanChecks.password(password);
   bool get passwordsMatch => password == repeat;
 
   /// What is wrong with the account so far, for the screen; null when fine.
@@ -662,6 +789,8 @@ class InstallerFlow extends ChangeNotifier {
 
   String hostname = 'hinteros';
   bool ssh = false;
+  bool _hostnameSet = false;
+  bool _sshSet = false;
   InstallChannel _channel = InstallChannel.stable;
 
   /// Keep data stays on the channel of the disk's install unless changed in
@@ -673,11 +802,13 @@ class InstallerFlow extends ChangeNotifier {
 
   void setHostname(String v) {
     hostname = v;
+    _hostnameSet = true;
     notifyListeners();
   }
 
   void toggleSsh() {
     ssh = !ssh;
+    _sshSet = true;
     notifyListeners();
   }
 
@@ -714,7 +845,9 @@ class InstallerFlow extends ChangeNotifier {
 
   bool get ready =>
       disk?.diskSeq != null &&
-      (keepData || (accountValid && hostnameProblem == null && apps != null));
+      accountValid &&
+      hostnameProblem == null &&
+      (keepData || apps != null);
 
   /// The plan, from the answers. Only call when [ready].
   InstallPlan buildPlan() {
@@ -722,6 +855,10 @@ class InstallerFlow extends ChangeNotifier {
       return InstallPlan.keepData(
         disk: disk!.path,
         diskSeq: disk!.diskSeq!,
+        hostname: hostname,
+        adminUser: username,
+        adminPassword: keepsPassword ? '' : password,
+        ssh: ssh,
         channel: channel,
         network: online ? PlanNetwork.auto : PlanNetwork.offline,
         wifiSsid: online ? joinedSsid : null,
