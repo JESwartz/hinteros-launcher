@@ -42,6 +42,7 @@
       "homepage": "https://www.mozilla.org/firefox/",
       "icon": {
         "iconUrl": "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/browser/branding/official/content/about-logo@2x.png",
+        "sha256": "310bc31d4b036d47c84fc020005b08e7b1a2a5582bd9ff54781b647cc0ff3ba3",
         "siteUrl": "https://www.mozilla.org"
       },
       "id": "firefox",
@@ -81,6 +82,7 @@
       "icon": {
         "desktopId": "org.jellyfin.JellyfinDesktop",
         "iconUrl": "https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/SVG/icon-transparent.svg",
+        "sha256": "817c25b47442b192250448fe48cd5f265fe9183bc75aa12030bbe335495255d1",
         "siteUrl": "https://jellyfin.org"
       },
       "id": "jellyfin-desktop",
@@ -112,6 +114,7 @@
       "homepage": "https://jellyfin.org",
       "icon": {
         "iconUrl": "https://raw.githubusercontent.com/jellyfin/jellyfin-ux/master/branding/SVG/icon-transparent.svg",
+        "sha256": "817c25b47442b192250448fe48cd5f265fe9183bc75aa12030bbe335495255d1",
         "siteUrl": "https://jellyfin.org"
       },
       "id": "jellyfin-server",
@@ -144,6 +147,7 @@
       "icon": {
         "desktopId": "com.moonlight_stream.Moonlight",
         "iconUrl": "https://moonlight-stream.org/images/manifest/icons-512.png",
+        "sha256": "46e574737bb8777932049e6a90c577fca9656d8ee14a6228209cbfcb0885ba8b",
         "siteUrl": "https://moonlight-stream.org"
       },
       "id": "moonlight",
@@ -184,6 +188,7 @@
       "icon": {
         "desktopId": "plex-htpc",
         "iconUrl": "https://watch.plex.tv/icons/icon-512x512.png",
+        "sha256": "78072fd57aacff1f73dee6432fb8d7f0360f300b4545422fb767cce638c4e7d3",
         "siteUrl": "https://www.plex.tv"
       },
       "id": "plex-htpc",
@@ -224,6 +229,7 @@
       "icon": {
         "desktopId": "steam",
         "iconUrl": "https://store.steampowered.com/public/shared/images/responsive/share_steam_logo.png",
+        "sha256": "57df95cc7a45db8c9e62306aaa1be8983a62c5b2260cee830a1329fe803172f1",
         "siteUrl": "https://store.steampowered.com"
       },
       "id": "steam",
@@ -262,6 +268,7 @@
       "icon": {
         "desktopId": "VacuumTube",
         "iconUrl": "https://raw.githubusercontent.com/shy1132/VacuumTube/main/assets/icon.png",
+        "sha256": "a315a1175e5835eee596891a65c57ace8d24ba940e464854c7f0d380e56802e7",
         "siteUrl": "https://github.com/shy1132/VacuumTube"
       },
       "id": "vacuum-tube",
@@ -296,6 +303,7 @@
       "icon": {
         "firefoxProfile": true,
         "iconUrl": "https://www.gstatic.com/youtube/img/branding/favicon/favicon_192x192_v2.png",
+        "sha256": "360c7d41cb4feabc5299c79e07d0e51f7f910f93811220a5d82a277792b3e935",
         "siteUrl": "https://www.youtube.com"
       },
       "id": "youtube",
