@@ -56,10 +56,13 @@ class StepPage extends StatelessWidget {
   }
 }
 
-Widget scrolling(Widget pane) => SingleChildScrollView(
-  clipBehavior: Clip.none,
-  padding: const EdgeInsets.all(HinterTokens.s2),
-  child: pane,
+Widget scrolling(Widget pane) => ClipRect(
+  clipper: const _SideBleed(),
+  child: SingleChildScrollView(
+    clipBehavior: Clip.none,
+    padding: const EdgeInsets.all(HinterTokens.s2),
+    child: pane,
+  ),
 );
 
 // ------------------------------------------------------------------ welcome
@@ -356,13 +359,15 @@ class DiskStep extends StatelessWidget {
         final disks = f.disks;
         final p = Pane(env.region);
         p.add(
-          Text(
-            'Choose the disk to install HinterOS on. It will be erased.',
-            style: t.body.copyWith(color: t.danger),
-          ),
+          f.keepData
+              ? Text('Choose the disk to install HinterOS on.', style: t.body)
+              : Text(
+                  'Choose the disk to install HinterOS on. It will be erased.',
+                  style: t.body.copyWith(color: t.danger),
+                ),
         );
-        if (disks == null) {
-          p.add(const StatusLine('Looking for disks...'));
+        if (disks == null || f.loadingDisks) {
+          p.add(const StatusLine('Looking for disks...', busy: true));
         } else if (disks.isEmpty) {
           p.add(
             StatusLine(
@@ -407,10 +412,49 @@ class DiskStep extends StatelessWidget {
             ),
           );
         }
+        final existing = f.disk?.existing;
+        if (existing != null) {
+          final keepable = f.disk!.canKeep;
+          final down = f.keepDowngrade;
+          if (keepable) {
+            p.item(
+              'keep',
+              onSelect: () => f.chooseKeepData(true),
+              builder: (focused) => SettingRow(
+                title: 'Keep data',
+                focused: focused,
+                leading: CheckMark(checked: f.keepData),
+                subtitle: down == null
+                    ? null
+                    : 'This replaces HinterOS ${down.disk} with the older '
+                          '${down.usb}.',
+              ),
+              gap: HinterTokens.s3,
+            );
+          }
+          p.item(
+            'erase',
+            onSelect: () => f.chooseKeepData(false),
+            builder: (focused) => SettingRow(
+              title: 'Erase all',
+              focused: focused,
+              leading: CheckMark(checked: !f.keepData),
+            ),
+            gap: keepable ? HinterTokens.s1 + 4 : HinterTokens.s3,
+          );
+          if (!keepable) {
+            p.add(const StatusLine('Cannot keep data on this disk.'));
+          }
+        }
         p.buttons('actions', [
-          btn('Look again', f.loadDisks),
-          // Erasing is confirmed once, on the summary (hold to erase).
-          btn('Continue', f.next, primary: true, enabled: f.disk != null),
+          btn('Look again', f.loadDisks, enabled: !f.loadingDisks),
+          // Confirmed once, on the summary (hold to install).
+          btn(
+            'Continue',
+            f.next,
+            primary: true,
+            enabled: f.disk != null && !f.loadingDisks,
+          ),
         ], gap: HinterTokens.s3);
         return StepPage(
           step: InstallerStep.disk,
@@ -527,34 +571,38 @@ class OptionsStep extends StatelessWidget {
         final f = env.flow;
         final t = HinterTheme.of(context);
         final p = Pane(env.region);
-        p.item(
-          'host',
-          onSelect: () async {
-            final v = await env.console.editText(
+        // A keepData plan keeps the computer name and SSH of the install.
+        final keep = f.keepData;
+        if (!keep) {
+          p.item(
+            'host',
+            onSelect: () async {
+              final v = await env.console.editText(
+                title: 'Computer name',
+                initial: f.hostname,
+                hint: 'Lowercase letters, digits and hyphens',
+                maxLength: 63,
+              );
+              if (v != null) f.setHostname(v);
+            },
+            builder: (focused) => SettingRow(
               title: 'Computer name',
-              initial: f.hostname,
-              hint: 'Lowercase letters, digits and hyphens',
-              maxLength: 63,
-            );
-            if (v != null) f.setHostname(v);
-          },
-          builder: (focused) => SettingRow(
-            title: 'Computer name',
-            focused: focused,
-            trailing: Text(f.hostname, style: t.body),
-          ),
-        );
-        p.item(
-          'ssh',
-          onSelect: f.toggleSsh,
-          builder: (focused) => SettingRow(
-            title: 'Enable SSH',
-            subtitle:
-                'Lets other computers on your network log in as the admin.',
-            focused: focused,
-            trailing: ToggleMark(on: f.ssh),
-          ),
-        );
+              focused: focused,
+              trailing: Text(f.hostname, style: t.body),
+            ),
+          );
+          p.item(
+            'ssh',
+            onSelect: f.toggleSsh,
+            builder: (focused) => SettingRow(
+              title: 'Enable SSH',
+              subtitle:
+                  'Lets other computers on your network log in as the admin.',
+              focused: focused,
+              trailing: ToggleMark(on: f.ssh),
+            ),
+          );
+        }
         p.item(
           'channel',
           onSelect: f.toggleChannel,
@@ -564,7 +612,7 @@ class OptionsStep extends StatelessWidget {
             trailing: Text(f.channel.label, style: t.body),
           ),
         );
-        final problem = f.hostnameProblem;
+        final problem = keep ? null : f.hostnameProblem;
         if (problem != null) {
           p.add(StatusLine(problem, error: true), gap: HinterTokens.s3);
         }
@@ -620,12 +668,12 @@ class AppsStep extends StatelessWidget {
 
 // ------------------------------------------------------------------ summary
 
-/// How long A is held on "Erase and install" (the one confirmation that the
-/// disk is erased).
+/// How long A is held on "Erase and install" or "Keep data and install" (the
+/// one confirmation of what happens to the disk).
 const eraseHold = Duration(seconds: 5);
 
-/// The answers, and the one place that erases the disk: a hold of
-/// [eraseHold] on "Erase and install". Back goes back.
+/// The answers, and the one place that starts the install: a hold of
+/// [eraseHold] on the button that says what it does. Back goes back.
 class SummaryStep extends StatelessWidget {
   const SummaryStep({super.key, required this.env});
 
@@ -650,10 +698,14 @@ class SummaryStep extends StatelessWidget {
           ),
         );
         final d = f.disk;
+        final keep = f.keepData;
+        final action = keep ? 'Keep data and install' : 'Erase and install';
+        final mark = keep ? t.accent : t.danger;
         final appNames = [
           for (final a in f.apps?.selectedApps ?? const []) a.name,
         ];
         // The danger does not rely on colour alone: a heading and a border.
+        // Keeping the data looks different, and says so in the same place.
         p.add(
           Container(
             width: double.infinity,
@@ -661,18 +713,25 @@ class SummaryStep extends StatelessWidget {
             decoration: BoxDecoration(
               color: t.surface,
               borderRadius: BorderRadius.circular(HinterTokens.radiusCard),
-              border: Border.all(color: t.danger, width: 6),
+              border: Border.all(color: mark, width: 6),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  d == null ? 'No disk' : 'Erase ${d.title}, ${d.sizeLabel}',
-                  style: t.headline.copyWith(color: t.danger),
+                  d == null
+                      ? 'No disk'
+                      : '${keep ? 'Keep data on' : 'Erase'} '
+                            '${d.title}, ${d.sizeLabel}',
+                  style: t.headline.copyWith(color: keep ? t.text : t.danger),
                 ),
                 const SizedBox(height: HinterTokens.s1),
                 Text(
-                  'Everything on this disk is deleted. You cannot undo this.',
+                  keep
+                      ? 'Your files stay on this disk. HinterOS is installed '
+                            'again.'
+                      : 'Everything on this disk is deleted. You cannot undo '
+                            'this.',
                   style: t.body,
                 ),
               ],
@@ -684,11 +743,14 @@ class SummaryStep extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               line('Version', f.planVersionLabel),
-              line('Admin user', f.username),
-              line('Computer name', f.hostname),
-              line('SSH', f.ssh ? 'On' : 'Off'),
+              if (!keep) ...[
+                line('Admin user', f.username),
+                line('Computer name', f.hostname),
+                line('SSH', f.ssh ? 'On' : 'Off'),
+              ],
               line('Update channel', f.channel.label),
-              line('Apps', appNames.isEmpty ? 'None' : appNames.join(', ')),
+              if (!keep)
+                line('Apps', appNames.isEmpty ? 'None' : appNames.join(', ')),
               line(
                 'Internet',
                 f.online
@@ -720,7 +782,8 @@ class SummaryStep extends StatelessWidget {
                 region: env.region,
                 rowKey: 'actions',
                 col: 1,
-                label: 'Erase and install',
+                label: action,
+                danger: !keep,
                 duration: eraseHold,
                 enabled: f.ready,
                 onDone: () {
@@ -735,7 +798,7 @@ class SummaryStep extends StatelessWidget {
         );
         p.add(
           Text(
-            'Hold A on Erase and install for ${eraseHold.inSeconds} seconds.',
+            'Hold A on $action for ${eraseHold.inSeconds} seconds.',
             style: t.caption,
           ),
         );

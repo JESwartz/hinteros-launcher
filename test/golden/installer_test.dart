@@ -126,6 +126,50 @@ void main() {
     );
   });
 
+  /// The disk step with the disk that has HinterOS on it chosen.
+  Future<void> toKeepChoice(InstallerHarness h, WidgetTester t) async {
+    h.flow.go(InstallerStep.disk);
+    await t.pumpAndSettle();
+    await h.choose(t, 'd1');
+    await h.moveTo(t, 'actions', 1);
+  }
+
+  /// [existing] on the disk with HinterOS on it.
+  List<DiskInfo> withExisting(ExistingInstall existing) {
+    final d = mockDisks();
+    return [d[0], d[1].withInstall(existing), ...d.skip(2)];
+  }
+
+  testWidgets('disk: Keep data or Erase all', (t) async {
+    await shot(t, 'disk_keep', setup: (h) => toKeepChoice(h, t));
+  });
+
+  testWidgets('disk: Keep data would install an older HinterOS', (t) async {
+    await shot(
+      t,
+      'disk_keep_older',
+      backend: FakeInstallerBackend(
+        disks: withExisting(
+          const ExistingInstall(schemaOk: true, version: '0.9.0'),
+        ),
+      ),
+      setup: (h) => toKeepChoice(h, t),
+    );
+  });
+
+  testWidgets('disk: an install that cannot be kept', (t) async {
+    await shot(
+      t,
+      'disk_keep_refused',
+      backend: FakeInstallerBackend(
+        disks: withExisting(
+          const ExistingInstall(schemaOk: false, version: '9.0.0'),
+        ),
+      ),
+      setup: (h) => toKeepChoice(h, t),
+    );
+  });
+
   testWidgets('account with a password that does not match', (t) async {
     await shot(
       t,
@@ -172,6 +216,17 @@ void main() {
     );
   });
 
+  testWidgets('options, Keep data', (t) async {
+    await shot(
+      t,
+      'options_keep',
+      setup: (h) async {
+        await toKeepChoice(h, t);
+        await h.accept(t);
+      },
+    );
+  });
+
   testWidgets('apps, offline', (t) async {
     await shot(
       t,
@@ -214,6 +269,56 @@ void main() {
       'summary_highcontrast',
       settings: const LauncherSettings(highContrast: true, textScale: 1.4),
       setup: (h) => filled(h, t),
+    );
+  });
+
+  /// Keep data, on the summary screen.
+  Future<void> keepSummary(InstallerHarness h, WidgetTester t) async {
+    h.flow.chooseDisk(h.flow.disks![1]);
+    h.flow.go(InstallerStep.summary);
+    await t.pumpAndSettle();
+  }
+
+  testWidgets('summary, Keep data', (t) async {
+    await shot(t, 'summary_keep', setup: (h) => keepSummary(h, t));
+  });
+
+  testWidgets('summary, Keep data, high contrast and large text', (t) async {
+    await shot(
+      t,
+      'summary_keep_highcontrast',
+      settings: const LauncherSettings(highContrast: true, textScale: 1.4),
+      setup: (h) => keepSummary(h, t),
+    );
+  });
+
+  testWidgets('progress, Keep data', (t) async {
+    await shot(
+      t,
+      'progress_keep',
+      backend: FakeInstallerBackend(delay: const Duration(milliseconds: 50)),
+      settle: false,
+      setup: (h) async {
+        await keepSummary(h, t);
+        h.flow.go(InstallerStep.install);
+        unawaited(h.flow.startInstall());
+        for (var i = 0; i < 600 && h.flow.percent < 20; i++) {
+          await t.pump(const Duration(milliseconds: 10));
+        }
+      },
+    );
+    await t.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('the install that keeps data did not finish (exit 1)', (t) async {
+    await shot(
+      t,
+      'failed_keep',
+      backend: FakeInstallerBackend()..installScript = FakeScript.failed(),
+      setup: (h) async {
+        await keepSummary(h, t);
+        await h.choose(t, 'actions', 1);
+      },
     );
   });
 

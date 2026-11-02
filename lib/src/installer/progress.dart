@@ -172,6 +172,7 @@ const _stageLabels = {
   'validate': 'Checking your choices',
   'fetch': 'Downloading HinterOS',
   'partition': 'Erasing and preparing the disk',
+  'mount': 'Preparing the disk',
   'facter': 'Checking the hardware',
   'config': 'Writing the settings',
   // Older backends: the packages, the build and the boot loader in one.
@@ -211,6 +212,19 @@ const newerInstallStages = [
   'finalize',
 ];
 
+/// The same for a plan that keeps the data: nothing is partitioned.
+const keepInstallStages = [
+  'validate',
+  'mount',
+  'facter',
+  'config',
+  'packages',
+  'build',
+  'bootloader',
+  'snapshot',
+  'finalize',
+];
+
 /// [stage] in plain words. [download]: the packages come from the internet
 /// (a newer HinterOS), not from the USB stick.
 String stageLabel(String stage, {bool download = false}) => stage == 'packages'
@@ -225,6 +239,8 @@ String explainCode(String? code) => switch (code) {
   'plan-unreadable' ||
   'plan-invalid' ||
   'unknown-field' ||
+  'keep-data-invalid' ||
+  'keep-data-field' ||
   'disk-seq-invalid' =>
     'The installer could not read your choices. This is an installer bug.',
   'disk-missing' || 'disk-not-found' =>
@@ -300,6 +316,19 @@ String explainCode(String? code) => switch (code) {
     'The HinterOS server did not answer. Check the internet connection.',
   'channel-missing' => 'The update channel is not on the HinterOS server.',
   'iso-rev-unknown' => 'This installer cannot install a newer HinterOS.',
+  'keep-no-install' ||
+  'keep-no-subvolumes' => 'This disk has no HinterOS install to keep.',
+  'keep-not-btrfs' ||
+  'keep-layout' => 'This installer cannot keep the data on this disk.',
+  'keep-unreadable' ||
+  'keep-state-unreadable' ||
+  'keep-uuid-mismatch' => 'The HinterOS install on this disk cannot be read.',
+  'keep-schema-newer' =>
+    'The HinterOS install on this disk is newer than this installer. Use a '
+        'newer installer.',
+  'esp-failed' =>
+    'Could not write the boot partition. Your files stay on the '
+        'disk.',
   'internal' => 'The installer stopped unexpectedly.',
   _ => 'The install could not be completed.',
 };

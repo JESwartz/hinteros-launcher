@@ -102,7 +102,26 @@ class InstallPlan {
     this.wifiSsid,
     this.wifiPsk,
     this.rev,
-  });
+  }) : keepData = false;
+
+  /// A new system on the HinterOS install that is on [disk]: nothing is
+  /// erased. All the rest comes from that install, and the backend refuses
+  /// a plan that has it (`keep-data-field`).
+  const InstallPlan.keepData({
+    required this.disk,
+    required this.diskSeq,
+    this.channel = InstallChannel.stable,
+    this.network = PlanNetwork.auto,
+    this.wifiSsid,
+    this.wifiPsk,
+  }) : keepData = true,
+       hostname = '',
+       adminUser = '',
+       adminPassword = '',
+       ssh = false,
+       apps = const [],
+       acceptedTerms = const {},
+       rev = null;
 
   /// Whole-disk device path (lsblk's PATH, `/dev/nvme0n1`).
   final String disk;
@@ -111,6 +130,7 @@ class InstallPlan {
   /// ([DiskInfo.diskSeq]). The backend refuses the plan (`disk-changed`)
   /// when the disk at [disk] has another one: it was replaced.
   final int diskSeq;
+  final bool keepData;
   final String hostname;
   final String adminUser;
   final String adminPassword;
@@ -136,14 +156,16 @@ class InstallPlan {
   Map<String, Object?> toJson() => {
     'disk': disk,
     'diskSeq': diskSeq,
-    'hostname': hostname,
-    'admin': {'user': adminUser, 'password': adminPassword},
-    'ssh': {'enable': ssh},
+    if (keepData) 'keepData': true,
+    if (!keepData) ...{
+      'hostname': hostname,
+      'admin': {'user': adminUser, 'password': adminPassword},
+      'ssh': {'enable': ssh},
+    },
     'channel': channel.name,
-    'base': 'unstable',
+    if (!keepData) 'base': 'unstable',
     'network': network.name,
-    'apps': apps,
-    'acceptedTerms': acceptedTerms,
+    if (!keepData) ...{'apps': apps, 'acceptedTerms': acceptedTerms},
     if (wifiSsid != null)
       'wifi': {'ssid': wifiSsid, if (wifiPsk != null) 'psk': wifiPsk},
     if (rev != null) 'rev': rev,
@@ -154,6 +176,6 @@ class InstallPlan {
 
   @override
   String toString() =>
-      'InstallPlan(disk: $disk, diskSeq: $diskSeq, host: $hostname, admin: $adminUser, '
+      'InstallPlan(disk: $disk, diskSeq: $diskSeq, keepData: $keepData, host: $hostname, admin: $adminUser, '
       'ssh: $ssh, channel: ${channel.name}, apps: $apps, acceptedTerms: $acceptedTerms, rev: $rev, password: <hidden>)';
 }

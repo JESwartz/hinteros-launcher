@@ -131,6 +131,17 @@ class WifiAp {
   int get bars => signal <= 0 ? 0 : ((signal - 1) ~/ 25 + 1).clamp(1, 4);
 }
 
+/// The HinterOS install on a disk, from `hinteros-install --list-disks`.
+class ExistingInstall {
+  const ExistingInstall({required this.schemaOk, this.version});
+
+  /// The backend accepts a keepData plan on this disk.
+  final bool schemaOk;
+
+  /// `MAJOR.MINOR.PATCH[-suffix]`; null when it is not known.
+  final String? version;
+}
+
 class DiskInfo {
   const DiskInfo({
     required this.path,
@@ -141,6 +152,8 @@ class DiskInfo {
     this.transport,
     this.removable = false,
     this.mountpoints = const [],
+    this.installLeftover = false,
+    this.existing,
   });
 
   /// `/dev/nvme0n1`: goes into the plan.
@@ -163,6 +176,35 @@ class DiskInfo {
   /// Where the disk or any of its partitions is mounted (`/mnt` leftovers of
   /// an earlier try excluded, like the backend does).
   final List<String> mountpoints;
+
+  /// A part of the disk is still mounted under `/mnt`: an earlier try.
+  final bool installLeftover;
+
+  /// The HinterOS install on the disk; null: none, or it cannot be read.
+  final ExistingInstall? existing;
+
+  /// The same disk with another [diskSeq].
+  DiskInfo copyWith({int? diskSeq}) => _with(diskSeq, existing);
+
+  /// The same disk with [existing] (null: none).
+  DiskInfo withInstall(ExistingInstall? existing) => _with(diskSeq, existing);
+
+  DiskInfo _with(int? diskSeq, ExistingInstall? existing) => DiskInfo(
+    path: path,
+    name: name,
+    sizeBytes: sizeBytes,
+    diskSeq: diskSeq,
+    model: model,
+    transport: transport,
+    removable: removable,
+    mountpoints: mountpoints,
+    installLeftover: installLeftover,
+    existing: existing,
+  );
+
+  /// Whether this is the disk [other] (a new sequence number is a new disk).
+  bool sameDisk(DiskInfo other) =>
+      path == other.path && diskSeq == other.diskSeq;
 
   String get title => (model != null && model!.isNotEmpty) ? model! : name;
 
@@ -188,6 +230,9 @@ class DiskInfo {
   }
 
   bool get usable => unusableReason == null;
+
+  /// A keepData plan is accepted on this disk.
+  bool get canKeep => usable && existing?.schemaOk == true;
 }
 
 abstract class InstallerBackend {
@@ -210,7 +255,8 @@ abstract class InstallerBackend {
   /// command line. Throws [InstallerException].
   Future<void> connectWifi(String ssid, {String? psk});
 
-  /// Whole disks of this machine (usable or not: the UI shows why not).
+  /// Whole disks of this machine (usable or not: the UI shows why not), with
+  /// the HinterOS install on each as far as it can be read.
   Future<List<DiskInfo>> disks();
 
   /// The apps the installer offers, from the catalog index on the ISO.
@@ -230,7 +276,8 @@ abstract class InstallerBackend {
   /// `hinteros-install --plan - --validate-only`: touches nothing.
   InstallRun validate(InstallPlan plan);
 
-  /// `hinteros-install --plan -`: erases the disk and installs.
+  /// `hinteros-install --plan -`: erases the disk and installs, or with
+  /// [InstallPlan.keepData] puts a new system on the install that is there.
   InstallRun install(InstallPlan plan);
 
   /// `systemctl reboot`.

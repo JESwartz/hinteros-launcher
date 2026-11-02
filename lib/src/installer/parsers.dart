@@ -33,7 +33,7 @@ void _mounts(Map<String, Object?> node, List<String> out) {
   final mp = node['mountpoints'] ?? node['mountpoint'];
   final list = mp is List ? mp : [mp];
   for (final m in list) {
-    if (m is String && m.isNotEmpty && !_isInstallLeftover(m)) out.add(m);
+    if (m is String && m.isNotEmpty) out.add(m);
   }
   final children = node['children'];
   if (children is List) {
@@ -43,9 +43,20 @@ void _mounts(Map<String, Object?> node, List<String> out) {
   }
 }
 
-/// The whole disks (`type == disk`) of `lsblk --json -b` output. Loop
-/// devices, optical drives and the like are not disks and do not appear.
-/// Throws [FormatException] when [source] is not lsblk's JSON.
+/// The `existing` of a disk in `hinteros-install --list-disks` output.
+ExistingInstall? _existing(Object? v) {
+  if (v is! Map) return null;
+  final version = v['version'];
+  return ExistingInstall(
+    schemaOk: v['schemaOk'] == true,
+    version: version is String && version.isNotEmpty ? version : null,
+  );
+}
+
+/// The whole disks (`type == disk`) of `lsblk --json -b` output, or of
+/// `hinteros-install --list-disks`, which is the same with `existing` on each
+/// disk. Loop devices, optical drives and the like are not disks and do not
+/// appear. Throws [FormatException] when [source] is not lsblk's JSON.
 List<DiskInfo> parseLsblk(String source) {
   final j = jsonDecode(source);
   if (j is! Map || j['blockdevices'] is! List) {
@@ -74,11 +85,50 @@ List<DiskInfo> parseLsblk(String source) {
         model: model is String ? model.trim() : null,
         transport: tran is String ? tran : null,
         removable: _truthy(d['rm']) || tran == 'usb',
-        mountpoints: mounts,
+        mountpoints: mounts.where((m) => !_isInstallLeftover(m)).toList(),
+        installLeftover: mounts.any(_isInstallLeftover),
+        existing: _existing(d['existing']),
       ),
     );
   }
   return disks;
+}
+
+final _semver = RegExp(r'^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$');
+
+/// Compares two pre-release suffixes the way SemVer does.
+int _comparePre(String a, String b) {
+  final x = a.split('.');
+  final y = b.split('.');
+  for (var i = 0; i < x.length && i < y.length; i++) {
+    final m = int.tryParse(x[i]);
+    final n = int.tryParse(y[i]);
+    final c = m != null && n != null
+        ? m.compareTo(n)
+        : m != null
+        ? -1
+        : n != null
+        ? 1
+        : x[i].compareTo(y[i]);
+    if (c != 0) return c;
+  }
+  return x.length.compareTo(y.length);
+}
+
+/// Whether release [a] is newer than release [b]. False when either is not
+/// `MAJOR.MINOR.PATCH[-suffix]` (such as a short revision).
+bool versionNewer(String a, String b) {
+  final x = _semver.firstMatch(a);
+  final y = _semver.firstMatch(b);
+  if (x == null || y == null) return false;
+  for (var i = 1; i <= 3; i++) {
+    final c = BigInt.parse(x[i]!).compareTo(BigInt.parse(y[i]!));
+    if (c != 0) return c > 0;
+  }
+  final p = x[4];
+  final q = y[4];
+  if (p == null || q == null) return p == null && q != null;
+  return _comparePre(p, q) > 0;
 }
 
 /// Splits one line of `nmcli -t` output: fields are separated by `:`, and a

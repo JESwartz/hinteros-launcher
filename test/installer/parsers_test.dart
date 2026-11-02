@@ -5,6 +5,79 @@ import 'package:hinteros_launcher/src/installer/parsers.dart';
 import '../support/installer_fixtures.dart';
 
 void main() {
+  group('--list-disks', () {
+    String listing(String existing, {String extra = ''}) =>
+        '{"blockdevices":[{"name":"vdc","path":"/dev/vdc","size":34359738368,'
+        '"model":null,"tran":null,"type":"disk","rm":false,'
+        '"mountpoints":[null],"disk-seq":3,$extra"existing":$existing}]}';
+
+    test('an install that can be kept', () {
+      final d = parseLsblk(
+        listing('{"profiles":1,"schemaOk":true,"version":"0.7.0"}'),
+      ).single;
+      expect(d.existing!.schemaOk, isTrue);
+      expect(d.existing!.version, '0.7.0');
+      expect(d.canKeep, isTrue);
+    });
+
+    test('no version, and an install that cannot be kept', () {
+      final d = parseLsblk(listing('{"profiles":2,"schemaOk":false}')).single;
+      expect(d.existing!.schemaOk, isFalse);
+      expect(d.existing!.version, isNull);
+      expect(d.canKeep, isFalse);
+    });
+
+    test('null, odd values and plain lsblk: nothing to keep', () {
+      expect(parseLsblk(listing('null')).single.existing, isNull);
+      expect(parseLsblk(listing('"yes"')).single.existing, isNull);
+      expect(parseLsblk(listing('{"profiles":1}')).single.canKeep, isFalse);
+      expect(parseLsblk(lsblkFixture).any((d) => d.existing != null), isFalse);
+    });
+
+    test('a disk that cannot be chosen cannot be kept', () {
+      final d = parseLsblk(
+        listing(
+          '{"schemaOk":true}',
+          extra: '"children":[{"name":"vdc1","mountpoints":["/iso"]}],',
+        ),
+      ).single;
+      expect(d.existing, isNotNull);
+      expect(d.canKeep, isFalse);
+    });
+
+    test('a mount under /mnt is noted, and does not make it in use', () {
+      final d = parseLsblk(lsblkFixture).first;
+      expect(d.mountpoints, isEmpty);
+      expect(d.installLeftover, isTrue);
+      expect(parseLsblk(lsblkFixture)[1].installLeftover, isFalse);
+    });
+  });
+
+  group('versionNewer', () {
+    test('by the numbers, not as text', () {
+      expect(versionNewer('0.10.0', '0.9.0'), isTrue);
+      expect(versionNewer('1.0.0', '0.99.99'), isTrue);
+      expect(versionNewer('0.7.1', '0.7.0'), isTrue);
+      expect(versionNewer('0.7.0', '0.7.1'), isFalse);
+      expect(versionNewer('0.7.0', '0.7.0'), isFalse);
+    });
+
+    test('a suffix comes before its release', () {
+      expect(versionNewer('1.0.0', '1.0.0-rc.1'), isTrue);
+      expect(versionNewer('1.0.0-rc.1', '1.0.0'), isFalse);
+      expect(versionNewer('1.0.0-rc.10', '1.0.0-rc.9'), isTrue);
+      expect(versionNewer('1.0.0-rc.1', '1.0.0-beta.2'), isTrue);
+      expect(versionNewer('1.0.0-rc.1.1', '1.0.0-rc.1'), isTrue);
+      expect(versionNewer('1.0.0-rc.1', '1.0.0-rc.1'), isFalse);
+    });
+
+    test('what is not a release is never newer', () {
+      expect(versionNewer('1a2b3c4d5e6f', '0.7.0'), isFalse);
+      expect(versionNewer('0.7.0', '1a2b3c4d5e6f'), isFalse);
+      expect(versionNewer('', '0.7.0'), isFalse);
+    });
+  });
+
   group('lsblk', () {
     test('lists whole disks only, with the reasons for hiding some', () {
       final disks = parseLsblk(lsblkFixture);

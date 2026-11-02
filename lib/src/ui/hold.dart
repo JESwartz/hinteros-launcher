@@ -69,7 +69,8 @@ class HoldController extends ChangeNotifier {
 }
 
 /// The look of a hold: [base] with a [border] at rest; held ([fill] not
-/// null), light red filling with red from the left, a red border.
+/// null), a light tint filling with [color] (red by default) from the left,
+/// a border of the same colour.
 class HoldFill extends StatelessWidget {
   const HoldFill({
     super.key,
@@ -80,8 +81,10 @@ class HoldFill extends StatelessWidget {
     required this.child,
     this.width,
     this.height,
+    this.color,
   });
 
+  final Color? color;
   final double? fill;
   final Color base;
   final Color border;
@@ -94,14 +97,15 @@ class HoldFill extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
     final h = fill;
+    final mark = color ?? t.danger;
     return Container(
       width: width,
       height: height,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: h == null ? base : Color.lerp(base, t.danger, 0.35),
+        color: h == null ? base : Color.lerp(base, mark, 0.35),
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: h != null ? t.danger : border, width: 2),
+        border: Border.all(color: h != null ? mark : border, width: 2),
       ),
       child: Stack(
         children: [
@@ -112,7 +116,7 @@ class HoldFill extends StatelessWidget {
                 child: FractionallySizedBox(
                   widthFactor: h.clamp(0.0, 1.0),
                   heightFactor: 1,
-                  child: ColoredBox(color: t.danger),
+                  child: ColoredBox(color: mark),
                 ),
               ),
             ),
@@ -136,8 +140,11 @@ class HoldButton extends StatefulWidget {
     required this.duration,
     required this.onDone,
     this.enabled = true,
+    this.danger = true,
   });
 
+  /// Red, for what cannot be undone.
+  final bool danger;
   final NavRegion region;
   final String rowKey;
   final int col;
@@ -219,6 +226,7 @@ class _HoldButtonState extends State<HoldButton>
   @override
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
+    final mark = widget.danger ? t.danger : t.accent;
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
@@ -239,7 +247,8 @@ class _HoldButtonState extends State<HoldButton>
               child: HoldFill(
                 fill: h,
                 base: t.surface,
-                border: on ? t.danger : t.textDim.withValues(alpha: 0.5),
+                color: mark,
+                border: on ? mark : t.textDim.withValues(alpha: 0.5),
                 radius: HinterTokens.radiusPill,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -252,7 +261,7 @@ class _HoldButtonState extends State<HoldButton>
                     style: t.label.copyWith(
                       color: h != null
                           ? t.text
-                          : (on ? t.danger : t.textDim.withValues(alpha: 0.6)),
+                          : (on ? mark : t.textDim.withValues(alpha: 0.6)),
                     ),
                   ),
                 ),

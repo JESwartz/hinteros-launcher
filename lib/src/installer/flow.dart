@@ -4,10 +4,11 @@ import 'package:flutter/foundation.dart';
 
 import '../log.dart';
 import '../system/daemon_system.dart' show releaseName;
-import '../system/models.dart' show UpdateChannel;
+import '../system/models.dart' show StoreApp, UpdateChannel;
 import '../ui/app_selection.dart';
 import '../ui/jobs.dart' show elapsedText;
 import 'backend.dart';
+import 'parsers.dart' show versionNewer;
 import 'plan.dart';
 import 'progress.dart';
 
@@ -123,6 +124,11 @@ class InstallerFlow extends ChangeNotifier {
         );
       case InstallerStep.version:
         go(_versionNext);
+      case InstallerStep.disk when keepData:
+        go(InstallerStep.options);
+      case InstallerStep.options when keepData:
+        // A keepData plan installs the version on the USB stick.
+        go(InstallerStep.summary);
       case InstallerStep.options:
         // Asks again for another channel, or when the offer was not answered.
         if (online &&
@@ -158,21 +164,30 @@ class InstallerFlow extends ChangeNotifier {
         go(_versionBack);
       case InstallerStep.disk:
         go(versionOffered ? InstallerStep.version : InstallerStep.network);
+      case InstallerStep.options when keepData:
+        go(InstallerStep.disk);
+      case InstallerStep.summary when keepData:
+        go(InstallerStep.options);
       default:
         go(InstallerStep.values[_step.index - 1]);
     }
   }
 
   /// "Step n of N" on the question screens: the version step counts only
-  /// when a newer HinterOS is offered.
-  int get questionCount =>
-      InstallerStep.summary.index -
-      InstallerStep.network.index +
-      (versionOffered ? 1 : 0);
+  /// when a newer HinterOS is offered, and the steps [keepData] does not show
+  /// do not count.
+  int get questionCount => questionNumber(InstallerStep.summary);
 
   int questionNumber(InstallerStep s) {
-    final n = s.index - InstallerStep.network.index + 1;
-    return !versionOffered && s.index > InstallerStep.version.index ? n - 1 : n;
+    var n = s.index - InstallerStep.network.index + 1;
+    if (!versionOffered && s.index > InstallerStep.version.index) n--;
+    if (keepData) {
+      n -= [
+        InstallerStep.account,
+        InstallerStep.apps,
+      ].where((x) => x.index < s.index).length;
+    }
+    return n;
   }
 
   // ------------------------------------------------------------- version
@@ -236,7 +251,8 @@ class InstallerFlow extends ChangeNotifier {
   bool get versionOffered => newer != null;
 
   /// Whether the plan installs the newer HinterOS.
-  bool get installsNewer => chosenRev != null && newer?.rev == chosenRev;
+  bool get installsNewer =>
+      !keepData && chosenRev != null && newer?.rev == chosenRev;
 
   /// "HinterOS 0.7.0 stable (1a2b3c4)" for a release on the chosen channel.
   String releaseLabel(HinterRelease r) =>
@@ -521,9 +537,44 @@ class InstallerFlow extends ChangeNotifier {
   String? disksMessage;
   DiskInfo? disk;
 
-  Future<void> loadDisks() async {
+  /// The person chose "Erase all" on the chosen disk.
+  bool _eraseChosen = false;
+
+  /// The disk of the last run, when that run kept the data and failed.
+  DiskInfo? _failedKeep;
+  Future<void>? _disksRun;
+
+  /// The list of disks is being read: it can take long, as the backend looks
+  /// inside each disk.
+  bool get loadingDisks => _disksRun != null;
+
+  /// Whether the plan keeps the data of the install on the chosen disk: the
+  /// default wherever that can be done. Read from the disk and not stored,
+  /// so that it cannot outlive the disk.
+  bool get keepData => (disk?.canKeep ?? false) && !_eraseChosen;
+
+  /// The versions, when [keepData] would replace a newer HinterOS on the disk
+  /// with the older one on the USB stick. Null when either is not known.
+  ({String disk, String usb})? get keepDowngrade {
+    final have = disk?.existing?.version;
+    final usb = isoRelease?.version;
+    if (have == null || usb == null || !versionNewer(have, usb)) return null;
+    return (disk: have, usb: usb);
+  }
+
+  /// Only one at a time: a second listing would find the disk the first one
+  /// looks at mounted, and take it for a disk in use.
+  Future<void> loadDisks() => _disksRun ??= _loadDisks().whenComplete(() {
+    _disksRun = null;
+    if (!_disposed) notifyListeners();
+  });
+
+  Future<void> _loadDisks() async {
+    await Future<void>.value(); // never while a screen is being built
+    if (_disposed) return;
+    notifyListeners();
     try {
-      disks = await backend.disks();
+      disks = [for (final d in await backend.disks()) _withFailedKeep(d)];
       disksMessage = null;
     } on InstallerException catch (e) {
       disks = const [];
@@ -535,17 +586,36 @@ class InstallerFlow extends ChangeNotifier {
     // The same path with another disk sequence number is another disk (or
     // the same one plugged in again): the choice is gone.
     final d = disk;
-    if (d != null &&
-        !disks!.any(
-          (x) => x.path == d.path && x.diskSeq == d.diskSeq && x.usable,
-        )) {
-      disk = null;
+    if (d != null) {
+      _setDisk(disks!.where((x) => x.sameDisk(d) && x.usable).firstOrNull);
     }
-    notifyListeners();
+  }
+
+  /// A failed run leaves the disk mounted at /mnt, and the backend does not
+  /// look inside a mounted disk: without this, the install it failed on
+  /// would seem to be gone. The plan is checked against the disk anyway.
+  DiskInfo _withFailedKeep(DiskInfo d) {
+    final k = _failedKeep;
+    return k != null && d.existing == null && d.installLeftover && d.sameDisk(k)
+        ? d.withInstall(k.existing)
+        : d;
+  }
+
+  void _setDisk(DiskInfo? d) {
+    final was = disk;
+    if (d == null || was == null || !d.sameDisk(was)) _eraseChosen = false;
+    disk = d;
   }
 
   void chooseDisk(DiskInfo? d) {
-    disk = d;
+    _setDisk(d);
+    notifyListeners();
+  }
+
+  /// "Keep data" or "Erase all" for the chosen disk. Another disk starts
+  /// with the default again.
+  void chooseKeepData(bool keep) {
+    _eraseChosen = !keep;
     notifyListeners();
   }
 
@@ -637,12 +707,20 @@ class InstallerFlow extends ChangeNotifier {
 
   bool get ready =>
       disk?.diskSeq != null &&
-      accountValid &&
-      hostnameProblem == null &&
-      apps != null;
+      (keepData || (accountValid && hostnameProblem == null && apps != null));
 
   /// The plan, from the answers. Only call when [ready].
   InstallPlan buildPlan() {
+    if (keepData) {
+      return InstallPlan.keepData(
+        disk: disk!.path,
+        diskSeq: disk!.diskSeq!,
+        channel: channel,
+        network: online ? PlanNetwork.auto : PlanNetwork.offline,
+        wifiSsid: online ? joinedSsid : null,
+        wifiPsk: online && joinedSsid != null ? _joinedPsk : null,
+      );
+    }
     final a = apps!;
     final needsDownload = a.selectedApps.any((x) => !x.onIso);
     return InstallPlan(
@@ -849,6 +927,8 @@ class InstallerFlow extends ChangeNotifier {
     if (running || !ready) return;
     final plan = buildPlan();
     runRev = plan.rev;
+    runKeep = plan.keepData;
+    final chosen = disk;
     runLabel = planVersionLabel;
     _runChannel = plan.channel;
     _doneEvent = null;
@@ -861,7 +941,7 @@ class InstallerFlow extends ChangeNotifier {
     _failedIds.clear();
     _appStates.clear();
     _planApps = [
-      for (final a in apps!.selectedApps)
+      for (final a in plan.keepData ? const <StoreApp>[] : apps!.selectedApps)
         (id: a.id, name: a.name, onIso: a.onIso),
     ];
     stepPercent = null;
@@ -905,6 +985,7 @@ class InstallerFlow extends ChangeNotifier {
       InstallVerdict.refused => InstallPhase.refused,
       InstallVerdict.failed => InstallPhase.failed,
     };
+    _failedKeep = plan.keepData && phase == InstallPhase.failed ? chosen : null;
     if (phase == InstallPhase.succeeded) {
       // Nothing needs the password any more.
       password = '';
@@ -926,14 +1007,18 @@ class InstallerFlow extends ChangeNotifier {
   /// installer's own).
   String? runRev;
 
+  /// The last run kept the data of the install on the disk.
+  bool runKeep = false;
+
   /// The version the last run installed or tried to, for the screens.
   String runLabel = '';
   InstallChannel _runChannel = InstallChannel.stable;
   InstallEvent? _doneEvent;
 
   /// The stages of the current run, in order.
-  List<String> get stages =>
-      runRev != null ? newerInstallStages : installStages;
+  List<String> get stages => runKeep
+      ? keepInstallStages
+      : (runRev != null ? newerInstallStages : installStages);
 
   /// [stage] in plain words for the current run (a newer HinterOS downloads
   /// its packages; the installer's own copies them from the USB stick).
@@ -953,12 +1038,17 @@ class InstallerFlow extends ChangeNotifier {
   /// or replaced): the disk must be chosen again.
   bool get diskChanged => outcome?.error?.code == 'disk-changed';
 
-  /// From a run stopped by [diskChanged] back to the disk step (which reads
-  /// the list again), with no disk chosen.
+  /// The backend refused to keep the data: the same plan cannot work.
+  bool get keepRefused =>
+      phase == InstallPhase.refused &&
+      (outcome?.error?.code?.startsWith('keep-') ?? false);
+
+  /// From a run stopped by [diskChanged] or [keepRefused] back to the disk
+  /// step (which reads the list again), with no disk chosen.
   void chooseDiskAgain() {
     phase = InstallPhase.idle;
     outcome = null;
-    disk = null;
+    _setDisk(null);
     go(InstallerStep.disk);
   }
 

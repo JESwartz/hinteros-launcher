@@ -171,6 +171,9 @@ class InstallStepView extends StatelessWidget {
       StatusLine(
         refused
             ? 'Nothing was changed on your disk.'
+            : f.runKeep
+            ? 'The install stopped before the end. Your files stay on the '
+                  'disk, but HinterOS may not start. "Try again" starts over.'
             : 'The install stopped before the end. The disk may be changed '
                   'and HinterOS may not start. "Try again" starts over.',
         error: !refused,
@@ -196,8 +199,9 @@ class InstallStepView extends StatelessWidget {
       Text('Full log: $installLogPath', style: t.caption),
       gap: HinterTokens.s2,
     );
-    // Another disk is at the chosen path: the same plan cannot work.
-    if (f.diskChanged) {
+    // Another disk is at the chosen path, or the install on it cannot be
+    // kept: the same plan cannot work.
+    if (f.diskChanged || f.keepRefused) {
       p.buttons('actions', [
         btn('Select the disk', f.chooseDiskAgain, primary: true),
       ], gap: HinterTokens.s4);

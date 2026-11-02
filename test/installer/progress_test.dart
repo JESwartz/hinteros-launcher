@@ -257,6 +257,37 @@ void main() {
       for (final s in newerInstallStages) {
         expect(stageLabel(s, download: true), isNot('Working'), reason: s);
       }
+      expect(keepInstallStages, [
+        'validate',
+        'mount',
+        'facter',
+        'config',
+        ...system,
+        'snapshot',
+        'finalize',
+      ]);
+      for (final s in keepInstallStages) {
+        expect(stageLabel(s), isNot('Working'), reason: s);
+      }
+    });
+
+    test('every code of a keepData plan has its own sentence', () {
+      const general = 'The install could not be completed.';
+      for (final c in [
+        'keep-data-invalid',
+        'keep-data-field',
+        'keep-no-install',
+        'keep-not-btrfs',
+        'keep-unreadable',
+        'keep-no-subvolumes',
+        'keep-state-unreadable',
+        'keep-layout',
+        'keep-schema-newer',
+        'keep-uuid-mismatch',
+        'esp-failed',
+      ]) {
+        expect(explainCode(c), isNot(general), reason: c);
+      }
     });
 
     test('the system stages in plain words', () {

@@ -114,6 +114,21 @@ class FakeScript {
     _e('done', 100, 'HinterOS is installed. Remove the installer medium.'),
   ], 0);
 
+  /// A whole install that keeps the data: `mount` for `partition`, no apps
+  /// stage.
+  static final keepOk = FakeScript([
+    _e('validate', 0, 'Checking the plan'),
+    _e('validate', 8, 'Plan accepted: keep all data'),
+    _e('mount', 10, 'Mounting the install'),
+    _e('mount', 20, 'The install is mounted; nothing was erased'),
+    _e('facter', 22, 'Detecting hardware'),
+    _e('config', 30, 'Device configuration written to /etc/hinteros'),
+    ..._system(copy: true),
+    _e('snapshot', 92, 'Checking the config snapshot'),
+    _e('finalize', 97, 'Flushing to disk'),
+    _e('done', 100, 'HinterOS is installed. All data is kept.'),
+  ], 0);
+
   /// A whole two-stage install: the system, then each of [apps]; the ones
   /// in [failing] end with an `app-failed` warning (the exit status stays 0).
   static FakeScript twoStage(
@@ -389,9 +404,13 @@ class FakeInstallerBackend implements InstallerBackend {
     );
   }
 
+  /// When set, `disks()` waits for it (a slow listing, for tests).
+  Future<void>? disksHold;
+
   @override
   Future<List<DiskInfo>> disks() async {
     calls.add('disks');
+    await disksHold;
     return List.of(_disks);
   }
 
@@ -399,18 +418,42 @@ class FakeInstallerBackend implements InstallerBackend {
   /// new disk sequence number (as the kernel does).
   void replug(String path) {
     final i = _disks.indexWhere((d) => d.path == path);
-    final d = _disks[i];
     final next = _disks.map((x) => x.diskSeq ?? 0).reduce(max) + 1;
-    _disks[i] = DiskInfo(
-      path: d.path,
-      name: d.name,
-      sizeBytes: d.sizeBytes,
-      diskSeq: next,
-      model: d.model,
-      transport: d.transport,
-      removable: d.removable,
-      mountpoints: d.mountpoints,
-    );
+    _disks[i] = _disks[i].copyWith(diskSeq: next);
+  }
+
+  /// What the next listing says about the disk at [path] (a disk that
+  /// changed, or that is mounted).
+  void setDisk(String path, DiskInfo d) =>
+      _disks[_disks.indexWhere((x) => x.path == path)] = d;
+
+  /// As the backend checks a keepData plan: only what it takes, and an
+  /// install it can keep. Null: it is fine, or does not keep the data.
+  FakeScript? _keepRefusal(InstallPlan plan) {
+    if (!plan.keepData) return null;
+    const notKept = {
+      'hostname',
+      'admin',
+      'ssh',
+      'base',
+      'apps',
+      'acceptedTerms',
+      'rev',
+    };
+    final field = plan.toJson().keys.where(notKept.contains).firstOrNull;
+    if (field != null) {
+      return FakeScript.refused(
+        'keep-data-field',
+        'a keepData plan does not take $field',
+      );
+    }
+    final d = _disks.where((x) => x.path == plan.disk).first;
+    return d.existing?.schemaOk == true
+        ? null
+        : FakeScript.refused(
+            'keep-no-install',
+            '${plan.disk} has no HinterOS install',
+          );
   }
 
   /// As the backend checks the plan's disk: there, and the same disk
@@ -499,7 +542,10 @@ class FakeInstallerBackend implements InstallerBackend {
   InstallRun validate(InstallPlan plan) => _run(
     'validate',
     plan,
-    _diskRefusal(plan) ?? validateScript ?? FakeScript.validateOk,
+    _diskRefusal(plan) ??
+        _keepRefusal(plan) ??
+        validateScript ??
+        FakeScript.validateOk,
   );
 
   @override
@@ -509,8 +555,10 @@ class FakeInstallerBackend implements InstallerBackend {
       'install',
       plan,
       _diskRefusal(plan) ??
+          _keepRefusal(plan) ??
           (plan.rev != null ? newerInstallScript : null) ??
           installScript ??
+          (plan.keepData ? FakeScript.keepOk : null) ??
           installScriptFor?.call(plan) ??
           FakeScript.installOk,
     );
@@ -522,8 +570,8 @@ class FakeInstallerBackend implements InstallerBackend {
 
 const _gib = 1024 * 1024 * 1024;
 
-/// A machine with an internal NVMe disk, a second SATA disk, a small one,
-/// the installer stick and a USB drive.
+/// A machine with an internal NVMe disk, a second SATA disk with HinterOS on
+/// it, a small one, the installer stick and a USB drive.
 List<DiskInfo> mockDisks() => const [
   DiskInfo(
     path: '/dev/nvme0n1',
@@ -540,6 +588,7 @@ List<DiskInfo> mockDisks() => const [
     sizeBytes: 1000204886016,
     model: 'Example SATA SSD 1TB',
     transport: 'sata',
+    existing: ExistingInstall(schemaOk: true, version: '0.6.0'),
   ),
   DiskInfo(
     path: '/dev/mmcblk0',

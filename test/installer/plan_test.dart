@@ -5,6 +5,43 @@ import 'package:hinteros_launcher/src/installer/plan.dart';
 
 void main() {
   group('plan JSON', () {
+    test('keepData: only what the backend takes', () {
+      const plan = InstallPlan.keepData(
+        disk: '/dev/nvme0n1',
+        diskSeq: 1,
+        channel: InstallChannel.beta,
+      );
+      expect(plan.toJson(), {
+        'disk': '/dev/nvme0n1',
+        'diskSeq': 1,
+        'keepData': true,
+        'channel': 'beta',
+        'network': 'auto',
+      });
+      const wifi = InstallPlan.keepData(
+        disk: '/dev/nvme0n1',
+        diskSeq: 1,
+        network: PlanNetwork.offline,
+        wifiSsid: 'Home',
+        wifiPsk: 'secret',
+      );
+      expect(wifi.toJson()['wifi'], {'ssid': 'Home', 'psk': 'secret'});
+      expect(wifi.toJson()['network'], 'offline');
+      expect(wifi.toString(), isNot(contains('secret')));
+    });
+
+    test('a plan without keepData does not name it', () {
+      const plan = InstallPlan(
+        disk: '/dev/sda',
+        diskSeq: 1,
+        hostname: 'hinteros',
+        adminUser: 'james',
+        adminPassword: 'change-me-now',
+      );
+      expect(plan.keepData, isFalse);
+      expect(plan.toJson().containsKey('keepData'), isFalse);
+    });
+
     test('matches the backend format field for field', () {
       const plan = InstallPlan(
         disk: '/dev/nvme0n1',

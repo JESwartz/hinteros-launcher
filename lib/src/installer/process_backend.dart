@@ -9,7 +9,7 @@ import 'parsers.dart';
 import 'plan.dart';
 import 'progress.dart';
 
-/// The real backend, for the ISO: runs `lsblk`, `nmcli`, `hinteros-install`
+/// The real backend, for the ISO: runs `hinteros-install`, `lsblk`, `nmcli`
 /// and `systemctl` as the current user (root there). Every command is an
 /// executable plus a list of fixed arguments: no shell is involved and no
 /// user-typed text is ever part of an argument list apart from a Wi-Fi name
@@ -19,15 +19,22 @@ import 'progress.dart';
 class ProcessInstallerBackend implements InstallerBackend {
   ProcessInstallerBackend({
     this.installBinary = 'hinteros-install',
+    this.lsblkBinary = 'lsblk',
     this.catalogPath = catalogIndexPath,
     this.reachable = _probeCache,
+    this.listDisksTimeout = const Duration(seconds: 60),
   });
 
   /// Whether the internet is reachable: a real HTTPS request, 5 s at most.
   final Future<bool> Function() reachable;
 
   final String installBinary;
+  final String lsblkBinary;
   final String catalogPath;
+
+  /// How long `--list-disks` may look inside the disks. One mount alone can
+  /// take 35 s, and a hung disk can take longer.
+  final Duration listDisksTimeout;
 
   Future<String> _stdout(
     String exe,
@@ -176,8 +183,41 @@ class ProcessInstallerBackend implements InstallerBackend {
   }
 
   @override
-  Future<List<DiskInfo>> disks() async =>
-      parseLsblk(await _stdout('lsblk', lsblkArgs));
+  Future<List<DiskInfo>> disks() async {
+    final listed = await _listDisks();
+    if (listed != null) {
+      try {
+        return parseLsblk(listed);
+      } on FormatException {
+        // The same as no answer: plain lsblk.
+      }
+    }
+    return parseLsblk(await _stdout(lsblkBinary, lsblkArgs));
+  }
+
+  /// `hinteros-install --list-disks`; null when it gives no answer in time
+  /// (the disks are then listed without what is on them). It is stopped, not
+  /// left to hold a disk: SIGTERM lets it unmount what it mounted.
+  Future<String?> _listDisks() async {
+    final Process p;
+    try {
+      p = await Process.start(installBinary, const ['--list-disks']);
+    } on ProcessException {
+      return null;
+    }
+    unawaited(p.stderr.drain<void>());
+    final out = p.stdout.transform(const Utf8Decoder(allowMalformed: true));
+    try {
+      final (rc, text) = await (
+        p.exitCode,
+        out.join(),
+      ).wait.timeout(listDisksTimeout);
+      return rc == 0 ? text : null;
+    } on TimeoutException {
+      p.kill();
+      return null;
+    }
+  }
 
   @override
   Future<List<StoreApp>> catalog() async {

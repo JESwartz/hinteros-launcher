@@ -139,6 +139,99 @@ exit 2
     expect((await backend().catalog()).length, 3);
   });
 
+  group('the disks', () {
+    const answer =
+        '{"blockdevices":[{"name":"vdc","path":"/dev/vdc","size":34359738368,'
+        '"type":"disk","rm":false,"mountpoints":[null],"disk-seq":3,'
+        '"existing":{"profiles":1,"schemaOk":true,"version":"0.7.0"}}]}';
+    const plain =
+        '{"blockdevices":[{"name":"vdc","path":"/dev/vdc","size":34359738368,'
+        '"type":"disk","rm":false,"mountpoints":[null],"disk-seq":3}]}';
+    late String lsblk;
+
+    /// A stand-in for lsblk that records its arguments.
+    setUp(() {
+      lsblk = '${dir.path}/lsblk';
+      File(lsblk).writeAsStringSync(
+        '#!/bin/sh\nprintf \'%s\\n\' "\$@" > "${dir.path}/lsblk-argv"\n'
+        "echo '$plain'\n",
+      );
+      Process.runSync('chmod', ['+x', lsblk]);
+    });
+
+    ProcessInstallerBackend backend({
+      Duration timeout = const Duration(seconds: 20),
+    }) => ProcessInstallerBackend(
+      installBinary: script,
+      lsblkBinary: lsblk,
+      listDisksTimeout: timeout,
+    );
+
+    bool usedLsblk() => File('${dir.path}/lsblk-argv').existsSync();
+
+    test('hinteros-install --list-disks says what is on them', () async {
+      write('''
+printf '%s\\n' "\$@" > "\$OUT/argv"
+echo "tool noise" >&2
+echo '$answer'
+''');
+      final d = (await backend().disks()).single;
+      expect(File('${dir.path}/argv').readAsLinesSync(), ['--list-disks']);
+      expect(d.existing!.schemaOk, isTrue);
+      expect(d.existing!.version, '0.7.0');
+      expect(usedLsblk(), isFalse);
+    });
+
+    test('it fails: plain lsblk', () async {
+      write('echo usage >&2\nexit 2\n');
+      final d = (await backend().disks()).single;
+      expect(d.path, '/dev/vdc');
+      expect(d.existing, isNull);
+      expect(File('${dir.path}/lsblk-argv').readAsLinesSync().length, 4);
+    });
+
+    test('its answer cannot be read: plain lsblk', () async {
+      write('echo not json\n');
+      expect((await backend().disks()).single.existing, isNull);
+      expect(usedLsblk(), isTrue);
+    });
+
+    test('it is not there: plain lsblk', () async {
+      final d = await ProcessInstallerBackend(
+        installBinary: '${dir.path}/does-not-exist',
+        lsblkBinary: lsblk,
+      ).disks();
+      expect(d.single.existing, isNull);
+    });
+
+    test('a hung disk: it is stopped, and plain lsblk answers', () async {
+      write(r'''
+echo $$ > "$OUT/pid"
+exec sleep 300
+''');
+      final d = await backend(timeout: const Duration(milliseconds: 500))
+          .disks();
+      expect(d.single.existing, isNull);
+      expect(usedLsblk(), isTrue);
+      final pid = File('${dir.path}/pid').readAsStringSync().trim();
+      for (var i = 0; i < 100 && Directory('/proc/$pid').existsSync(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect(Directory('/proc/$pid').existsSync(), isFalse);
+    });
+
+    test('neither answers: the error of lsblk', () async {
+      write('exit 1\n');
+      await expectLater(
+        ProcessInstallerBackend(
+          installBinary: script,
+          lsblkBinary: '${dir.path}/does-not-exist',
+        ).disks(),
+        throwsA(isA<InstallerException>()),
+      );
+    });
+  });
+
   group('--check-newer', () {
     const iso = '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d';
     const tip = '9f8e7d6c5b4a39281706f5e4d3c2b1a098765432';
