@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/installer/backend.dart';
 import 'package:hinteros_launcher/src/installer/parsers.dart';
+import 'package:hinteros_launcher/src/installer/plan.dart';
 
 import '../support/installer_fixtures.dart';
 
@@ -13,16 +14,20 @@ void main() {
 
     test('an install that can be kept', () {
       final d = parseLsblk(
-        listing('{"profiles":1,"schemaOk":true,"version":"0.7.0"}'),
+        listing(
+          '{"profiles":1,"schemaOk":true,"version":"0.7.0","channel":"beta"}',
+        ),
       ).single;
       expect(d.existing!.schemaOk, isTrue);
       expect(d.existing!.version, '0.7.0');
+      expect(d.existing!.channel, InstallChannel.beta);
       expect(d.canKeep, isTrue);
     });
 
     test('no version, and an install that cannot be kept', () {
       final d = parseLsblk(listing('{"profiles":2,"schemaOk":false}')).single;
       expect(d.existing!.schemaOk, isFalse);
+      expect(d.existing!.channel, isNull);
       expect(d.existing!.version, isNull);
       expect(d.canKeep, isFalse);
     });

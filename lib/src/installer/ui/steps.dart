@@ -86,7 +86,7 @@ class WelcomeStep extends StatelessWidget {
     );
     p.add(
       Text(
-        'The installer erases the disk you choose.',
+        'The installer asks before it erases a disk.',
         style: t.body.copyWith(color: t.danger),
       ),
       gap: HinterTokens.s3,

@@ -50,6 +50,9 @@ ExistingInstall? _existing(Object? v) {
   return ExistingInstall(
     schemaOk: v['schemaOk'] == true,
     version: version is String && version.isNotEmpty ? version : null,
+    channel: InstallChannel.values
+        .where((c) => c.name == v['channel'])
+        .firstOrNull,
   );
 }
 

@@ -215,7 +215,7 @@ class InstallerFlow extends ChangeNotifier {
       final r = await backend.info().timeout(checkTimeout);
       if (_disposed) return;
       isoRelease ??= r.iso;
-      if (!_channelTouched && !_defaultKnown) channel = r.channel;
+      if (!_channelTouched && !_defaultKnown) _channel = r.channel;
     } catch (e) {
       logFailure('reading the installer version', e);
       return;
@@ -313,7 +313,7 @@ class InstallerFlow extends ChangeNotifier {
           .timeout(checkNewerTimeout);
       isoRelease = r.iso;
       newerCheck = r;
-      if (useDefault && !_channelTouched) channel = r.channel;
+      if (useDefault && !_channelTouched) _channel = r.channel;
       _defaultKnown = true;
       _checkedChannel = r.channel;
       _lastCheckOk = true;
@@ -662,7 +662,14 @@ class InstallerFlow extends ChangeNotifier {
 
   String hostname = 'hinteros';
   bool ssh = false;
-  InstallChannel channel = InstallChannel.stable;
+  InstallChannel _channel = InstallChannel.stable;
+
+  /// Keep data stays on the channel of the disk's install unless changed in
+  /// Options: a keepData plan writes this channel into the flake.
+  InstallChannel get channel {
+    final kept = keepData && !_channelTouched ? disk?.existing?.channel : null;
+    return kept ?? _channel;
+  }
 
   void setHostname(String v) {
     hostname = v;
@@ -675,7 +682,7 @@ class InstallerFlow extends ChangeNotifier {
   }
 
   void toggleChannel() {
-    channel = channel == InstallChannel.stable
+    _channel = channel == InstallChannel.stable
         ? InstallChannel.beta
         : InstallChannel.stable;
     _channelTouched = true;

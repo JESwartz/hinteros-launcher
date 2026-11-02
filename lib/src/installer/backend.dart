@@ -133,13 +133,16 @@ class WifiAp {
 
 /// The HinterOS install on a disk, from `hinteros-install --list-disks`.
 class ExistingInstall {
-  const ExistingInstall({required this.schemaOk, this.version});
+  const ExistingInstall({required this.schemaOk, this.version, this.channel});
 
   /// The backend accepts a keepData plan on this disk.
   final bool schemaOk;
 
   /// `MAJOR.MINOR.PATCH[-suffix]`; null when it is not known.
   final String? version;
+
+  /// The update channel of the install; null when it is not known.
+  final InstallChannel? channel;
 }
 
 class DiskInfo {

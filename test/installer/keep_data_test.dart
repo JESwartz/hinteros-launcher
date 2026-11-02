@@ -165,6 +165,35 @@ void main() {
       expect(h.flow.keepData, isFalse);
     });
 
+    testWidgets('Keep data stays on the channel of the disk', (t) async {
+      final h = await toChoice(
+        t,
+        backend: FakeInstallerBackend(
+          disks: disksWith(
+            const ExistingInstall(
+              schemaOk: true,
+              version: '0.9.0',
+              channel: InstallChannel.beta,
+            ),
+          ),
+        ),
+      );
+      expect(h.flow.channel, InstallChannel.beta);
+      expect(h.flow.buildPlan().channel, InstallChannel.beta);
+
+      h.flow.chooseKeepData(false);
+      expect(h.flow.channel, InstallChannel.stable, reason: 'not kept');
+
+      h.flow.chooseKeepData(true);
+      h.flow.toggleChannel();
+      expect(
+        h.flow.channel,
+        InstallChannel.stable,
+        reason: 'changed in Options',
+      );
+      expect(h.flow.buildPlan().channel, InstallChannel.stable);
+    });
+
     testWidgets('the list changes: the choice follows the disk', (t) async {
       final h = await toChoice(t);
       expect(h.flow.keepData, isTrue);
