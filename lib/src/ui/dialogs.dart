@@ -374,6 +374,8 @@ class _ChoiceDialog<T> extends StatelessWidget {
 /// on the desktop the real keyboard works too. The keyboard opens by itself
 /// when the field gains focus (`osk.show`) and closes when focus leaves it or
 /// the text is submitted (`osk.hide`). Accept (Enter) calls [onSubmit].
+/// With [onReveal], an eye at the right end of the field (column 1 of the
+/// row) shows or hides the text; the row then needs 2 columns.
 class NavTextField extends StatefulWidget {
   const NavTextField({
     super.key,
@@ -383,6 +385,7 @@ class NavTextField extends StatefulWidget {
     this.obscure = false,
     this.hint = '',
     this.onSubmit,
+    this.onReveal,
   });
 
   final NavRegion region;
@@ -391,6 +394,7 @@ class NavTextField extends StatefulWidget {
   final bool obscure;
   final String hint;
   final VoidCallback? onSubmit;
+  final VoidCallback? onReveal;
 
   @override
   State<NavTextField> createState() => _NavTextFieldState();
@@ -462,26 +466,62 @@ class _NavTextFieldState extends State<NavTextField> {
             horizontal: HinterTokens.s3,
             vertical: HinterTokens.s2,
           ),
-          child: TextField(
-            focusNode: _node,
-            controller: widget.controller,
-            obscureText: widget.obscure,
-            autocorrect: false,
-            enableSuggestions: false,
-            enableInteractiveSelection: false,
-            style: t.label.copyWith(fontWeight: FontWeight.w400),
-            cursorColor: t.accent,
-            cursorWidth: 3,
-            decoration: InputDecoration.collapsed(
-              hintText: widget.hint,
-              hintStyle: t.label.copyWith(
-                fontWeight: FontWeight.w400,
-                color: t.textDim.withValues(alpha: 0.7),
+          child: _withReveal(
+            TextField(
+              focusNode: _node,
+              controller: widget.controller,
+              obscureText: widget.obscure,
+              autocorrect: false,
+              enableSuggestions: false,
+              enableInteractiveSelection: false,
+              style: t.label.copyWith(fontWeight: FontWeight.w400),
+              cursorColor: t.accent,
+              cursorWidth: 3,
+              decoration: InputDecoration.collapsed(
+                hintText: widget.hint,
+                hintStyle: t.label.copyWith(
+                  fontWeight: FontWeight.w400,
+                  color: t.textDim.withValues(alpha: 0.7),
+                ),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _withReveal(Widget field) {
+    final reveal = widget.onReveal;
+    if (reveal == null) return field;
+    return Row(
+      children: [
+        Expanded(child: field),
+        const SizedBox(width: HinterTokens.s2),
+        NavFocusable(
+          region: widget.region,
+          rowKey: widget.rowKey,
+          col: 1,
+          scrollIntoView: false,
+          onSelect: reveal,
+          builder: (_, f) => FocusFrame(
+            focused: f,
+            radius: HinterTokens.radiusSmall,
+            scale: 1.0,
+            child: Semantics(
+              button: true,
+              label: widget.obscure ? 'Show password' : 'Hide password',
+              child: Padding(
+                padding: const EdgeInsets.all(HinterTokens.s1),
+                child: EyeMark(
+                  shown: !widget.obscure,
+                  size: MediaQuery.textScalerOf(context).scale(32),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -590,11 +630,26 @@ class _TextEntryDialogState extends State<_TextEntryDialog> {
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
     final region = widget.modal.region;
+    // A secret field has the show/hide button on its right, in the same row.
     region.setRows([
-      const NavRow('field', 1),
-      if (widget.secret) const NavRow('reveal', 1),
+      NavRow('field', widget.secret ? 2 : 1),
       const NavRow('buttons', 2),
     ]);
+    final field = NavTextField(
+      region: region,
+      rowKey: 'field',
+      controller: _text,
+      obscure: widget.secret && !_reveal,
+      hint: widget.hint,
+      onReveal: widget.secret ? () => setState(() => _reveal = !_reveal) : null,
+      onSubmit: widget.enterSubmits
+          ? _submit
+          : () {
+              region.model.goTo(1, 1);
+              region.changed();
+              unawaited(region.focusCurrent());
+            },
+    );
     return DialogCard(
       title: widget.title,
       children: [
@@ -604,35 +659,7 @@ class _TextEntryDialogState extends State<_TextEntryDialog> {
           widget.extra!,
         ],
         const SizedBox(height: HinterTokens.s3),
-        NavTextField(
-          region: region,
-          rowKey: 'field',
-          controller: _text,
-          obscure: widget.secret && !_reveal,
-          hint: widget.hint,
-          onSubmit: widget.enterSubmits
-              ? _submit
-              : () {
-                  region.model.goTo(widget.secret ? 2 : 1, 1);
-                  region.changed();
-                  unawaited(region.focusCurrent());
-                },
-        ),
-        if (widget.secret) ...[
-          const SizedBox(height: HinterTokens.s2),
-          NavFocusable(
-            region: region,
-            rowKey: 'reveal',
-            col: 0,
-            scrollIntoView: false,
-            onSelect: () => setState(() => _reveal = !_reveal),
-            builder: (_, f) => SettingRow(
-              title: 'Show what I type',
-              focused: f,
-              leading: CheckMark(checked: _reveal),
-            ),
-          ),
-        ],
+        field,
         if (_error != null) ...[
           const SizedBox(height: HinterTokens.s2),
           StatusLine(_error!, error: true),

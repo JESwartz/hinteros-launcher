@@ -1,5 +1,5 @@
-/// Creating a profile, step by step on one page: name, colour, PIN (twice),
-/// "Lock this profile". The same page serves the picker's Add profile,
+/// Creating a profile, step by step on one page: name and colour, PIN
+/// (twice), "Lock this profile". The same page serves the picker's Add profile,
 /// Settings -> Profiles -> Add profile and first-boot mode's "Create your
 /// profile" (with the admin wording), and then the "Getting things ready"
 /// page follows a create job.
@@ -45,7 +45,7 @@ typedef EditText = Future<String?> Function({
   String? hint,
 });
 
-enum _Step { name, color, pin, pinAgain, lock }
+enum _Step { name, pin, pinAgain, lock }
 
 /// Shows the form. [admin]: first-boot mode's wording. [taken]: names
 /// already on the box (a duplicate is allowed, with a note). Null:
@@ -161,7 +161,7 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
       setState(() => _error = p);
       return;
     }
-    _go(_Step.color);
+    _go(_Step.pin);
   }
 
   void _pinNext() {
@@ -206,7 +206,11 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
     final Widget body;
     switch (_step) {
       case _Step.name:
-        _region.setRows([const NavRow('name', 1), const NavRow('next', 1)]);
+        _region.setRows([
+          const NavRow('name', 1),
+          NavRow('colors', ProfileColor.values.length),
+          const NavRow('next', 1),
+        ]);
         final dup = widget.taken.any(
           (n) => n.trim().toLowerCase() == _name.trim().toLowerCase(),
         );
@@ -233,15 +237,7 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
           if (_error != null) StatusLine(_error!, error: true),
           if (_error == null && dup)
             const StatusLine('Another profile has this name.'),
-          _buttons('next', [btn('Continue', _nameNext, primary: true)]),
-        ]);
-      case _Step.color:
-        _region.setRows([
-          NavRow('colors', ProfileColor.values.length),
-          const NavRow('next', 1),
-        ]);
-        body = _column([
-          Text('Pick a colour for $_name.', style: t.title),
+          Text('Pick a colour', style: t.label),
           Wrap(
             spacing: HinterTokens.s2,
             runSpacing: HinterTokens.s2,
@@ -254,7 +250,7 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
                   scrollIntoView: false,
                   onFocused: () =>
                       setState(() => _color = ProfileColor.values[i]),
-                  onSelect: () => _go(_Step.pin),
+                  onSelect: _nameNext,
                   builder: (_, f) => _Swatch(
                     color: ProfileColor.values[i],
                     focused: f,
@@ -264,9 +260,7 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
             ],
           ),
           Text(_color.label, style: t.bodyDim),
-          _buttons('next', [
-            btn('Continue', () => _go(_Step.pin), primary: true),
-          ]),
+          _buttons('next', [btn('Continue', _nameNext, primary: true)]),
         ]);
       case _Step.pin:
       case _Step.pinAgain:
@@ -339,10 +333,8 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_step != _Step.name) ...[
-            avatar,
-            const SizedBox(width: HinterTokens.s5),
-          ],
+          avatar,
+          const SizedBox(width: HinterTokens.s5),
           Expanded(child: body),
         ],
       ),

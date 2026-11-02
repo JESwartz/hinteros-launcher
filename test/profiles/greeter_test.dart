@@ -261,7 +261,7 @@ void main() {
     expect(focusLabel(), 'content/tiles:3');
     await p.press(NavAction.accept);
     expect(find.text('Add profile'), findsWidgets);
-    expect(find.text('Step 1 of 5'), findsOneWidget);
+    expect(find.text('Step 1 of 4'), findsOneWidget);
     // Name, with the picker's own keyboard.
     await p.press(NavAction.accept);
     final screen = t.widget<GreeterScreen>(find.byType(GreeterScreen));
@@ -270,9 +270,9 @@ void main() {
     kb.onDone!(kb.text.value);
     await t.pumpAndSettle();
     expect(find.text('Robin'), findsOneWidget);
+    // The colours are on the same page, below the name.
+    expect(find.text('Pick a colour'), findsOneWidget);
     await p.press(NavAction.down);
-    await p.press(NavAction.accept); // Continue
-    expect(find.text('Pick a colour for Robin.'), findsOneWidget);
     await p.press(NavAction.right); // blue
     await p.press(NavAction.accept);
     expect(find.text('Choose a PIN for Robin: 4 to 8 digits.'), findsOneWidget);

@@ -101,7 +101,7 @@ void main() {
       final h = await start(t, failing: ['youtube']);
       await until(t, () => h.flow.section == InstallSection.apps);
       expect(h.flow.systemPercent, 100);
-      expect(find.text('Checking your choices'), findsNothing);
+      expect(find.text('Verifying install configuration'), findsNothing);
       await t.pump();
       expect(find.text('Installing apps'), findsNothing);
       expect(find.text('Installing HinterOS'), findsWidgets);

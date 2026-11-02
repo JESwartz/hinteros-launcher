@@ -194,7 +194,7 @@ void main() {
     expect(find.text('Controllers'), findsOneWidget);
     // Continue through controllers, network and display; the last Continue
     // opens the profile form itself.
-    for (final title in ['Internet', 'Display', 'Step 1 of 5']) {
+    for (final title in ['Internet', 'Display', 'Step 1 of 4']) {
       for (var i = 0; i < 20 && find.text(title).evaluate().isEmpty; i++) {
         await keys(t, [down]);
         if (focusLabel()?.endsWith('/actions:0') ?? false) {
@@ -205,11 +205,11 @@ void main() {
     }
     // B in the form comes back to Display; Continue opens it again.
     await keys(t, [escape]);
-    expect(find.text('Step 1 of 5'), findsNothing);
+    expect(find.text('Step 1 of 4'), findsNothing);
     expect(find.text('Display'), findsOneWidget);
     for (
       var i = 0;
-      i < 20 && find.text('Step 1 of 5').evaluate().isEmpty;
+      i < 20 && find.text('Step 1 of 4').evaluate().isEmpty;
       i++
     ) {
       await keys(t, [down]);
@@ -217,15 +217,14 @@ void main() {
         await keys(t, [enter]);
       }
     }
-    expect(find.text('Step 1 of 5'), findsOneWidget);
+    expect(find.text('Step 1 of 4'), findsOneWidget);
     await keys(t, [enter]); // the name field: the text dialog
     await t.enterText(find.byType(EditableText), 'James');
     // Enter only closes the keyboard (focus on Done); Done takes the name.
     await keys(t, [enter]);
     expect(find.byType(EditableText), findsOneWidget);
     await keys(t, [enter]);
-    await keys(t, [down, enter]); // Continue
-    await keys(t, [enter]); // the first colour
+    await keys(t, [down, enter]); // the first colour
     await typePin(t, '2468');
     await typePin(t, '2468');
     await keys(t, [down, enter]); // Create my profile
@@ -275,6 +274,46 @@ void main() {
       'keep',
     ]);
     expect(find.text('3840 x 2160 at 60 Hz'), findsOneWidget);
+    // A kept mode: the optional step is no longer skipped.
+    expect(find.text('Continue'), findsOneWidget);
+    expect(find.text('Check the picture edges'), findsOneWidget);
+  });
+
+  testWidgets('first-boot mode: optional steps, pairing, the joined network', (
+    t,
+  ) async {
+    setView(t);
+    final box = MockProfileBox(profiles: [], now: fixedNow);
+    final h = harness(current: 'p1', setupRequired: true, box: box);
+    final bt = h.services.mockBluetooth;
+    await bt.forget('AA:00:11'); // no controller connected
+    await h.pump(t);
+    await keys(t, [enter]); // Start
+    expect(find.text('Controllers'), findsOneWidget);
+    expect(find.text('Step 2 of 7 · Optional'), findsOneWidget);
+    expect(find.text('Skip'), findsOneWidget);
+    // Skip has the focus; controllers are first in the list. A pairs (and
+    // the daemon connects it).
+    expect(focusLabel(), endsWith('/actions:0'));
+    for (var i = 0; i < 6 && !focusLabel()!.endsWith('/bt-BB:00:33:0'); i++) {
+      await keys(t, [up]);
+    }
+    expect(focusLabel(), endsWith('/bt-BB:00:33:0'));
+    await keys(t, [up]); // the top of the list
+    expect(focusLabel(), endsWith('/bt-BB:00:33:0'));
+    await keys(t, [enter]);
+    expect(bt.log, contains('pair:BB:00:33'));
+    expect(find.text('Connected'), findsOneWidget);
+    expect(find.text('Skip'), findsNothing);
+    expect(find.text('Continue'), findsOneWidget);
+    for (var i = 0; i < 20 && find.text('Internet').evaluate().isEmpty; i++) {
+      await keys(t, [down]);
+      if (focusLabel()?.endsWith('/actions:0') ?? false) {
+        await keys(t, [enter]);
+      }
+    }
+    expect(find.text('Connected to Hinter-Home.'), findsOneWidget);
+    expect(find.text('Step 3 of 7'), findsOneWidget);
   });
 
   testWidgets('a profile without a PIN sets one first', (t) async {

@@ -469,7 +469,7 @@ void main() {
         await t.pump(const Duration(milliseconds: 5));
       }
       expect(h.flow.stages, keepInstallStages);
-      expect(find.text('Preparing the disk'), findsWidgets);
+      expect(find.text('Preparing disk'), findsWidgets);
       expect(find.text('Working'), findsNothing);
       expect(find.textContaining('Erasing'), findsNothing);
       await t.pump(const Duration(seconds: 5));

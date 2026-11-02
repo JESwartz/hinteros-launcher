@@ -389,6 +389,60 @@ class _LockPainter extends CustomPainter {
   bool shouldRepaint(_LockPainter o) => o.color != color;
 }
 
+/// An eye: open when [shown] (the hidden text is on screen), struck through
+/// when not.
+class EyeMark extends StatelessWidget {
+  const EyeMark({super.key, required this.shown, this.size = 32});
+
+  final bool shown;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    size: Size.square(size),
+    painter: _EyePainter(HinterTheme.of(context).text, shown),
+  );
+}
+
+class _EyePainter extends CustomPainter {
+  _EyePainter(this.color, this.shown);
+
+  final Color color;
+  final bool shown;
+
+  @override
+  void paint(Canvas canvas, Size s) {
+    final w = s.width;
+    final h = s.height;
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w * 0.09
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+    final outline = Path()
+      ..moveTo(w * 0.06, h * 0.5)
+      ..quadraticBezierTo(w * 0.5, h * 0.02, w * 0.94, h * 0.5)
+      ..quadraticBezierTo(w * 0.5, h * 0.98, w * 0.06, h * 0.5)
+      ..close();
+    canvas.drawPath(outline, stroke);
+    canvas.drawCircle(
+      Offset(w * 0.5, h * 0.5),
+      w * 0.14,
+      Paint()..color = color,
+    );
+    if (!shown) {
+      canvas.drawLine(
+        Offset(w * 0.14, h * 0.86),
+        Offset(w * 0.86, h * 0.14),
+        stroke,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_EyePainter o) => o.color != color || o.shown != shown;
+}
+
 /// A horizontal bar, filled to [fraction] (0..1), or an indeterminate stripe
 /// when [fraction] is null.
 class HBar extends StatelessWidget {

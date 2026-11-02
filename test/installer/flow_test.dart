@@ -587,7 +587,7 @@ void main() {
         find.text('HinterOS 0.7.0 stable (1a2b3c4) is installed'),
         findsOneWidget,
       );
-      expect(find.textContaining('Remove the USB stick'), findsOneWidget);
+      expect(find.textContaining('Remove installation media'), findsOneWidget);
       expect(
         find.textContaining('general drivers'),
         findsOneWidget,
@@ -610,7 +610,7 @@ void main() {
       final h = await toSummary(t, backend: backend);
       await h.eraseAndInstall(t);
       expect(h.flow.phase, InstallPhase.validating);
-      expect(find.text('Checking your choices'), findsOneWidget);
+      expect(find.text('Verifying install configuration'), findsOneWidget);
 
       // Part-way through the install: the warning and a percentage.
       for (var i = 0; i < 80 && h.flow.percent < 57; i++) {
@@ -628,7 +628,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Copying packages'), findsOneWidget);
-      expect(find.text('Installing the boot loader'), findsOneWidget);
+      expect(find.text('Installing boot loader'), findsOneWidget);
       expect(
         t.widget<Text>(find.byKey(const ValueKey('build-line'))).data,
         startsWith('Building hinteros-launcher (3 of 12): 88%. Time elapsed: '),

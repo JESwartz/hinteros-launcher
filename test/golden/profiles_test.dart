@@ -104,7 +104,7 @@ void main() {
     await keys(t, [kEnter]);
     for (
       var i = 0;
-      i < 30 && find.text('Step 1 of 5').evaluate().isEmpty;
+      i < 30 && find.text('Step 1 of 4').evaluate().isEmpty;
       i++
     ) {
       await keys(t, [kDown]);

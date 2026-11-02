@@ -1065,7 +1065,7 @@ class MockBluetooth implements BluetoothRepository {
   void _emit() => _changes.add(current);
 
   @override
-  Future<void> startScan() async {
+  Future<void> startScan({int? timeoutS}) async {
     _scanning = true;
     for (final d in _nearby) {
       if (!_devices.any((e) => e.id == d.id)) _devices = [..._devices, d];

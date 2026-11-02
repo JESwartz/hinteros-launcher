@@ -295,7 +295,7 @@ void main() {
       expect(stageLabel('packages', download: true), 'Downloading packages');
       expect(stageLabel('build'), 'Building HinterOS');
       expect(stageLabel('build', download: true), 'Building HinterOS');
-      expect(stageLabel('bootloader'), 'Installing the boot loader');
+      expect(stageLabel('bootloader'), 'Installing boot loader');
       expect(stageLabel('install'), 'Installing HinterOS', reason: 'older');
     });
 

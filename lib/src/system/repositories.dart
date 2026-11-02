@@ -206,8 +206,9 @@ abstract class BluetoothRepository {
   /// `bluetooth.confirm`: answers the pairing of device [id].
   Future<void> confirm(String id, {required bool accept});
 
-  /// `bluetooth.scan`; the daemon stops by itself after 30 s.
-  Future<void> startScan();
+  /// `bluetooth.scan`; the daemon stops by itself after [timeoutS] seconds
+  /// (30 when null, 300 at most).
+  Future<void> startScan({int? timeoutS});
   Future<void> stopScan();
 
   /// Returns when the pairing is over. Controllers and headsets pair without

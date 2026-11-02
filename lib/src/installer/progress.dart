@@ -169,17 +169,17 @@ class InstallRun {
 
 /// The stages in order, in plain words.
 const _stageLabels = {
-  'validate': 'Checking your choices',
+  'validate': 'Verifying install configuration',
   'fetch': 'Downloading HinterOS',
-  'partition': 'Erasing and preparing the disk',
-  'mount': 'Preparing the disk',
-  'facter': 'Checking the hardware',
-  'config': 'Writing the settings',
+  'partition': 'Erasing disk',
+  'mount': 'Preparing disk',
+  'facter': 'Checking hardware',
+  'config': 'Writing settings',
   // Older backends: the packages, the build and the boot loader in one.
   'install': 'Installing HinterOS',
   'build': 'Building HinterOS',
-  'bootloader': 'Installing the boot loader',
-  'snapshot': 'Checking the result',
+  'bootloader': 'Installing boot loader',
+  'snapshot': 'Validating system',
   'finalize': 'Finishing',
   'done': 'Done',
 };

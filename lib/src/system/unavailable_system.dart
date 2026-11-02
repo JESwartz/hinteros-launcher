@@ -115,7 +115,7 @@ class _UnavailableBluetooth implements BluetoothRepository {
   @override
   List<BtDevice> get current => const [];
   @override
-  Future<void> startScan() => Future.error(_gone);
+  Future<void> startScan({int? timeoutS}) => Future.error(_gone);
   @override
   Future<void> stopScan() => Future.error(_gone);
   @override

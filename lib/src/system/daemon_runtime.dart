@@ -233,9 +233,9 @@ class DaemonBluetooth implements BluetoothRepository {
   });
 
   @override
-  Future<void> startScan() => guardCall(() async {
+  Future<void> startScan({int? timeoutS}) => guardCall(() async {
     _scanning = (await _conn.bluetoothScan(
-      const api.BluetoothScanParams(enabled: true),
+      api.BluetoothScanParams(enabled: true, timeoutS: timeoutS),
     )).scanning;
   });
 

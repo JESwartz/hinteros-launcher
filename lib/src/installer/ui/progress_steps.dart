@@ -96,10 +96,6 @@ class InstallStepView extends StatelessWidget {
                           ? t.label.copyWith(color: t.accent)
                           : (i < current ? t.body : t.bodyDim),
                     ),
-                    if (i == current) ...[
-                      const SizedBox(width: HinterTokens.s2),
-                      Text('now', style: t.caption),
-                    ],
                   ],
                 ),
               ),
@@ -309,7 +305,7 @@ class _DoneStepViewState extends State<DoneStepView> {
     final t = HinterTheme.of(context);
     final f = env.flow;
     final p = Pane(env.region);
-    p.add(Text('Remove the USB stick, then restart.', style: t.title));
+    p.add(Text('Remove installation media and restart.', style: t.title));
     final failedApps = f.failedAppNames;
     if (failedApps.isNotEmpty) {
       p.add(

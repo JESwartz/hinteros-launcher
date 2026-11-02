@@ -6,9 +6,11 @@
 /// profile form for the admin profile (`profiles.setup_admin`: no rebuild,
 /// no network), and ends on Home in the new profile.
 ///
-/// Every step between Welcome and All set is a choice: a step with nothing to
-/// choose is skipped (a display whose mode can't be set, or that has only one
-/// mode), and the profile step is the form itself, not a page about it.
+/// Every step between Welcome and All set is a choice, and the profile step
+/// is the form itself, not a page about it. Display always has the picture
+/// edge check; the resolution only when the display has modes to choose.
+/// Controllers and Display are optional: their button says Skip until
+/// something was done there.
 library;
 
 import 'dart:async';
@@ -23,7 +25,8 @@ import '../dialogs.dart';
 import '../modal_host.dart';
 import '../pages.dart' show FullPage;
 import '../system/hardware_sections.dart'
-    show DisplayModeDropDown, KeepDisplayDialog;
+    show DisplayModeDropDown, KeepDisplayDialog, SafeAreaGuide, SafePreview;
+import '../system/network_sections.dart' show PairConfirmDialog;
 import '../time_zone/time_zone_picker.dart';
 import '../widgets.dart';
 import 'profile_form.dart';
@@ -31,16 +34,21 @@ import 'session_profile.dart' show sessionEditText;
 
 enum FirstBootStep {
   welcome('Welcome'),
-  controllers('Controllers'),
+  controllers('Controllers', optional: true),
   network('Internet'),
   timeZone('Time zone'),
-  display('Display'),
+  display('Display', optional: true),
   profile('Create your profile'),
   done('All set');
 
-  const FirstBootStep(this.title);
+  const FirstBootStep(this.title, {this.optional = false});
   final String title;
+  final bool optional;
 }
+
+/// How long one controller search lasts (the daemon's most); it starts
+/// again while the step is open.
+const _scanSeconds = 300;
 
 class FirstBootPage extends StatefulWidget {
   const FirstBootPage({
@@ -63,15 +71,22 @@ class FirstBootPage extends StatefulWidget {
 class _FirstBootPageState extends State<FirstBootPage> {
   FirstBootStep _step = FirstBootStep.welcome;
 
-  /// The way the wizard is moving, so a step with nothing to choose is
-  /// skipped in the same direction.
-  bool _forward = true;
   String? _message;
   NetworkStatus? _net;
   List<WifiNetwork> _wifi = const [];
   List<BtDevice> _devices = const [];
   StreamSubscription<List<BtDevice>>? _bt;
+  StreamSubscription<BtConfirmRequest>? _confirms;
+  Timer? _rescan;
+
+  /// The device being paired now, and the open code dialog of that pairing.
+  String? _pairing;
+  ModalHandle<bool>? _confirmModal;
   DisplayInfo? _display;
+  bool _displayLoaded = false;
+
+  /// A mode was kept on the Display step (it is not skipped then).
+  bool _modeChanged = false;
   TimeZoneInfo? _zone;
   List<TimeZoneEntry> _zones = const [];
   bool _settingZone = false;
@@ -99,6 +114,8 @@ class _FirstBootPageState extends State<FirstBootPage> {
   @override
   void dispose() {
     _bt?.cancel();
+    _confirms?.cancel();
+    _stopScan();
     super.dispose();
   }
 
@@ -116,14 +133,10 @@ class _FirstBootPageState extends State<FirstBootPage> {
     _go(FirstBootStep.values[_step.index - 1], forward: false);
   }
 
-  /// Leaves a step that turned out to have nothing to choose.
-  void _skip() =>
-      _forward ? _go(FirstBootStep.values[_step.index + 1]) : _back();
-
   void _go(FirstBootStep s, {bool forward = true}) {
+    if (_step == FirstBootStep.controllers && s != _step) _stopScan();
     setState(() {
       _step = s;
-      _forward = forward;
       _message = null;
     });
     _region.reset();
@@ -216,19 +229,77 @@ class _FirstBootPageState extends State<FirstBootPage> {
     _bt ??= _s.bluetooth.devices.listen((d) {
       if (mounted) setState(() => _devices = d);
     });
+    _confirms ??= _s.bluetooth.confirmRequests.listen(_onConfirm);
     if (mounted) setState(() => _devices = _s.bluetooth.current);
-    await _try(_s.bluetooth.startScan);
+    await _try(() => _s.bluetooth.startScan(timeoutS: _scanSeconds));
+    // A controller put in pairing mode later must still be found.
+    _rescan?.cancel();
+    _rescan = Timer.periodic(const Duration(seconds: _scanSeconds - 10), (_) {
+      if (mounted && _step == FirstBootStep.controllers) {
+        unawaited(_try(() => _s.bluetooth.startScan(timeoutS: _scanSeconds)));
+      }
+    });
+  }
+
+  void _stopScan() {
+    if (_rescan == null) return;
+    _rescan!.cancel();
+    _rescan = null;
+    // Scanning slows Bluetooth audio and other devices.
+    unawaited(_s.bluetooth.stopScan().catchError((_) {}));
+  }
+
+  /// Controllers first, then by name; the order does not change while a
+  /// row has the focus only because a device was found.
+  List<BtDevice> get _sortedDevices {
+    final l = [..._devices];
+    int rank(BtDevice d) => d.kind == BtKind.controller ? 0 : 1;
+    l.sort((a, b) {
+      final r = rank(a).compareTo(rank(b));
+      return r != 0 ? r : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return l;
+  }
+
+  /// Pairs (the daemon trusts and connects it), or connects a paired one.
+  Future<void> _chooseDevice(BtDevice d) async {
+    if (_pairing != null || d.connected) return;
+    setState(() {
+      _pairing = d.id;
+      _message = null;
+    });
+    try {
+      await _try(
+        () => d.paired ? _s.bluetooth.connect(d.id) : _s.bluetooth.pair(d.id),
+      );
+    } finally {
+      _confirmModal?.close();
+      _confirmModal = null;
+      if (mounted) setState(() => _pairing = null);
+    }
+  }
+
+  /// The pairing needs a code compared or typed on the device.
+  Future<void> _onConfirm(BtConfirmRequest r) async {
+    if (!mounted || _step != FirstBootStep.controllers) return;
+    _confirmModal?.close();
+    final accepted = await ModalScope.of(context).show<bool>((c, m) {
+      _confirmModal = m;
+      return PairConfirmDialog(modal: m, request: r);
+    });
+    // Closed because the pairing ended: nothing to answer.
+    if (_confirmModal == null || !r.mustAnswer) return;
+    _confirmModal = null;
+    await _try(() => _s.bluetooth.confirm(r.id, accept: accepted == true));
   }
 
   Future<void> _loadDisplay() async {
     final d = await _try(_s.displayAudio.displayModes);
     if (!mounted || _step != FirstBootStep.display) return;
-    // Nothing to choose: a display that can't be set, or has one mode.
-    if (d == null || !d.canSet || d.modes.length < 2) {
-      _skip();
-      return;
-    }
-    setState(() => _display = d);
+    setState(() {
+      _display = d;
+      _displayLoaded = true;
+    });
   }
 
   /// `display.set_mode`, then the keep-or-go-back countdown, as in Settings.
@@ -246,6 +317,7 @@ class _FirstBootPageState extends State<FirstBootPage> {
     final keep = await ModalScope.of(context)
         .show<bool>((c, modal) => KeepDisplayDialog(modal: modal, mode: m));
     await _try(keep == true ? da.keepDisplayMode : da.revertDisplayMode);
+    if (keep == true) _modeChanged = true;
     final d = await _try(da.displayModes);
     if (mounted && d != null) setState(() => _display = d);
   }
@@ -304,7 +376,7 @@ class _FirstBootPageState extends State<FirstBootPage> {
     if (_message != null) p.add(StatusLine(_message!, error: true));
     switch (_step) {
       case FirstBootStep.welcome:
-        p.add(Text('Set up this box. It takes a few minutes.', style: t.title));
+        p.add(Text('Set up HinterOS', style: t.title));
         p.add(
           Text(
             'Move with the D-pad, A chooses, B goes back.',
@@ -318,24 +390,32 @@ class _FirstBootPageState extends State<FirstBootPage> {
             style: t.bodyDim,
           ),
         );
-        for (var i = 0; i < _devices.length; i++) {
-          final d = _devices[i];
+        if (_devices.isEmpty) {
+          p.add(const StatusLine('Searching...', busy: true));
+        }
+        // Rows keyed by address: a device found meanwhile does not move the
+        // focus to another device.
+        for (final d in _sortedDevices) {
+          final pairing = _pairing == d.id;
           p.item(
-            'b$i',
-            onSelect: d.paired || d.connected
+            'bt-${d.id}',
+            onSelect: d.connected || _pairing != null
                 ? null
-                : () => _try(() => _s.bluetooth.pair(d.id)),
+                : () => unawaited(_chooseDevice(d)),
             builder: (f) => SettingRow(
               title: d.name,
+              subtitle: d.kind == BtKind.controller ? null : d.kind.label,
               focused: f,
-              trailing: Text(
-                d.connected
-                    ? 'Connected'
-                    : d.paired
-                    ? 'Paired'
-                    : 'Choose to pair',
-                style: t.caption,
-              ),
+              trailing: pairing
+                  ? const Spinner(size: 32)
+                  : Text(
+                      d.connected
+                          ? 'Connected'
+                          : d.paired
+                          ? 'Connect'
+                          : 'Pair',
+                      style: t.caption,
+                    ),
             ),
           );
         }
@@ -345,23 +425,27 @@ class _FirstBootPageState extends State<FirstBootPage> {
           StatusLine(
             n == null
                 ? 'Checking the network...'
-                : (n.online
-                      ? 'Online.'
-                      : 'Not online. Updates and the Store need the '
-                            'internet.'),
+                : n.wifiSsid != null
+                ? 'Connected to ${n.wifiSsid}.'
+                : n.ethernet
+                ? 'Connected by cable.'
+                : 'Not online. Updates and the Store need the internet.',
             ok: n?.online ?? false,
           ),
         );
         for (var i = 0; i < _wifi.length; i++) {
           final ap = _wifi[i];
+          final joined = ap.connected || ap.ssid == n?.wifiSsid;
           p.item(
             'w$i',
-            onSelect: () => unawaited(_join(ap)),
+            onSelect: joined ? null : () => unawaited(_join(ap)),
             builder: (f) => SettingRow(
               title: ap.ssid,
               focused: f,
               leading: SignalBars(bars: ap.bars),
-              trailing: ap.secured ? const LockMark() : null,
+              trailing: joined
+                  ? Text('Connected', style: t.caption)
+                  : (ap.secured ? const LockMark() : null),
             ),
           );
         }
@@ -385,32 +469,41 @@ class _FirstBootPageState extends State<FirstBootPage> {
         }
       case FirstBootStep.display:
         final d = _display;
-        p.add(
-          Text(
-            d == null
-                ? 'Checking the display...'
-                : 'Choose a resolution if the picture does not fit or is '
-                      'not sharp.',
-            style: t.bodyDim,
-          ),
-        );
-        if (d != null) {
-          p.row(
-            'mode',
-            1,
-            DisplayModeDropDown(
-              region: _region,
-              rowKey: 'mode',
-              modes: d.modes,
-              onChoose: (m) => unawaited(_setMode(m)),
+        if (!_displayLoaded) {
+          p.add(const StatusLine('Checking the display...', busy: true));
+        } else {
+          // Only a display that can be set and has more than one mode.
+          if (d != null && d.canSet && d.modes.length > 1) {
+            p.add(Text('Choose a resolution', style: t.bodyDim));
+            p.row(
+              'mode',
+              1,
+              DisplayModeDropDown(
+                region: _region,
+                rowKey: 'mode',
+                modes: d.modes,
+                onChoose: (m) => unawaited(_setMode(m)),
+              ),
+            );
+          }
+          p.item(
+            'guide',
+            onSelect: () =>
+                ModalScope.of(context)
+                    .show<void>((c, m) => SafeAreaGuide(modal: m)),
+            builder: (f) => SettingRow(
+              title: 'Check the picture edges',
+              focused: f,
+              trailing: const SafePreview(),
             ),
+            gap: HinterTokens.s3,
           );
         }
       case FirstBootStep.profile:
         // The form is open over this; only a failed setup shows here.
         break;
       case FirstBootStep.done:
-        p.add(Text('You are ready, ${_createdName ?? ''}.', style: t.title));
+        p.add(Text("You're all set, ${_createdName ?? ''}.", style: t.title));
     }
     if (_step != FirstBootStep.profile || _message != null) {
       p.buttons('actions', [
@@ -419,6 +512,9 @@ class _FirstBootPageState extends State<FirstBootPage> {
             FirstBootStep.welcome => 'Start',
             FirstBootStep.profile => 'Try again',
             FirstBootStep.done => 'Go to Home',
+            FirstBootStep.controllers when !_devices.any((d) => d.connected) =>
+              'Skip',
+            FirstBootStep.display when !_modeChanged => 'Skip',
             _ => 'Continue',
           },
           _next,
@@ -428,7 +524,9 @@ class _FirstBootPageState extends State<FirstBootPage> {
     }
     return FullPage(
       title: _step.title,
-      subtitle: 'Step ${_step.index + 1} of ${FirstBootStep.values.length}',
+      subtitle:
+          'Step ${_step.index + 1} of ${FirstBootStep.values.length}'
+          '${_step.optional ? ' · Optional' : ''}',
       child: SingleChildScrollView(child: p.build()),
     );
   }

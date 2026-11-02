@@ -54,8 +54,8 @@ void main() {
     await kb.type('Robin');
     kb.onDone!(kb.text.value);
     await t.pumpAndSettle();
+    // The colours are below the name, on the same page.
     await p.press(NavAction.down);
-    await p.press(NavAction.accept);
     await p.press(NavAction.right);
     await p.press(NavAction.right);
     await shot(t, 'add_color');
@@ -74,8 +74,7 @@ void main() {
     kb.onDone!(kb.text.value);
     await t.pumpAndSettle();
     await p.press(NavAction.down);
-    await p.press(NavAction.accept);
-    await p.press(NavAction.accept);
+    await p.press(NavAction.accept); // the first colour
     await p.typePin('2580');
     await p.typePin('2580');
     await p.press(NavAction.down);

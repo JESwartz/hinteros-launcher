@@ -9,7 +9,6 @@ import '../system/repositories.dart';
 import '../theme/hinter_theme.dart';
 import 'dialogs.dart';
 import 'modal_host.dart';
-import 'nav_focusable.dart';
 import 'widgets.dart';
 
 /// What the action is for, in the words of the sentence "Enter the password
@@ -165,11 +164,7 @@ class _AuthPromptDialogState extends State<AuthPromptDialog> {
     final region = widget.modal.region;
     final r = widget.request;
     final purpose = authPurpose(r.action);
-    region.setRows(const [
-      NavRow('field', 1),
-      NavRow('reveal', 1),
-      NavRow('buttons', 2),
-    ]);
+    region.setRows(const [NavRow('field', 2), NavRow('buttons', 2)]);
     return DialogCard(
       title: 'Admin password',
       children: [
@@ -191,19 +186,7 @@ class _AuthPromptDialogState extends State<AuthPromptDialog> {
           obscure: !_reveal,
           hint: 'Password',
           onSubmit: _submit,
-        ),
-        const SizedBox(height: HinterTokens.s2),
-        NavFocusable(
-          region: region,
-          rowKey: 'reveal',
-          col: 0,
-          scrollIntoView: false,
-          onSelect: () => setState(() => _reveal = !_reveal),
-          builder: (_, f) => SettingRow(
-            title: 'Show password',
-            focused: f,
-            leading: CheckMark(checked: _reveal),
-          ),
+          onReveal: () => setState(() => _reveal = !_reveal),
         ),
         if (_error != null) ...[
           const SizedBox(height: HinterTokens.s2),

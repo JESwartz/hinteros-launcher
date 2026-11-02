@@ -45,7 +45,7 @@ class DisplaySection extends StatelessWidget {
           builder: (f) => SettingRow(
             title: 'Check the picture edges',
             focused: f,
-            trailing: const _SafePreview(),
+            trailing: const SafePreview(),
           ),
           gap: info.canSet ? HinterTokens.s1 + 4 : HinterTokens.s2,
         );
@@ -235,8 +235,8 @@ class _Radio extends StatelessWidget {
 }
 
 /// A miniature screen with the 5% safe frame.
-class _SafePreview extends StatelessWidget {
-  const _SafePreview();
+class SafePreview extends StatelessWidget {
+  const SafePreview({super.key});
 
   @override
   Widget build(BuildContext context) {

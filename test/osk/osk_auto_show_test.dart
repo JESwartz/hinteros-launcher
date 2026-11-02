@@ -31,7 +31,7 @@ void main() {
     t,
   ) async {
     final h = await _passwordDialog(t);
-    await press(t, [kDown]); // "Show what I type"
+    await press(t, [kDown]); // the buttons
     expect(h.mock.oskVisible, isFalse);
     await press(t, [kUp]);
     expect(h.mock.oskVisible, isTrue);

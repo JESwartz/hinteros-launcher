@@ -84,13 +84,6 @@ class WelcomeStep extends StatelessWidget {
       ),
       gap: HinterTokens.s3,
     );
-    p.add(
-      Text(
-        'The installer asks before it erases a disk.',
-        style: t.body.copyWith(color: t.danger),
-      ),
-      gap: HinterTokens.s3,
-    );
     p.buttons('start', [
       btn('Start', env.flow.next, primary: true),
     ], gap: HinterTokens.s5);
