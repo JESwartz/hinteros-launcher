@@ -525,7 +525,7 @@ class AccountsPage extends StatelessWidget {
       ], gap: HinterTokens.s4);
     return FullPage(
       title: 'Jellyfin accounts',
-      child: SingleChildScrollView(child: p.build()),
+      child: PageScroll(child: p.build()),
     );
   }
 }

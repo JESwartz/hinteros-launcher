@@ -75,6 +75,47 @@ class FullPage extends StatelessWidget {
   }
 }
 
+/// Scrolls a page body without cutting off the focus marker: the ring and
+/// the focus scale draw past the items, so the body gets room above and
+/// below and paints into the page margin at the sides.
+class PageScroll extends StatelessWidget {
+  const PageScroll({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.symmetric(vertical: HinterTokens.s2),
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) => ClipRect(
+    clipper: const SideBleed(),
+    child: SingleChildScrollView(
+      clipBehavior: Clip.none,
+      padding: padding,
+      child: child,
+    ),
+  );
+}
+
+/// Clips at the top and bottom only: lets a focus marker paint into the page
+/// margin at the sides.
+class SideBleed extends CustomClipper<Rect> {
+  const SideBleed();
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(
+    -HinterTokens.s5,
+    0,
+    size.width + HinterTokens.s5,
+    size.height,
+  );
+
+  @override
+  bool shouldReclip(SideBleed old) => false;
+}
+
 // ------------------------------------------------------------------ progress
 
 /// Follows a job (`jobs.watch`) on a full-screen page: what it does (for
@@ -270,7 +311,7 @@ class _JobProgressScreenState extends State<JobProgressScreen> with JobTicker {
     return FullPage(
       title: headline,
       subtitle: s.finished ? title : sub,
-      child: SingleChildScrollView(
+      child: PageScroll(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

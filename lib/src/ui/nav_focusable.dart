@@ -46,6 +46,10 @@ class _NavFocusableState extends State<NavFocusable> {
   @override
   void initState() {
     super.initState();
+    // The node belongs to the region, not to this widget: when one page
+    // replaces another, the item at the same row and column takes over a
+    // node that already has focus, and no focus change follows.
+    _focused = widget.region.nodeAt(widget.rowKey, widget.col).hasFocus;
     widget.region.registerSelect(widget.rowKey, widget.col, widget.onSelect);
     widget.region.registerContext(widget.rowKey, widget.col, widget.onContext);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -61,6 +65,7 @@ class _NavFocusableState extends State<NavFocusable> {
         old.col != widget.col) {
       old.region.unregisterSelect(old.rowKey, old.col);
       old.region.registerContext(old.rowKey, old.col, null);
+      _focused = widget.region.nodeAt(widget.rowKey, widget.col).hasFocus;
     }
     widget.region.registerSelect(widget.rowKey, widget.col, widget.onSelect);
     widget.region.registerContext(widget.rowKey, widget.col, widget.onContext);

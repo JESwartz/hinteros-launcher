@@ -6,6 +6,7 @@ import 'package:hinteros_launcher/src/installer/fake_backend.dart';
 import 'package:hinteros_launcher/src/installer/flow.dart';
 import 'package:hinteros_launcher/src/installer/plan.dart';
 import 'package:hinteros_launcher/src/installer/progress.dart';
+import 'package:hinteros_launcher/src/ui/widgets.dart';
 
 import '../support/installer_harness.dart';
 
@@ -367,6 +368,19 @@ void main() {
       expect(h.flow.step, InstallerStep.options);
       await h.back(t);
       expect(h.flow.step, InstallerStep.account);
+    });
+
+    testWidgets('Continue on the options to the summary: Back shows focus', (
+      t,
+    ) async {
+      // Continue and Back both sit at actions:0, so Back takes over a node
+      // that already has focus.
+      final h = await toKeepSummary(t);
+      expect(h.focus, 'content/actions:0');
+      expect(
+        t.widget<HButton>(find.widgetWithText(HButton, 'Back')).focused,
+        isTrue,
+      );
     });
   });
 

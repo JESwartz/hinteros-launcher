@@ -498,7 +498,7 @@ class _AppKeysPageState extends State<_AppKeysPage> {
     ], gap: HinterTokens.s4);
     return FullPage(
       title: _s.app(id)?.name ?? id,
-      child: SingleChildScrollView(child: p.build()),
+      child: PageScroll(child: p.build()),
     );
   }
 }
@@ -630,7 +630,7 @@ class _KeyPickerState extends State<_KeyPicker> {
     return FullPage(
       title: widget.title,
       subtitle: keyLabel(widget.current),
-      child: SingleChildScrollView(child: pane),
+      child: PageScroll(child: pane),
     );
   }
 }

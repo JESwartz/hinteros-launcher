@@ -15,7 +15,7 @@ import '../../system/repositories.dart';
 import '../../theme/hinter_theme.dart';
 import '../dialogs.dart';
 import '../modal_host.dart';
-import '../pages.dart' show FullPage, showJobProgress;
+import '../pages.dart' show FullPage, PageScroll, showJobProgress;
 import '../session_ending.dart';
 import '../system/common.dart';
 import '../widgets.dart';
@@ -577,7 +577,7 @@ class _AppHistoryPage extends StatelessWidget {
     p.buttons('close', [btn('Close', modal.close)], gap: HinterTokens.s4);
     return FullPage(
       title: 'App history',
-      child: SingleChildScrollView(child: p.build()),
+      child: PageScroll(child: p.build()),
     );
   }
 }
@@ -642,7 +642,7 @@ class _StarterPageState extends State<_StarterPage> {
     return FullPage(
       title: 'Starter apps',
       subtitle: '${_chosen.length} chosen',
-      child: SingleChildScrollView(child: p.build()),
+      child: PageScroll(child: p.build()),
     );
   }
 }

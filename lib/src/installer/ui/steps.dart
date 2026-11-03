@@ -56,14 +56,8 @@ class StepPage extends StatelessWidget {
   }
 }
 
-Widget scrolling(Widget pane) => ClipRect(
-  clipper: const _SideBleed(),
-  child: SingleChildScrollView(
-    clipBehavior: Clip.none,
-    padding: const EdgeInsets.all(HinterTokens.s2),
-    child: pane,
-  ),
-);
+Widget scrolling(Widget pane) =>
+    PageScroll(padding: const EdgeInsets.all(HinterTokens.s2), child: pane);
 
 // ------------------------------------------------------------------ welcome
 
@@ -651,7 +645,7 @@ class AppsStep extends StatelessWidget {
                   child: StatusLine('Loading apps...'),
                 )
               : ClipRect(
-                  clipper: const _SideBleed(),
+                  clipper: const SideBleed(),
                   child: AppSelectionView(
                     controller: apps,
                     region: env.region,
@@ -812,21 +806,4 @@ class SummaryStep extends StatelessWidget {
       },
     );
   }
-}
-
-/// Clips scrolling content at the top and bottom of its area, but lets the
-/// focus marker of a row spill out sideways.
-class _SideBleed extends CustomClipper<Rect> {
-  const _SideBleed();
-
-  @override
-  Rect getClip(Size size) => Rect.fromLTRB(
-    -HinterTokens.s5,
-    0,
-    size.width + HinterTokens.s5,
-    size.height,
-  );
-
-  @override
-  bool shouldReclip(_SideBleed old) => false;
 }

@@ -23,7 +23,7 @@ import '../../system/repositories.dart';
 import '../../theme/hinter_theme.dart';
 import '../dialogs.dart';
 import '../modal_host.dart';
-import '../pages.dart' show FullPage;
+import '../pages.dart' show FullPage, PageScroll;
 import '../system/hardware_sections.dart'
     show DisplayModeDropDown, KeepDisplayDialog, SafeAreaGuide, SafePreview;
 import '../system/network_sections.dart' show PairConfirmDialog;
@@ -527,7 +527,7 @@ class _FirstBootPageState extends State<FirstBootPage> {
       subtitle:
           'Step ${_step.index + 1} of ${FirstBootStep.values.length}'
           '${_step.optional ? ' · Optional' : ''}',
-      child: SingleChildScrollView(child: p.build()),
+      child: PageScroll(child: p.build()),
     );
   }
 }
