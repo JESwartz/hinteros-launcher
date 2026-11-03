@@ -91,10 +91,35 @@ class WelcomeStep extends StatelessWidget {
 
 // ------------------------------------------------------------------ network
 
-class NetworkStep extends StatelessWidget {
+class NetworkStep extends StatefulWidget {
   const NetworkStep({super.key, required this.env});
 
   final StepEnv env;
+
+  @override
+  State<NetworkStep> createState() => _NetworkStepState();
+}
+
+class _NetworkStepState extends State<NetworkStep> {
+  StepEnv get env => widget.env;
+
+  /// Whether the Wi-Fi list was shown once on this screen.
+  bool _listShown = false;
+
+  /// The list came after the screen (a slow check or scan), when only the
+  /// buttons could take the focus: the focus goes to the first network, as
+  /// when the list is there at once. A focus the person moved stays.
+  void _focusList() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final region = env.region;
+      final m = region.model;
+      if (!mounted || env.console.typing) return;
+      if (m.currentRow?.key != 'actions' || m.col != 0) return;
+      if (!m.rows.any((r) => r.key.startsWith('w:'))) return;
+      region.reset();
+      env.console.refocus();
+    });
+  }
 
   Future<void> _join(WifiAp ap) async {
     String? psk;
@@ -207,6 +232,9 @@ class NetworkStep extends StatelessWidget {
                     ),
               gap: HinterTokens.s1,
             );
+          } else if (!_listShown) {
+            _listShown = true;
+            _focusList();
           }
           // Keyed by name: a new scan does not move the focus.
           for (final ap in f.wifi) {

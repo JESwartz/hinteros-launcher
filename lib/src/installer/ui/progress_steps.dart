@@ -125,8 +125,7 @@ class InstallStepView extends StatelessWidget {
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Installing HinterOS', style: t.title),
-          const SizedBox(height: HinterTokens.s1),
+          // The page title says "Installing HinterOS": no heading here.
           _SpinnerCaption(caption: caption, captionKey: key),
           const SizedBox(height: HinterTokens.s1),
           Row(

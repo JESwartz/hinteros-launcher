@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -86,6 +88,55 @@ void main() {
       await h.accept(t);
       expect(backend.calls.contains('connectWifi:Office (802.1X)'), isFalse);
       expect(h.console(t).typing, isFalse);
+    });
+
+    /// On the internet step with a Wi-Fi scan that waits for [gate]: the
+    /// spinner turns, so only frames, no settle.
+    Future<InstallerHarness> slowScan(
+      WidgetTester t,
+      Completer<void> gate,
+    ) async {
+      final h = InstallerHarness(
+        backend: FakeInstallerBackend(
+          state: const NetworkState(wifiAvailable: true),
+          scanHold: gate.future,
+        ),
+      );
+      await h.pump(t);
+      h.flow.next();
+      for (var i = 0; i < 5; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      expect(h.flow.step, InstallerStep.network);
+      expect(find.text('Searching…'), findsOneWidget);
+      return h;
+    }
+
+    testWidgets('a slow Wi-Fi scan: the focus goes to the first network', (
+      t,
+    ) async {
+      final gate = Completer<void>();
+      final h = await slowScan(t, gate);
+      expect(h.focus, 'content/actions:0', reason: 'only the buttons yet');
+      gate.complete();
+      await t.pumpAndSettle();
+      expect(h.focus, 'content/w:Living Room:0');
+      // A later scan does not move it again.
+      await h.moveTo(t, 'actions');
+      await h.flow.scanWifi();
+      await t.pumpAndSettle();
+      expect(h.focus, 'content/actions:0');
+    });
+
+    testWidgets('a slow Wi-Fi scan: a focus that was moved stays', (t) async {
+      final gate = Completer<void>();
+      final h = await slowScan(t, gate);
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await t.pump();
+      expect(h.focus, 'content/actions:1');
+      gate.complete();
+      await t.pumpAndSettle();
+      expect(h.focus, 'content/actions:1');
     });
 
     testWidgets('an open Wi-Fi network joins without a password', (t) async {
@@ -621,7 +672,7 @@ void main() {
         await t.pump(const Duration(milliseconds: 100));
       }
       expect(h.flow.phase, InstallPhase.installing);
-      expect(find.text('Installing HinterOS'), findsWidgets);
+      expect(find.text('Installing HinterOS'), findsOneWidget);
       expect(
         t.widget<Text>(find.byKey(const ValueKey('percent'))).data,
         '${h.flow.stepPercent}%',
