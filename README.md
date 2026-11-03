@@ -3,7 +3,7 @@
 The Flutter UI that runs as the home app in the gamescope session: Home, Games, Apps, Store,
 Server, Settings. It talks to the daemon over a Unix socket and contains no system logic.
 
-Part of [HinterOS](https://justsomeshed.com/JSwartz/HinterOS/hinteros). Licensed under GPL-3.0-only, see [LICENSE](LICENSE).
+Part of [HinterOS](https://hinteros.org). Licensed under GPL-3.0-only, see [LICENSE](LICENSE).
 
 ## Develop
 
@@ -506,7 +506,7 @@ InputPlumber, with your real Steam library and a sample app list, and reads an X
 straight from evdev. In one terminal:
 
 ```
-nix run git+https://justsomeshed.com/JSwartz/HinterOS/hinteros-daemon.git#desktop-preview
+nix run git+https://git.hinteros.org/hinteros-daemon.git#desktop-preview
 ```
 
 It prints "hinteros-session is listening on:" and the socket path (in a temporary
@@ -1058,7 +1058,7 @@ through their stages by themselves.
 The UI reads through `AppsRepository` (apps, running, launch, close, Steam attention and focus) and
 `GamesRepository` (`games.list`, launch by Steam URL) in `lib/src/data/`, combined in
 `LauncherData`, which owns all daemon traffic and re-queries on connect and on events (the daemon
-does not replay them). The client speaks session API 0.11 (during 0.x the minor must match); the on-screen keyboard's connection too.
+does not replay them). The client speaks session API 1.0 (the daemon must have the same major and an equal or higher minor); the on-screen keyboard's connection too.
 
 ### Map data
 
