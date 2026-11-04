@@ -450,6 +450,24 @@ void main() {
       );
     });
 
+    testWidgets('a check that ends elsewhere shows on the open page', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await enterSettingsEntry(t, 'updates');
+      expect(find.text('HinterOS 0.6.0'), findsOneWidget);
+      expect(find.textContaining('Update available'), findsNothing);
+      h.services.mockUpdates.setStatus(mockBehind(mockOrdinaryUpdate()));
+      await t.pumpAndSettle();
+
+      expect(
+        find.textContaining('Update available: HinterOS 0.6.1'),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('rollback asks first and runs the job', (t) async {
       setView(t);
       final h = harness();
