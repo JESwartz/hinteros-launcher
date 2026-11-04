@@ -203,12 +203,13 @@ class InstallStepView extends StatelessWidget {
       return;
     }
     p.buttons('actions', [
-      btn('Try again', f.startInstall, primary: true),
+      // An erase goes back to the summary, to be held again.
+      btn('Try again', f.retry, primary: true),
       // A newer HinterOS that did not install: choose the version again
       // (the one on the USB stick, for example).
       if (f.newerFailed)
         btn('Choose another version', f.chooseVersionAgain)
-      else
+      else if (f.runKeep)
         btn('Change my choices', f.leaveFailure),
     ], gap: HinterTokens.s4);
   }

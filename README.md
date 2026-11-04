@@ -650,7 +650,7 @@ channel stable or beta), Apps (`AppSelectionView`: YouTube and Firefox ticked, a
 download disabled with "Needs internet" while offline, vendor terms read and accepted), Summary,
 Installing (`hinteros-install --validate-only`, then the install, with the stages in plain words,
 a percentage and the warnings; on an error the explanation of its code, the log path
-`/var/log/hinteros-install.log`, Try again or Change my choices; after `disk-changed` only "Select
+`/var/log/hinteros-install.log`, Try again (an Erase goes back to the Summary to be held again; Keep data runs again at once, or Change my choices); after `disk-changed` only "Select
 the disk", back to the Disk screen with no disk chosen) and Done (remove the stick,
 Restart now = `systemctl reboot`).
 

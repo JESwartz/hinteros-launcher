@@ -321,8 +321,11 @@ void main() {
       expect(find.text('Choose another version'), findsOneWidget);
       expect(find.text('Change my choices'), findsNothing);
 
-      // Try again runs the same newer install.
+      // Try again: the summary, held again, runs the same newer install.
       await h.accept(t);
+      expect(h.flow.step, InstallerStep.summary);
+      expect(b.calls.where((c) => c == 'install').length, 1);
+      await h.eraseAndInstall(t);
       expect(h.flow.phase, InstallPhase.failed);
       expect(b.calls.where((c) => c == 'install').length, 2);
       expect(b.plans.last['rev'], stableRev);

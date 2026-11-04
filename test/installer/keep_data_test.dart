@@ -678,7 +678,6 @@ void main() {
       await h.eraseAndInstall(t);
       expect(h.flow.phase, InstallPhase.failed);
       backend.setDisk(_sda, leftBehind());
-      await h.moveTo(t, 'actions', 1);
       await h.accept(t);
       h.flow.go(InstallerStep.disk);
       await h.settle(t);

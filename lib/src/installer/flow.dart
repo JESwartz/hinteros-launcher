@@ -1140,6 +1140,18 @@ class InstallerFlow extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// "Try again" after a refused or failed run. The hold on the summary is
+  /// the one confirmation of an erase, and the plan is built again from what
+  /// is true now (online, for example), so an Erase run goes back there; a
+  /// run that keeps the data starts again at once.
+  void retry() {
+    if (runKeep) {
+      unawaited(startInstall());
+    } else {
+      leaveFailure();
+    }
+  }
+
   /// Back from a failed run to the summary.
   void leaveFailure() {
     phase = InstallPhase.idle;

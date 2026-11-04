@@ -728,9 +728,13 @@ void main() {
       );
       expect(h.focus, 'content/actions:0');
 
-      // Try again, now it passes.
+      // Try again: an erase is held again on the summary; now it passes.
       backend.validateScript = null;
       await h.accept(t);
+      expect(h.flow.step, InstallerStep.summary);
+      expect(h.flow.phase, InstallPhase.idle);
+      expect(backend.calls.where((c) => c == 'validate').length, 1);
+      await h.eraseAndInstall(t);
       expect(h.flow.step, InstallerStep.done);
       expect(backend.calls.where((c) => c == 'validate').length, 2);
     });
@@ -775,7 +779,9 @@ void main() {
       expect(backend.plans.last['diskSeq'], 6);
     });
 
-    testWidgets('exit 1: failed part-way; Change my choices', (t) async {
+    testWidgets('exit 1: failed part-way; Try again goes to the summary', (
+      t,
+    ) async {
       final backend = FakeInstallerBackend()
         ..installScript = FakeScript.failed();
       final h = await toSummary(t, backend: backend);
@@ -800,8 +806,14 @@ void main() {
       );
       expect(backend.calls, containsAllInOrder(['validate', 'install']));
 
-      await h.choose(t, 'actions', 1); // Change my choices
+      expect(find.text('Change my choices'), findsNothing);
+      await h.accept(t); // Try again
       expect(h.flow.step, InstallerStep.summary);
+      expect(
+        backend.calls.where((c) => c == 'install').length,
+        1,
+        reason: 'nothing runs before the hold',
+      );
       expect(h.flow.phase, InstallPhase.idle);
       expect(h.flow.password, 'change-me-now', reason: 'kept for another try');
     });
