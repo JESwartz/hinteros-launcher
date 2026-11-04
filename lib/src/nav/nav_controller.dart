@@ -124,20 +124,22 @@ class NavRegion extends ChangeNotifier {
   }
 
   /// Registered by items that have a context action (the `context` button,
-  /// Y/Triangle): what it does on them.
-  void registerContext(
-    String rowKey,
-    int col,
-    VoidCallback? onContext, {
-    VoidCallback? replacing,
-  }) {
+  /// Y/Triangle): what it does on them. Null: none.
+  void registerContext(String rowKey, int col, VoidCallback? onContext) {
     if (onContext == null) {
-      final k = '$rowKey:$col';
-      if (replacing == null || identical(_contexts[k], replacing)) {
-        _contexts.remove(k);
-      }
+      _contexts.remove('$rowKey:$col');
     } else {
       _contexts['$rowKey:$col'] = onContext;
+    }
+  }
+
+  /// Like [releaseSelect]: removes the context action only if it is still
+  /// [owner]'s. Null [owner] (an item without one) removes nothing, so an
+  /// item that took over the position keeps its action.
+  void releaseContext(String rowKey, int col, VoidCallback? owner) {
+    final k = '$rowKey:$col';
+    if (owner != null && identical(_contexts[k], owner)) {
+      _contexts.remove(k);
     }
   }
 
