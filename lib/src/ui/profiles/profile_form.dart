@@ -278,12 +278,6 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
                 ),
                 if (_error != null) StatusLine(_error!, error: true),
                 Text(pinDisclaimer, style: t.bodyDim),
-                if (widget.admin)
-                  Text(
-                    'If you forget the admin PIN, reset it with the admin '
-                    "account's password.",
-                    style: t.caption,
-                  ),
               ]),
             ),
             const SizedBox(width: HinterTokens.s5),
