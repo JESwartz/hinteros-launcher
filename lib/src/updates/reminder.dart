@@ -61,6 +61,10 @@ class UpdateReminders extends ChangeNotifier {
   bool _checking = false;
   bool _wasOnline = false;
 
+  /// The last network status had no connection: the hourly retry waits for
+  /// the network to come up instead (a check holds the single job slot).
+  bool _offline = false;
+
   /// The network came up during a check: check again if that one failed.
   bool _againAfter = false;
 
@@ -83,6 +87,7 @@ class UpdateReminders extends ChangeNotifier {
           (s.connectivity == Connectivity.unknown && s.online);
       final up = online && !_wasOnline;
       _wasOnline = online;
+      _offline = !s.online || s.connectivity == Connectivity.none;
       if (!up || _checkedAt != null) return;
       if (_checking) {
         _againAfter = true;
@@ -92,7 +97,10 @@ class UpdateReminders extends ChangeNotifier {
     });
     _ticker = Timer.periodic(tick, (_) {
       final at = _checkedAt;
-      if (at == null) return unawaited(_again());
+      if (at == null) {
+        if (!_offline) unawaited(_again());
+        return;
+      }
       // A clock set back counts as old too.
       final age = _now().difference(at);
       if (age.isNegative || age >= recheckAfter) unawaited(_again());

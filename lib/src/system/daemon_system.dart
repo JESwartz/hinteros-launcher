@@ -708,6 +708,7 @@ class DaemonUpdates implements UpdatesRepository {
   /// anything else it is "not checked" until the next check (a check is a
   /// job, so it is not started here).
   Future<void> _switched(api.JobKind kind, String? rev) async {
+    final before = _status;
     final update = kind == api.JobKind.updateApply;
     var version = _status.currentVersion;
     var current = update && rev != null ? rev : _status.currentRev;
@@ -718,6 +719,8 @@ class DaemonUpdates implements UpdatesRepository {
     } catch (_) {
       // Kept as it was: the next check names it.
     }
+    // A check that ended meanwhile is newer: keep its result.
+    if (!identical(_status, before)) return;
     _status = UpdateStatus(
       currentVersion: version,
       currentRev: current,

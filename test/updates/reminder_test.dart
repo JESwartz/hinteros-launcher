@@ -146,6 +146,24 @@ void main() {
     r.dispose();
   });
 
+  test('offline: no hourly retry; the network coming up checks', () async {
+    const tick = Duration(milliseconds: 5);
+    final net = StreamController<NetworkStatus>.broadcast();
+    final ups = MockUpdates(MockJobs())..failCheckWith = _unreachable;
+    final r = UpdateReminders(ups, network: net.stream, tick: tick);
+    await r.start();
+    expect(ups.checks, 1);
+    net.add(const NetworkStatus(connectivity: Connectivity.none));
+    await Future<void>.delayed(tick * 4);
+    expect(ups.checks, 1);
+    ups.failCheckWith = null;
+    net.add(_online);
+    await pumpEventQueue();
+    expect(ups.checks, 2);
+    r.dispose();
+    await net.close();
+  });
+
   test('disposed during the startup check: no notify after dispose', () async {
     final gate = Completer<void>();
     final ups = _GatedUpdates(MockJobs(), gate.future);
