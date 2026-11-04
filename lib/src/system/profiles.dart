@@ -50,16 +50,42 @@ enum PinKind {
 bool validPin(String pin) => RegExp(r'^[0-9]{4,8}$').hasMatch(pin);
 
 /// A display name the service accepts: 1 to 32 characters once trimmed, no
-/// control characters. Returns the problem in words, or null.
+/// control or format characters (zero-width, text direction). Returns the
+/// problem in words, or null.
 String? nameProblem(String name) {
   final n = name.trim();
   if (n.isEmpty) return 'Type a name.';
   if (n.runes.length > 32) return 'Use at most 32 characters.';
-  if (n.runes.any((r) => r < 0x20 || (r >= 0x7f && r < 0xa0))) {
+  if (n.runes.any((r) => r < 0x20 || (r >= 0x7f && r < 0xa0) || _format(r))) {
     return 'Use letters, numbers and spaces.';
   }
   return null;
 }
+
+/// Unicode format characters (Cf), as the system's `is_format_char`
+/// (hinteros-system profiles.rs) lists them.
+bool _format(int r) =>
+    r == 0x00AD ||
+    (r >= 0x0600 && r <= 0x0605) ||
+    r == 0x061C ||
+    r == 0x06DD ||
+    r == 0x070F ||
+    (r >= 0x0890 && r <= 0x0891) ||
+    r == 0x08E2 ||
+    r == 0x180E ||
+    (r >= 0x200B && r <= 0x200F) ||
+    (r >= 0x202A && r <= 0x202E) ||
+    (r >= 0x2060 && r <= 0x2064) ||
+    (r >= 0x2066 && r <= 0x206F) ||
+    r == 0xFEFF ||
+    (r >= 0xFFF9 && r <= 0xFFFB) ||
+    r == 0x110BD ||
+    r == 0x110CD ||
+    (r >= 0x13430 && r <= 0x1343F) ||
+    (r >= 0x1BCA0 && r <= 0x1BCA3) ||
+    (r >= 0x1D173 && r <= 0x1D17A) ||
+    r == 0xE0001 ||
+    (r >= 0xE0020 && r <= 0xE007F);
 
 /// What a refused PIN means for the person typing it: [retryAt] while the
 /// profile's backoff lock lasts ("Try again in 30 seconds"); [rebootRequired]

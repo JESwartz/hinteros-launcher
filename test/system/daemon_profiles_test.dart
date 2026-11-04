@@ -208,6 +208,22 @@ void main() {
       expect(await g.login(job.id), isA<LoginStarted>());
     });
   });
+
+  test('names: what the service refuses is refused in the form', () {
+    expect(nameProblem('  '), 'Type a name.');
+    expect(nameProblem('Sam'), isNull);
+    expect(nameProblem('Zoë 2'), isNull);
+    expect(nameProblem('a' * 33), 'Use at most 32 characters.');
+    for (final bad in [
+      'Sa\tm',
+      'Sa\u0085m',
+      'Sa\u200Bm',
+      '\u202ESam',
+      'S\uFEFFam',
+    ]) {
+      expect(nameProblem(bad), 'Use letters, numbers and spaces.', reason: bad);
+    }
+  });
 }
 
 /// greeter.login fails (the session daemon went away).
