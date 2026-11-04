@@ -412,7 +412,7 @@ class ProfileSession extends ChangeNotifier {
       // goes back to it, not into the locked session.
       await _whileEnding(
         SessionEnding(
-          title: 'Switching to $name...',
+          title: 'Switching to $name…',
           identity: id == CurrentProfile.guestId
               ? LoadingIdentity.guestIdentity
               : LoadingIdentity(name: name, color: avatar?.color),
@@ -439,7 +439,7 @@ class ProfileSession extends ChangeNotifier {
     unawaited(
       _whileEnding(
         SessionEnding(
-          title: 'Switching profile...',
+          title: 'Switching profile…',
           identity: _identity(),
           cover: false,
         ),
@@ -507,7 +507,7 @@ class ProfileSession extends ChangeNotifier {
       if (!context.mounted) return;
       await _whileEnding(
         const SessionEnding(
-          title: 'Ending the guest session...',
+          title: 'Ending the guest session…',
           detail: 'Removing everything the guest did.',
           identity: LoadingIdentity.guestIdentity,
           cover: false,

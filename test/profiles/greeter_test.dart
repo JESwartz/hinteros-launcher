@@ -138,7 +138,7 @@ void main() {
     expect(focusLabel(), 'content/tiles:0');
     await p.press(NavAction.accept, settle: false);
     expect(p.greeter.entered, 'p1');
-    expect(find.text('Loading James...'), findsOneWidget);
+    expect(find.text('Loading James…'), findsOneWidget);
     expect(find.text('Who is watching?'), findsNothing);
   });
 
@@ -354,7 +354,7 @@ void main() {
     expect(p.greeter.log.first, 'login:p3');
     await p.typePin('1357', settle: false);
     expect(p.greeter.entered, 'p3');
-    expect(find.text('Loading Sam...'), findsOneWidget);
+    expect(find.text('Loading Sam…'), findsOneWidget);
   });
 
   testWidgets("backing out of the pending switch's PIN pad shows the tiles", (

@@ -663,7 +663,7 @@ class _LauncherShellState extends State<LauncherShell> {
     try {
       await endSessionWith(
         _scopeContext ?? context,
-        const SessionEnding(title: 'Restarting the session...'),
+        const SessionEnding(title: 'Restarting the session…'),
         widget.services.system.restartSession,
       );
     } on SystemException catch (e) {

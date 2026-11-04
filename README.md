@@ -411,7 +411,7 @@ launcher's proposal until the daemon's M7 schema is vendored (see `m7/DECISIONS.
   PIN pad: D-pad and A, B deletes (B on an empty pad goes back), digits and Enter on a keyboard,
   no auto-submit, "That PIN didn't match." and the backoff countdown (the admin profile: no
   countdown, but after 10 wrong tries "Too many wrong PINs. Restart the box to try again."). After a login greetd
-  accepted, "Loading Sam..." (`profile_loading.dart`: avatar, name, spinner) until the picker
+  accepted, "Loading Sam…" (`profile_loading.dart`: avatar, name, spinner) until the picker
   exits; the console shows the same words on the VT (`hinteros-system pin splash`) and the
   session's launcher shows the page again on its first frames (name from
   `/run/hinteros/profiles-public.json` by `$USER`) until Home has its data (at most 15 s).
@@ -434,7 +434,7 @@ launcher's proposal until the daemon's M7 schema is vendored (see `m7/DECISIONS.
   back; only the right one starts the switch (`session.switch_profile {id, pin}`), and the greeter
   then enters the profile with no picker. The not-responding pop-up counts up every second from
   `switch_blocked.waited_s`.
-- **Session start**: "Loading Sam..." until Home has its data (at most 20 s); during the first 20 s a
+- **Session start**: "Loading Sam…" until Home has its data (at most 20 s); during the first 20 s a
   connection that is not up (yet, or again: the session daemon restarts once as a session
   starts) shows that page, never "Can't reach the HinterOS service".
 - **Text fields in the profile flows** (names): Enter, also the on-screen keyboard's, only closes

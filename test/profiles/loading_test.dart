@@ -8,7 +8,7 @@ import 'package:hinteros_launcher/src/ui/profiles/profile_loading.dart';
 
 import '../support/harness.dart';
 
-/// "Loading Sam..." between the picker and Home: the identity from the
+/// "Loading Sam…" between the picker and Home: the identity from the
 /// service's public view, the page on the session's first frames until Home
 /// has its data.
 const public = '''
@@ -47,7 +47,7 @@ void main() {
     );
   });
 
-  testWidgets('the first frame is "Loading James...", then Home', (t) async {
+  testWidgets('the first frame is "Loading James…", then Home', (t) async {
     setView(t);
     final h = Harness();
     await h.precacheArt(t);
@@ -55,7 +55,7 @@ void main() {
     await t.pumpWidget(
       appWith(h, LoadingIdentity.fromPublicJson(public, 'hinteros-p1')),
     );
-    expect(find.text('Loading James...'), findsOneWidget);
+    expect(find.text('Loading James…'), findsOneWidget);
     expect(find.byKey(const ValueKey('profile-loading')), findsOneWidget);
     // The mock answers: Home's data is there, the page goes.
     for (var i = 0; i < 20; i++) {
@@ -91,7 +91,7 @@ void main() {
     for (final s in [1, 5, 12]) {
       await t.pump(Duration(seconds: s));
       expect(find.byKey(page), findsOneWidget, reason: '$s s');
-      expect(find.text('Loading James...'), findsOneWidget);
+      expect(find.text('Loading James…'), findsOneWidget);
       // Covered by the page (the shell below still has the notice).
       expect(find.textContaining("Can't reach").hitTestable(), findsNothing);
     }

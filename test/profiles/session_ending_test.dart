@@ -46,7 +46,7 @@ void main() {
   ) async {
     final h = await removeOwnProfile(t);
     expect(endingPage.hitTestable(), findsOneWidget);
-    expect(find.text('Removing Sam...'), findsOneWidget);
+    expect(find.text('Removing Sam…'), findsOneWidget);
     expect(find.text("You'll be taken to the profile picker."), findsNothing);
     // No way back: nav does nothing.
     await keys(t, [kEscape, kEscape, kUp, kEnter], settle: false);
@@ -58,7 +58,7 @@ void main() {
     h.mock.simulateDisconnect();
     await frames(t, 10);
     expect(endingPage.hitTestable(), findsOneWidget);
-    expect(find.text('Removing Sam...'), findsOneWidget);
+    expect(find.text('Removing Sam…'), findsOneWidget);
     expect(connectionError, findsNothing);
     expect(find.textContaining('Connecting to').hitTestable(), findsNothing);
     final job = h.services.mockJobs.started.last;
@@ -146,7 +146,7 @@ void main() {
     h.mock.simulateDisconnect();
     await frames(t, 10);
     expect(endingPage.hitTestable(), findsOneWidget);
-    expect(find.text('Ending the guest session...'), findsOneWidget);
+    expect(find.text('Ending the guest session…'), findsOneWidget);
     expect(find.text('Removing everything the guest did.'), findsOneWidget);
     expect(connectionError, findsNothing);
     // Nothing moves it.
@@ -171,7 +171,7 @@ void main() {
     h.mock.simulateDisconnect();
     await frames(t, 10);
     expect(endingPage.hitTestable(), findsOneWidget);
-    expect(find.text('Switching to Sam...'), findsOneWidget);
+    expect(find.text('Switching to Sam…'), findsOneWidget);
     expect(connectionError, findsNothing);
   });
 

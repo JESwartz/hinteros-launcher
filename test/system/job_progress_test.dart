@@ -505,7 +505,7 @@ void main() {
       await t.pump();
       await t.pump();
       expect(h.services.mockSystem.log, ['session:restart']);
-      expect(find.text('Restarting the session...'), findsOneWidget);
+      expect(find.text('Restarting the session…'), findsOneWidget);
     });
 
     testWidgets('Restart session from the notice', (t) async {
@@ -566,7 +566,7 @@ void main() {
         await t.pump(const Duration(seconds: 1));
         await t.pump();
         expect(h.services.mockSystem.log, ['session:restart']);
-        expect(find.text('Restarting the session...'), findsOneWidget);
+        expect(find.text('Restarting the session…'), findsOneWidget);
       });
 
       testWidgets('Later stops it', (t) async {
@@ -634,7 +634,7 @@ void main() {
         await t.pump();
         await t.pump();
         expect(h.services.mockSystem.log, ['session:restart']);
-        expect(find.text('Restarting the session...'), findsOneWidget);
+        expect(find.text('Restarting the session…'), findsOneWidget);
       });
 
       testWidgets('Later stops it', (t) async {

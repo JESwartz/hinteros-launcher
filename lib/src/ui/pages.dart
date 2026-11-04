@@ -260,7 +260,7 @@ class _JobProgressScreenState extends State<JobProgressScreen> with JobTicker {
     try {
       await endSessionWith(
         context,
-        const SessionEnding(title: 'Restarting the session...'),
+        const SessionEnding(title: 'Restarting the session…'),
         widget.services.system.restartSession,
       );
     } on SystemException catch (e) {

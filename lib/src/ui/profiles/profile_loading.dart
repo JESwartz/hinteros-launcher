@@ -1,9 +1,10 @@
-/// "Loading Sam...": the full-screen page between choosing a profile and its
+/// "Loading Sam…": the full-screen page between choosing a profile and its
 /// Home. The picker shows it once greetd accepted the login (until it
 /// exits), the console shows the same words on the VT while the session's
 /// compositor starts (`hinteros-system pin splash`, same colours), and the
 /// launcher's first frames show it again until Home has its data, so the
-/// handover reads as one screen.
+/// handover reads as one screen. The titles end in "…" (U+2026), as the
+/// splash draws them (`splash.rs`), not "...", which the rest of the UI uses.
 library;
 
 import 'dart:convert';
@@ -21,7 +22,7 @@ class LoadingIdentity {
 
   static const guestIdentity = LoadingIdentity(name: 'Guest', guest: true);
 
-  /// Null: not known (the page says "Loading...").
+  /// Null: not known (the page says "Loading…").
   final String? name;
   final ProfileColor? color;
   final bool guest;
@@ -73,9 +74,9 @@ class LoadingIdentity {
   }
 }
 
-/// The page: the profile's avatar, "Loading Sam...", a spinner (a still ring
+/// The page: the profile's avatar, "Loading Sam…", a spinner (a still ring
 /// with reduce motion). Also the page of a session that is ending
-/// ("Removing Sam...", with [detail] under it).
+/// ("Removing Sam…", with [detail] under it).
 class ProfileLoadingPage extends StatelessWidget {
   const ProfileLoadingPage({
     super.key,
@@ -86,7 +87,7 @@ class ProfileLoadingPage extends StatelessWidget {
 
   final LoadingIdentity identity;
 
-  /// Instead of "Loading Sam...".
+  /// Instead of "Loading Sam…".
   final String? title;
 
   /// A line under the title.
@@ -96,8 +97,7 @@ class ProfileLoadingPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
     final name = identity.name;
-    final title =
-        this.title ?? (name == null ? 'Loading...' : 'Loading $name...');
+    final title = this.title ?? (name == null ? 'Loading…' : 'Loading $name…');
     return Semantics(
       container: true,
       liveRegion: true,
