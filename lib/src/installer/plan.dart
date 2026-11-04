@@ -29,10 +29,14 @@ enum PlanNetwork {
 /// can say no early. The backend checks again; it has the last word.
 const minDiskBytes = 16 * 1024 * 1024 * 1024;
 
-/// Names the backend refuses for the admin account.
+/// Names the backend refuses for the admin account (hinteros-install.sh,
+/// admin-user-reserved), with the prefixes in [PlanChecks.username].
 const _reservedUsers = {
   'root',
   'hinteros',
+  'hinteros-guest',
+  'hinteros-greeter',
+  'hinteros-kbd',
   'nobody',
   'deploy',
   'sshd',
@@ -45,6 +49,9 @@ const _reservedUsers = {
 abstract final class PlanChecks {
   static final _user = RegExp(r'^[a-z_][a-z0-9_-]{0,31}$');
   static final _host = RegExp(r'^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$');
+
+  /// The accounts of the profiles (hinteros-p1, ...).
+  static final _profileUser = RegExp(r'^hinteros-p[0-9]');
 
   /// Shortest admin password the installer asks for. The backend only needs
   /// it to be non-empty; this is the UI's own rule (it is the sudo and SSH
@@ -59,7 +66,8 @@ abstract final class PlanChecks {
     }
     if (_reservedUsers.contains(v) ||
         v.startsWith('systemd-') ||
-        v.startsWith('nixbld')) {
+        v.startsWith('nixbld') ||
+        _profileUser.hasMatch(v)) {
       return 'The user name "$v" is reserved for the system. Choose another '
           'name.';
     }
