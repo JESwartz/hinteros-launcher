@@ -55,7 +55,11 @@ class DaemonClient extends DaemonConnection {
   final Duration interactiveTimeout;
 
   /// Relayed calls that may wait for the admin password (the daemon's
-  /// `system::may_interact`).
+  /// `system::may_interact`; its tests/schema.rs asserts the same list).
+  ///
+  /// The timeouts here copy the daemon's limits: `runtime::time_limit` and the
+  /// relay's `CALL_TIMEOUT` and `INTERACTIVE_CALL_TIMEOUT`
+  /// (crates/hinteros-session/src). Change both together.
   static const _interactive = {'system.ssh.set', 'system.profiles.reset_pin'};
 
   /// Calls the daemon may take longer to answer, each 5 s over the daemon's
