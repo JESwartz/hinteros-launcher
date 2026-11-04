@@ -63,11 +63,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793577487,
-        "narHash": "sha256-LL/dT0kzetmRqCvFOd2ajVVr5g+p10vHAFfLO/bZj6A=",
+        "lastModified": 1793803096,
+        "narHash": "sha256-ZNlrFXX78xYwXm9QwLQsfZpED9bojl1Y1kqTZeYQhIE=",
         "ref": "pre-1.0",
-        "rev": "bde23787a62f9094bcc8d8aff6e8ec6cd7d8b198",
-        "revCount": 202,
+        "rev": "b813417b0b2781c26297f1c4fd9bbef7f9566453",
+        "revCount": 349,
         "type": "git",
         "url": "https://git.hinteros.org/hinteros-daemon.git"
       },
