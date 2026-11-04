@@ -1004,10 +1004,16 @@ through their stages by themselves.
   running, "Restart session" (with the 30 s countdown, see above) when `session_restart_required`, and on failure or cancel what went
   wrong plus "Nothing was changed". Back (or Hide) leaves a running job's page; the top bar shows
   the job. "Restart session" calls `session.restart`; the daemon answers and then ends the session (the launcher goes with it, greetd starts a new one). On a desktop session (not greetd) the daemon refuses and the page says "This is not a TV session, so it cannot be restarted from here".
-- **Updates:** at startup the box checks once (`UpdateReminders`; the real check waits for the
+- **Updates:** at startup the box checks (`UpdateReminders`; the real check waits for the
   connection, and is tried again after 5, 15, 45 and 120 s while the system service is not up
   yet, since it can start after the session; the update check is a job whose result arrives with
-  `job_finished`, or comes straight back when cached within 60 s). The version of an update is
+  `job_finished`, or comes straight back when cached within 60 s). A check that fails (no network
+  yet on a Wi-Fi box, the update server down) is tried again when `network_changed` says the box is
+  online (connectivity full, or a connection when NetworkManager does not check) and every hour
+  until one works; after that the box checks again once the last good check is a day old (on the
+  clock, so the time the box sleeps counts). It only checks, never installs. When an update,
+  rollback, channel or base switch finishes, the update found by the last check is cleared (after an
+  update the box is "up to date", after the others "Not checked yet"). The version of an update is
   `available.version` ("HinterOS 0.6.1", session API 0.11) when that is a release version, else
   its date (the daemon's short-rev fallback, or an older daemon); the notice's severity is
   `available.security`, with `available.security_summary` under it when the release has one (also
