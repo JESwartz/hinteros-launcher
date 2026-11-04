@@ -181,6 +181,14 @@ void main() {
       await t.pump();
       expect(h.services.mockSystem.log.last, 'power:restart');
       expect(find.text('Restarting…'), findsOneWidget);
+      // Accepted, but the service still answers long after: it did not
+      // work. The page goes, and the launcher takes input again.
+      await t.pump(const Duration(minutes: 2));
+      await t.pumpAndSettle();
+      expect(find.text('Restarting…'), findsNothing);
+      expect(find.text('Nothing happened. Try again.'), findsOneWidget);
+      await press(t, [kEnter]);
+      expect(find.text('Nothing happened. Try again.'), findsNothing);
     });
 
     testWidgets('About shows the version and identity', (t) async {

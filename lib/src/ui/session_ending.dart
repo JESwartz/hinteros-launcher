@@ -6,6 +6,8 @@
 /// reach the HinterOS service", and takes no more input while it shows.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../system/models.dart';
@@ -38,10 +40,18 @@ class SessionEnding {
 
 /// The one "session ending" state of a launcher.
 class SessionEndingController extends ChangeNotifier {
-  SessionEndingController({bool Function()? connected})
-    : _connected = connected ?? (() => true);
+  SessionEndingController({
+    bool Function()? connected,
+    this.endTimeout = const Duration(minutes: 2),
+  }) : _connected = connected ?? (() => true);
 
   final bool Function() _connected;
+
+  /// How long an accepted action may take to end the session before the
+  /// page goes again ([endSessionWith]).
+  final Duration endTimeout;
+
+  Timer? _endTimer;
 
   /// The service answers now.
   bool get connected => _connected();
@@ -77,6 +87,36 @@ class SessionEndingController extends ChangeNotifier {
     if (_ending == null || _final) return;
     _final = true;
     notifyListeners();
+  }
+
+  /// After the action was accepted: true if [e] is still up and the
+  /// connection is still there after [endTimeout] (the session did not
+  /// end); false once the connection goes or [e] is replaced or undone.
+  Future<bool> _stillUp(SessionEnding e) {
+    if (_final || !identical(_ending, e)) return Future.value(false);
+    final done = Completer<bool>();
+    void onChange() {
+      if (_final || !identical(_ending, e)) _settle(done, onChange, false);
+    }
+
+    _endTimer?.cancel();
+    _endTimer = Timer(endTimeout, () => _settle(done, onChange, true));
+    addListener(onChange);
+    return done.future;
+  }
+
+  void _settle(Completer<bool> done, VoidCallback onChange, bool up) {
+    if (done.isCompleted) return;
+    _endTimer?.cancel();
+    _endTimer = null;
+    removeListener(onChange);
+    done.complete(up);
+  }
+
+  @override
+  void dispose() {
+    _endTimer?.cancel();
+    super.dispose();
   }
 
   /// Whether the ending page is up, given whether the service answers.
@@ -127,7 +167,9 @@ class SessionEndingPage extends StatelessWidget {
 /// session restart), with [e] up from the start: the answer may never come,
 /// since the service goes away with the session. A refusal while the service
 /// answers takes the page away again and is rethrown; the connection going
-/// away during the call is the action working.
+/// away during the call is the action working. An accepted action after
+/// which the service still answers at [SessionEndingController.endTimeout]
+/// did not work either: the page goes and a [SystemException] says so.
 Future<void> endSessionWith(
   BuildContext context,
   SessionEnding e,
@@ -151,6 +193,13 @@ Future<void> endSessionWith(
     }
     c.abandon(e);
     rethrow;
+  }
+  if (await c._stillUp(e)) {
+    c.abandon(e);
+    throw const SystemException(
+      SystemErrorKind.failed,
+      'Nothing happened. Try again.',
+    );
   }
 }
 
