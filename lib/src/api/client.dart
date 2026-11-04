@@ -32,7 +32,7 @@ class DaemonClient extends DaemonConnection {
     required this.socketPath,
     this.clientInfo = const Peer(
       name: 'hinteros-launcher',
-      version: apiVersion,
+      version: launcherVersion,
     ),
     this.clientApiVersion = apiVersion,
     this.initialBackoff = const Duration(milliseconds: 250),

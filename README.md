@@ -35,7 +35,11 @@ After changing `pubspec.yaml`, run `flutter pub get` and commit `pubspec.lock`; 
 The launcher talks to `hinteros-session` over a Unix socket (JSON-RPC 2.0, one message per line;
 rules in `hinteros-docs/design/api.md`). The socket is `$HINTEROS_SESSION_SOCKET`, else
 `$XDG_RUNTIME_DIR/hinteros/session.sock`. If the daemon is missing or speaks another API version,
-the home screen says so and the client keeps retrying with backoff.
+the home screen says so and the client keeps retrying with backoff. `hello` sends the build
+version (`launcherVersion`: the Nix build passes the pubspec version with `--dart-define`).
+Each call waits a little longer than the daemon's own limit for it (`DaemonClient.timeoutFor`):
+10 s, NetworkManager and BlueZ calls 35 s (`wifi.connect` 65 s, `bluetooth.pair` 95 s), relayed
+`system.*` calls 65 s, and those that may ask for the admin password 340 s.
 
 **After a system switch** (`lib/src/system/home_relaunch.dart`): gamescope runs the launcher
 through the session's home loop (hinteros `nixos/modules/session.nix`), which sets

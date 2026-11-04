@@ -105,6 +105,11 @@ void main() {
       switch (req['method']) {
         case 'hello':
           expect(req['params']['api_version'], apiVersion);
+          // The build version, not the API version.
+          expect(req['params']['client'], {
+            'name': 'hinteros-launcher',
+            'version': launcherVersion,
+          });
           return helloOk(req['id']);
         case 'subscribe':
           return ok(req['id'], {'events': req['params']['events']});

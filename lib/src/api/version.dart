@@ -30,3 +30,11 @@ class ApiVersionNumber {
   @override
   String toString() => '$major.$minor';
 }
+
+/// The launcher's build version, which `hello` sends as `client.version`: the
+/// Nix build passes the package version
+/// (`--dart-define=HINTEROS_LAUNCHER_VERSION=...`); `dev` without it.
+const launcherVersion = String.fromEnvironment(
+  'HINTEROS_LAUNCHER_VERSION',
+  defaultValue: 'dev',
+);
