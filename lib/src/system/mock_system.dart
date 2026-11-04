@@ -1370,6 +1370,9 @@ class MockStore implements StoreRepository {
   /// The next install or remove fails with this (a conflict, no space...).
   SystemException? failNext;
 
+  /// Test hook: set_permission waits for this before it applies.
+  Future<void>? holdPermission;
+
   @override
   bool get loaded => true;
   @override
@@ -1458,6 +1461,7 @@ class MockStore implements StoreRepository {
 
   @override
   Future<void> setPermission(String id, String permission, bool granted) async {
+    await holdPermission;
     final a = _app(id);
     _maybeFail();
     final p = a.permissions.where((p) => p.name == permission).firstOrNull;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart' show App, AppKind;
@@ -604,6 +606,20 @@ void main() {
       expect(find.text('Off'), findsOneWidget);
       await press(t, [kEnter]); // and on again
       expect(h.services.mockStore.log.last, 'set_permission:mpv:mic:true');
+      expect(find.text('Off'), findsNothing);
+      // A second press while the first is on its way sends nothing.
+      final hold = Completer<void>();
+      h.services.mockStore.holdPermission = hold.future;
+      await press(t, [kEnter, kEnter]);
+      hold.complete();
+      h.services.mockStore.holdPermission = null;
+      await t.pumpAndSettle();
+      expect(
+        h.services.mockStore.log.where((l) => l.startsWith('set_permission')),
+        hasLength(3),
+      );
+      expect(find.text('Off'), findsOneWidget);
+      await press(t, [kEnter]);
       expect(find.text('Off'), findsNothing);
       // While it runs, one line says when a change applies.
       await h.launch(t, 'mpv');

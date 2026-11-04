@@ -621,14 +621,21 @@ class _AppDetailPageState extends State<AppDetailPage> {
     return false;
   }
 
+  /// Permissions with a change on the way: [p.granted] is the value from
+  /// before it, so a second press would send the same value again.
+  final _togglingPermissions = <String>{};
+
   /// Turns optional permission [p] of [app] on or off for this profile.
   Future<void> _togglePermission(StoreApp app, AppPermission p) async {
+    if (!_togglingPermissions.add(p.name)) return;
     try {
       await widget.services.store.setPermission(app.id, p.name, !p.granted);
     } on SystemException catch (e) {
       if (mounted) {
         await showMessage(context, title: refusalTitle(e), body: e.message);
       }
+    } finally {
+      _togglingPermissions.remove(p.name);
     }
   }
 
