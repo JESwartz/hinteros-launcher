@@ -1525,15 +1525,16 @@ enum ProfileColor {
   red('red'),
   orange('orange'),
   yellow('yellow'),
-  green('green');
+  green('green'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
 
   const ProfileColor(this.value);
   final String value;
 
-  factory ProfileColor.fromJson(String value) => values.firstWhere(
-    (e) => e.value == value,
-    orElse: () => throw FormatException('not a ProfileColor', value),
-  );
+  factory ProfileColor.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }

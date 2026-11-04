@@ -1,6 +1,6 @@
 // A client of 1.0 reads a newer server of its major: fields, enum values,
 // events and error codes it does not know, and job results it cannot read.
-// The enums a client also sends stay closed.
+// The enums a client also sends stay closed, except ProfileColor.
 import 'dart:convert';
 import 'dart:io';
 
@@ -142,8 +142,10 @@ void main() {
       'Modifier': (api.Modifier.fromJson, api.Modifier.values),
       'KeyAction': (api.KeyAction.fromJson, api.KeyAction.values),
       'EventName': (api.EventName.fromJson, api.EventName.values),
-      'ProfileColor': (api.ProfileColor.fromJson, api.ProfileColor.values),
     };
+    // Sent but open on purpose (see tool/gen_api.dart): the client sends only
+    // values of its own enum and reads a new one as `unknown`.
+    const openSent = {'ProfileColor'};
     final doc = jsonDecode(
       File('schema/session-api.json').readAsStringSync(),
     ) as Map<String, dynamic>;
@@ -170,7 +172,21 @@ void main() {
       final enums = sent.where(
         (n) => (defs[n] as Map<String, dynamic>).containsKey('enum'),
       );
-      expect(closed.keys, containsAll(enums));
+      expect({...closed.keys, ...openSent}, containsAll(enums));
+    });
+    test('ProfileColor reads a new value as unknown', () {
+      expect(api.ProfileColor.fromJson(_new), api.ProfileColor.unknown);
+      expect(
+        ProfileColor.parse(api.ProfileColor.unknown.value),
+        ProfileColor.teal,
+      );
+    });
+    test('the launcher sends only ProfileColor values of the schema', () {
+      final schema =
+          ((defs['ProfileColor'] as Map<String, dynamic>)['enum'] as List)
+              .cast<String>();
+      expect(schema, containsAll(ProfileColor.values.map((c) => c.name)));
+      expect(schema, isNot(contains('unknown')));
     });
     for (final MapEntry(key: name, value: (read, values)) in closed.entries) {
       test('$name has no catch-all and refuses a new value', () {

@@ -137,8 +137,14 @@ const _closedEnums = {
   'Modifier',
   'KeyAction',
   'EventName',
-  'ProfileColor',
 };
+
+// Sent but open on purpose: `ProfileColor`. A newer daemon may add a colour,
+// and this client reads it as `unknown` (the UI shows teal). The launcher
+// sends only names of its own enum (lib/src/system/profiles.dart), so it never
+// sends `unknown`; the daemon checks the name in any case. A colour is not a
+// security boundary, and a hard failure would break profiles.list and
+// greeter.list. test/api/forward_compat_test.dart keeps the same list.
 
 /// Enums whose catch-all is a value of the schema other than `unknown`.
 const _ownCatchAll = {'LibraryKindShown': 'other'};
