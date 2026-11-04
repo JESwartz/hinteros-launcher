@@ -697,7 +697,12 @@ class _StagePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_StagePainter o) => o.state != state || o.accent != accent;
+  bool shouldRepaint(_StagePainter o) =>
+      o.state != state ||
+      o.line != line ||
+      o.accent != accent ||
+      o.onAccent != onAccent ||
+      o.danger != danger;
 }
 
 // ------------------------------------------------------------------ terms
