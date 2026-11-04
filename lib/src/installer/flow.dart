@@ -26,9 +26,6 @@ String installVersionLabel(String version, String rev, InstallChannel channel) {
   return name.contains(short) ? 'HinterOS $name' : 'HinterOS $name ($short)';
 }
 
-/// One app in the second stage of the install.
-enum AppInstallState { waiting, installing, done, failed }
-
 enum InstallerStep {
   welcome('Welcome'),
   network('Internet'),
@@ -941,37 +938,8 @@ class InstallerFlow extends ChangeNotifier {
   /// Which of the two stages the install is in.
   InstallSection section = InstallSection.system;
 
-  /// Progress of the system stage (0..100; 100 once the apps stage began).
-  int get systemPercent =>
-      section == InstallSection.apps || phase == InstallPhase.succeeded
-      ? 100
-      : percent;
-
-  /// The apps stage, one entry per selected app (in the order of the plan).
-  List<({String id, String name, AppInstallState state})> get appProgress => [
-    for (final a in _planApps)
-      (
-        id: a.id,
-        name: a.name,
-        state: _appStates[a.id] ?? AppInstallState.waiting,
-      ),
-  ];
-
+  /// The apps of the plan, in its order.
   List<({String id, String name, bool onIso})> _planApps = const [];
-  final _appStates = <String, AppInstallState>{};
-
-  /// Progress of the apps stage (0..100): apps finished or failed of those
-  /// picked; with none picked, what the backend says.
-  int get appsPercent {
-    if (phase == InstallPhase.succeeded) return 100;
-    if (section != InstallSection.apps) return 0;
-    if (_planApps.isEmpty) return percent;
-    final finished = _planApps.where((a) {
-      final s = _appStates[a.id];
-      return s == AppInstallState.done || s == AppInstallState.failed;
-    }).length;
-    return (finished * 100 / _planApps.length).round();
-  }
 
   /// Progress of the stage or app being worked on, on its own (0..100); null
   /// when the backend cannot measure it (an indeterminate bar).
@@ -1076,31 +1044,13 @@ class InstallerFlow extends ChangeNotifier {
     } else if (e.stage != 'done') {
       _currentAppId = null;
     }
-    if (id != null) {
-      if (e.code == 'app-failed') {
-        _fail(id);
-      } else if (_appStates[id] != AppInstallState.failed) {
-        // The previous app is over when the next one starts.
-        for (final k in _appStates.keys.toList()) {
-          if (k != id && _appStates[k] == AppInstallState.installing) {
-            _appStates[k] = AppInstallState.done;
-          }
-        }
-        _appStates[id] = AppInstallState.installing;
-      }
-    }
+    if (id != null && e.code == 'app-failed') _fail(id);
     if (e.stage == 'done' && e.level != InstallLevel.error) {
       e.failedApps.forEach(_fail);
-      for (final k in _appStates.keys.toList()) {
-        if (_appStates[k] != AppInstallState.failed) {
-          _appStates[k] = AppInstallState.done;
-        }
-      }
     }
   }
 
   void _fail(String id) {
-    _appStates[id] = AppInstallState.failed;
     if (!_failedIds.contains(id)) _failedIds.add(id);
   }
 
@@ -1126,7 +1076,6 @@ class InstallerFlow extends ChangeNotifier {
     progressMessage = '';
     section = InstallSection.system;
     _failedIds.clear();
-    _appStates.clear();
     _planApps = [
       for (final a in plan.keepData ? const <StoreApp>[] : apps!.selectedApps)
         (id: a.id, name: a.name, onIso: a.onIso),

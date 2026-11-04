@@ -90,17 +90,13 @@ void main() {
       expect(find.text('Installing HinterOS'), findsOneWidget);
       expect(find.text('Installing apps'), findsNothing);
       expect(find.byKey(const ValueKey('apps-line')), findsNothing);
-      expect(h.flow.systemPercent, h.flow.percent);
-      expect(h.flow.appsPercent, 0);
+      expect(h.flow.appsLine, isNull);
       await finish(t, h);
     });
 
-    testWidgets('apps phase: system is complete, apps have their states', (
-      t,
-    ) async {
+    testWidgets('apps phase: one line, the app worked on now', (t) async {
       final h = await start(t, failing: ['youtube']);
       await until(t, () => h.flow.section == InstallSection.apps);
-      expect(h.flow.systemPercent, 100);
       expect(find.text('Verifying install configuration'), findsNothing);
       await t.pump();
       expect(find.text('Installing apps'), findsNothing);
@@ -109,19 +105,9 @@ void main() {
       expect(find.byKey(const ValueKey('apps-percent')), findsNothing);
       expect(h.flow.appsLine, contains(' · 1 of 2'));
       expect(h.flow.stepPercent, 40, reason: 'this app\'s own bar');
-      expect(
-        h.flow.appProgress.map((a) => a.state),
-        contains(AppInstallState.installing),
-      );
       // Firefox done, YouTube installing then failed.
-      await until(
-        t,
-        () =>
-            h.flow.appProgress.last.state == AppInstallState.failed ||
-            !h.flow.running,
-      );
-      final states = {for (final a in h.flow.appProgress) a.id: a.state};
-      expect(states['youtube'], AppInstallState.failed);
+      await until(t, () => h.flow.failedAppNames.isNotEmpty || !h.flow.running);
+      expect(h.flow.failedAppNames, ['YouTube']);
       await finish(t, h);
     });
 
@@ -145,10 +131,6 @@ void main() {
       expect(h.flow.step, InstallerStep.done);
       expect(find.textContaining("couldn't be installed"), findsNothing);
       expect(h.flow.failedAppNames, isEmpty);
-      expect(
-        h.flow.appProgress.map((a) => a.state),
-        everyElement(AppInstallState.done),
-      );
     });
 
     testWidgets('a backend without phases still works (all system)', (t) async {

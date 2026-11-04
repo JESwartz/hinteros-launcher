@@ -91,9 +91,6 @@ class NetworkState {
   /// stays, so it is only waited for briefly.
   final bool cableWaiting;
 
-  /// A connection is expected soon, though not up yet.
-  bool get pending => !linkUp && (connecting || cableWaiting);
-
   /// A cable or Wi-Fi connection is up (whether or not it reaches anywhere).
   bool get linkUp => wiredConnected || wifiSsid != null;
 

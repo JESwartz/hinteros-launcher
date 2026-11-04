@@ -606,7 +606,7 @@ void main() {
       await t.pump(const Duration(seconds: 5));
       await t.pumpAndSettle();
       expect(h.flow.step, InstallerStep.done);
-      expect(h.flow.appProgress, isEmpty);
+      expect(h.flow.failedAppNames, isEmpty);
       expect(
         find.text('HinterOS 0.7.0 stable (1a2b3c4) is installed'),
         findsOneWidget,

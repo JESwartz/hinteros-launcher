@@ -463,11 +463,8 @@ void main() {
       'progress_apps',
       backend: twoStage(failing: ['firefox']),
       settle: false,
-      setup: (h) => install(
-        h,
-        t,
-        () => h.flow.appProgress.last.state == AppInstallState.installing,
-      ),
+      setup: (h) =>
+          install(h, t, () => h.flow.appsLine?.endsWith(' · 2 of 2') ?? false),
     );
     await t.pump(const Duration(seconds: 5));
   });
