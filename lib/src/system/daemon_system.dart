@@ -83,11 +83,16 @@ JobStage? _stage(api.Stage? s) => switch (s) {
 UpdateChannel? _channel(api.Channel? c) => switch (c) {
   api.Channel.beta => UpdateChannel.beta,
   api.Channel.stable => UpdateChannel.stable,
-  null => null,
+  // A channel of a newer daemon: none this launcher can show.
+  api.Channel.unknown || null => null,
 };
 
-NixBase _base(api.Base b) =>
-    b == api.Base.stable ? NixBase.stable : NixBase.unstable;
+/// A base of a newer daemon is null.
+NixBase? _base(api.Base b) => switch (b) {
+  api.Base.stable => NixBase.stable,
+  api.Base.unstable => NixBase.unstable,
+  api.Base.unknown => null,
+};
 
 SecuritySeverity _severity(api.Severity s) => switch (s) {
   api.Severity.low => SecuritySeverity.low,
@@ -875,7 +880,8 @@ class DaemonSystem implements SystemRepository {
     return SystemInfo(
       version: releaseName(i.version, i.rev, channel),
       channel: channel,
-      base: _base(i.base),
+      // A base of a newer daemon: unstable, the only one 1.0 builds.
+      base: _base(i.base) ?? NixBase.unstable,
       rev: i.rev,
       generation: i.generation,
       hostname: i.hostname,

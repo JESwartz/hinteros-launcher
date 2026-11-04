@@ -109,7 +109,10 @@ import chain reaches.
 The launcher works with a daemon of the same major and an equal or higher minor. `tool/gen_api.dart`
 gives every enum that grows a catch-all, so a value of a newer daemon reads as `unknown`
 (`LibraryKindShown`: `other`; `Connectivity` and `UnitState` have their own `unknown`). The enums the
-launcher also sends (`_closedEnums`) have none: a new value there is a new major. An unknown
+launcher only sends (`_closedEnums`) have none: a new value there is a new major. `Channel`, `Base`
+and `CleanupFrequency` are sent and read, so they have `unknown` too: a newer channel reads as none,
+a newer base as `unstable`, a newer frequency as weekly; the launcher never sends `unknown`. A known
+event it cannot read is `UnknownSessionEvent` too (logged). An unknown
 `AuthOutcome` is no authorization. Unknown fields are ignored, an unknown event is
 `UnknownSessionEvent`, an unknown error code is a plain failure, and a job `result` or a service
 `setup` or `detail` it cannot read is null. `test/api/forward_compat_test.dart` covers this.

@@ -126,12 +126,15 @@ const _reserved = {
 /// Extra names taken on event classes (they implement SessionEvent).
 const _eventReserved = {'name', 'params'};
 
-/// Enums a client also sends: a new value is a new major, and a catch-all
-/// would let an unknown value through to the daemon.
+/// Enums a client sends and never reads: a new value is a new major, and a
+/// catch-all would let an unknown value through to the daemon.
+///
+/// `Channel`, `Base` and `CleanupFrequency` are sent too, but also read
+/// (`system.info`, job subjects, `cleanup.get`), so they have a catch-all:
+/// a newer daemon's value reads as `unknown` instead of failing the whole
+/// answer. The launcher never sends `unknown`; the daemon refuses it
+/// (`invalid_params`), its enums stay closed.
 const _closedEnums = {
-  'Channel',
-  'Base',
-  'CleanupFrequency',
   'LibraryKind',
   'Key',
   'Modifier',

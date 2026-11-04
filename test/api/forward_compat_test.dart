@@ -1,6 +1,6 @@
 // A client of 1.0 reads a newer server of its major: fields, enum values,
 // events and error codes it does not know, and job results it cannot read.
-// The enums a client also sends stay closed.
+// The enums a client only sends stay closed.
 import 'dart:convert';
 import 'dart:io';
 
@@ -104,6 +104,13 @@ void main() {
       ),
       'Connectivity': (api.Connectivity.fromJson, api.Connectivity.unknown),
       'UnitState': (api.UnitState.fromJson, api.UnitState.unknown),
+      // Sent too, but also read (system.info, job subjects, cleanup.get).
+      'Channel': (api.Channel.fromJson, api.Channel.unknown),
+      'Base': (api.Base.fromJson, api.Base.unknown),
+      'CleanupFrequency': (
+        api.CleanupFrequency.fromJson,
+        api.CleanupFrequency.unknown,
+      ),
       'LibraryKindShown': (
         api.LibraryKindShown.fromJson,
         api.LibraryKindShown.other,
@@ -131,12 +138,6 @@ void main() {
 
   group('closed enums', () {
     final closed = <String, (Object Function(String), List<Enum>)>{
-      'Channel': (api.Channel.fromJson, api.Channel.values),
-      'Base': (api.Base.fromJson, api.Base.values),
-      'CleanupFrequency': (
-        api.CleanupFrequency.fromJson,
-        api.CleanupFrequency.values,
-      ),
       'LibraryKind': (api.LibraryKind.fromJson, api.LibraryKind.values),
       'Key': (api.Key.fromJson, api.Key.values),
       'Modifier': (api.Modifier.fromJson, api.Modifier.values),
@@ -276,6 +277,27 @@ void main() {
       expect(s.setup, ServiceSetup.none);
       expect(s.detail, isNull);
     }
+  });
+
+  test('a newer channel, base and clean-up frequency still read', () async {
+    final info = _Newer(
+      'system.info',
+      (r) => {...r, 'channel': _new, 'base': _new},
+    );
+    await info.waitConnected();
+    addTearDown(info.close);
+    final i = await daemonSystemServices(info).system.info();
+    expect(i.channel, isNull);
+    expect(i.base, NixBase.unstable);
+
+    final cleanup = _Newer(
+      'system.cleanup.get',
+      (r) => {...r, 'frequency': _new},
+    );
+    await cleanup.waitConnected();
+    addTearDown(cleanup.close);
+    final c = await daemonSystemServices(cleanup).storage.cleanupSettings();
+    expect(c.frequency, CleanupFrequency.weekly);
   });
 
   test('an unknown error code is a plain failure', () {
