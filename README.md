@@ -639,7 +639,7 @@ install that can be kept, Disk comes right after Internet (decided once, when In
 left, after the first disk listing, which starts with the installer). Internet (cable status; Wi-Fi
 list and join through `nmcli`, scanned again by itself while offline, every 3 s while the list is
 empty, else every 10 s; or carry on offline), Disk (internal disks from `hinteros-install --list-disks`, or plain `lsblk --json` when
-that fails or takes over a minute; removable, in-use and under 16 GiB disks, and
+that fails or takes over a minute, with "Cannot look for HinterOS on the disks. To keep data, select Refresh." and no Keep data; such a listing does not decide the order of the steps; removable, in-use and under 16 GiB disks, and
 disks without a `DISK-SEQ`, are listed with the reason and cannot be picked; a full-screen warning
 and then a second "last check"; the plan carries the disk's path and its disk sequence number,
 `diskSeq`, which is new each time a disk is plugged in, so `hinteros-install` refuses a disk that was

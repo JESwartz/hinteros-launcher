@@ -407,11 +407,15 @@ class FakeInstallerBackend implements InstallerBackend {
   /// When set, `disks()` waits for it (a slow listing, for tests).
   Future<void>? disksHold;
 
+  /// The listing does not look inside the disks (`--list-disks` gave no
+  /// answer in time, plain lsblk listed them).
+  bool disksUnchecked = false;
+
   @override
   Future<List<DiskInfo>> disks() async {
     calls.add('disks');
     await disksHold;
-    return List.of(_disks);
+    return [for (final d in _disks) disksUnchecked ? d.unchecked() : d];
   }
 
   /// The disk at [path] is unplugged and plugged in again: the same path, a

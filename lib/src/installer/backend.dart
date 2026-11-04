@@ -170,6 +170,7 @@ class DiskInfo {
     this.mountpoints = const [],
     this.installLeftover = false,
     this.existing,
+    this.installUnknown = false,
   });
 
   /// `/dev/nvme0n1`: goes into the plan.
@@ -199,13 +200,25 @@ class DiskInfo {
   /// The HinterOS install on the disk; null: none, or it cannot be read.
   final ExistingInstall? existing;
 
+  /// Nobody looked for an install on the disk (`--list-disks` gave no
+  /// answer, plain lsblk listed it): [existing] is null but says nothing.
+  final bool installUnknown;
+
   /// The same disk with another [diskSeq].
-  DiskInfo copyWith({int? diskSeq}) => _with(diskSeq, existing);
+  DiskInfo copyWith({int? diskSeq}) =>
+      _with(diskSeq, existing, installUnknown: installUnknown);
 
   /// The same disk with [existing] (null: none).
   DiskInfo withInstall(ExistingInstall? existing) => _with(diskSeq, existing);
 
-  DiskInfo _with(int? diskSeq, ExistingInstall? existing) => DiskInfo(
+  /// The same disk, listed without a look inside it.
+  DiskInfo unchecked() => _with(diskSeq, null, installUnknown: true);
+
+  DiskInfo _with(
+    int? diskSeq,
+    ExistingInstall? existing, {
+    bool installUnknown = false,
+  }) => DiskInfo(
     path: path,
     name: name,
     sizeBytes: sizeBytes,
@@ -216,6 +229,7 @@ class DiskInfo {
     mountpoints: mountpoints,
     installLeftover: installLeftover,
     existing: existing,
+    installUnknown: installUnknown,
   );
 
   /// Whether this is the disk [other] (a new sequence number is a new disk).

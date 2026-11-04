@@ -89,6 +89,42 @@ void main() {
       expect(find.textContaining('It will be erased'), findsOneWidget);
     });
 
+    testWidgets('a listing that did not look inside: says so; Refresh', (
+      t,
+    ) async {
+      final backend = FakeInstallerBackend()..disksUnchecked = true;
+      final h = await toDisk(t, backend: backend);
+      expect(h.flow.diskFirst, isFalse);
+      const line =
+          'Cannot look for HinterOS on the disks. To keep data, select '
+          'Refresh.';
+      expect(find.text(line), findsOneWidget);
+      await h.choose(t, 'd1');
+      expect(find.text('Keep data'), findsNothing);
+
+      backend.disksUnchecked = false;
+      await h.choose(t, 'actions'); // Refresh
+      await h.settle(t);
+      expect(find.text(line), findsNothing);
+      expect(find.text('Keep data'), findsOneWidget);
+      expect(h.flow.keepData, isTrue);
+    });
+
+    testWidgets('an unchecked listing does not decide the order', (t) async {
+      final backend = FakeInstallerBackend()..disksUnchecked = true;
+      final h = InstallerHarness(backend: backend);
+      await h.start(t);
+      await h.choose(t, 'actions', 1);
+      expect(h.flow.step, InstallerStep.account);
+      backend.disksUnchecked = false;
+      await h.flow.loadDisks();
+      h.flow.go(InstallerStep.network);
+      await t.pumpAndSettle();
+      await h.choose(t, 'actions', 1);
+      expect(h.flow.diskFirst, isTrue);
+      expect(h.flow.step, InstallerStep.disk);
+    });
+
     testWidgets('an install that can be kept: Keep data is the default', (
       t,
     ) async {

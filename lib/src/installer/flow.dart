@@ -253,7 +253,9 @@ class InstallerFlow extends ChangeNotifier {
         notifyListeners();
         if (token != _diskToken || _step != InstallerStep.network) return;
       }
-      _diskFirst = disks!.any((d) => d.canKeep);
+      // A listing that did not look inside the disks decides nothing: the
+      // next time the internet step is left, a new listing may.
+      if (!disksUnchecked) _diskFirst = disks!.any((d) => d.canKeep);
     }
     await _askVersion(
       after: _after(InstallerStep.network),
@@ -650,6 +652,11 @@ class InstallerFlow extends ChangeNotifier {
   /// The list of disks is being read: it can take long, as the backend looks
   /// inside each disk.
   bool get loadingDisks => _disksRun != null;
+
+  /// The last listing did not look for an install on the disks: Keep data
+  /// cannot be offered, though an install may be there.
+  bool get disksUnchecked =>
+      disks?.any((d) => d.usable && d.installUnknown) ?? false;
 
   /// Whether the plan keeps the data of the install on the chosen disk: the
   /// default wherever that can be done. Read from the disk and not stored,

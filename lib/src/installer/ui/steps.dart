@@ -426,6 +426,14 @@ class DiskStep extends StatelessWidget {
             ),
           );
         }
+        if (!f.loadingDisks && f.disksUnchecked) {
+          p.add(
+            const StatusLine(
+              'Cannot look for HinterOS on the disks. To keep data, select '
+              'Refresh.',
+            ),
+          );
+        }
         if (disks != null && disks.isNotEmpty && !disks.any((d) => d.usable)) {
           p.add(
             const StatusLine(

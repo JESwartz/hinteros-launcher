@@ -192,7 +192,10 @@ class ProcessInstallerBackend implements InstallerBackend {
         // The same as no answer: plain lsblk.
       }
     }
-    return parseLsblk(await _stdout(lsblkBinary, lsblkArgs));
+    return [
+      for (final d in parseLsblk(await _stdout(lsblkBinary, lsblkArgs)))
+        d.unchecked(),
+    ];
   }
 
   /// `hinteros-install --list-disks`; null when it gives no answer in time
