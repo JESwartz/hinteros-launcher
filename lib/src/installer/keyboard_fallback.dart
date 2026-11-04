@@ -69,6 +69,9 @@ class KeyboardFallback extends ChangeNotifier {
   bool _wasActive = false;
 
   final _pending = <SoftKey>[];
+
+  /// The keys sent on [keys] as down and not yet let go.
+  final _down = <LogicalKeyboardKey>{};
   Timer? _graceTimer;
 
   /// Whether the window is known to have the compositor's keyboard focus (so
@@ -122,7 +125,13 @@ class KeyboardFallback extends ChangeNotifier {
   }
 
   void _onEvdev(SoftKey k) {
-    if (_out.isClosed || _flutterKeys) return;
+    if (_out.isClosed) return;
+    if (_flutterKeys) {
+      // A key pressed on the evdev path is let go on it too, or a hold
+      // (Erase) started with it would never see the release.
+      if (!k.down && _down.contains(k.key)) _emit(k);
+      return;
+    }
     if (_windowFocused == false || _deaf) {
       _emit(k);
       return;
@@ -149,7 +158,13 @@ class KeyboardFallback extends ChangeNotifier {
   }
 
   void _emit(SoftKey k) {
-    if (!_out.isClosed) _out.add(k);
+    if (_out.isClosed) return;
+    if (k.down) {
+      _down.add(k.key);
+    } else {
+      _down.remove(k.key);
+    }
+    _out.add(k);
   }
 
   void _changed() {
