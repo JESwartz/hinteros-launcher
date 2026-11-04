@@ -712,8 +712,8 @@ and the Store alike. The installer reads `/run/current-system/sw/share/hinteros/
 the ISO (`catalogIndexPath`; `ProcessInstallerBackend(catalogPath:)` overrides it for tests); the
 vendor terms are text files next to it (`terms/<id>-<version>.txt`), which the index entry names as
 `terms {title, version, url, retrieved, file}` and the parser reads into `VendorTerms.text`
-(only paths of the form `terms/<name>.txt`). Only `status: available` entries are read, and no services (`kind: service`). The
-installer lists entries with a `starter`, pre-selects `starter: ticked`,
+(only paths of the form `terms/<name>.txt`). Only `status: available` entries are read, and only apps (`kind: app` or none; services and kinds of a newer catalog are left out). Permission names the system does not know are left out, and a level other than `optional` is required. The
+installer lists entries with `starter: offered` or `ticked`, pre-selects `starter: ticked`,
 and says "On the
 installer" for `onIso` (everything else is a download and is disabled while offline). The safety
 rule: an unfree entry (`unfree` is not false) whose terms are missing or unreadable is not offered, in
