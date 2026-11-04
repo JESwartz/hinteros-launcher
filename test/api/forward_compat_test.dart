@@ -1,6 +1,7 @@
 // A client of 1.0 reads a newer server of its major: fields, enum values,
 // events and error codes it does not know, and job results it cannot read.
-// The enums a client only sends stay closed.
+// The enums a client sends stay closed, except ProfileColor, Channel, Base
+// and CleanupFrequency (sent only as known values, read with a fallback).
 import 'dart:convert';
 import 'dart:io';
 
@@ -146,7 +147,7 @@ void main() {
     };
     // Sent but open on purpose (see tool/gen_api.dart): the client sends only
     // values of its own enum and reads a new one as `unknown`.
-    const openSent = {'ProfileColor'};
+    const openSent = {'ProfileColor', 'Channel', 'Base', 'CleanupFrequency'};
     final doc = jsonDecode(
       File('schema/session-api.json').readAsStringSync(),
     ) as Map<String, dynamic>;
