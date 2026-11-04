@@ -44,6 +44,7 @@ class _ServicePageState extends State<ServicePage> {
   final _token = TextEditingController();
   String? _codeError;
   String? _tokenError;
+  bool _revealToken = false;
 
   ServerRepository get _repo => widget.services.server;
 
@@ -191,12 +192,13 @@ class _ServicePageState extends State<ServicePage> {
       return;
     }
     setState(() => _tokenError = null);
-    if (await _job(
+    final ok = await _job(
       'Save the token',
       (pin) => _repo.setCloudflareToken(token, pin: pin),
-    )) {
-      _token.clear();
-    }
+    );
+    // Hidden again after every try; a refused token stays, to be corrected.
+    if (ok) _token.clear();
+    if (mounted) setState(() => _revealToken = false);
   }
 
   Future<void> _removeToken() async {
@@ -398,15 +400,18 @@ class _ServicePageState extends State<ServicePage> {
           : InfoLine('Route this address in Zero Trust', d.localIp!),
     );
     p.add(Text('Tunnel token', style: t.title), gap: HinterTokens.s4);
+    // The token runs the tunnel: hidden like a password, the eye shows it.
     p.row(
       'token',
-      1,
+      2,
       NavTextField(
         region: p.region,
         rowKey: 'token',
         controller: _token,
+        obscure: !_revealToken,
         hint: d.tokenSet ? 'New token' : 'Token',
         onSubmit: _saveToken,
+        onReveal: () => setState(() => _revealToken = !_revealToken),
       ),
     );
     if (_tokenError != null) p.add(StatusLine(_tokenError!, error: true));

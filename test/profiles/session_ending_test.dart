@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/system/models.dart';
+import 'package:hinteros_launcher/src/ui/session_ending.dart';
 
 import '../support/harness.dart';
 import '../support/nav_helpers.dart';
@@ -196,5 +197,39 @@ void main() {
     await frames(t);
     expect(endingPage, findsNothing);
     expect(connectionError, findsOneWidget);
+  });
+
+  testWidgets('a second wait does not stop the first one\'s timeout', (
+    t,
+  ) async {
+    final c = SessionEndingController(endTimeout: const Duration(seconds: 1));
+    addTearDown(c.dispose);
+    late BuildContext ctx;
+    await t.pumpWidget(
+      SessionEndingScope(
+        controller: c,
+        child: Builder(
+          builder: (context) {
+            ctx = context;
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+    // The same (const) ending twice: the second does not settle the first.
+    const e = SessionEnding(title: 'Restarting the session…');
+    final errors = <String>[];
+    void track(Future<void> f) => f.catchError(
+      (Object err) => errors.add((err as SystemException).message),
+    );
+    track(endSessionWith(ctx, e, () async {}));
+    await t.pump(const Duration(milliseconds: 500));
+    track(endSessionWith(ctx, e, () async {}));
+    await t.pump(const Duration(milliseconds: 600));
+    // The first timed out on time; its page went, which ends the second.
+    expect(errors, ['Nothing happened. Try again.']);
+    expect(c.ending, isNull);
+    await t.pump(const Duration(seconds: 1));
+    expect(errors, hasLength(1));
   });
 }

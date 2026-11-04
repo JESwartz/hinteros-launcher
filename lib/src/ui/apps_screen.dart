@@ -24,10 +24,18 @@ class AppsScreen extends StatelessWidget {
         if (notice != null || apps.isEmpty) {
           region.setRows(const []);
           return notice ??
-              const Notice(
-                title: 'No apps yet',
-                detail: 'Apps from the Store will show up here.',
-              );
+              switch ((data.appList, data.appsError)) {
+                // Not loaded: no "No apps yet" (as on Home).
+                (null, _?) => const Notice(
+                  title: "Couldn't load apps",
+                  detail: 'The HinterOS service did not answer. Retrying.',
+                ),
+                (null, null) => const Notice(title: 'Loading...'),
+                _ => const Notice(
+                  title: 'No apps yet',
+                  detail: 'Apps from the Store will show up here.',
+                ),
+              };
         }
         const width = 320.0;
         return Column(

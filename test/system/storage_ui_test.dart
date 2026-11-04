@@ -1,3 +1,5 @@
+import 'dart:async';
+
 // Settings > Storage (session API 0.14): the ring (around, into, back out),
 // who may open which home, the two clean-ups, the automatic clean-up and
 // measuring.
@@ -365,6 +367,30 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Scanned 2 hours ago.'), findsOneWidget);
+    });
+
+    testWidgets('Close before the scan is asked for: its page still follows', (
+      t,
+    ) async {
+      final h = await openStorage(t);
+      await openCleanup(t, CleanupTarget.system);
+      await press(t, [kDown, kRight, kEnter]);
+      await enterPin(t, '2468');
+      final gate = Completer<void>();
+      h.services.mockStorage.measureGate = gate.future;
+      h.services.mockJobs.finish(h.services.mockJobs.started.single.jobId);
+      await t.pumpAndSettle();
+      await press(t, [kEnter]); // Close, before measure answers
+      gate.complete();
+      await t.pumpAndSettle();
+      expect(find.text('Scanning the disk'), findsOneWidget);
+      final scan = h.services.mockJobs.started.last;
+      expect(scan.kind, JobKind.storageMeasure);
+      h.services.mockJobs.finish(scan.jobId);
+      await t.pumpAndSettle();
+      await press(t, [kEnter]);
+      expect(find.textContaining('before the clean-up'), findsNothing);
+      expect(find.text('Scanned just now.'), findsOneWidget);
     });
 
     testWidgets(

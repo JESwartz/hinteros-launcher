@@ -71,8 +71,14 @@ class ProfileSession extends ChangeNotifier {
   bool _started = false;
 
   /// Loads the current profile and raises what it needs (first-boot mode,
-  /// "Set your PIN", the lock screen). Call again after a reconnect.
-  Future<void> start() async {
+  /// "Set your PIN", the lock screen). Call again after a reconnect. A call
+  /// while one runs joins it (no second first-boot wizard).
+  Future<void> start() =>
+      _starting ??= _start().whenComplete(() => _starting = null);
+
+  Future<void>? _starting;
+
+  Future<void> _start() async {
     if (!_started) {
       _started = true;
       _subs
@@ -401,8 +407,9 @@ class ProfileSession extends ChangeNotifier {
           return;
         }
       }
-      _lock?.close();
       // The switch has begun: this session ends with it (unless cancelled).
+      // The sleep lock stays under the Switching page: a cancelled switch
+      // goes back to it, not into the locked session.
       await _whileEnding(
         SessionEnding(
           title: 'Switching to $name…',
@@ -481,17 +488,23 @@ class ProfileSession extends ChangeNotifier {
       danger: true,
     );
     if (ok == null || !context.mounted) return;
-    try {
-      await profiles.endGuest();
-    } on SystemException catch (e) {
-      if (context.mounted) {
-        await showMessage(context, title: "That didn't work", body: e.message);
-      }
-      return;
-    }
-    if (!context.mounted) return;
+    // Before the call: its first switch event can come before its answer,
+    // and belongs to this page (not to a second one).
     _switching = true;
     try {
+      try {
+        await profiles.endGuest();
+      } on SystemException catch (e) {
+        if (context.mounted) {
+          await showMessage(
+            context,
+            title: "That didn't work",
+            body: e.message,
+          );
+        }
+        return;
+      }
+      if (!context.mounted) return;
       await _whileEnding(
         const SessionEnding(
           title: 'Ending the guest session…',
@@ -668,8 +681,13 @@ class _SessionPickerPageState extends State<SessionPickerPage> {
     if (!_focused) {
       _focused = true;
       final i = tiles.indexWhere((t) => t.current);
+      // Rows first (the view sets them), then the focus: after the modal's
+      // own first focus (on the first tile), so this one wins.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) region.model.goTo(0, i < 0 ? 0 : i);
+        if (!mounted) return;
+        region.model.goTo(0, i < 0 ? 0 : i);
+        region.changed();
+        unawaited(region.focusCurrent());
       });
     }
     return ProfilePickerView(

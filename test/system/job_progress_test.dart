@@ -172,10 +172,7 @@ void main() {
         h.services.mockJobs.heartbeat(job.jobId);
       }
       await t.pump(const Duration(seconds: 1));
-      expect(
-        find.text('No new output for 4 min. Some steps take a long time.'),
-        findsOneWidget,
-      );
+      expect(find.text('No new output for 4 min.'), findsOneWidget);
       await t.pumpAndSettle();
     });
   });
@@ -724,6 +721,24 @@ void main() {
       expect(find.text('Installing Moonlight: done.'), findsNothing);
       await press(t, [kEnter]); // Close
       expect(indicator, findsNothing);
+    });
+
+    testWidgets('the indicator goes while the chip has the focus: the focus '
+        'stays on the chip', (t) async {
+      setView(t);
+      final (h, _) = harness();
+      final job = h.services.mockJobs.start(JobKind.rebuild);
+      await h.pump(t);
+      expect(indicator, findsOneWidget);
+      // Up to the tab row; left wraps to the profile chip (after the job).
+      await press(t, [kUp, kLeft]);
+      expect(focusLabel(), 'tabs/tabs:7');
+      h.services.mockJobs.finish(job.jobId);
+      await t.pumpAndSettle();
+      expect(indicator, findsNothing);
+      expect(focusLabel(), 'tabs/tabs:6');
+      await press(t, [kEnter]);
+      expect(find.text('Who is watching?'), findsOneWidget);
     });
   });
 }

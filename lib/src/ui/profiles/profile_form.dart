@@ -278,12 +278,6 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
                 ),
                 if (_error != null) StatusLine(_error!, error: true),
                 Text(pinDisclaimer, style: t.bodyDim),
-                if (widget.admin)
-                  Text(
-                    'If you forget the admin PIN, reset it with the admin '
-                    "account's password.",
-                    style: t.caption,
-                  ),
               ]),
             ),
             const SizedBox(width: HinterTokens.s5),
@@ -292,12 +286,11 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
               controller: _pin,
               submitLabel: 'Next',
               onSubmit: _pinNext,
+              // The pad deletes digits; then B goes back a step.
+              onBackEmpty: _back,
             ),
           ],
         );
-        // The pad set the region's Back to its own; deleting then going
-        // back a step is ours.
-        _region.onBack = _back;
       case _Step.lock:
         _region.setRows([const NavRow('lock', 1), const NavRow('next', 1)]);
         body = _column([

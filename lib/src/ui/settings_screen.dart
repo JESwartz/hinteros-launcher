@@ -54,7 +54,7 @@ const _groups = [
     _Setting('contrast', 'High contrast'),
     _Setting('focus', 'Focus marker'),
     _Setting('motion', 'Reduce motion'),
-    _Setting('osk_text', 'Show typed passwords on the on-screen keyboard'),
+    _Setting('osk_text', 'Show typed passwords'),
   ]),
   _Group('controller', 'Controller', [
     _Setting('buttons', 'Buttons'),

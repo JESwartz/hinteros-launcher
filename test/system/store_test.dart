@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart' show App, AppKind;
 import 'package:hinteros_launcher/src/system/mock_system.dart';
 import 'package:hinteros_launcher/src/system/models.dart';
 import 'package:hinteros_launcher/src/ui/widgets.dart';
+import 'package:hinteros_launcher/src/ui/store_screen.dart' show StoreCard;
 
 import '../support/harness.dart';
 import '../support/nav_helpers.dart';
@@ -40,7 +43,7 @@ void main() {
     final h = harness();
     await h.pump(t);
     await openStore(t);
-    expect(focusLabel(), 'store-cats/c0:0');
+    expect(focusLabel(), 'store-cats/c-installed:0');
     // Installed first, then All and the categories (in the left column,
     // below the tab bar).
     double y(String label) => [
@@ -60,7 +63,26 @@ void main() {
     await press(t, [kRight]);
     expect(focusLabel(), 'store-grid/r0:0');
     await press(t, [kLeft]);
-    expect(focusLabel(), 'store-cats/c3:0');
+    expect(focusLabel(), 'store-cats/c-games:0');
+  });
+
+  testWidgets('a category that comes before the chosen one moves nothing', (
+    t,
+  ) async {
+    setView(t);
+    final h = harness();
+    await h.pump(t);
+    await openStore(t);
+    await press(t, List.filled(storeRow(3), kDown)); // Utilities
+    expect(focusLabel(), 'store-cats/c-utilities:0');
+    final before = find.byType(StoreCard).evaluate().length;
+    // A catalog change brings the first Music app (before Utilities).
+    h.services.mockStore.addApp(mockServiceApp);
+    await t.pumpAndSettle();
+    expect(find.text('Music'), findsWidgets);
+    expect(focusLabel(), 'store-cats/c-utilities:0');
+    expect(find.byType(StoreCard), findsNWidgets(before));
+    expect(find.text('Music library'), findsNothing);
   });
 
   group('storeChanges off (the browser demo)', () {
@@ -584,6 +606,20 @@ void main() {
       expect(find.text('Off'), findsOneWidget);
       await press(t, [kEnter]); // and on again
       expect(h.services.mockStore.log.last, 'set_permission:mpv:mic:true');
+      expect(find.text('Off'), findsNothing);
+      // A second press while the first is on its way sends nothing.
+      final hold = Completer<void>();
+      h.services.mockStore.holdPermission = hold.future;
+      await press(t, [kEnter, kEnter]);
+      hold.complete();
+      h.services.mockStore.holdPermission = null;
+      await t.pumpAndSettle();
+      expect(
+        h.services.mockStore.log.where((l) => l.startsWith('set_permission')),
+        hasLength(3),
+      );
+      expect(find.text('Off'), findsOneWidget);
+      await press(t, [kEnter]);
       expect(find.text('Off'), findsNothing);
       // While it runs, one line says when a change applies.
       await h.launch(t, 'mpv');

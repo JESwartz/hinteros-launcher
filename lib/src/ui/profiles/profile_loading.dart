@@ -3,7 +3,8 @@
 /// exits), the console shows the same words on the VT while the session's
 /// compositor starts (`hinteros-system pin splash`, same colours), and the
 /// launcher's first frames show it again until Home has its data, so the
-/// handover reads as one screen.
+/// handover reads as one screen. The titles end in "…" (U+2026), as the
+/// splash draws them (`splash.rs`), not "...", which the rest of the UI uses.
 library;
 
 import 'dart:convert';

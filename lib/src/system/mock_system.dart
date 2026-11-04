@@ -1052,10 +1052,13 @@ class MockBluetooth implements BluetoothRepository {
   final _changes = StreamController<List<BtDevice>>.broadcast();
   final List<String> log = [];
 
+  /// Tests: [load] answers only when this completes (a slow daemon).
+  Future<void>? loadGate;
+
   @override
   bool get scanning => _scanning;
   @override
-  Future<void> load() async {}
+  Future<void> load() async => loadGate;
   @override
   Stream<BtConfirmRequest> get confirmRequests => const Stream.empty();
   @override
@@ -1362,8 +1365,17 @@ class MockStore implements StoreRepository {
   /// `<id>=<terms version>` for every acceptance the box would record.
   final List<String> acceptances = [];
 
+  /// Test hook: a catalog change brings [a] (store_changed).
+  void addApp(StoreApp a) {
+    _catalog.add(a);
+    _changes.add(null);
+  }
+
   /// The next install or remove fails with this (a conflict, no space...).
   SystemException? failNext;
+
+  /// Test hook: set_permission waits for this before it applies.
+  Future<void>? holdPermission;
 
   @override
   bool get loaded => true;
@@ -1453,6 +1465,7 @@ class MockStore implements StoreRepository {
 
   @override
   Future<void> setPermission(String id, String permission, bool granted) async {
+    await holdPermission;
     final a = _app(id);
     _maybeFail();
     final p = a.permissions.where((p) => p.name == permission).firstOrNull;

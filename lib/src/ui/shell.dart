@@ -54,6 +54,18 @@ enum Section {
   final String label;
 }
 
+/// How long the clock waits after [now] for its next tick: just after the
+/// next minute starts, so the top bar shows the new minute at once.
+@visibleForTesting
+Duration untilNextMinute(DateTime now) {
+  final into = Duration(
+    seconds: now.second,
+    milliseconds: now.millisecond,
+    microseconds: now.microsecond,
+  );
+  return const Duration(minutes: 1) - into + const Duration(milliseconds: 50);
+}
+
 /// The top-level layout: a top bar with the section tabs, the current section
 /// below. Owns the [NavController] and every [NavRegion], and is the single
 /// place where keyboard and `input_nav` become navigation.
@@ -91,7 +103,7 @@ class LauncherShell extends StatefulWidget {
   final SystemServices services;
 
   /// Who this session is, as known before the daemon answers: the shell
-  /// shows "Loading Sam…" over Home until Home has its data (the same
+  /// shows "Loading Sam..." over Home until Home has its data (the same
   /// page the picker and the console showed). Null: no loading page.
   final LoadingIdentity? startup;
 
@@ -242,16 +254,17 @@ class _LauncherShellState extends State<LauncherShell> {
       widget.data.cancelClose();
       return true;
     };
-    _tabs.onBack = () {
+    // Back to Home, but never from under a page or dialog: focus would go
+    // to the hidden Home row (behind the sleep lock, too).
+    bool backHome() {
+      if (_modals.isOpen || _dialogOpen) return true;
       if (_section == Section.home) return false;
       _goHome(reset: false);
       return true;
-    };
-    _nav.onBack = () {
-      if (_section == Section.home) return false;
-      _goHome(reset: false);
-      return true;
-    };
+    }
+
+    _tabs.onBack = backHome;
+    _nav.onBack = backHome;
     _nav.onOther = (a) {
       if (_dialogOpen || _modals.isOpen) return;
       if (a == NavAction.secondary && _bannerVisible) {
@@ -340,11 +353,7 @@ class _LauncherShellState extends State<LauncherShell> {
     unawaited(_reminders.start().then((_) => _homeEntered()));
     _subs.add(widget.services.timeZone.changes.listen(_setZone));
     unawaited(_loadZone());
-    if (widget.now == null) {
-      _clock = Timer.periodic(const Duration(seconds: 20), (_) {
-        if (mounted) setState(() => _time = _clockTime());
-      });
-    }
+    if (widget.now == null) _tickClock();
     // First item focused, as soon as Home has items (the daemon answers later).
     _nav.fallback = () => _modals.topRegion ?? _contentOf(_section);
     _home.addListener(_initialFocus);
@@ -364,6 +373,16 @@ class _LauncherShellState extends State<LauncherShell> {
   }
 
   DateTime _now() => (widget.now ?? DateTime.now)();
+
+  /// Ticks just after each minute starts (timed again every time, so a
+  /// clock that is set does not leave it behind).
+  void _tickClock() {
+    _clock = Timer(untilNextMinute(_clockTime()), () {
+      if (!mounted) return;
+      setState(() => _time = _clockTime());
+      _tickClock();
+    });
+  }
 
   /// The time the top bar shows: UTC plus the box's offset.
   DateTime _clockTime() {
@@ -569,18 +588,36 @@ class _LauncherShellState extends State<LauncherShell> {
 
   /// The tab row: the sections, the job indicator, the profile chip.
   void _syncTabRow() {
-    final job = _jobs.showsIndicator ? 1 : 0;
-    final n = _sections.length + job + (_profile.current == null ? 0 : 1);
-    if (_tabs.model.rows.firstOrNull?.length == n) return;
-    // The indicator went away under the focus: back to the tab of this
-    // section (moving to another tab would switch the section).
-    final onExtra = _tabs.model.col >= _sections.length;
-    _tabs.setRows([NavRow('tabs', n)]);
-    if (onExtra && job == 0) {
-      _tabs.model.goTo(0, _sections.indexOf(_section));
-      _tabs.changed();
+    final job = _jobs.showsIndicator;
+    final chip = _profile.current != null;
+    final before = _tabExtras;
+    if (before == (job: job, chip: chip)) return;
+    _tabExtras = (job: job, chip: chip);
+    final s = _sections.length;
+    final col = _tabs.model.col;
+    final onJob = before.job && col == s;
+    final onChip = before.chip && col == s + (before.job ? 1 : 0);
+    _tabs.setRows([NavRow('tabs', s + (job ? 1 : 0) + (chip ? 1 : 0))]);
+    // The focus stays on its item when the indicator comes or goes beside
+    // it. Its item gone: back to the tab of this section (moving to another
+    // tab would switch the section).
+    final int? want;
+    if (onChip) {
+      want = chip ? s + (job ? 1 : 0) : _sections.indexOf(_section);
+    } else if (onJob) {
+      want = job ? s : _sections.indexOf(_section);
+    } else {
+      want = null;
     }
+    // The item moved (or went): its old node has the focus no more.
+    if (want == null || want == col) return;
+    _tabs.model.goTo(0, want);
+    _tabs.changed();
+    if (_nav.active == _tabs) _nav.focusRegion(_tabs);
   }
+
+  /// What the tab row held at the last [_syncTabRow].
+  ({bool job, bool chip}) _tabExtras = (job: false, chip: false);
 
   void _onJobs() {
     if (!mounted) return;

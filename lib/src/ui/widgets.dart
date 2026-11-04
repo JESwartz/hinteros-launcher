@@ -280,7 +280,10 @@ class _CheckPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_CheckPainter o) =>
-      o.checked != checked || o.line != line || o.fill != fill;
+      o.checked != checked ||
+      o.line != line ||
+      o.fill != fill ||
+      o.tick != tick;
 }
 
 /// Wi-Fi signal: four bars of rising height.
@@ -322,7 +325,8 @@ class _BarsPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_BarsPainter o) => o.bars != bars || o.on != on;
+  bool shouldRepaint(_BarsPainter o) =>
+      o.bars != bars || o.on != on || o.off != off;
 }
 
 /// A padlock, drawn.

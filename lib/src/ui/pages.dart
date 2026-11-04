@@ -548,8 +548,7 @@ class _JobProgressScreenState extends State<JobProgressScreen> with JobTicker {
         ] else if (noOutput >= jobNoOutputAfter) ...[
           const SizedBox(height: HinterTokens.s2),
           StatusLine(
-            'No new output for ${_ago(noOutput)}. Some steps take a long '
-            'time.',
+            'No new output for ${_ago(noOutput)}.',
             key: const ValueKey('job-no-output'),
           ),
         ],
@@ -697,7 +696,12 @@ class _StagePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_StagePainter o) => o.state != state || o.accent != accent;
+  bool shouldRepaint(_StagePainter o) =>
+      o.state != state ||
+      o.line != line ||
+      o.accent != accent ||
+      o.onAccent != onAccent ||
+      o.danger != danger;
 }
 
 // ------------------------------------------------------------------ terms
@@ -1029,16 +1033,8 @@ const securityLockout = Duration(seconds: 5);
 
 /// The full-screen security-update notice: states the severity. "Update now"
 /// works at once and has the focus; "Later" and Back wait [securityLockout]
-/// (a countdown on Later). Never updates by itself.
-Future<SecurityChoice?> showSecurityNotice(
-  BuildContext context,
-  AvailableUpdate update, {
-  Duration lockout = securityLockout,
-}) => ModalScope.of(context).show<SecurityChoice>(
-  (context, modal) =>
-      SecurityNotice(modal: modal, update: update, lockout: lockout),
-);
-
+/// (a countdown on Later). Never updates by itself. The shell shows it in
+/// its own modal layer.
 class SecurityNotice extends StatefulWidget {
   const SecurityNotice({
     super.key,

@@ -32,7 +32,7 @@ void main() {
     await h.data.launchApp('jellyfin-desktop', 'Jellyfin');
     await frames(t);
     expect(view, findsOneWidget);
-    expect(find.text('Starting Jellyfin…'), findsOneWidget);
+    expect(find.text('Starting Jellyfin...'), findsOneWidget);
     expect(hint, findsNothing);
     h.mock.finishStart('jellyfin-desktop');
     await frames(t);

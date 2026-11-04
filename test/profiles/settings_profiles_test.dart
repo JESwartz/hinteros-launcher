@@ -233,6 +233,28 @@ void main() {
     expect(find.text('Robin'), findsOneWidget);
   });
 
+  testWidgets('Add profile: B on the empty PIN pad goes back a step', (
+    t,
+  ) async {
+    final h = await open(t);
+    await keys(t, [kDown, kDown, kEnter]); // Add profile
+    await keys(t, [kEnter]);
+    await t.enterText(find.byType(EditableText), 'Robin');
+    await keys(t, [kEnter, kEnter]);
+    await keys(t, [kDown, kEnter, kEnter]); // Continue, first colour
+    expect(find.text('Choose a PIN for Robin: 4 to 8 digits.'), findsOneWidget);
+    // B deletes a digit first, then goes back to the name step.
+    await t.sendKeyEvent(LogicalKeyboardKey.digit1);
+    await keys(t, [kEscape]);
+    expect(find.text('Choose a PIN for Robin: 4 to 8 digits.'), findsOneWidget);
+    await keys(t, [kEscape]);
+    expect(find.text('Choose a PIN for Robin: 4 to 8 digits.'), findsNothing);
+    expect(find.text('Step 1 of 4'), findsOneWidget);
+    // The focus stays in the form (not on the hidden Home row).
+    expect(focusLabel(), startsWith('modal-'));
+    expect(h.mock.running, isEmpty);
+  });
+
   testWidgets('starter apps: chosen from the admin profile, admin PIN', (
     t,
   ) async {

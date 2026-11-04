@@ -239,6 +239,14 @@ class _UpdatesSectionState extends State<UpdatesSection> {
       key: _key,
       region: env.region,
       load: () async => (await sys.info(), await up.generations()),
+      // A check that ends while the page is open (the startup check, the
+      // reminder's retries) shows at once.
+      updates: [
+        up.changes.map(
+          (_) =>
+              (d) => d,
+        ),
+      ],
       builder: (context, data, reload) {
         final (info, gens) = data;
         final status = up.status;
@@ -247,8 +255,11 @@ class _UpdatesSectionState extends State<UpdatesSection> {
         final p = Pane(env.region);
         p.add(
           // The version names the channel ("0.7.0.1a2b3c4 beta"), and so
-          // does the Channel row.
-          Text('HinterOS ${status.currentVersion}', style: t.label),
+          // does the Channel row. Before a check, only system.info has it.
+          Text(
+            'HinterOS ${status.checkedAt == null ? info.version : status.currentVersion}',
+            style: t.label,
+          ),
         );
         if (_checkError != null) {
           p.add(StatusLine(_checkError!, error: true));

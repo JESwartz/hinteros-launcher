@@ -181,6 +181,14 @@ void main() {
       await t.pump();
       expect(h.services.mockSystem.log.last, 'power:restart');
       expect(find.text('Restarting…'), findsOneWidget);
+      // Accepted, but the service still answers long after: it did not
+      // work. The page goes, and the launcher takes input again.
+      await t.pump(const Duration(minutes: 2));
+      await t.pumpAndSettle();
+      expect(find.text('Restarting…'), findsNothing);
+      expect(find.text('Nothing happened. Try again.'), findsOneWidget);
+      await press(t, [kEnter]);
+      expect(find.text('Nothing happened. Try again.'), findsNothing);
     });
 
     testWidgets('About shows the version and identity', (t) async {
@@ -446,6 +454,24 @@ void main() {
       await press(t, [kEnter]);
       expect(
         find.textContaining("Can't reach the update server"),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a check that ends elsewhere shows on the open page', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness();
+      await h.pump(t);
+      await enterSettingsEntry(t, 'updates');
+      expect(find.text('HinterOS 0.6.0'), findsOneWidget);
+      expect(find.textContaining('Update available'), findsNothing);
+      h.services.mockUpdates.setStatus(mockBehind(mockOrdinaryUpdate()));
+      await t.pumpAndSettle();
+
+      expect(
+        find.textContaining('Update available: HinterOS 0.6.1'),
         findsOneWidget,
       );
     });

@@ -138,10 +138,7 @@ void main() {
       // Settings > Accessibility > the last section (on-screen keyboard
       // text) > On
       await enterSettingsEntry(t, 'osk_text');
-      expect(
-        find.text('Show typed passwords on the on-screen keyboard'),
-        findsOneWidget,
-      );
+      expect(find.text('Show typed passwords'), findsOneWidget);
       await press(t, [kDown, kEnter]);
       expect(h.settings.value.showTypedOnOsk, true);
       expect(h.storage.value.showTypedOnOsk, true, reason: "saved");

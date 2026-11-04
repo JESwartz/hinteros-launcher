@@ -71,7 +71,7 @@ class _LaunchingScreenState extends State<LaunchingScreen> {
               ),
               const SizedBox(height: HinterTokens.s4),
               Text(
-                'Starting ${widget.name}…',
+                'Starting ${widget.name}...',
                 key: const ValueKey('launching-title'),
                 style: t.headline,
                 textAlign: TextAlign.center,

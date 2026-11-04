@@ -304,7 +304,7 @@ class PinPad extends StatefulWidget {
   final PinController controller;
   final VoidCallback onSubmit;
 
-  /// B with nothing typed.
+  /// B with nothing typed. Null: B then does nothing.
   final VoidCallback? onBackEmpty;
 
   /// False while a backoff lock lasts: the keys are dimmed and do nothing.
@@ -328,9 +328,14 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
   /// The hold of the submit key ([PinPad.holdToSubmit]).
   HoldController? _hold;
 
+  /// The region's Back before the pad took it: given back on dispose (a
+  /// form step after the PIN).
+  bool Function()? _outerBack;
+
   @override
   void initState() {
     super.initState();
+    _outerBack = widget.region.onBack;
     widget.region.onBack = _back;
     final h = widget.holdToSubmit;
     if (h != null) {
@@ -347,6 +352,8 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
   void didUpdateWidget(PinPad old) {
     super.didUpdateWidget(old);
     if (old.region != widget.region) {
+      if (old.region.onBack == _back) old.region.onBack = _outerBack;
+      _outerBack = widget.region.onBack;
       widget.region.onBack = _back;
       if (_hold != null) widget.region.onRaw = _raw;
     }
@@ -354,6 +361,7 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
 
   @override
   void dispose() {
+    if (widget.region.onBack == _back) widget.region.onBack = _outerBack;
     if (widget.region.onRaw == _raw) widget.region.onRaw = null;
     _hold?.dispose();
     super.dispose();
@@ -388,11 +396,11 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
 
   void _stopHold() => _hold?.stop();
 
+  /// Always consumed: with no [PinPad.onBackEmpty], B on the empty pad does
+  /// nothing (a lock that cannot be left).
   bool _back() {
     if (widget.controller.delete()) return true;
-    final b = widget.onBackEmpty;
-    if (b == null) return false;
-    b();
+    widget.onBackEmpty?.call();
     return true;
   }
 

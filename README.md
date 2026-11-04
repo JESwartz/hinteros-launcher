@@ -220,7 +220,7 @@ microphone and the Downloads folder).
 the session makes at start. `apps.launch` answers `no_app_display` (2009,
 `NoAppDisplayData.apps`: the running apps that hold one) when all are in use: `LauncherData`
 asks `chooseAppToClose` (the shell: "Close an app to open <Name>", the apps, Cancel). A pick
-calls `apps.close`, waits for that app's `app_exited` (up to 30 s; "Starting <Name>…" shows
+calls `apps.close`, waits for that app's `app_exited` (up to 30 s; "Starting <Name>..." shows
 meanwhile) and launches again; Cancel or Back open nothing. Nothing closes on its own. Settings >
 System > "Apps open at once": `apps.displays.get` / `apps.displays.set` (`AppDisplaySetting`,
 `SystemRepository.appDisplays` / `setAppDisplays`), a drop-down of 1 to 8 apps. A new number
@@ -315,7 +315,7 @@ API 0.15 (`job_started` / `job_progress` / `job_finished` with `subject`, `start
   of the time left). The bar moves once a second (a 0.7 s move, still with reduced motion). The
   service sends a heartbeat at least every 2 s: after 20 s without one the page says "No news for
   30 s. The job is still running." (never that it failed); after 3 min without output from the job
-  "No new output for 4 min. Some steps take a long time."
+  "No new output for 4 min."
 - **Leaving the page**: "Hide" (focused first) or B while the job runs. The job runs on; the top
   bar shows a compact indicator before the profile chip (a ring with the percentage, or a turning
   arc; the title and "Building 3 of 12" / "40%" / the stage; at large text the short part only).
@@ -829,7 +829,7 @@ masked only for a password field** (`osk_changed.password`, session API 0.10; a 
 appear on the TV): dots, with the newest character readable for about a second, like a phone
 password field. Any other field, or none reported (the Guide+Y chord), shows plain text. When the
 field kind changes while the keyboard is up, the preview starts afresh, so a password never shows
-unmasked. Settings > "Show typed passwords on the on-screen keyboard" (default off) shows passwords in
+unmasked. Settings > "Show typed passwords" (default off) shows passwords in
 plain text too; the keyboard reads `launcher.json` again every time it opens. The preview is cleared on hide. Characters go out with `keys.type` (the daemon picks uinput or the
 gamescope input method), Space included; the keyboard has no text field of its own.
 
@@ -869,7 +869,7 @@ UI. Focus on a tab selects its section (like console UIs); Down enters the secti
   4. Network: Network, Bluetooth
   5. Display and sound: Display, Audio
   6. Accessibility: Text size (100/120/140/160%), High contrast, Focus marker (ring/glow/bar),
-     Reduce motion, "Show typed passwords on the on-screen keyboard" (privacy; off = in password
+     Reduce motion, "Show typed passwords" (privacy; off = in password
      fields the keyboard's preview shows dots)
   7. Controller: Buttons, Pointer, Keyboard apps, App keys
   8. System: Time zone, Power, Remote access, About
@@ -1001,7 +1001,7 @@ through their stages by themselves.
   it and that typing Y or X is text, not a button press. (Checked in widget tests only; the key
   injection itself is the daemon's, and the real chain, uinput to gamescope to GTK to the field,
   is on the hardware checklist.) "Hold Guide, press Y" is no longer printed in the dialogs; it is
-  kept in Settings > Accessibility, under "Show typed passwords on the on-screen keyboard", as the way to open the keyboard anywhere else.
+  kept in Settings > Accessibility, under "Show typed passwords", as the way to open the keyboard anywhere else.
 - **Remote access:** one SSH toggle. SSH is plain username and password for now (you log in as the
   admin account). Key import and key-only login are in the backlog. The toggle just calls
   `ssh.set`; turning it on makes the daemon ask for the admin password, which shows as the prompt

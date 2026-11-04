@@ -64,7 +64,7 @@ class _NavFocusableState extends State<NavFocusable> {
         old.rowKey != widget.rowKey ||
         old.col != widget.col) {
       old.region.unregisterSelect(old.rowKey, old.col);
-      old.region.registerContext(old.rowKey, old.col, null);
+      old.region.releaseContext(old.rowKey, old.col, old.onContext);
       _focused = widget.region.nodeAt(widget.rowKey, widget.col).hasFocus;
     }
     widget.region.registerSelect(widget.rowKey, widget.col, widget.onSelect);
@@ -74,12 +74,7 @@ class _NavFocusableState extends State<NavFocusable> {
   @override
   void dispose() {
     widget.region.releaseSelect(widget.rowKey, widget.col, widget.onSelect);
-    widget.region.registerContext(
-      widget.rowKey,
-      widget.col,
-      null,
-      replacing: widget.onContext,
-    );
+    widget.region.releaseContext(widget.rowKey, widget.col, widget.onContext);
     super.dispose();
   }
 

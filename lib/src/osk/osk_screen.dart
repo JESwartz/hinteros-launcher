@@ -139,8 +139,8 @@ class OskScreen extends StatefulWidget {
   /// Backspace). Empty for the daemon-backed keyboard.
   final String initialText;
 
-  /// The "Show typed passwords on the on-screen keyboard" setting: on, a
-  /// password field's preview is not masked either.
+  /// The "Show typed passwords" setting: on, a password field's preview is
+  /// not masked either.
   final bool showTyped;
 
   /// The field is a password (masked preview). The daemon-backed keyboard

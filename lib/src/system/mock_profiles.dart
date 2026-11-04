@@ -781,8 +781,12 @@ class MockGreeter implements GreeterRepository {
     switchTo: switchTo,
   );
 
+  /// Tests: [login] answers only when this completes (a slow daemon).
+  Future<void>? loginGate;
+
   @override
   Future<LoginOutcome> login(String id, {String? pin}) async {
+    await loginGate;
     log.add('login:$id');
     if (id == CurrentProfile.guestId) {
       if (!box.guestEnabled) {
