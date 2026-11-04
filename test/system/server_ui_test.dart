@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/system/mock_system.dart';
 import 'package:hinteros_launcher/src/system/models.dart';
 import 'package:hinteros_launcher/src/system/server.dart';
+import 'package:hinteros_launcher/src/ui/dialogs.dart';
 import 'package:hinteros_launcher/src/ui/qr_code.dart';
 import 'package:hinteros_launcher/src/ui/server/server_screen.dart';
 import 'package:hinteros_launcher/src/ui/server/service_page.dart';
@@ -529,10 +530,16 @@ void main() {
     await t.enterText(field, 'eyJhIjoiYiJ9');
     // A credential: hidden like a password.
     expect(t.widget<TextField>(field).obscureText, isTrue);
+    t.widget<NavTextField>(find.byType(NavTextField)).onReveal!();
+    await t.pump();
+    expect(t.widget<TextField>(field).obscureText, isFalse);
     await choose(t, 'Save token');
     await enterPin(t, '2468');
     expect(find.text('This is not a tunnel token.'), findsOneWidget);
     await press(t, [kEnter]);
+    // Hidden again after a refused token, which stays to be corrected.
+    expect(t.widget<TextField>(field).obscureText, isTrue);
+    expect(t.widget<TextField>(field).controller!.text, 'eyJhIjoiYiJ9');
     expect(h.services.mockJobs.started, isEmpty);
     await t.enterText(
       field,

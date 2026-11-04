@@ -192,13 +192,13 @@ class _ServicePageState extends State<ServicePage> {
       return;
     }
     setState(() => _tokenError = null);
-    if (await _job(
+    final ok = await _job(
       'Save the token',
       (pin) => _repo.setCloudflareToken(token, pin: pin),
-    )) {
-      _token.clear();
-      if (mounted) setState(() => _revealToken = false);
-    }
+    );
+    // Hidden again after every try; a refused token stays, to be corrected.
+    if (ok) _token.clear();
+    if (mounted) setState(() => _revealToken = false);
   }
 
   Future<void> _removeToken() async {
