@@ -110,8 +110,9 @@ StoreApp? _parseApp(
   if (id == null || name == null) return null;
   final status = a['status'];
   if (status != 'available') return null;
-  // Services (`kind: service`) are not apps of a profile.
-  if (a['kind'] == 'service') return null;
+  // Only apps (a missing kind is one): services are box-wide, and a kind
+  // of a newer catalog is ignored (the schema's rule).
+  if (a['kind'] case final k? when k != 'app') return null;
 
   VendorTerms? terms;
   final t = a['terms'];
@@ -158,7 +159,7 @@ StoreApp? _parseApp(
     terms: terms,
     readme: readme,
     unfree: unfree,
-    installer: a['starter'] != null,
+    installer: a['starter'] == 'offered' || a['starter'] == 'ticked',
     installerDefault: a['starter'] == 'ticked',
     onIso: a['onIso'] == true,
     delivery: a['delivery'] == 'download' || a['delivery'] == null
@@ -173,11 +174,14 @@ StoreApp? _parseApp(
             firefoxProfile: icon['firefoxProfile'] == true,
           )
         : const StoreIcon(),
-    // Optional: `permissions`, name -> "required" / "optional".
+    // Optional: `permissions`, name -> "required" / "optional". Like the
+    // system: an unknown name is ignored (not enforced), an unknown level
+    // is required (it cannot be switched off).
     permissions: [
       if (a['permissions'] case final Map<String, Object?> perms)
         for (final e in perms.entries)
-          AppPermission(name: e.key, required: e.value == 'required'),
+          if (knownPermissions.contains(e.key))
+            AppPermission(name: e.key, required: e.value != 'optional'),
     ],
     // Optional (apps): `sandbox`, missing = true.
     fullAccess: a['sandbox'] == false,

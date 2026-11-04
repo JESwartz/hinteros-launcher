@@ -1153,6 +1153,10 @@ class AppPermission {
   );
 }
 
+/// The sandbox permissions the system knows (hinteros-api `PERMISSIONS`);
+/// a catalog's other names are not enforced, so not shown.
+const knownPermissions = {'gamepad', 'mic', 'downloads', 'lan'};
+
 /// The short name of permission [name] on screen.
 String permissionLabel(String name) => switch (name) {
   'gamepad' => 'Controller',
