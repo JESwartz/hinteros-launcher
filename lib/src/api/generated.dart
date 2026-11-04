@@ -13139,7 +13139,7 @@ final class JobFinishedEvent extends SessionEvent {
   /// A JSON-RPC error object (codes from this document's errors).
   final ErrorObject? error;
 
-  /// update_check jobs: an UpdateCheckResult; jobs that change the system: an AppliedResult; storage_measure: a MeasuredResult; cleanup_system and cleanup_profiles: a CleanedResult; channel_check: a ChannelCheckResult.
+  /// The shape is set by the job's kind, not by its fields: update_check jobs: an UpdateCheckResult; jobs that change the system: an AppliedResult; storage_measure: a MeasuredResult; cleanup_system and cleanup_profiles: a CleanedResult; channel_check: a ChannelCheckResult. Pick the shape by kind; a later minor may add a kind with a new shape that has the same required fields as another (a kind this client does not know: ignore the result).
   final Object? result;
   final bool sessionRestartRequired;
 
