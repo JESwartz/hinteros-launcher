@@ -728,6 +728,7 @@ class SummaryStep extends StatelessWidget {
         );
         final d = f.disk;
         final keep = f.keepData;
+        final down = f.keepDowngrade;
         final action = keep ? 'Keep data and install' : 'Erase and install';
         final mark = keep ? t.accent : t.danger;
         final appNames = [
@@ -754,6 +755,13 @@ class SummaryStep extends StatelessWidget {
                             '${d.title}, ${d.sizeLabel}',
                   style: t.headline.copyWith(color: keep ? t.text : t.danger),
                 ),
+                // Two disks of the same model and size: the path tells them
+                // apart, as on the disk step.
+                if (d != null)
+                  Text(
+                    '${d.path}${d.transport != null ? ', ${d.transport}' : ''}',
+                    style: t.bodyDim,
+                  ),
                 const SizedBox(height: HinterTokens.s1),
                 Text(
                   keep
@@ -763,6 +771,12 @@ class SummaryStep extends StatelessWidget {
                             'this.',
                   style: t.body,
                 ),
+                if (keep && down != null)
+                  Text(
+                    'This replaces HinterOS ${down.disk} with the older '
+                    '${down.usb}.',
+                    style: t.body,
+                  ),
               ],
             ),
           ),

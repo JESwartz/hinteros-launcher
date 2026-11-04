@@ -164,7 +164,7 @@ void main() {
     testWidgets('a newer install than the medium: both versions, once', (
       t,
     ) async {
-      await toChoice(
+      final h = await toChoice(
         t,
         backend: FakeInstallerBackend(
           disks: disksWith(
@@ -172,10 +172,13 @@ void main() {
           ),
         ),
       );
-      expect(
-        find.text('This replaces HinterOS 0.9.0 with the older 0.7.0.'),
-        findsOneWidget,
-      );
+      const line = 'This replaces HinterOS 0.9.0 with the older 0.7.0.';
+      expect(find.text(line), findsOneWidget);
+      // The summary says it again, and names the disk by its path.
+      h.flow.go(InstallerStep.summary);
+      await t.pumpAndSettle();
+      expect(find.text(line), findsOneWidget);
+      expect(find.text('$_sda, sata'), findsOneWidget);
     });
 
     for (final (name, version, infoError) in [
