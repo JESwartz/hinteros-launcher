@@ -103,7 +103,7 @@ class LauncherShell extends StatefulWidget {
   final SystemServices services;
 
   /// Who this session is, as known before the daemon answers: the shell
-  /// shows "Loading Sam…" over Home until Home has its data (the same
+  /// shows "Loading Sam..." over Home until Home has its data (the same
   /// page the picker and the console showed). Null: no loading page.
   final LoadingIdentity? startup;
 
@@ -663,7 +663,7 @@ class _LauncherShellState extends State<LauncherShell> {
     try {
       await endSessionWith(
         _scopeContext ?? context,
-        const SessionEnding(title: 'Restarting the session…'),
+        const SessionEnding(title: 'Restarting the session...'),
         widget.services.system.restartSession,
       );
     } on SystemException catch (e) {

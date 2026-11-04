@@ -738,7 +738,7 @@ class AppDisplaysSection extends StatelessWidget {
     try {
       await endSessionWith(
         context,
-        const SessionEnding(title: 'Restarting the session…'),
+        const SessionEnding(title: 'Restarting the session...'),
         env.services.system.restartSession,
       );
     } on SystemException catch (e) {

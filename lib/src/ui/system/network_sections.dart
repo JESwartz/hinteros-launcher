@@ -132,7 +132,7 @@ class _NetworkSectionState extends State<NetworkSection> {
             'scan',
             onSelect: _scanning ? null : _rescan,
             builder: (f) => SettingRow(
-              title: _scanning ? 'Scanning…' : 'Scan again',
+              title: _scanning ? 'Scanning...' : 'Scan again',
               focused: f,
               dim: true,
               trailing: _scanning ? const Spinner() : null,

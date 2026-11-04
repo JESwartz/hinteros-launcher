@@ -30,7 +30,7 @@ const _groups = <(String, String, List<(String, String)>)>[
       ('contrast', 'High contrast'),
       ('focus', 'Focus marker'),
       ('motion', 'Reduce motion'),
-      ('osk_text', 'Show typed passwords on the on-screen keyboard'),
+      ('osk_text', 'Show typed passwords'),
     ],
   ),
   (

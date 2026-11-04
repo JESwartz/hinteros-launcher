@@ -296,7 +296,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
     // service goes away too), so the Removing page takes over for good.
     final endings = own ? SessionEndingScope.maybeOf(context) : null;
     final ending = SessionEnding(
-      title: 'Removing ${p.name}…',
+      title: 'Removing ${p.name}...',
       identity: LoadingIdentity(name: p.name, color: p.color),
     );
     // The PIN, then Delete held for 3 seconds (letting go early starts over).

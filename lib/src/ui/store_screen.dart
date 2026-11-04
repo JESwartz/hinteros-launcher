@@ -692,9 +692,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
       // Red text, in words (owner answer, apps.md).
       p.add(
         Text(
-          '${app.name} needs ${needs.join(' and ')}, which this box does not '
-          'run. The admin profile can install '
-          '${needs.length == 1 ? 'it' : 'them'} in the Server section.',
+          '${app.name} needs ${needs.join(' and ')}. The admin profile can '
+          'install ${needs.length == 1 ? 'it' : 'them'} in Server.',
           style: t.body.copyWith(color: t.danger, fontWeight: FontWeight.w700),
         ),
       );

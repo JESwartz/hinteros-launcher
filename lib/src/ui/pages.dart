@@ -260,7 +260,7 @@ class _JobProgressScreenState extends State<JobProgressScreen> with JobTicker {
     try {
       await endSessionWith(
         context,
-        const SessionEnding(title: 'Restarting the session…'),
+        const SessionEnding(title: 'Restarting the session...'),
         widget.services.system.restartSession,
       );
     } on SystemException catch (e) {
@@ -548,8 +548,7 @@ class _JobProgressScreenState extends State<JobProgressScreen> with JobTicker {
         ] else if (noOutput >= jobNoOutputAfter) ...[
           const SizedBox(height: HinterTokens.s2),
           StatusLine(
-            'No new output for ${_ago(noOutput)}. Some steps take a long '
-            'time.',
+            'No new output for ${_ago(noOutput)}.',
             key: const ValueKey('job-no-output'),
           ),
         ],

@@ -344,7 +344,7 @@ void main() {
       await t.pump();
       await t.pump();
       expect(h.mock.runtime.power, ['suspend', 'reboot']);
-      expect(find.text('Restarting…'), findsOneWidget);
+      expect(find.text('Restarting...'), findsOneWidget);
     });
 
     testWidgets('during an update: "Can\'t do that while an update is being '

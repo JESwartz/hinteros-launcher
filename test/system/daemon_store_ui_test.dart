@@ -509,7 +509,7 @@ void main() {
       await t.pump();
       await t.pump();
       expect(h.mock.sessionRestarts, 1);
-      expect(find.text('Restarting the session…'), findsOneWidget);
+      expect(find.text('Restarting the session...'), findsOneWidget);
     });
 
     testWidgets('a desktop session says it cannot be restarted from here', (

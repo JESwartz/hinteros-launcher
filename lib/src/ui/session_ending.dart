@@ -2,7 +2,7 @@
 /// the guest session ends, a switch has begun, the box restarts or shuts
 /// down, or the session restarts. The session daemon goes away with the
 /// session, so from then on a lost connection is expected: the shell shows
-/// the "Removing Sam…" page (the loading page's style) instead of "Can't
+/// the "Removing Sam..." page (the loading page's style) instead of "Can't
 /// reach the HinterOS service", and takes no more input while it shows.
 library;
 
@@ -23,7 +23,7 @@ class SessionEnding {
     this.cover = true,
   });
 
-  /// "Removing Sam…".
+  /// "Removing Sam...".
   final String title;
 
   /// "You'll be taken to the profile picker."
@@ -206,8 +206,8 @@ Future<void> endSessionWith(
 /// Restart or Shut down: the ending page with its words.
 SessionEnding powerEnding(PowerAction a) => SessionEnding(
   title: switch (a) {
-    PowerAction.restart => 'Restarting…',
-    PowerAction.shutdown => 'Shutting down…',
-    PowerAction.sleep => 'Going to sleep…',
+    PowerAction.restart => 'Restarting...',
+    PowerAction.shutdown => 'Shutting down...',
+    PowerAction.sleep => 'Going to sleep...',
   },
 );

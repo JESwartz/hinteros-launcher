@@ -91,9 +91,7 @@ void main() {
     await press(t, [kRight]);
     await press(t, [kEnter]);
     expect(
-      find.textContaining(
-        'Music library needs Jellyfin server, which this box does not run.',
-      ),
+      find.textContaining('Music library needs Jellyfin server.'),
       findsOneWidget,
     );
     expect(find.text('Not installed.'), findsOneWidget);
