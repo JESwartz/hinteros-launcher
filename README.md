@@ -53,7 +53,7 @@ launcher installed, or without those variables (`--mock`, development), it stays
 | `tool/gen_api.dart` | Generator: schema to `lib/src/api/generated.dart` (models, typed method stubs, sealed event class, error codes) |
 | `lib/src/api/generated.dart` | Generated, committed. Do not edit |
 | `lib/src/api/client.dart` | `DaemonClient`: handshake, request correlation, events, subscribe, reconnect |
-| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.11 methods and events: the relayed `system.*` API, the runtime settings, the admin password prompt, `session.restart` and the Store) |
+| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (every method and event of the vendored schema, including the relayed `system.*` API, the runtime settings, the admin password prompt, `session.restart` and the Store; `test/api/contract_test.dart` plays each example through it) |
 | `lib/src/osk/` | The on-screen keyboard: `OskBackend` (+ mock), layouts, state, UI |
 | `tool/gen_mock_art.dart` | Draws the placeholder cover art in `test/fixtures/art/` (with `--demo`: the browser demo's, on the `web-demo` branch; committed; no network, no third-party pictures) |
 | `lib/src/platform/local_files*.dart` | Local files: from disk on the desktop, from the bundled assets in the browser |
@@ -64,7 +64,7 @@ launcher installed, or without those variables (`--mock`, development), it stays
 ### Mock daemon
 
 `--mock` (or `HINTEROS_MOCK=1`) swaps the socket for the in-process mock, which behaves like the
-0.9 daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
+daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
 Plex), a fake Steam library of 14 games in every install state (`games.list`, sorted by name),
 `apps.launch` (by id, command or `steam://rungameid/<appid>`), `apps.running`, `apps.focus`,
 `apps.close` (then `app_exited` with reason `closed`), `steam.attention` / `steam.focus`, and the
