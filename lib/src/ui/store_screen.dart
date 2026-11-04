@@ -885,7 +885,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   // reach past the sides.
                   Flexible(
                     child: ClipRect(
-                      clipper: const _VerticalClip(),
+                      clipper: const SideBleed(),
                       child: SingleChildScrollView(
                         key: _viewportKey,
                         controller: _scroll,
@@ -912,19 +912,4 @@ class _AppDetailPageState extends State<AppDetailPage> {
     if (r == null || r.isEmpty) return '';
     return r.endsWith('.') ? ' $r' : ' $r.';
   }
-}
-
-class _VerticalClip extends CustomClipper<Rect> {
-  const _VerticalClip();
-
-  @override
-  Rect getClip(Size size) => Rect.fromLTRB(
-    -HinterTokens.s5,
-    0,
-    size.width + HinterTokens.s5,
-    size.height,
-  );
-
-  @override
-  bool shouldReclip(_VerticalClip oldClipper) => false;
 }
