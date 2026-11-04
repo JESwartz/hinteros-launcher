@@ -223,6 +223,23 @@ exec sleep 300
       expect(Directory('/proc/$pid').existsSync(), isFalse);
     });
 
+    test('the next listing waits until a stopped one has cleaned up', () async {
+      write('''
+if [ ! -e "\$OUT/first" ]; then
+  touch "\$OUT/first"
+  trap 'kill \$!; sleep 1; touch "\$OUT/undone"; exit 143' TERM
+  sleep 300 &
+  wait
+fi
+if [ -e "\$OUT/undone" ]; then echo after > "\$OUT/order"; else echo before > "\$OUT/order"; fi
+echo '$answer'
+''');
+      final b = backend(timeout: const Duration(milliseconds: 500));
+      expect((await b.disks()).single.installUnknown, isTrue);
+      expect((await b.disks()).single.existing, isNotNull);
+      expect(File('${dir.path}/order').readAsStringSync().trim(), 'after');
+    });
+
     test('neither answers: the error of lsblk', () async {
       write('exit 1\n');
       await expectLater(

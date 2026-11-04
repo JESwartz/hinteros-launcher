@@ -36,6 +36,10 @@ class ProcessInstallerBackend implements InstallerBackend {
   /// take 35 s, and a hung disk can take longer.
   final Duration listDisksTimeout;
 
+  /// The exit of a `--list-disks` that was stopped: it first undoes the
+  /// mount it was doing (up to 35 s), and the next listing waits for that.
+  Future<void>? _stopped;
+
   Future<String> _stdout(
     String exe,
     List<String> args, {
@@ -202,6 +206,11 @@ class ProcessInstallerBackend implements InstallerBackend {
   /// (the disks are then listed without what is on them). It is stopped, not
   /// left to hold a disk: SIGTERM lets it unmount what it mounted.
   Future<String?> _listDisks() async {
+    final stopped = _stopped;
+    if (stopped != null) {
+      await stopped.timeout(const Duration(seconds: 45), onTimeout: () {});
+      _stopped = null;
+    }
     final Process p;
     try {
       p = await Process.start(installBinary, const ['--list-disks']);
@@ -218,6 +227,7 @@ class ProcessInstallerBackend implements InstallerBackend {
       return rc == 0 ? text : null;
     } on TimeoutException {
       p.kill();
+      _stopped = p.exitCode.then((_) {});
       return null;
     }
   }
