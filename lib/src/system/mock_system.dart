@@ -1048,10 +1048,13 @@ class MockBluetooth implements BluetoothRepository {
   final _changes = StreamController<List<BtDevice>>.broadcast();
   final List<String> log = [];
 
+  /// Tests: [load] answers only when this completes (a slow daemon).
+  Future<void>? loadGate;
+
   @override
   bool get scanning => _scanning;
   @override
-  Future<void> load() async {}
+  Future<void> load() async => loadGate;
   @override
   Stream<BtConfirmRequest> get confirmRequests => const Stream.empty();
   @override

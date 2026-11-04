@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -377,6 +379,28 @@ void main() {
     }
     expect(find.text('Connected to Hinter-Home.'), findsOneWidget);
     expect(find.text('Step 3 of 7'), findsOneWidget);
+  });
+
+  testWidgets('first-boot mode: Skip before the scan starts, no scan', (
+    t,
+  ) async {
+    setView(t);
+    final box = MockProfileBox(profiles: [], now: fixedNow);
+    final h = harness(current: 'p1', setupRequired: true, box: box);
+    final bt = h.services.mockBluetooth;
+    await bt.forget('AA:00:11'); // no controller: Skip
+    final gate = Completer<void>();
+    bt.loadGate = gate.future;
+    await h.pump(t);
+    await keys(t, [enter], settle: false); // Start
+    await frames(t);
+    expect(find.text('Skip'), findsOneWidget);
+    await keys(t, [enter], settle: false); // Skip, while bluetooth loads
+    await frames(t);
+    expect(find.text('Internet'), findsWidgets);
+    gate.complete();
+    await frames(t);
+    expect(bt.scanning, isFalse);
   });
 
   testWidgets('a profile without a PIN sets one first', (t) async {

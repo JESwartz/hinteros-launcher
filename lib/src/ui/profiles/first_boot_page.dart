@@ -231,7 +231,14 @@ class _FirstBootPageState extends State<FirstBootPage> {
     });
     _confirms ??= _s.bluetooth.confirmRequests.listen(_onConfirm);
     if (mounted) setState(() => _devices = _s.bluetooth.current);
+    // Left the step (Skip) or the wizard meanwhile: no scan.
+    bool left() => !mounted || _step != FirstBootStep.controllers;
+    if (left()) return;
     await _try(() => _s.bluetooth.startScan(timeoutS: _scanSeconds));
+    if (left()) {
+      unawaited(_s.bluetooth.stopScan().catchError((_) {}));
+      return;
+    }
     // A controller put in pairing mode later must still be found.
     _rescan?.cancel();
     _rescan = Timer.periodic(const Duration(seconds: _scanSeconds - 10), (_) {
