@@ -292,6 +292,31 @@ void main() {
       expect(h.flow.chosenRev, isNull);
       expect(h.flow.installsNewer, isFalse);
     });
+
+    testWidgets('back to the version step after it was asked after the '
+        'options: on to the disk again', (t) async {
+      final b = FakeInstallerBackend(state: wired, newer: mockNewer());
+      final h = await pastNetwork(t, b);
+      await h.choose(t, 'iso');
+      expect(h.flow.step, InstallerStep.disk);
+      h.flow.go(InstallerStep.options);
+      await t.pumpAndSettle();
+      await h.choose(t, 'channel'); // Beta
+      await h.choose(t, 'actions');
+      expect(h.flow.step, InstallerStep.version);
+      await h.choose(t, 'iso');
+      expect(h.flow.step, InstallerStep.apps);
+
+      h.flow.go(InstallerStep.disk);
+      await t.pumpAndSettle();
+      await h.back(t);
+      expect(h.flow.step, InstallerStep.version);
+      await h.choose(t, 'iso');
+      expect(h.flow.step, InstallerStep.disk);
+      await h.back(t);
+      await h.back(t);
+      expect(h.flow.step, InstallerStep.network);
+    });
   });
 
   group('the newer HinterOS does not install', () {

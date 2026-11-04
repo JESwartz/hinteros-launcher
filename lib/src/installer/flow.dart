@@ -210,11 +210,15 @@ class InstallerFlow extends ChangeNotifier {
       default:
         final o = _order;
         final prev = o[o.indexOf(_step) - 1];
-        go(
-          prev == InstallerStep.network && versionOffered
-              ? InstallerStep.version
-              : prev,
-        );
+        if (prev == InstallerStep.network && versionOffered) {
+          // The version step between the internet and this one: it goes on
+          // to here again, not where it went after the options.
+          _versionNext = _step;
+          _versionBack = InstallerStep.network;
+          go(InstallerStep.version);
+        } else {
+          go(prev);
+        }
     }
   }
 
