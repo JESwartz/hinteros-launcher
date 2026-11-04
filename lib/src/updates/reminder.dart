@@ -8,31 +8,78 @@ import '../system/repositories.dart';
 /// Decides when to remind about an update (ROADMAP M6, threat-model
 /// decision 2). Never installs anything.
 ///
-/// - At startup the box checks once. When it is behind its channel, an
-///   ordinary update shows a non-modal reminder on Home, again on every
-///   return to Home ([enteredHome] resets it).
+/// - At startup the box checks. A check that fails (no network yet, the
+///   update server down) is tried again when the network comes up and
+///   every hour, [hourlyTries] times, then once a day. Every day the
+///   session lasts the box checks again, and within the hour after a
+///   switch to another revision (rollback, channel, base).
+/// - When it is behind its channel, an ordinary update shows a non-modal
+///   reminder on Home, again on every return to Home (the shell's
+///   `_homeEntered`).
 /// - A security update (a severity) shows the full-screen notice instead,
 ///   at startup and on every return to Home, until it is installed (the
 ///   owner's decision: no throttling).
 class UpdateReminders extends ChangeNotifier {
   UpdateReminders(
     this.updates, {
+    this.network,
     this.retryDelays = const [
       Duration(seconds: 5),
       Duration(seconds: 15),
       Duration(seconds: 45),
       Duration(seconds: 120),
     ],
-  });
+    this.recheckAfter = const Duration(hours: 24),
+    this.tick = const Duration(hours: 1),
+    this.hourlyTries = 3,
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now;
 
   final UpdatesRepository updates;
+
+  /// `network_changed`: a check that failed is tried again when the
+  /// connection reaches the internet.
+  final Stream<NetworkStatus>? network;
 
   /// Waits before each retry of a startup check that found the system service
   /// missing.
   final List<Duration> retryDelays;
 
+  /// How old the last good check may be before the box checks again.
+  final Duration recheckAfter;
+
+  /// How often the age of the last good check is looked at. A timer does
+  /// not count the time the box sleeps, so a long [recheckAfter] is measured
+  /// on the clock instead.
+  final Duration tick;
+
+  /// How many [tick]s in a row a failing check is tried again before it
+  /// waits [recheckAfter]: a check holds the single job slot, and it can
+  /// fail for a long time (no update source, the update server down).
+  final int hourlyTries;
+  final DateTime Function() _now;
+
   bool _started = false;
   StreamSubscription<UpdateStatus>? _sub;
+  StreamSubscription<NetworkStatus>? _netSub;
+  Timer? _ticker;
+
+  /// When the last check worked; null: none has yet.
+  DateTime? _checkedAt;
+
+  /// Retries after startup that failed since the last good check, and when
+  /// the last one was.
+  int _failed = 0;
+  DateTime? _failedAt;
+  bool _checking = false;
+  bool _wasOnline = false;
+
+  /// The last network status had no connection: the hourly retry waits for
+  /// the network to come up instead (a check holds the single job slot).
+  bool _offline = false;
+
+  /// The network came up during a check: check again if that one failed.
+  bool _againAfter = false;
 
   /// The update the box is behind by, if any.
   AvailableUpdate? get update => updates.status.available;
@@ -45,17 +92,80 @@ class UpdateReminders extends ChangeNotifier {
   Future<void> start() async {
     if (_started) return;
     _started = true;
-    _sub = updates.changes.listen((_) => notifyListeners());
+    _sub = updates.changes.listen((s) {
+      // The box switched revision: the last check is out of date.
+      if (s.checkedAt == null && _checkedAt != null) {
+        _checkedAt = null;
+        _failed = 0;
+      }
+      notifyListeners();
+    });
+    _netSub = network?.listen((s) {
+      // `unknown`: NetworkManager does not check; a connection is enough.
+      final online =
+          s.connectivity == Connectivity.full ||
+          (s.connectivity == Connectivity.unknown && s.online);
+      final up = online && !_wasOnline;
+      _wasOnline = online;
+      _offline = !s.online || s.connectivity == Connectivity.none;
+      if (!up || _checkedAt != null) return;
+      if (_checking) {
+        _againAfter = true;
+      } else {
+        unawaited(_again());
+      }
+    });
+    _ticker = Timer.periodic(tick, (_) {
+      final at = _checkedAt;
+      if (at == null) {
+        final failedAt = _failedAt;
+        if (_offline ||
+            (_failed >= hourlyTries && failedAt != null && !_old(failedAt))) {
+          return;
+        }
+        unawaited(_again());
+        return;
+      }
+      if (_old(at)) unawaited(_again());
+    });
     await _check(0);
+    if (_disposed) return;
     notifyListeners();
+  }
+
+  /// [recheckAfter] has passed since [at]. A clock set back counts as old
+  /// too.
+  bool _old(DateTime at) {
+    final age = _now().difference(at);
+    return age.isNegative || age >= recheckAfter;
   }
 
   Timer? _retry;
   bool _disposed = false;
 
-  Future<void> _check(int attempt) async {
+  /// A check after startup; the shell shows the notice if it is due.
+  Future<void> _again() async {
+    if (_checking || _disposed || (_retry?.isActive ?? false)) return;
+    if (await _check(retryDelays.length)) {
+      _failed = 0;
+    } else {
+      _failed++;
+      _failedAt = _now();
+    }
+    if (!_disposed) {
+      notifyListeners();
+      onLateResult?.call();
+    }
+  }
+
+  /// True when the check worked.
+  Future<bool> _check(int attempt) async {
+    _checking = true;
+    var ok = false;
     try {
       await updates.check();
+      _checkedAt = _now();
+      ok = true;
     } on SystemException catch (e) {
       if (e.kind == SystemErrorKind.unavailable &&
           attempt < retryDelays.length &&
@@ -70,10 +180,17 @@ class UpdateReminders extends ChangeNotifier {
       }
     } catch (_) {
       // Nothing else depends on the update server.
+    } finally {
+      _checking = false;
     }
+    if (_againAfter) {
+      _againAfter = false;
+      if (_checkedAt == null) unawaited(Future(_again));
+    }
+    return ok;
   }
 
-  /// A retry after startup finished (the shell shows the notice if due).
+  /// A check after startup finished (the shell shows the notice if due).
   VoidCallback? onLateResult;
 
   /// The Home screen is entered (or startup finished): true when the
@@ -88,7 +205,9 @@ class UpdateReminders extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _retry?.cancel();
+    _ticker?.cancel();
     _sub?.cancel();
+    _netSub?.cancel();
     super.dispose();
   }
 }

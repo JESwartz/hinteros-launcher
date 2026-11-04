@@ -10,6 +10,7 @@ import 'dart:async';
 import '../api/api.dart' as api;
 import 'daemon_errors.dart';
 import 'daemon_system.dart' show DaemonJobs;
+import 'daemon_util.dart';
 import 'models.dart';
 import 'profiles.dart';
 
@@ -18,9 +19,7 @@ ProfileColor _color(api.ProfileColor? c) => ProfileColor.parse(c?.value);
 api.ProfileColor _wireColor(ProfileColor c) =>
     api.ProfileColor.fromJson(c.name);
 
-DateTime? _time(int? seconds) => seconds == null
-    ? null
-    : DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+DateTime? _time(int? seconds) => seconds == null ? null : unixTime(seconds);
 
 ProfileUsage? _usage(api.ProfileUsage? u) => u == null
     ? null
@@ -427,7 +426,10 @@ class DaemonGreeter implements GreeterRepository {
   Future<LoginOutcome> login(String id, {String? pin}) => guardCall(() async {
     if (_prompted != id) {
       final answer = _nextAnswer();
-      await _conn.greeterLogin(api.GreeterLoginParams(id: id));
+      await _awaitWith(
+        answer,
+        () => _conn.greeterLogin(api.GreeterLoginParams(id: id)),
+      );
       final a = await answer;
       if (a is api.GreeterResultEvent) return _result(a);
       _prompted = id;
@@ -437,9 +439,27 @@ class DaemonGreeter implements GreeterRepository {
         .whereType<api.GreeterResultEvent>()
         .first
         .timeout(answerTimeout);
-    await _conn.greeterPin(api.GreeterPinParams(pin: pin));
+    await _awaitWith(
+      answer,
+      () => _conn.greeterPin(api.GreeterPinParams(pin: pin)),
+    );
     return _result(await answer);
   });
+
+  /// [call], with the wait for its [answer] already running (the event may
+  /// come before the call's reply). When the call fails nobody waits for the
+  /// answer: its timeout is not an uncaught error.
+  static Future<void> _awaitWith(
+    Future<Object?> answer,
+    Future<Object?> Function() call,
+  ) async {
+    try {
+      await call();
+    } catch (_) {
+      answer.ignore();
+      rethrow;
+    }
+  }
 
   @override
   Future<void> cancel() async {

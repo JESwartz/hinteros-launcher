@@ -5,12 +5,12 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
 
 import '../api/api.dart' as api;
 import 'catalog.dart';
 import 'daemon_errors.dart';
 import 'daemon_system.dart' show DaemonJobs;
+import 'daemon_util.dart';
 import 'models.dart';
 import 'repositories.dart';
 
@@ -27,20 +27,11 @@ StoreState _state(api.StoreState s) => switch (s) {
 /// when it is missing or unreadable.
 typedef TermsFileReader = String? Function(String path);
 
-String? _readTermsFile(String path) {
-  try {
-    final t = File(path).readAsStringSync();
-    return t.isEmpty ? null : t;
-  } on FileSystemException {
-    return null;
-  }
-}
-
 class DaemonStore implements StoreRepository {
   DaemonStore(
     this._conn,
     this._jobs, {
-    this.readTerms = _readTermsFile,
+    this.readTerms = readBoxTerms,
     this.readReadme = readReadmeFile,
   }) {
     _events = _conn.events.listen((e) {
@@ -277,7 +268,7 @@ class DaemonStore implements StoreRepository {
       for (final g in r.generations)
         AppGeneration(
           generation: g.generation,
-          date: DateTime.fromMillisecondsSinceEpoch(g.date * 1000),
+          date: unixTime(g.date),
           ids: g.ids,
           systemRev: g.systemRev,
           current: g.current,

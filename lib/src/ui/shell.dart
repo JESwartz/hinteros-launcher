@@ -159,6 +159,8 @@ class _LauncherShellState extends State<LauncherShell> {
   bool _updateBannerVisible = false;
   late final UpdateReminders _reminders = UpdateReminders(
     widget.services.updates,
+    network: widget.services.network.statusChanges,
+    now: widget.services.jobs.now,
   );
   bool _dialogOpen = false;
   NavRegion? _beforeDialog;
@@ -334,7 +336,7 @@ class _LauncherShellState extends State<LauncherShell> {
     _subs.add(d.inputNav.listen((e) => _onAction(e.action, e.phase)));
     _authPrompts = AuthPrompter(widget.services.auth, _modals);
     _reminders.addListener(_onReminders);
-    _reminders.onLateResult = _homeEntered;
+    _reminders.onLateResult = _lateResult;
     unawaited(_reminders.start().then((_) => _homeEntered()));
     _subs.add(widget.services.timeZone.changes.listen(_setZone));
     unawaited(_loadZone());
@@ -438,6 +440,10 @@ class _LauncherShellState extends State<LauncherShell> {
     final d = widget.data;
     _front.value = d.inFront;
     _syncSaver();
+    if (_lateNotice && d.inFront) {
+      _lateNotice = false;
+      _homeEntered();
+    }
     if (_hideConnection != _hidingConnection) {
       _hidingConnection = _hideConnection;
       setState(() {});
@@ -735,6 +741,15 @@ class _LauncherShellState extends State<LauncherShell> {
   void _onReminders() {
     if (!mounted) return;
     setState(_syncUpdateBanner);
+  }
+
+  /// A check after startup can end at any time: while an app is in front the
+  /// notice waits until the launcher is back.
+  bool _lateNotice = false;
+
+  void _lateResult() {
+    if (widget.data.inFront) return _homeEntered();
+    _lateNotice = true;
   }
 
   /// Home was entered (startup, a return from another tab, the Home button):

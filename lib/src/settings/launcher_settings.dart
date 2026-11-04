@@ -102,13 +102,16 @@ class LauncherSettings {
   };
 
   /// Lenient: wrong types or unknown values fall back to the default for that
-  /// field, so a hand-edited or newer file never breaks the launcher.
+  /// field, so a hand-edited or newer file never breaks the launcher. A text
+  /// size between the steps takes the nearest step; a whole number written
+  /// as `10.0` is that number.
   factory LauncherSettings.fromJson(Map<String, dynamic> j) {
     const d = LauncherSettings();
     final scale = j['text_scale'];
+    final minutes = j['screen_saver_minutes'];
     return LauncherSettings(
-      textScale: scale is num
-          ? scale.toDouble().clamp(minTextScale, maxTextScale)
+      textScale: scale is num && scale.isFinite
+          ? _nearest(scale.toDouble(), textScaleSteps)
           : d.textScale,
       highContrast: j['high_contrast'] is bool
           ? j['high_contrast'] as bool
@@ -123,8 +126,12 @@ class LauncherSettings {
       showTypedOnOsk: j['osk_show_typed'] is bool
           ? j['osk_show_typed'] as bool
           : d.showTypedOnOsk,
-      screenSaverMinutes: screenSaverSteps.contains(j['screen_saver_minutes'])
-          ? j['screen_saver_minutes'] as int
+      screenSaverMinutes:
+          minutes is num &&
+              minutes.isFinite &&
+              minutes == minutes.truncateToDouble() &&
+              screenSaverSteps.contains(minutes.toInt())
+          ? minutes.toInt()
           : d.screenSaverMinutes,
       screenSaverStyle: ScreenSaverStyle.values.firstWhere(
         (s) => s.name == j['screen_saver_style'],
@@ -132,6 +139,10 @@ class LauncherSettings {
       ),
     );
   }
+
+  /// The step of [steps] nearest to [v] (the lower one on a tie).
+  static double _nearest(double v, List<double> steps) =>
+      steps.reduce((a, b) => (b - v).abs() < (a - v).abs() ? b : a);
 
   @override
   bool operator ==(Object other) =>
@@ -201,14 +212,21 @@ class FileSettingsStorage implements SettingsStorage {
     return const LauncherSettings();
   }
 
-  /// Writes atomically (temp file, then rename).
+  /// Writes atomically (temp file, flushed, then rename). Saves run one
+  /// after another: two at once would write the same temp file.
   @override
-  Future<void> save(LauncherSettings settings) async {
+  Future<void> save(LauncherSettings settings) =>
+      _last = _last.then((_) => _write(settings));
+
+  Future<void> _last = Future.value();
+
+  Future<void> _write(LauncherSettings settings) async {
     try {
       await file.parent.create(recursive: true);
       final tmp = File('${file.path}.tmp');
       await tmp.writeAsString(
         '${const JsonEncoder.withIndent('  ').convert(settings.toJson())}\n',
+        flush: true,
       );
       await tmp.rename(file.path);
     } catch (e) {

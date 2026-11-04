@@ -2,8 +2,8 @@
 /// `UpdatesRepository` and `JobsRepository` over the session daemon's
 /// `system.*` relay (the daemon forwards the privileged service's methods and
 /// its three job events unchanged), and the runtime settings of session API
-/// 0.7 (`daemon_runtime.dart`). Only the Store is still unavailable, see
-/// [daemonSystemServices].
+/// 0.7 (`daemon_runtime.dart`). [daemonSystemServices] wires every service
+/// over one connection.
 library;
 
 import 'dart:async';
@@ -19,6 +19,7 @@ import 'daemon_server.dart';
 import 'daemon_storage.dart';
 import 'daemon_store.dart';
 import 'daemon_time_zone.dart';
+import 'daemon_util.dart';
 import 'models.dart';
 import 'repositories.dart';
 
@@ -58,7 +59,7 @@ JobKind _jobKind(api.JobKind k) => switch (k) {
   api.JobKind.cloudflareSetToken => JobKind.cloudflareSetToken,
   api.JobKind.cloudflareClearToken => JobKind.cloudflareClearToken,
   api.JobKind.appsClearData => JobKind.clearData,
-  api.JobKind.unknown => JobKind.rebuild,
+  api.JobKind.unknown => JobKind.other,
 };
 
 JobStage? _stage(api.Stage? s) => switch (s) {
@@ -128,15 +129,12 @@ final _hexRev = RegExp(r'^[0-9a-f]{7,}$');
 
 /// A daemon-provided line, trimmed to one line of at most 120 characters;
 /// null when empty.
-String? _oneLine(String? s) {
+String? _firstLine(String? s) {
   if (s == null) return null;
   final line = s.split(RegExp(r'[\r\n]')).first.trim();
   if (line.isEmpty) return null;
   return line.length > 120 ? line.substring(0, 120) : line;
 }
-
-DateTime _unix(int seconds) =>
-    DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
 
 String _size(int bytes) => bytes >= 1 << 30
     ? '${(bytes / (1 << 30)).toStringAsFixed(1)} GB'
@@ -159,10 +157,10 @@ JobSubject _subject(api.JobSubject? s) {
   return JobSubject(
     owner: s.owner,
     profileId: s.profile?.id,
-    profileName: _oneLine(s.profile?.name),
+    profileName: _firstLine(s.profile?.name),
     apps: [
       for (final a in s.apps ?? const <api.CatalogApp>[])
-        (id: a.id, name: _oneLine(a.name) ?? a.id),
+        (id: a.id, name: _firstLine(a.name) ?? a.id),
     ],
     deleteData: s.deleteData ?? false,
     fromOwner: s.fromOwner,
@@ -197,9 +195,9 @@ JobSubject _subject(api.JobSubject? s) {
     keepProfiles: s.keepProfiles,
     services: [
       for (final a in s.services ?? const <api.CatalogApp>[])
-        (id: a.id, name: _oneLine(a.name) ?? a.id),
+        (id: a.id, name: _firstLine(a.name) ?? a.id),
     ],
-    library: _oneLine(s.library?.name),
+    library: _firstLine(s.library?.name),
   );
 }
 
@@ -212,9 +210,9 @@ BuildProgress? _build(api.ProgressDetail? d) {
     done: d.buildsDone,
     total: d.buildsTotal,
     running: d.buildsRunning,
-    name: _oneLine(b?.name),
-    version: _oneLine(b?.version),
-    phase: _oneLine(b?.phase),
+    name: _firstLine(b?.name),
+    version: _firstLine(b?.version),
+    phase: _firstLine(b?.phase),
     percent: b?.percent?.clamp(0, 99),
   );
 }
@@ -227,7 +225,8 @@ String? _authUrl(api.ProgressDetail? d) {
   return RegExp(r'^https://[!-~]+$').hasMatch(u) ? u : null;
 }
 
-DateTime? _unixOrNull(int? seconds) => seconds == null ? null : _unix(seconds);
+DateTime? _unixOrNull(int? seconds) =>
+    seconds == null ? null : unixTime(seconds);
 
 /// `update_verification_failed {reason: older_than_seen}` (session API 0.17):
 /// the server offers an older version than one this box already verified.
@@ -307,11 +306,13 @@ String _verb(JobStage s) => switch (s) {
 };
 
 /// A job that ended because of `jobs.cancel` (state `cancelled`, or
-/// `job_finished` with `job_failed` and the message "cancelled").
-bool _isCancel(api.ErrorObject? e) =>
-    e != null &&
-    e.code == api.ApiErrorCode.jobFailed &&
-    e.message == 'cancelled';
+/// `job_finished` with `job_failed` and the reason "cancelled"). The message
+/// is text, not contract: it is looked at only when no reason is given.
+bool _isCancel(api.ErrorObject? e) {
+  if (e == null || e.code != api.ApiErrorCode.jobFailed) return false;
+  final reason = _asMap(e.data)?['reason'];
+  return reason == null ? e.message == 'cancelled' : reason == 'cancelled';
+}
 
 Map<String, dynamic>? _asMap(Object? o) =>
     o is Map ? o.cast<String, dynamic>() : null;
@@ -335,13 +336,9 @@ T? _readResult<T>(
 // ---------------------------------------------------------------- jobs
 
 class _Entry {
-  _Entry(this.snap, {required this.kindKnown});
+  _Entry(this.snap);
 
   JobSnapshot snap;
-
-  /// `job_progress` does not carry the kind: an entry made from one waits
-  /// for `job_started`, `job_finished` or the method that started the job.
-  bool kindKnown;
   bool refreshed = false;
   final changes = StreamController<JobSnapshot>.broadcast(sync: true);
 }
@@ -373,18 +370,15 @@ class DaemonJobs implements JobsRepository {
   late final StreamSubscription<api.ConnectionStatus> _status;
   final _jobs = <String, _Entry>{};
 
+  /// How many jobs are followed (for the tests).
+  int get known => _jobs.length;
+
   /// Remembers a job this client started (the kind comes from the method).
   void track(String jobId, JobKind kind) {
-    final e = _jobs[jobId];
-    if (e == null) {
-      _jobs[jobId] = _Entry(
-        JobSnapshot(jobId: jobId, kind: kind),
-        kindKnown: true,
-      );
-    } else if (!e.kindKnown) {
-      e.kindKnown = true;
-      e.snap = e.snap.copyWith(kind: kind);
-    }
+    _jobs.putIfAbsent(
+      jobId,
+      () => _Entry(JobSnapshot(jobId: jobId, kind: kind)),
+    );
     _prune();
   }
 
@@ -402,20 +396,26 @@ class DaemonJobs implements JobsRepository {
     return JobHandle(id, kind);
   }
 
+  /// Keeps the last 20 finished jobs. Jobs other clients start come only
+  /// from events, so this runs after each `job_finished` too.
   void _prune() {
     final done = _jobs.entries.where((e) => e.value.snap.finished).toList();
     for (final e in done.take((done.length - 20).clamp(0, done.length))) {
       _jobs.remove(e.key);
+      // A watcher closes on the finished snapshot: nobody listens now.
+      unawaited(e.value.changes.close());
     }
   }
 
-  _Entry _entry(String id, {JobKind? kind}) => _jobs.putIfAbsent(
-    id,
-    () => _Entry(
-      JobSnapshot(jobId: id, kind: kind ?? JobKind.rebuild),
-      kindKnown: kind != null,
-    ),
-  );
+  _Entry _entry(String id, JobKind kind) =>
+      _jobs.putIfAbsent(id, () => _Entry(JobSnapshot(jobId: id, kind: kind)));
+
+  /// The kind an event gives; one this launcher does not know keeps the kind
+  /// of the method that started the job, if this client started it.
+  static JobKind _kindOf(_Entry e, api.JobKind k) {
+    final kind = _jobKind(k);
+    return kind == JobKind.other ? e.snap.kind : kind;
+  }
 
   void _set(_Entry e, JobSnapshot s) {
     e.snap = s;
@@ -425,29 +425,26 @@ class DaemonJobs implements JobsRepository {
   void _onEvent(api.SessionEvent ev) {
     switch (ev) {
       case api.JobStartedEvent():
-        final e = _entry(ev.jobId, kind: _jobKind(ev.kind));
-        e.kindKnown = true;
+        final e = _entry(ev.jobId, _jobKind(ev.kind));
         _set(
           e,
           e.snap.copyWith(
-            kind: _jobKind(ev.kind),
+            kind: _kindOf(e, ev.kind),
             subject: _subject(ev.subject),
-            startedAt: _unix(ev.startedAt),
+            startedAt: unixTime(ev.startedAt),
             heardAt: now(),
           ),
         );
       case api.JobProgressEvent():
-        final e = _entry(ev.jobId, kind: _jobKind(ev.kind));
+        final e = _entry(ev.jobId, _jobKind(ev.kind));
         if (e.snap.finished) return;
         final stage = _stage(ev.stage) ?? e.snap.stage;
-        final known = e.kindKnown;
-        e.kindKnown = true;
         // Also a heartbeat (at least every 2 s, maybe with nothing new):
         // it says the job is alive.
         _set(
           e,
           e.snap.copyWith(
-            kind: known ? null : _jobKind(ev.kind),
+            kind: _kindOf(e, ev.kind),
             stage: stage,
             percent: ev.percent,
             clearPercent: ev.percent == null,
@@ -459,15 +456,14 @@ class DaemonJobs implements JobsRepository {
             authUrl: _authUrl(ev.detail),
             clearAuthUrl: stage != JobStage.signingIn,
             subject: ev.subject == null ? null : _subject(ev.subject),
-            startedAt: _unix(ev.startedAt),
+            startedAt: unixTime(ev.startedAt),
             lastActivityAt: _unixOrNull(ev.lastActivityAt),
             heardAt: now(),
           ),
         );
       case api.JobFinishedEvent():
-        final e = _entry(ev.jobId, kind: _jobKind(ev.kind));
-        final kind = _jobKind(ev.kind);
-        if (!e.kindKnown) e.kindKnown = true;
+        final e = _entry(ev.jobId, _jobKind(ev.kind));
+        final kind = _kindOf(e, ev.kind);
         final cancelled = !ev.ok && _isCancel(ev.error);
         if (!ev.ok && !cancelled) {
           final err = ev.error;
@@ -480,7 +476,7 @@ class DaemonJobs implements JobsRepository {
         _set(
           e,
           e.snap.copyWith(
-            kind: e.snap.kind == JobKind.rebuild ? kind : e.snap.kind,
+            kind: kind,
             finished: true,
             ok: ev.ok,
             cancelled: cancelled,
@@ -490,13 +486,14 @@ class DaemonJobs implements JobsRepository {
             sessionRestartRequired: ev.sessionRestartRequired,
             result: _asMap(ev.result),
             subject: _subject(ev.subject),
-            startedAt: _unix(ev.startedAt),
-            finishedAt: _unix(ev.finishedAt),
+            startedAt: unixTime(ev.startedAt),
+            finishedAt: unixTime(ev.finishedAt),
             heardAt: now(),
             clearPercent: true,
             clearBuild: true,
           ),
         );
+        _prune();
       default:
     }
   }
@@ -508,7 +505,9 @@ class DaemonJobs implements JobsRepository {
         (j.state == api.JobState.failed && _isCancel(j.error));
     return JobSnapshot(
       jobId: j.jobId,
-      kind: _jobKind(j.kind),
+      kind: old != null && _jobKind(j.kind) == JobKind.other
+          ? old.kind
+          : _jobKind(j.kind),
       stage: _stage(j.stage) ?? old?.stage ?? JobStage.preparing,
       percent: finished ? null : j.percent,
       detail: finished ? null : _progressText(j.detail),
@@ -523,7 +522,7 @@ class DaemonJobs implements JobsRepository {
       sessionRestartRequired: j.sessionRestartRequired,
       result: _asMap(j.result),
       subject: _subject(j.subject),
-      startedAt: _unix(j.startedAt),
+      startedAt: unixTime(j.startedAt),
       finishedAt: _unixOrNull(j.finishedAt),
       lastActivityAt: _unixOrNull(j.lastActivityAt),
       heardAt: now(),
@@ -536,14 +535,14 @@ class DaemonJobs implements JobsRepository {
     try {
       job = (await _conn.systemJobsGet(api.SystemJobsGetParams(jobId: id))).job;
     } on api.ApiException catch (e) {
-      if (e.code == api.ApiErrorCode.notFound) _jobs.remove(id);
+      if (e.code == api.ApiErrorCode.notFound) _lost(id);
       return;
     } catch (_) {
       return;
     }
     final e = _jobs[id];
     if (e == null) {
-      final fresh = _entry(id, kind: _jobKind(job.kind));
+      final fresh = _entry(id, _jobKind(job.kind));
       fresh.refreshed = true;
       _set(fresh, _fromJob(job, null));
       return;
@@ -551,6 +550,31 @@ class DaemonJobs implements JobsRepository {
     e.refreshed = true;
     if (e.snap.finished) return;
     _set(e, _fromJob(job, e.snap));
+  }
+
+  /// The system service no longer knows job [id] (it restarted, or dropped
+  /// the job). Whoever follows it gets a failed end, so no page or
+  /// [finished] waits for ever, then the entry goes.
+  void _lost(String id) {
+    final e = _jobs.remove(id);
+    if (e == null) return;
+    if (!e.snap.finished) {
+      _set(
+        e,
+        e.snap.copyWith(
+          finished: true,
+          ok: false,
+          error: const JobError(
+            message: 'Job stopped',
+            kind: SystemErrorKind.notFound,
+          ),
+          heardAt: now(),
+          clearPercent: true,
+          clearBuild: true,
+        ),
+      );
+    }
+    unawaited(e.changes.close());
   }
 
   /// After a reconnect: events may have been missed, so look at every job
@@ -634,7 +658,7 @@ class DaemonJobs implements JobsRepository {
     // The running job, if any, comes first.
     final j = r.jobs.where((j) => j.state == api.JobState.running).firstOrNull;
     if (j == null) return null;
-    final e = _entry(j.jobId, kind: _jobKind(j.kind));
+    final e = _entry(j.jobId, _jobKind(j.kind));
     e.refreshed = true;
     if (!e.snap.finished) _set(e, _fromJob(j, e.snap));
     return e.snap;
@@ -656,10 +680,17 @@ class DaemonJobs implements JobsRepository {
 // ---------------------------------------------------------------- updates
 
 class DaemonUpdates implements UpdatesRepository {
-  DaemonUpdates(this._conn, this._jobs);
+  DaemonUpdates(this._conn, this._jobs) {
+    _events = _conn.events.listen((ev) {
+      if (ev is api.JobFinishedEvent && ev.ok && _switches(ev.kind)) {
+        unawaited(_switched(ev.kind, ev.subject.rev));
+      }
+    });
+  }
 
   final api.DaemonConnection _conn;
   final DaemonJobs _jobs;
+  late final StreamSubscription<api.SessionEvent> _events;
   final _changes = StreamController<UpdateStatus>.broadcast();
   UpdateStatus _status = const UpdateStatus(
     currentVersion: 'unknown',
@@ -670,6 +701,45 @@ class DaemonUpdates implements UpdatesRepository {
   UpdateStatus get status => _status;
   @override
   Stream<UpdateStatus> get changes => _changes.stream;
+
+  /// Jobs that change the revision the box runs.
+  static bool _switches(api.JobKind k) =>
+      k == api.JobKind.updateApply ||
+      k == api.JobKind.rollback ||
+      k == api.JobKind.channel ||
+      k == api.JobKind.base;
+
+  /// The box now runs another revision (from this launcher or not), so the
+  /// last check is out of date: the update it found is gone. After an update
+  /// the box is on the checked revision, so it stays "up to date"; after
+  /// anything else it is "not checked" until the next check (a check is a
+  /// job, so it is not started here).
+  Future<void> _switched(api.JobKind kind, String? rev) async {
+    final before = _status;
+    final update = kind == api.JobKind.updateApply;
+    var version = _status.currentVersion;
+    var current = update && rev != null ? rev : _status.currentRev;
+    try {
+      final info = await _conn.systemInfo();
+      version = releaseName(info.version, info.rev, _channel(info.channel));
+      current = info.rev ?? current;
+    } catch (_) {
+      // Kept as it was: the next check names it.
+    }
+    // A check that ended meanwhile is newer: keep its result.
+    if (!identical(_status, before)) return;
+    _status = UpdateStatus(
+      currentVersion: version,
+      currentRev: current,
+      checkedAt: update ? _status.checkedAt : null,
+    );
+    _changes.add(_status);
+  }
+
+  Future<void> dispose() async {
+    await _events.cancel();
+    await _changes.close();
+  }
 
   /// The startup check can come before the socket is up: wait a moment for
   /// the connection rather than report "unavailable" at once.
@@ -724,12 +794,12 @@ class DaemonUpdates implements UpdatesRepository {
           : AvailableUpdate(
               rev: a.rev,
               version: releaseVersion(a.version) == null
-                  ? _dateVersion(_unix(a.date))
+                  ? _dateVersion(unixTime(a.date))
                   : releaseName(a.version!, a.rev, channel),
-              date: _unix(a.date),
+              date: unixTime(a.date),
               summary: a.summary,
               severity: a.security == null ? null : _severity(a.security!),
-              securitySummary: _oneLine(a.securitySummary),
+              securitySummary: _firstLine(a.securitySummary),
               signer: a.signer,
               newApps: a.newApps == null
                   ? null
@@ -741,7 +811,7 @@ class DaemonUpdates implements UpdatesRepository {
                         CatalogChange(n.id, n.name, reason: n.reason),
                     ],
             ),
-      checkedAt: _unix(result.checkedAt),
+      checkedAt: unixTime(result.checkedAt),
     );
     _changes.add(_status);
     return _status;
@@ -766,7 +836,7 @@ class DaemonUpdates implements UpdatesRepository {
       for (final g in r.generations)
         Generation(
           generation: g.generation,
-          date: _unix(g.date),
+          date: unixTime(g.date),
           rev: g.rev,
           current: g.current,
           booted: g.booted,
@@ -823,9 +893,9 @@ class DaemonUpdates implements UpdatesRepository {
           channel: channel,
           rev: t.rev,
           version: releaseVersion(t.version) == null
-              ? _dateVersion(_unix(t.date))
+              ? _dateVersion(unixTime(t.date))
               : releaseName(t.version!, t.rev, channel),
-          date: _unix(t.date),
+          date: unixTime(t.date),
           older: r.older,
         );
       });

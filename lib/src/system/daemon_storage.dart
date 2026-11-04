@@ -5,6 +5,7 @@ library;
 import '../api/api.dart' as api;
 import 'daemon_errors.dart';
 import 'daemon_system.dart' show DaemonJobs;
+import 'daemon_util.dart';
 import 'models.dart';
 import 'storage.dart';
 
@@ -28,9 +29,6 @@ StorageKind storageKind(api.NodeKind k) => switch (k) {
   api.NodeKind.unknown => StorageKind.unknown,
 };
 
-DateTime _unix(int seconds) =>
-    DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
-
 /// A wire node as the ring draws it. A name is data (a folder, a game): it
 /// is kept to one line of at most 128 characters.
 StorageNode storageNode(api.StorageNode n) => StorageNode(
@@ -38,21 +36,13 @@ StorageNode storageNode(api.StorageNode n) => StorageNode(
   bytes: n.bytes < 0 ? 0 : n.bytes,
   children: [for (final c in n.children) storageNode(c)],
   id: n.id,
-  name: _name(n.name),
+  name: oneLine(n.name),
   generation: n.generation,
-  date: n.date == null ? null : _unix(n.date!),
+  date: n.date == null ? null : unixTime(n.date!),
   current: n.current ?? false,
   booted: n.booted ?? false,
   appId: n.appId,
 );
-
-String? _name(String? s) {
-  if (s == null) return null;
-  final line = s.replaceAll(RegExp(r'[\r\n\t]'), ' ').trim();
-  if (line.isEmpty) return null;
-  final r = line.runes.toList();
-  return r.length > 128 ? String.fromCharCodes(r.take(128)) : line;
-}
 
 List<CleanupEstimate> _estimates(List<api.CleanupEstimate> l) => [
   for (final e in l)
@@ -60,7 +50,7 @@ List<CleanupEstimate> _estimates(List<api.CleanupEstimate> l) => [
 ];
 
 StorageMeasurement storageMeasurement(api.Measurement m) => StorageMeasurement(
-  measuredAt: _unix(m.measuredAt),
+  measuredAt: unixTime(m.measuredAt),
   disk: DiskSpace(
     totalBytes: m.disk.totalBytes,
     usedBytes: m.disk.usedBytes,
@@ -111,7 +101,7 @@ class DaemonStorage implements StorageRepository {
         );
         return StorageTree(
           id: r.id,
-          measuredAt: _unix(r.measuredAt),
+          measuredAt: unixTime(r.measuredAt),
           root: storageNode(r.root),
         );
       });

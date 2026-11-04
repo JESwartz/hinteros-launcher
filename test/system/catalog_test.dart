@@ -222,6 +222,40 @@ void main() {
       );
     });
 
+    test('values of a newer catalog follow the schema rules', () {
+      // An unknown kind is ignored, even when offered at install.
+      expect(
+        parseCatalogIndex(
+          one({'kind': 'driver', 'starter': 'ticked'}),
+          readTerms: noTerms,
+        ),
+        isEmpty,
+      );
+      // An unknown starter value is not offered.
+      expect(
+        parseCatalogIndex(
+          one({'kind': 'app', 'starter': 'later'}),
+          readTerms: noTerms,
+        ).single.installer,
+        isFalse,
+      );
+      // An unknown permission is not shown; an unknown level is required.
+      final perms = parseCatalogIndex(
+        one({
+          'permissions': {
+            'mic': 'optional',
+            'gamepad': 'always',
+            'camera': 'optional',
+          },
+        }),
+        readTerms: noTerms,
+      ).single.permissions;
+      expect(
+        [for (final p in perms) (p.name, p.required)],
+        [('mic', false), ('gamepad', true)],
+      );
+    });
+
     test('delivery: a value this code does not know is a build', () {
       AppDelivery of(Object? d) => parseCatalogIndex(
         one({'delivery': d}),

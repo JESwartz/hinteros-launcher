@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/system/mock_system.dart';
 import 'package:hinteros_launcher/src/system/models.dart';
@@ -70,4 +72,174 @@ void main() {
     expect(r.behind, isFalse);
     r.dispose();
   });
+
+  test('a check that failed offline is tried again when online', () async {
+    final net = StreamController<NetworkStatus>.broadcast();
+    final ups = MockUpdates(MockJobs())
+      ..nextAvailable = mockSecurityUpdate()
+      ..failCheckWith = _unreachable;
+    final r = UpdateReminders(ups, network: net.stream);
+    var late = 0;
+    r.onLateResult = () => late++;
+    await r.start();
+    expect(r.behind, isFalse);
+    expect(ups.checks, 1);
+    ups.failCheckWith = null;
+    // Not online yet: nothing.
+    net.add(const NetworkStatus(connectivity: Connectivity.limited));
+    await pumpEventQueue();
+    expect(ups.checks, 1);
+    net.add(_online);
+    await pumpEventQueue();
+    expect(ups.checks, 2);
+    expect(r.securityNoticeDue(), isTrue);
+    expect(late, 1);
+    // Checked: a reconnect does not check again.
+    net
+      ..add(const NetworkStatus(connectivity: Connectivity.none))
+      ..add(_online);
+    await pumpEventQueue();
+    expect(ups.checks, 2);
+    r.dispose();
+    await net.close();
+  });
+
+  test('the network comes up during the failing startup check', () async {
+    final net = StreamController<NetworkStatus>.broadcast();
+    final gate = Completer<void>();
+    final ups = _GatedUpdates(MockJobs(), gate.future, failFirst: true)
+      ..nextAvailable = mockOrdinaryUpdate();
+    final r = UpdateReminders(ups, network: net.stream);
+    final started = r.start();
+    await pumpEventQueue();
+    // NetworkManager does not check: a connection is enough.
+    net.add(const NetworkStatus(ethernet: true));
+    await pumpEventQueue();
+    gate.complete();
+    await started;
+    await pumpEventQueue();
+    expect(ups.calls, 2);
+    expect(r.behind, isTrue);
+    r.dispose();
+    await net.close();
+  });
+
+  test('a long session checks again every day', () async {
+    var now = DateTime(2026, 11, 3, 8);
+    const tick = Duration(milliseconds: 5);
+    final ups = MockUpdates(MockJobs());
+    final r = UpdateReminders(ups, tick: tick, now: () => now);
+    await r.start();
+    expect(ups.checks, 1);
+    now = now.add(const Duration(hours: 23));
+    await Future<void>.delayed(tick * 4);
+    expect(ups.checks, 1);
+    // The box slept: the timer did not count it, the clock did.
+    now = now.add(const Duration(hours: 2));
+    await Future<void>.delayed(tick * 4);
+    expect(ups.checks, 2);
+    ups.nextAvailable = mockSecurityUpdate();
+    now = now.add(const Duration(days: 1));
+    await Future<void>.delayed(tick * 4);
+    expect(ups.checks, 3);
+    expect(r.securityNoticeDue(), isTrue);
+    r.dispose();
+  });
+
+  test('offline: no hourly retry; the network coming up checks', () async {
+    const tick = Duration(milliseconds: 5);
+    final net = StreamController<NetworkStatus>.broadcast();
+    final ups = MockUpdates(MockJobs())..failCheckWith = _unreachable;
+    final r = UpdateReminders(ups, network: net.stream, tick: tick);
+    await r.start();
+    expect(ups.checks, 1);
+    net.add(const NetworkStatus(connectivity: Connectivity.none));
+    await Future<void>.delayed(tick * 4);
+    expect(ups.checks, 1);
+    ups.failCheckWith = null;
+    net.add(_online);
+    await pumpEventQueue();
+    expect(ups.checks, 2);
+    r.dispose();
+    await net.close();
+  });
+
+  test('a check that keeps failing: three hourly tries, then daily', () async {
+    var now = DateTime(2026, 11, 3, 8);
+    const tick = Duration(milliseconds: 5);
+    final ups = MockUpdates(MockJobs())
+      ..failCheckWith = const SystemException(SystemErrorKind.failed, 'x');
+    final r = UpdateReminders(ups, tick: tick, now: () => now);
+    await r.start();
+    expect(ups.checks, 1);
+    await Future<void>.delayed(tick * 10);
+    expect(ups.checks, 4, reason: 'startup, then three hourly tries');
+    now = now.add(const Duration(hours: 25));
+    await Future<void>.delayed(tick * 10);
+    expect(ups.checks, 5, reason: 'one try a day');
+    ups.failCheckWith = null;
+    now = now.add(const Duration(hours: 25));
+    await Future<void>.delayed(tick * 10);
+    expect(ups.checks, 6);
+    await Future<void>.delayed(tick * 10);
+    expect(ups.checks, 6, reason: 'worked: next check in a day');
+    r.dispose();
+  });
+
+  test('a switch to another revision checks again at the next tick', () async {
+    const tick = Duration(milliseconds: 5);
+    final ups = MockUpdates(MockJobs());
+    final r = UpdateReminders(ups, tick: tick);
+    await r.start();
+    expect(ups.checks, 1);
+    await Future<void>.delayed(tick * 4);
+    expect(ups.checks, 1);
+    // A rollback finished: DaemonUpdates says "not checked".
+    ups.setStatus(
+      UpdateStatus(
+        currentVersion: ups.status.currentVersion,
+        currentRev: 'older',
+      ),
+    );
+    await Future<void>.delayed(tick * 4);
+    expect(ups.checks, 2);
+    await Future<void>.delayed(tick * 4);
+    expect(ups.checks, 2);
+    r.dispose();
+  });
+
+  test('disposed during the startup check: no notify after dispose', () async {
+    final gate = Completer<void>();
+    final ups = _GatedUpdates(MockJobs(), gate.future);
+    final r = UpdateReminders(ups);
+    final started = r.start();
+    await pumpEventQueue();
+    r.dispose();
+    gate.complete();
+    await started;
+  });
+}
+
+const _unreachable = SystemException(SystemErrorKind.updateUnreachable, 'x');
+const _online = NetworkStatus(
+  wifiSsid: 'home',
+  connectivity: Connectivity.full,
+);
+
+/// A check that waits for [gate]; with [failFirst] the first one finds the
+/// update server unreachable.
+class _GatedUpdates extends MockUpdates {
+  _GatedUpdates(super.jobs, this.gate, {this.failFirst = false});
+
+  final Future<void> gate;
+  final bool failFirst;
+  int calls = 0;
+
+  @override
+  Future<UpdateStatus> check() async {
+    final n = ++calls;
+    await gate;
+    if (failFirst && n == 1) throw _unreachable;
+    return super.check();
+  }
 }

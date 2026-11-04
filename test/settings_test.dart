@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -39,6 +40,41 @@ void main() {
     expect(s.highContrast, false);
     expect(s.focusStyle, FocusStyle.ring);
     expect(s.reduceMotion, true);
+  });
+
+  test('a whole number as a float, and a text size between the steps', () {
+    final s = LauncherSettings.fromJson({
+      'text_scale': 1.3,
+      'high_contrast': true,
+      'screen_saver_minutes': 30.0,
+    });
+    expect(s.textScale, 1.4);
+    expect(s.highContrast, true);
+    expect(s.screenSaverMinutes, 30);
+    expect(
+      LauncherSettings.fromJson({'screen_saver_minutes': 10.5}),
+      const LauncherSettings(),
+    );
+    expect(
+      LauncherSettings.fromJson({'screen_saver_minutes': double.infinity}),
+      const LauncherSettings(),
+    );
+    expect(LauncherSettings.fromJson({'text_scale': 0.2}).textScale, 1.0);
+  });
+
+  test('file storage: saves in a row write one after another', () async {
+    final dir = tempDir();
+    final s = FileSettingsStorage.xdg(
+      environment: {'XDG_CONFIG_HOME': dir.path, 'HOME': '/nonexistent'},
+    );
+    final c = await SettingsController.load(s);
+    // A long value, then a short one: a shared temp file kept the tail.
+    c.update(c.value.copyWith(screenSaverStyle: ScreenSaverStyle.black));
+    c.update(c.value.copyWith(screenSaverStyle: ScreenSaverStyle.logo));
+    c.update(c.value.copyWith(reduceMotion: true));
+    await s.save(c.value);
+    expect(await s.load(), c.value);
+    expect(File('${s.file.path}.tmp').existsSync(), isFalse);
   });
 
   test('file storage: XDG path, persistence, corrupt file', () async {

@@ -539,17 +539,15 @@ class MockUpdates implements UpdatesRepository {
               booted: g.booted,
             ),
         ];
-        setStatus(
-          UpdateStatus(
-            currentVersion: 'rev ${shortRev(target.rev)}',
-            currentRev: target.rev ?? '',
-            available: _status.available,
-            checkedAt: _status.checkedAt,
-          ),
-        );
+        _switched(target.rev ?? '', 'rev ${shortRev(target.rev)}');
       },
     );
   }
+
+  /// The box runs another revision: like the daemon, the update the last
+  /// check found is gone and the box is "not checked".
+  void _switched(String rev, String version) =>
+      setStatus(UpdateStatus(currentVersion: version, currentRev: rev));
 
   /// The last [checkChannel] result (what [setChannel] accepts).
   ChannelTarget? checkedChannel;
@@ -609,7 +607,10 @@ class MockUpdates implements UpdatesRepository {
         rev: rev,
         version: t.version,
       ),
-      onSuccess: () => channel = c,
+      onSuccess: () {
+        channel = c;
+        _switched(rev, t.version);
+      },
     );
   }
 
@@ -638,7 +639,10 @@ class MockUpdates implements UpdatesRepository {
     return jobs.start(
       JobKind.base,
       subject: JobSubject(base: b, fromBase: base),
-      onSuccess: () => base = b,
+      onSuccess: () {
+        base = b;
+        _switched(_status.currentRev, _status.currentVersion);
+      },
     );
   }
 }

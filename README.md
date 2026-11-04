@@ -124,8 +124,9 @@ Per profile: which button does which action, the keys of keyboard-mode apps, the
 `ControllerRepository` (`lib/src/system/controller.dart`: the models, the changes as
 `ControllerState.with...`, the labels; `daemon_controller.dart`, `mock_controller.dart` over the wire
 mock `lib/src/api/mock_input.dart`), the sections in `lib/src/ui/system/controller_sections.dart`.
-Every change is stored at once (the whole stored form) and the four sections follow
-`ControllerRepository.changes`.
+Every change is stored at once (the whole stored form; what the launcher does not know, such as a
+newer daemon's part or pointer field, is sent back as the daemon gave it, so a save keeps it) and
+the four sections follow `ControllerRepository.changes`.
 
 - **Buttons:** one row per action with its button. Select, "Press a button" (`input.capture`), and
   the pressed button goes to the action; the action that had it gets the old one, so the map stays
@@ -718,8 +719,8 @@ and the Store alike. The installer reads `/run/current-system/sw/share/hinteros/
 the ISO (`catalogIndexPath`; `ProcessInstallerBackend(catalogPath:)` overrides it for tests); the
 vendor terms are text files next to it (`terms/<id>-<version>.txt`), which the index entry names as
 `terms {title, version, url, retrieved, file}` and the parser reads into `VendorTerms.text`
-(only paths of the form `terms/<name>.txt`). Only `status: available` entries are read, and no services (`kind: service`). The
-installer lists entries with a `starter`, pre-selects `starter: ticked`,
+(only paths of the form `terms/<name>.txt`). Only `status: available` entries are read, and only apps (`kind: app` or none; services and kinds of a newer catalog are left out). Permission names the system does not know are left out, and a level other than `optional` is required. The
+installer lists entries with `starter: offered` or `ticked`, pre-selects `starter: ticked`,
 and says "On the
 installer" for `onIso` (everything else is a download and is disabled while offline). The safety
 rule: an unfree entry (`unfree` is not false) whose terms are missing or unreadable is not offered, in
@@ -1011,10 +1012,17 @@ through their stages by themselves.
   running, "Restart session" (with the 30 s countdown, see above) when `session_restart_required`, and on failure or cancel what went
   wrong plus "Nothing was changed". Back (or Hide) leaves a running job's page; the top bar shows
   the job. "Restart session" calls `session.restart`; the daemon answers and then ends the session (the launcher goes with it, greetd starts a new one). On a desktop session (not greetd) the daemon refuses and the page says "This is not a TV session, so it cannot be restarted from here".
-- **Updates:** at startup the box checks once (`UpdateReminders`; the real check waits for the
+- **Updates:** at startup the box checks (`UpdateReminders`; the real check waits for the
   connection, and is tried again after 5, 15, 45 and 120 s while the system service is not up
   yet, since it can start after the session; the update check is a job whose result arrives with
-  `job_finished`, or comes straight back when cached within 60 s). The version of an update is
+  `job_finished`, or comes straight back when cached within 60 s). A check that fails (no network
+  yet on a Wi-Fi box, the update server down) is tried again when `network_changed` says the box is
+  online (connectivity full, or a connection when NetworkManager does not check) and every hour,
+  three times, then once a day until one works (a check holds the single job slot); after that the
+  box checks again once the last good check is a day old (on the clock, so the time the box sleeps
+  counts). It only checks, never installs. When an update, rollback, channel or base switch
+  finishes, the update found by the last check is cleared (after an update the box is "up to date",
+  after the others "Not checked yet", and the box checks again within the hour). The version of an update is
   `available.version` ("HinterOS 0.6.1", session API 0.11) when that is a release version, else
   its date (the daemon's short-rev fallback, or an older daemon); the notice's severity is
   `available.security`, with `available.security_summary` under it when the release has one (also

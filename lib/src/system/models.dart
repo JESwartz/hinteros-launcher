@@ -149,7 +149,10 @@ enum JobKind {
   cloudflareClearToken('Removing the tunnel token'),
 
   /// 0.19: an app's data deleted in this profile (Clear user data).
-  clearData('Clearing data');
+  clearData('Clearing data'),
+
+  /// A job of a newer system service that this launcher does not know.
+  other('Working');
 
   const JobKind(this.title);
   final String title;
@@ -158,6 +161,7 @@ enum JobKind {
   /// model": not every job has every stage).
   List<JobStage> get stages => switch (this) {
     clearData => const [JobStage.finishing],
+    other => const [JobStage.preparing, JobStage.finishing],
     update || channel || base => const [
       JobStage.preparing,
       JobStage.fetching,
@@ -572,14 +576,6 @@ enum SecuritySeverity {
 
   const SecuritySeverity(this.label);
   final String label;
-
-  static SecuritySeverity parse(String? s) => switch (s?.toLowerCase()) {
-    'low' => low,
-    'moderate' || 'medium' => moderate,
-    'high' => high,
-    'critical' => critical,
-    _ => unknown,
-  };
 }
 
 /// An app an update adds to the catalog or takes away from this box.
@@ -1148,6 +1144,10 @@ class AppPermission {
     granted: granted ?? this.granted,
   );
 }
+
+/// The sandbox permissions the system knows (hinteros-api `PERMISSIONS`);
+/// a catalog's other names are not enforced, so not shown.
+const knownPermissions = {'gamepad', 'mic', 'downloads', 'lan'};
 
 /// The short name of permission [name] on screen.
 String permissionLabel(String name) => switch (name) {

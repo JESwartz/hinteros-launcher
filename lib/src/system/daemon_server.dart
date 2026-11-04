@@ -4,35 +4,18 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
 
 import '../api/api.dart' as api;
+import 'catalog.dart' show readBoxTerms;
 import 'daemon_errors.dart';
 import 'daemon_system.dart' show DaemonJobs;
+import 'daemon_util.dart';
 import 'models.dart';
 import 'server.dart';
 
 /// Reads a terms text from its absolute path on the box; null when it is
 /// missing or unreadable.
 typedef ServiceTermsReader = String? Function(String path);
-
-String? _readFile(String path) {
-  try {
-    final t = File(path).readAsStringSync();
-    return t.isEmpty ? null : t;
-  } on FileSystemException {
-    return null;
-  }
-}
-
-/// One line of at most [max] characters: names come from other programs.
-String? _line(String? s, [int max = 128]) {
-  if (s == null) return null;
-  final l = s.replaceAll(RegExp(r'[\r\n\t]'), ' ').trim();
-  if (l.isEmpty) return null;
-  final r = l.runes.toList();
-  return r.length > max ? String.fromCharCodes(r.take(max)) : l;
-}
 
 UnitStatus? _unit(api.UnitState? s) => switch (s) {
   null => null,
@@ -91,46 +74,44 @@ ServiceDetail? _detail(ServiceSetup setup, Object? d) {
         final w = api.JellyfinDetail.fromJson(j);
         return JellyfinDetail(
           setupDone: w.setupDone,
-          url: _line(w.url, 256),
+          url: oneLine(w.url, 256),
           libraries: [
             for (final l in w.libraries)
               JellyfinLibrary(
                 id: l.id,
-                name: _line(l.name) ?? l.id,
+                name: oneLine(l.name) ?? l.id,
                 kind: _kind(l.kind),
                 folder: l.folder,
               ),
           ],
           users: {
             for (final u in w.users)
-              u.profileId: _line(u.jellyfinUser) ?? u.profileId,
+              u.profileId: oneLine(u.jellyfinUser) ?? u.profileId,
           },
         );
       case ServiceSetup.plexMediaServer:
         final w = api.PlexDetail.fromJson(j);
         return PlexDetail(
           claimed: w.claimed,
-          serverName: _line(w.serverName),
-          url: _line(w.url, 256),
+          serverName: oneLine(w.serverName),
+          url: oneLine(w.url, 256),
         );
       case ServiceSetup.tailscale:
         final w = api.TailscaleDetail.fromJson(j);
         return TailscaleDetail(
           state: _tailscale(w.state),
-          name: _line(w.name),
-          ip4: _line(w.ip4),
-          dnsName: _line(w.dnsName, 256),
-          tailnet: _line(w.tailnet),
-          keyExpiry: w.keyExpiry == null
-              ? null
-              : DateTime.fromMillisecondsSinceEpoch(w.keyExpiry! * 1000),
+          name: oneLine(w.name),
+          ip4: oneLine(w.ip4),
+          dnsName: oneLine(w.dnsName, 256),
+          tailnet: oneLine(w.tailnet),
+          keyExpiry: w.keyExpiry == null ? null : unixTime(w.keyExpiry!),
         );
       case ServiceSetup.cloudflareTunnel:
         final w = api.CloudflareDetail.fromJson(j);
         return CloudflareDetail(
           tokenSet: w.tokenSet,
           connected: w.connected,
-          localIp: _line(w.localIp),
+          localIp: oneLine(w.localIp),
         );
       case ServiceSetup.none:
         return null;
@@ -142,7 +123,7 @@ ServiceDetail? _detail(ServiceSetup setup, Object? d) {
 }
 
 class DaemonServer implements ServerRepository {
-  DaemonServer(this._conn, this._jobs, {this.readTerms = _readFile}) {
+  DaemonServer(this._conn, this._jobs, {this.readTerms = readBoxTerms}) {
     _events = _conn.events.listen((e) {
       if (e is api.JobFinishedEvent && _kinds.contains(e.kind)) {
         _changes.add(null);
@@ -194,7 +175,7 @@ class DaemonServer implements ServerRepository {
     final text = t == null ? null : readTerms(t.file);
     return ServerService(
       id: s.id,
-      name: _line(s.name, 64) ?? s.id,
+      name: oneLine(s.name, 64) ?? s.id,
       available: s.available,
       enabled: s.enabled,
       status: _unit(s.status),
@@ -240,7 +221,7 @@ class DaemonServer implements ServerRepository {
       for (final f in r.folders)
         MediaFolder(
           id: f.id,
-          name: _line(f.name) ?? f.id,
+          name: oneLine(f.name) ?? f.id,
           hasChildren: f.hasChildren,
         ),
     ];
@@ -356,13 +337,16 @@ class DaemonServer implements ServerRepository {
       return JellyfinAccounts(
         admin: a == null
             ? null
-            : JellyfinAccount(name: _line(a.name) ?? '', password: a.password),
+            : JellyfinAccount(
+                name: oneLine(a.name) ?? '',
+                password: a.password,
+              ),
         users: [
           for (final u in r.users)
             JellyfinAccount(
-              name: _line(u.name) ?? '',
+              name: oneLine(u.name) ?? '',
               password: u.password,
-              profileName: _line(u.profileName) ?? u.profileId,
+              profileName: oneLine(u.profileName) ?? u.profileId,
             ),
         ],
       );

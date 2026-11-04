@@ -61,6 +61,21 @@ String? readReadmeFile(String path) {
   return t == null || t.trim().isEmpty ? null : t;
 }
 
+/// A terms text the system names by its absolute path on this box
+/// (`store.list`, `services.list`); null when it is missing, empty,
+/// unreadable or over 1 MiB. A Nix store path never changes, so its text is
+/// read once: every `store_changed` lists every app again.
+String? readBoxTerms(String path) {
+  final cached = _boxTerms[path];
+  if (cached != null) return cached;
+  final t = readLocalText(path, maxBytes: 1024 * 1024);
+  if (t == null || t.isEmpty) return null;
+  if (path.startsWith('/nix/store/')) _boxTerms[path] = t;
+  return t;
+}
+
+final _boxTerms = <String, String>{};
+
 /// The apps of an index, in its order: `status` available only (retired and
 /// removed entries are hidden), each with its terms text read through
 /// [readTerms]. An unfree entry (not `unfree: false`) whose terms are missing,
@@ -110,8 +125,9 @@ StoreApp? _parseApp(
   if (id == null || name == null) return null;
   final status = a['status'];
   if (status != 'available') return null;
-  // Services (`kind: service`) are not apps of a profile.
-  if (a['kind'] == 'service') return null;
+  // Only apps (a missing kind is one): services are box-wide, and a kind
+  // of a newer catalog is ignored (the schema's rule).
+  if (a['kind'] case final k? when k != 'app') return null;
 
   VendorTerms? terms;
   final t = a['terms'];
@@ -158,7 +174,7 @@ StoreApp? _parseApp(
     terms: terms,
     readme: readme,
     unfree: unfree,
-    installer: a['starter'] != null,
+    installer: a['starter'] == 'offered' || a['starter'] == 'ticked',
     installerDefault: a['starter'] == 'ticked',
     onIso: a['onIso'] == true,
     delivery: a['delivery'] == 'download' || a['delivery'] == null
@@ -173,11 +189,14 @@ StoreApp? _parseApp(
             firefoxProfile: icon['firefoxProfile'] == true,
           )
         : const StoreIcon(),
-    // Optional: `permissions`, name -> "required" / "optional".
+    // Optional: `permissions`, name -> "required" / "optional". Like the
+    // system: an unknown name is ignored (not enforced), an unknown level
+    // is required (it cannot be switched off).
     permissions: [
       if (a['permissions'] case final Map<String, Object?> perms)
         for (final e in perms.entries)
-          AppPermission(name: e.key, required: e.value == 'required'),
+          if (knownPermissions.contains(e.key))
+            AppPermission(name: e.key, required: e.value != 'optional'),
     ],
     // Optional (apps): `sandbox`, missing = true.
     fullAccess: a['sandbox'] == false,

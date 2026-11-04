@@ -66,6 +66,21 @@ class _Recording extends api.MockDaemon {
   }
 }
 
+/// A system service that restarted: once [lost], it knows no job.
+class _LosesJobs extends api.MockDaemon {
+  bool lost = false;
+
+  @override
+  Future<Map<String, dynamic>> rpc(String method, Map<String, dynamic> params) {
+    if (lost && method == 'system.jobs.get') {
+      return Future.error(
+        const api.ApiException(api.ApiErrorCode.notFound, 'no such job'),
+      );
+    }
+    return super.rpc(method, params);
+  }
+}
+
 /// A connection that is not there (the real client throws this).
 class _Offline extends api.MockDaemon {
   @override
@@ -348,6 +363,24 @@ void main() {
       );
     });
 
+    test('a cancel is read from the reason, not the message', () async {
+      final (mock, s) = await _setup();
+      mock.system.adminAuthorized = true;
+      final job = await s.system.setSsh(true);
+      mock.system.finishJob(
+        job.jobId,
+        ok: false,
+        error: const api.ErrorObject(
+          code: api.ApiErrorCode.jobFailed,
+          message: 'cancelled by the user',
+          data: {'stage': 'building', 'log_hint': '', 'reason': 'cancelled'},
+        ),
+      );
+      final last = await s.jobs.watch(job.jobId).last;
+      expect(last.cancelled, isTrue);
+      expect(last.failed, isFalse);
+    });
+
     test('cancel works before activating, then job_busy', () async {
       final (mock, s) = await _setup();
       mock.system.adminAuthorized = true;
@@ -383,6 +416,46 @@ void main() {
       expect(first.kind, JobKind.rebuild);
       expect(first.running, isTrue);
       await jobs2.dispose();
+    });
+
+    test('a job kind of a newer daemon is "Working", no restart', () async {
+      final (mock, s) = await _setup();
+      const id = 'bbbbbbbbbbbbbbbb';
+      final all = <JobSnapshot>[];
+      mock.emitRaw('job_started', {
+        'job_id': id,
+        'kind': 'firmware',
+        'uid': 0,
+        'subject': <String, dynamic>{},
+        'started_at': 1791300000,
+      });
+      await pumpEventQueue();
+      final sub = s.jobs.watch(id).listen(all.add);
+      await pumpEventQueue();
+      expect(all.last.kind, JobKind.other);
+      expect(all.last.kind.title, 'Working');
+      expect(all.last.kind.mayRestartSession, isFalse);
+      expect(all.last.kind.stages, [JobStage.preparing, JobStage.finishing]);
+      await sub.cancel();
+    });
+
+    test('finished jobs seen only in events are pruned', () async {
+      final (mock, s) = await _setup();
+      final jobs = s.jobs as DaemonJobs;
+      for (var i = 0; i < 25; i++) {
+        final id = i.toRadixString(16).padLeft(16, 'c');
+        mock.emitRaw('job_finished', {
+          'job_id': id,
+          'kind': 'storage_measure',
+          'ok': true,
+          'session_restart_required': false,
+          'subject': <String, dynamic>{},
+          'started_at': 1791300000,
+          'finished_at': 1791300001,
+        });
+      }
+      await pumpEventQueue();
+      expect(jobs.known, 20);
     });
 
     test('building: the count, the name, the subject, heartbeats', () async {
@@ -466,6 +539,19 @@ void main() {
         await jobs2.dispose();
       },
     );
+
+    test('a job the system service lost ends its watchers', () async {
+      final mock = _LosesJobs();
+      await mock.waitConnected();
+      addTearDown(mock.close);
+      final s = daemonSystemServices(mock);
+      final h = await s.system.redetectHardware(adminPin: _pin);
+      mock.lost = true;
+      final done = await s.jobs.watch(h.jobId).last;
+      expect(done.finished, isTrue);
+      expect(done.ok, isFalse);
+      expect(done.error!.kind, SystemErrorKind.notFound);
+    });
 
     test('an unknown job is not_found', () async {
       final (_, s) = await _setup();
@@ -640,6 +726,34 @@ void main() {
       expect(gens.first.generation, 43);
       expect(gens.first.current, isTrue);
       expect(gens.last.rev, isNull);
+    });
+
+    test('a finished update or rollback clears the update found', () async {
+      final (mock, s) = await _setup();
+      mock.system.nextUpdate = _update(security: api.Severity.high);
+      final f = s.updates.check();
+      await pumpEventQueue();
+      mock.system.finishJob(mock.system.runningJobId!);
+      final checked = await f;
+      expect(checked.available, isNotNull);
+      final h = await s.updates.apply(_rev, adminPin: _pin);
+      // A failed update leaves it.
+      mock.system.finishJob(h.jobId, ok: false);
+      await pumpEventQueue();
+      expect(s.updates.status.available, isNotNull);
+      final h2 = await s.updates.apply(_rev, adminPin: _pin);
+      mock.system.finishJob(h2.jobId);
+      await pumpEventQueue();
+      expect(s.updates.status.available, isNull);
+      expect(s.updates.status.currentRev, _rev);
+      // Checked, and the box is on that revision: up to date.
+      expect(s.updates.status.checkedAt, checked.checkedAt);
+
+      final r = await s.updates.rollback(adminPin: _pin);
+      mock.system.finishJob(r.jobId);
+      await pumpEventQueue();
+      expect(s.updates.status.available, isNull);
+      expect(s.updates.status.checkedAt, isNull);
     });
 
     test('a channel switch takes the revision the check verified', () async {
