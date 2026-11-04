@@ -287,8 +287,12 @@ class MockStorage implements StorageRepository {
     return _measurement;
   }
 
+  /// Tests: [measure] answers only when this completes (a slow daemon).
+  Future<void>? measureGate;
+
   @override
   Future<JobHandle> measure() async {
+    await measureGate;
     _fail();
     final r = jobs.runningJob;
     if (r != null && r.kind == JobKind.storageMeasure) return r;

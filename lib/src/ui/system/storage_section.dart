@@ -394,12 +394,18 @@ class _StorageSectionState extends State<StorageSection> {
       }
       return;
     }
-    // Not awaited: a cancel future can finish outside the test zone.
-    unawaited(sub.cancel());
-    if (!(r?.ok ?? false) || !mounted) return;
+    if (!(r?.ok ?? false) || !mounted) {
+      // Not awaited: a cancel future can finish outside the test zone.
+      unawaited(sub.cancel());
+      return;
+    }
     // The page closes only once the job is over: by then the scan was
-    // asked for (or the clean-up failed).
-    final h = scan.isCompleted ? await scan.future : null;
+    // asked for, but its answer may still be on the way (Close at once).
+    final h = await scan.future.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () => null,
+    );
+    unawaited(sub.cancel());
     if (!mounted) return;
     if (h == null) {
       setState(() => _stale = true);
