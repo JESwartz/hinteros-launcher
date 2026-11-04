@@ -2,8 +2,8 @@
 /// `UpdatesRepository` and `JobsRepository` over the session daemon's
 /// `system.*` relay (the daemon forwards the privileged service's methods and
 /// its three job events unchanged), and the runtime settings of session API
-/// 0.7 (`daemon_runtime.dart`). Only the Store is still unavailable, see
-/// [daemonSystemServices].
+/// 0.7 (`daemon_runtime.dart`). [daemonSystemServices] wires every service
+/// over one connection.
 library;
 
 import 'dart:async';

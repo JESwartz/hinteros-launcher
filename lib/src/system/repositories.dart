@@ -4,8 +4,7 @@
 /// settings (Wi-Fi, Bluetooth, audio, display, power) over the 0.7 methods,
 /// and the 0.8 ones (admin password prompt, session restart, Store);
 /// `mock_system.dart` has in-process fakes for all of them (like
-/// `MockDaemon`), and `unavailable_system.dart` answers "unavailable" for
-/// tests and the first moments before a connection exists.
+/// `MockDaemon`).
 library;
 
 import 'models.dart';
