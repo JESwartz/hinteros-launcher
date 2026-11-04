@@ -31,6 +31,17 @@ class _GoneLaunch extends MockDaemon {
   }
 }
 
+/// A daemon whose apps list fails.
+class _FailingAppsList extends MockDaemon {
+  @override
+  Future<Map<String, dynamic>> rpc(String method, Map<String, dynamic> params) {
+    if (method == 'apps.list') {
+      throw const ApiException(ApiErrorCode.internalError, 'database locked');
+    }
+    return super.rpc(method, params);
+  }
+}
+
 void main() {
   const up = LogicalKeyboardKey.arrowUp;
   const down = LogicalKeyboardKey.arrowDown;
@@ -216,6 +227,15 @@ void main() {
       expect(find.text('Steam'), findsNothing);
     },
   );
+
+  testWidgets('apps.list fails: Apps says so, not "No apps yet"', (t) async {
+    setView(t);
+    final h = Harness(mock: _FailingAppsList());
+    await h.pump(t);
+    await keys(t, [up, right, right, down]); // Apps
+    expect(find.text("Couldn't load apps"), findsOneWidget);
+    expect(find.text('No apps yet'), findsNothing);
+  });
 
   testWidgets('Steam in apps.list means no prompt in Games', (t) async {
     setView(t);
