@@ -223,6 +223,9 @@ void main() {
       expect(PlanChecks.password('longenough'), isNull);
       expect(PlanChecks.password(''), isNotNull);
       expect(PlanChecks.password('short'), isNotNull);
+      // 4 characters, 8 UTF-16 units: the backend counts characters.
+      expect(PlanChecks.password('\u{1F600}' * 4), isNotNull);
+      expect(PlanChecks.password('\u{1F600}' * 8), isNull);
       expect(PlanChecks.password('line\nbreak!!'), isNotNull);
     });
   });
