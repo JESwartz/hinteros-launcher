@@ -117,7 +117,9 @@ Per profile: which button does which action, the keys of keyboard-mode apps, the
 `ControllerRepository` (`lib/src/system/controller.dart`: the models, the changes as
 `ControllerState.with...`, the labels; `daemon_controller.dart`, `mock_controller.dart` over the wire
 mock `lib/src/api/mock_input.dart`), the sections in `lib/src/ui/system/controller_sections.dart`.
-Every change is stored at once (the whole stored form) and the four sections follow
+Every change is stored at once (the whole stored form; what the launcher does not know, such as a
+newer daemon's part or pointer field, is sent back as the daemon gave it, so a save keeps it) and
+the four sections follow
 `ControllerRepository.changes`.
 
 - **Buttons:** one row per action with its button. Select, "Press a button" (`input.capture`), and

@@ -274,6 +274,33 @@ void main() {
     });
   });
 
+  test('a save keeps what a newer daemon stored', () async {
+    final mock = _NewerInput();
+    await mock.waitConnected();
+    addTearDown(mock.close);
+    final c = DaemonController(mock);
+    final got = await c.get();
+    expect(got.stored.pointer.speed, 150);
+    final st = got.stored;
+    await c.set(
+      StoredController(
+        general: const {'accept': 'b', 'back': 'a'},
+        keyboard: st.keyboard,
+        apps: st.apps,
+        pointer: const PointerPrefs(speed: 200),
+      ),
+    );
+    expect(mock.sent, {
+      'general': {'accept': 'b', 'back': 'a', 'hold': 2},
+      'apps': {
+        'firefox': {'up': 'w', 'hold': 2},
+        'kodi': 'future',
+      },
+      'pointer': {'speed': 200, 'acceleration': 3},
+      'rumble': {'strength': 50},
+    });
+  });
+
   testWidgets('over the daemon: capture, swap, stored', (t) async {
     setView(t);
     final mock = MockDaemon(apps: appsWithIcons(), games: gamesWithArt());
@@ -295,4 +322,35 @@ void main() {
       'lb',
     );
   });
+}
+
+/// A newer daemon: a stored form with a part, a pointer field and values
+/// this launcher does not know. Remembers the form of the last save.
+class _NewerInput extends MockDaemon {
+  Map<String, dynamic>? sent;
+
+  @override
+  Future<Map<String, dynamic>> rpc(
+    String method,
+    Map<String, dynamic> params,
+  ) async {
+    if (method == 'input.settings.set') {
+      sent = (params['settings'] as Map).cast<String, dynamic>();
+      return input.state().toJson();
+    }
+    final r = await super.rpc(method, params);
+    if (method != 'input.settings.get') return r;
+    return {
+      ...r,
+      'settings': {
+        'general': {'hold': 2},
+        'apps': {
+          'firefox': {'up': 'w', 'hold': 2},
+          'kodi': 'future',
+        },
+        'pointer': {'speed': 150, 'acceleration': 3},
+        'rumble': {'strength': 50},
+      },
+    };
+  }
 }

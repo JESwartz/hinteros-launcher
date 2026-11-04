@@ -65,6 +65,56 @@ api.ControllerSettings controllerSettingsOf(StoredController s) =>
             ),
     );
 
+/// [sent] laid over [stored], the stored form the daemon last gave.
+/// `input.settings.set` replaces the whole form, so what this launcher does
+/// not know (a newer daemon's parts, pointer fields, or values that are not
+/// a key name) goes back unchanged instead of being deleted. What the
+/// launcher shows (the string entries of the maps, the four pointer fields)
+/// is [sent]'s alone.
+Map<String, dynamic> mergeControllerSettings(
+  Map<String, dynamic>? stored,
+  api.ControllerSettings sent,
+) {
+  final old = stored ?? const <String, dynamic>{};
+  final s = sent.toJson();
+  final out = <String, dynamic>{...old};
+  void put(String k, Map<String, Object?>? v) =>
+      v == null || v.isEmpty ? out.remove(k) : out[k] = v;
+  put('general', _overStrings(old['general'], s['general']));
+  put('keyboard', _overStrings(old['keyboard'], s['keyboard']));
+  final oldApps = old['apps'] is Map ? old['apps'] as Map : const {};
+  final newApps = s['apps'] is Map ? s['apps'] as Map : const {};
+  put('apps', {
+    for (final e in oldApps.entries)
+      if (e.value is! Map) '${e.key}': e.value,
+    for (final id in {...oldApps.keys, ...newApps.keys})
+      if (_overStrings(oldApps[id], newApps[id]) case final m?
+          when m.isNotEmpty)
+        '$id': m,
+  });
+  final oldPointer = old['pointer'] is Map ? old['pointer'] as Map : const {};
+  put('pointer', {
+    for (final e in oldPointer.entries)
+      if (!_pointerFields.contains(e.key)) '${e.key}': e.value,
+    ...?(s['pointer'] as Map<String, dynamic>?),
+  });
+  return out;
+}
+
+const _pointerFields = {'speed', 'swap_sticks', 'left_click', 'right_click'};
+
+/// The non-string entries of [old] (unknown to the launcher) and [sent].
+Map<String, Object?>? _overStrings(Object? old, Object? sent) {
+  final m = <String, Object?>{
+    if (old is Map)
+      for (final e in old.entries)
+        if (e.value is! String) '${e.key}': e.value,
+    if (sent is Map)
+      for (final e in sent.entries) '${e.key}': e.value,
+  };
+  return m.isEmpty ? null : m;
+}
+
 class DaemonController implements ControllerRepository {
   DaemonController(this._conn) {
     _events = _conn.events.listen((e) {
@@ -98,22 +148,32 @@ class DaemonController implements ControllerRepository {
 
   @override
   Future<ControllerState> get() =>
-      guardCall(() async => _state((await _conn.inputSettingsGet()).toJson()));
+      guardCall(() async => _state(await _conn.rpc('input.settings.get', {})));
 
   @override
   Future<ControllerState> set(StoredController settings) => guardCall(() async {
+    final sent = controllerSettingsOf(settings);
     final r = _state(
-      (await _conn.inputSettingsSet(
-        api.InputSettingsSetParams(settings: controllerSettingsOf(settings)),
-      )).toJson(),
+      await _conn.rpc('input.settings.set', {
+        'settings': mergeControllerSettings(_stored, sent),
+      }),
     );
     _changes.add(r);
     return r;
   });
 
-  /// Both results are an InputSettings on the wire.
-  static ControllerState _state(Map<String, dynamic> json) =>
-      controllerStateFrom(api.InputSettings.fromJson(json));
+  /// The stored form of the last result, as the daemon sent it (with what
+  /// this launcher does not read).
+  Map<String, dynamic>? _stored;
+
+  /// Both results are an InputSettings on the wire, read here from the raw
+  /// JSON: the typed form would drop what [set] has to send back.
+  ControllerState _state(Map<String, dynamic> json) {
+    final s = controllerStateFrom(api.InputSettings.fromJson(json));
+    final raw = json['settings'];
+    _stored = raw is Map ? raw.cast<String, dynamic>() : null;
+    return s;
+  }
 
   @override
   Future<String?> capture() async {
