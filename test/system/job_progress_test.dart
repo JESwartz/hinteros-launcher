@@ -725,6 +725,24 @@ void main() {
       await press(t, [kEnter]); // Close
       expect(indicator, findsNothing);
     });
+
+    testWidgets('the indicator goes while the chip has the focus: the focus '
+        'stays on the chip', (t) async {
+      setView(t);
+      final (h, _) = harness();
+      final job = h.services.mockJobs.start(JobKind.rebuild);
+      await h.pump(t);
+      expect(indicator, findsOneWidget);
+      // Up to the tab row; left wraps to the profile chip (after the job).
+      await press(t, [kUp, kLeft]);
+      expect(focusLabel(), 'tabs/tabs:7');
+      h.services.mockJobs.finish(job.jobId);
+      await t.pumpAndSettle();
+      expect(indicator, findsNothing);
+      expect(focusLabel(), 'tabs/tabs:6');
+      await press(t, [kEnter]);
+      expect(find.text('Who is watching?'), findsOneWidget);
+    });
   });
 }
 

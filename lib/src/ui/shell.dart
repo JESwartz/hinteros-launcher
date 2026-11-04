@@ -564,18 +564,36 @@ class _LauncherShellState extends State<LauncherShell> {
 
   /// The tab row: the sections, the job indicator, the profile chip.
   void _syncTabRow() {
-    final job = _jobs.showsIndicator ? 1 : 0;
-    final n = _sections.length + job + (_profile.current == null ? 0 : 1);
-    if (_tabs.model.rows.firstOrNull?.length == n) return;
-    // The indicator went away under the focus: back to the tab of this
-    // section (moving to another tab would switch the section).
-    final onExtra = _tabs.model.col >= _sections.length;
-    _tabs.setRows([NavRow('tabs', n)]);
-    if (onExtra && job == 0) {
-      _tabs.model.goTo(0, _sections.indexOf(_section));
-      _tabs.changed();
+    final job = _jobs.showsIndicator;
+    final chip = _profile.current != null;
+    final before = _tabExtras;
+    if (before == (job: job, chip: chip)) return;
+    _tabExtras = (job: job, chip: chip);
+    final s = _sections.length;
+    final col = _tabs.model.col;
+    final onJob = before.job && col == s;
+    final onChip = before.chip && col == s + (before.job ? 1 : 0);
+    _tabs.setRows([NavRow('tabs', s + (job ? 1 : 0) + (chip ? 1 : 0))]);
+    // The focus stays on its item when the indicator comes or goes beside
+    // it. Its item gone: back to the tab of this section (moving to another
+    // tab would switch the section).
+    final int? want;
+    if (onChip) {
+      want = chip ? s + (job ? 1 : 0) : _sections.indexOf(_section);
+    } else if (onJob) {
+      want = job ? s : _sections.indexOf(_section);
+    } else {
+      want = null;
     }
+    // The item moved (or went): its old node has the focus no more.
+    if (want == null || want == col) return;
+    _tabs.model.goTo(0, want);
+    _tabs.changed();
+    if (_nav.active == _tabs) _nav.focusRegion(_tabs);
   }
+
+  /// What the tab row held at the last [_syncTabRow].
+  ({bool job, bool chip}) _tabExtras = (job: false, chip: false);
 
   void _onJobs() {
     if (!mounted) return;
