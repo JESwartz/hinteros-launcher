@@ -361,7 +361,8 @@ class ProcessInstallerBackend implements InstallerBackend {
 
   @override
   Future<void> reboot() async {
-    await Process.run('systemctl', ['reboot']);
+    // Throws InstallerException when systemctl refuses (an inhibitor).
+    await _stdout('systemctl', const ['reboot']);
   }
 }
 

@@ -560,8 +560,16 @@ class FakeInstallerBackend implements InstallerBackend {
     );
   }
 
+  /// The reboot fails (systemctl refused it).
+  bool rebootFails = false;
+
   @override
-  Future<void> reboot() async => calls.add('reboot');
+  Future<void> reboot() async {
+    calls.add('reboot');
+    if (rebootFails) {
+      throw const InstallerException('systemctl failed (status 1).');
+    }
+  }
 }
 
 const _gib = 1024 * 1024 * 1024;

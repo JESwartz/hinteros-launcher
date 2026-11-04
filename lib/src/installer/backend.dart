@@ -312,6 +312,6 @@ abstract class InstallerBackend {
   /// [InstallPlan.keepData] puts a new system on the install that is there.
   InstallRun install(InstallPlan plan);
 
-  /// `systemctl reboot`.
+  /// `systemctl reboot`. Throws [InstallerException] when it fails.
   Future<void> reboot();
 }

@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../log.dart';
 import '../../theme/hinter_theme.dart';
 import '../../ui/widgets.dart';
+import '../backend.dart';
 import '../flow.dart';
 import '../progress.dart';
 import 'steps.dart';
@@ -293,10 +295,23 @@ class DoneStepView extends StatefulWidget {
 
 class _DoneStepViewState extends State<DoneStepView> {
   bool _restarting = false;
+  bool _rebootFailed = false;
 
   Future<void> _reboot() async {
-    setState(() => _restarting = true);
-    await widget.env.flow.reboot();
+    setState(() {
+      _restarting = true;
+      _rebootFailed = false;
+    });
+    try {
+      await widget.env.flow.reboot();
+    } on InstallerException catch (e) {
+      logFailure('restarting', e);
+      if (!mounted) return;
+      setState(() {
+        _restarting = false;
+        _rebootFailed = true;
+      });
+    }
   }
 
   @override
@@ -327,6 +342,12 @@ class _DoneStepViewState extends State<DoneStepView> {
       p.add(const StatusLine('Restarting...'), gap: HinterTokens.s3);
       env.region.setRows(const []);
     } else {
+      if (_rebootFailed) {
+        p.add(
+          const StatusLine('Cannot restart. Try again.', error: true),
+          gap: HinterTokens.s3,
+        );
+      }
       p.buttons('actions', [
         btn('Restart now', _reboot, primary: true),
       ], gap: HinterTokens.s4);

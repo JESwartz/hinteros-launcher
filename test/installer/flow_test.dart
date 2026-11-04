@@ -656,6 +656,20 @@ void main() {
       expect(find.text('Restarting...'), findsOneWidget);
     });
 
+    testWidgets('the restart fails: says so, Restart now again', (t) async {
+      final backend = FakeInstallerBackend()..rebootFails = true;
+      final h = await toSummary(t, backend: backend);
+      await h.eraseAndInstall(t);
+      expect(h.flow.step, InstallerStep.done);
+      await h.accept(t); // Restart now
+      expect(find.text('Restarting...'), findsNothing);
+      expect(find.text('Cannot restart. Try again.'), findsOneWidget);
+      backend.rebootFails = false;
+      await h.accept(t);
+      expect(backend.calls.where((c) => c == 'reboot').length, 2);
+      expect(find.text('Restarting...'), findsOneWidget);
+    });
+
     testWidgets('progress: stage, percent, warnings, no Back while it runs', (
       t,
     ) async {

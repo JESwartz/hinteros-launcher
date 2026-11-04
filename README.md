@@ -652,7 +652,7 @@ Installing (`hinteros-install --validate-only`, then the install, with the stage
 a percentage and the warnings; on an error the explanation of its code, the log path
 `/var/log/hinteros-install.log`, Try again (an Erase goes back to the Summary to be held again; Keep data runs again at once, or Change my choices); after `disk-changed` only "Select
 the disk", back to the Disk screen with no disk chosen) and Done (remove the stick,
-Restart now = `systemctl reboot`).
+Restart now = `systemctl reboot`; if that fails, "Cannot restart. Try again." and Restart now stays).
 
 **Keep data.** On a disk that holds an install the backend can keep (`existing.schemaOk`), the Disk
 screen offers Keep data (the default) and Erase all; on an install it cannot keep, only Erase all,
