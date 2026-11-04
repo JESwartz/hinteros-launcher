@@ -51,7 +51,8 @@ class SessionEndingController extends ChangeNotifier {
   /// page goes again ([endSessionWith]).
   final Duration endTimeout;
 
-  Timer? _endTimer;
+  /// One per waiting [_stillUp], so a later wait does not stop an earlier one.
+  final _endTimers = <Timer>{};
 
   /// The service answers now.
   bool get connected => _connected();
@@ -95,27 +96,38 @@ class SessionEndingController extends ChangeNotifier {
   Future<bool> _stillUp(SessionEnding e) {
     if (_final || !identical(_ending, e)) return Future.value(false);
     final done = Completer<bool>();
+    late final Timer timer;
     void onChange() {
-      if (_final || !identical(_ending, e)) _settle(done, onChange, false);
+      if (_final || !identical(_ending, e)) {
+        _settle(done, timer, onChange, false);
+      }
     }
 
-    _endTimer?.cancel();
-    _endTimer = Timer(endTimeout, () => _settle(done, onChange, true));
+    timer = Timer(endTimeout, () => _settle(done, timer, onChange, true));
+    _endTimers.add(timer);
     addListener(onChange);
     return done.future;
   }
 
-  void _settle(Completer<bool> done, VoidCallback onChange, bool up) {
+  void _settle(
+    Completer<bool> done,
+    Timer timer,
+    VoidCallback onChange,
+    bool up,
+  ) {
     if (done.isCompleted) return;
-    _endTimer?.cancel();
-    _endTimer = null;
+    timer.cancel();
+    _endTimers.remove(timer);
     removeListener(onChange);
     done.complete(up);
   }
 
   @override
   void dispose() {
-    _endTimer?.cancel();
+    for (final t in _endTimers) {
+      t.cancel();
+    }
+    _endTimers.clear();
     super.dispose();
   }
 
