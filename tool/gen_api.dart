@@ -137,6 +137,7 @@ const _closedEnums = {
   'Modifier',
   'KeyAction',
   'EventName',
+  'ProfileColor',
 };
 
 /// Enums whose catch-all is a value of the schema other than `unknown`.

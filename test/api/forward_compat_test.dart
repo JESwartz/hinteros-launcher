@@ -142,11 +142,36 @@ void main() {
       'Modifier': (api.Modifier.fromJson, api.Modifier.values),
       'KeyAction': (api.KeyAction.fromJson, api.KeyAction.values),
       'EventName': (api.EventName.fromJson, api.EventName.values),
+      'ProfileColor': (api.ProfileColor.fromJson, api.ProfileColor.values),
     };
-    final defs =
-        (jsonDecode(File('schema/session-api.json').readAsStringSync())
-                as Map<String, dynamic>)[r'$defs']
-            as Map<String, dynamic>;
+    final doc = jsonDecode(
+      File('schema/session-api.json').readAsStringSync(),
+    ) as Map<String, dynamic>;
+    final defs = doc[r'$defs'] as Map<String, dynamic>;
+
+    test('every enum a client sends is closed', () {
+      final sent = <String>{};
+      void walk(Object? s) {
+        if (s is Map<String, dynamic>) {
+          final ref = s[r'$ref'];
+          if (ref is String && ref.startsWith(r'#/$defs/')) {
+            final name = ref.substring(8);
+            if (sent.add(name)) walk(defs[name]);
+          }
+          s.values.forEach(walk);
+        } else if (s is List) {
+          s.forEach(walk);
+        }
+      }
+
+      for (final m in (doc['methods'] as Map<String, dynamic>).values) {
+        walk((m as Map<String, dynamic>)['params']);
+      }
+      final enums = sent.where(
+        (n) => (defs[n] as Map<String, dynamic>).containsKey('enum'),
+      );
+      expect(closed.keys, containsAll(enums));
+    });
     for (final MapEntry(key: name, value: (read, values)) in closed.entries) {
       test('$name has no catch-all and refuses a new value', () {
         expect(() => read(_new), throwsFormatException);

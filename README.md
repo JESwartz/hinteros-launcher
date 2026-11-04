@@ -105,10 +105,10 @@ import chain reaches.
 The launcher works with a daemon of the same major and an equal or higher minor. `tool/gen_api.dart`
 gives every enum that grows a catch-all, so a value of a newer daemon reads as `unknown`
 (`LibraryKindShown`: `other`; `Connectivity` and `UnitState` have their own `unknown`). The enums the
-launcher also sends (`_closedEnums`) have none: a new value there is a new major. An unknown
-`AuthOutcome` is no authorization. Unknown fields are ignored, an unknown event is
-`UnknownSessionEvent`, an unknown error code is a plain failure, and a job `result` or a service
-`setup` or `detail` it cannot read is null. `test/api/forward_compat_test.dart` covers this.
+launcher also sends (`_closedEnums`, every enum in method params) have none: a new value there is
+a new major. An unknown `AuthOutcome` is no authorization. Unknown fields are ignored, an unknown
+event is `UnknownSessionEvent`, an unknown error code is a plain failure, and a job `result` or a
+service `setup` or `detail` it cannot read is null. `test/api/forward_compat_test.dart` covers this.
 
 ### Session API 0.20: Settings > Controller
 
