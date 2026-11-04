@@ -184,11 +184,27 @@ void main() {
     test('user names', () {
       expect(PlanChecks.username('james'), isNull);
       expect(PlanChecks.username('_svc-1'), isNull);
+      expect(PlanChecks.username('hinteros-pi'), isNull);
       expect(PlanChecks.username(''), isNotNull);
       expect(PlanChecks.username('James'), isNotNull);
       expect(PlanChecks.username('1abc'), isNotNull);
       expect(PlanChecks.username('a' * 33), isNotNull);
-      for (final r in ['root', 'hinteros', 'nobody', 'systemd-x', 'nixbld3']) {
+      // As hinteros-install.sh (admin-user-reserved).
+      for (final r in [
+        'root',
+        'hinteros',
+        'hinteros-guest',
+        'hinteros-greeter',
+        'hinteros-kbd',
+        'hinteros-p1',
+        'hinteros-p12x',
+        'nobody',
+        'deploy',
+        'sshd',
+        'daemon',
+        'systemd-x',
+        'nixbld3',
+      ]) {
         expect(PlanChecks.username(r), contains('reserved'), reason: r);
       }
     });
@@ -207,6 +223,9 @@ void main() {
       expect(PlanChecks.password('longenough'), isNull);
       expect(PlanChecks.password(''), isNotNull);
       expect(PlanChecks.password('short'), isNotNull);
+      // 4 characters, 8 UTF-16 units: the backend counts characters.
+      expect(PlanChecks.password('\u{1F600}' * 4), isNotNull);
+      expect(PlanChecks.password('\u{1F600}' * 8), isNull);
       expect(PlanChecks.password('line\nbreak!!'), isNotNull);
     });
   });

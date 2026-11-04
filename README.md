@@ -57,7 +57,7 @@ launcher installed, or without those variables (`--mock`, development), it stays
 | `tool/gen_api.dart` | Generator: schema to `lib/src/api/generated.dart` (models, typed method stubs, sealed event class, error codes) |
 | `lib/src/api/generated.dart` | Generated, committed. Do not edit |
 | `lib/src/api/client.dart` | `DaemonClient`: handshake, request correlation, events, subscribe, reconnect |
-| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (all 0.11 methods and events: the relayed `system.*` API, the runtime settings, the admin password prompt, `session.restart` and the Store) |
+| `lib/src/api/mock.dart` | `MockDaemon`: in-process fake with the same interface (every method and event of the vendored schema, including the relayed `system.*` API, the runtime settings, the admin password prompt, `session.restart` and the Store; `test/api/contract_test.dart` plays each example through it) |
 | `lib/src/osk/` | The on-screen keyboard: `OskBackend` (+ mock), layouts, state, UI |
 | `tool/gen_mock_art.dart` | Draws the placeholder cover art in `test/fixtures/art/` (with `--demo`: the browser demo's, on the `web-demo` branch; committed; no network, no third-party pictures) |
 | `lib/src/platform/local_files*.dart` | Local files: from disk on the desktop, from the bundled assets in the browser |
@@ -68,7 +68,7 @@ launcher installed, or without those variables (`--mock`, development), it stays
 ### Mock daemon
 
 `--mock` (or `HINTEROS_MOCK=1`) swaps the socket for the in-process mock, which behaves like the
-0.9 daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
+daemon: HinterOS's default apps (built-in Steam, Jellyfin, YouTube, Crunchyroll, Firefox,
 Plex), a fake Steam library of 14 games in every install state (`games.list`, sorted by name),
 `apps.launch` (by id, command or `steam://rungameid/<appid>`), `apps.running`, `apps.focus`,
 `apps.close` (then `app_exited` with reason `closed`), `steam.attention` / `steam.focus`, and the
@@ -111,9 +111,10 @@ gives every enum that grows a catch-all, so a value of a newer daemon reads as `
 (`LibraryKindShown`: `other`; `Connectivity` and `UnitState` have their own `unknown`). The enums the
 launcher only sends (`_closedEnums`) have none: a new value there is a new major. `Channel`, `Base`
 and `CleanupFrequency` are sent and read, so they have `unknown` too: a newer channel reads as none,
-a newer base as `unstable`, a newer frequency as weekly; the launcher never sends `unknown`. A known
-event it cannot read is `UnknownSessionEvent` too (logged). An unknown
-`AuthOutcome` is no authorization. Unknown fields are ignored, an unknown event is
+a newer base as `unstable`, a newer frequency as weekly; the launcher never sends `unknown`.
+`ProfileColor` stays open as well: the launcher sends only its own names, and a new colour reads as
+`unknown` (shown as teal). A known event it cannot read is `UnknownSessionEvent` too (logged). An
+unknown `AuthOutcome` is no authorization. Unknown fields are ignored, an unknown event is
 `UnknownSessionEvent`, an unknown error code is a plain failure, and a job `result` or a service
 `setup` or `detail` it cannot read is null. `test/api/forward_compat_test.dart` covers this.
 
@@ -597,7 +598,7 @@ params/result schemas that are a `$ref` (the relayed `system.*` results; `displa
 - `test/api/mock08_test.dart`: what the contract test's examples do not show about the 0.8 mock: the order of events and answers around the admin password prompt (`auth.respond` answers before the waiting `ssh.set`), three wrong passwords, cancel, who gets the events and may answer, the Store's states while an apps job runs, `store_changed`, dependencies and conflicts, `more_after_update`, `session.restart`.
 - `test/system/daemon_store_test.dart`: `DaemonStore` over `MockDaemon`: the listing (sorted, states, terms text from the daemon's file path, unfree without readable terms left out, `unavailable {catalog}`, `system_unavailable`, icons from `apps.list`, a slow older answer not overwriting a newer one), permissions and `apps.set_permission` with its errors (0.18), following jobs and `store_changed`, `accepted_terms`, `app_conflict`, `insufficient_resources`, `not_found`, `not_available`, `job_busy`, a stale revision retried once (and only once). `test/system/daemon_store_ui_test.dart`: the same through the screens: install with terms and progress, permissions (one switched off at install, on again on the app page), a stale revision, `terms_required` with a newer version, conflicts, no space, remove with delete data (two confirmations), a running app closed first, retired and going-away apps, the update's new and removed apps, the Games tab's "Install Steam", and the session restart offer (also on a desktop session).
 - `test/system/daemon_system_test.dart` runs the real repositories (`DaemonSystem`, `DaemonUpdates`, `DaemonJobs`) over `MockDaemon`'s relay: error mapping, jobs from events, cancel, downgrade acknowledgement (base), the channel check and switch (0.17), the update check and its cache, `settings.set` with a revision. Since 0.15 also builds (count, name, phase), the subject with its release name, heartbeats, and the running job found with `jobs.list` by a new launcher. `test/system/daemon_ui_test.dart` is the same through the Settings screens (SSH without a polkit agent, settings unavailable, About with the DEV badge, a security update through to "Restart session"). `test/osk/osk_auto_show_test.dart`: the keyboard opens and closes with the launcher's text fields.
-- `test/installer/` covers the installer: `flow_test.dart` walks the screens with a fake backend (disk filtering, the one erase confirmation on the summary (A held 5 s on "Erase and install"; a shorter hold or Back erases nothing), password mismatch, SSH off by default, offline disabling the online-only apps, the plan JSON for several choices, progress, exit status 2 and 1 with their codes, a disk replaced under the same path (`disk-changed`, back to the disk choice; "Refresh" drops it), typing with the pad on the in-app keyboard), `plan_test.dart`, `progress_test.dart`, `parsers_test.dart` (lsblk, nmcli; the catalog index is in `test/system/catalog_test.dart`, against `test/fixtures/catalog`, the real index with placeholder terms text), `process_backend_test.dart` (the real backend class against a stand-in script: the plan arrives on stdin, never in the arguments; `--list-disks` and its fallback to `lsblk`), `keep_data_test.dart` (the Keep data choice, the step order, the answers filled from the disk, what the plan may carry, going back), `gamepad_test.dart` (the stick deadzone and hysteresis, key repeat, hotplug, disconnects and permission errors, all over synthetic evdev streams from `test/support/fake_pads.dart`; no real device is ever opened), `two_stage_test.dart` (the phase fields, the two progress sections, failed apps on Done), `keyboard_fallback_test.dart` (the evdev keyboard mapping incl. Shift symbols and key repeat, hotplug, and the focus gate: active only while unfocused, never doubled), `input_test.dart` (the installer driven by the keyboard alone and by the stick alone, from Welcome to the restart, and the text-field exceptions), `test/nav/key_map_test.dart`, `first_boot_test.dart`.
+- `test/installer/` covers the installer: `flow_test.dart` walks the screens with a fake backend (disk filtering, the one erase confirmation on the summary (A held 5 s on "Erase and install"; a shorter hold or Back erases nothing), password mismatch, SSH off by default, offline disabling the online-only apps, the plan JSON for several choices, progress, exit status 2 and 1 with their codes, a disk replaced under the same path (`disk-changed`, back to the disk choice; "Refresh" drops it), typing with the pad on the in-app keyboard), `plan_test.dart`, `progress_test.dart`, `parsers_test.dart` (lsblk, nmcli; the catalog index is in `test/system/catalog_test.dart`, against `test/fixtures/catalog`, the real index with placeholder terms text), `process_backend_test.dart` (the real backend class against a stand-in script: the plan arrives on stdin, never in the arguments; `--list-disks` and its fallback to `lsblk`), `keep_data_test.dart` (the Keep data choice, the step order, the answers filled from the disk, what the plan may carry, going back), `gamepad_test.dart` (the stick deadzone and hysteresis, key repeat, hotplug, disconnects and permission errors, all over synthetic evdev streams from `test/support/fake_pads.dart`; no real device is ever opened), `two_stage_test.dart` (the phase fields, the system checklist and the apps line, failed apps on Done), `keyboard_fallback_test.dart` (the evdev keyboard mapping incl. Shift symbols and key repeat, hotplug, and the focus gate: active only while unfocused, never doubled), `input_test.dart` (the installer driven by the keyboard alone and by the stick alone, from Welcome to the restart, and the text-field exceptions), `test/nav/key_map_test.dart`.
 - `test/system/server_ui_test.dart`: the Server tab through the screens on the mocks (the states, Turn on with the PIN, a wrong PIN and Back, Plex's terms accepted and declined, the claim code, the Tailscale sign-in QR code on the job page and a sign-in that timed out, removing and adding a Jellyfin library with the folder picker, a taken name, the accounts, Turn off with and without the server data, the Cloudflare token refused and saved, a service not set up yet, the list unavailable). `test/system/daemon_server_test.dart`: `DaemonServer` over the mock daemon's relay (the list and its detail, terms not readable, the PIN and the terms before `services.enable`, `delete_data`, the sign-in address kept by heartbeats, `job_failed.data.reason`, the refusals, libraries, accounts, folders, the changes stream).
 - `test/system/job_progress_test.dart`: the job page while building (count, name, time, the bar moving with no news), the heartbeat gap ("still running", never "failed") and no output for minutes, the title and line under it for every job kind, Hide and the top bar indicator (it follows the job, A opens the page, Back leaves it again), the notices when a hidden job ends (done, failed with the indicator kept, the session restart offered by the notice and by the page opened again), the restart countdown (on the page and in the notice: to 0, Later, Restart at once, waiting while an app is in front and starting again from 30), and a launcher restart during a job.
 - `test/osk/` drives the on-screen keyboard with the mock backend: layout, D-pad navigation, shift,
@@ -635,32 +636,35 @@ params/result schemas that are a `$ref` (the relayed `system.*` results; `displa
   for the games test), e.g.
   `HINTEROS_SESSION_BIN=$(nix build ../hinteros-daemon#hinteros-session --no-link --print-out-paths)/bin/hinteros-session HINTEROS_STEAM_FIXTURE=../hinteros-daemon/crates/hinteros-session/tests/fixtures/steam-home flutter test test/integration`.
 
-## Installer mode and first-boot wizard
+## Installer mode
 
 The same binary is the installer UI for the ISO (roadmap M9): `hinteros-launcher --installer`
 (or `HINTEROS_INSTALLER=1`). It is controller-only and talks to no session daemon: it runs the
-system repo's `hinteros-install` backend. `--first-boot` (or `HINTEROS_FIRST_BOOT=1`) is the
-wizard for a box that is already installed (see "First-boot wizard" below).
+system repo's `hinteros-install` backend. An installed box with no admin profile starts in
+first-boot mode in the launcher itself ("Create your profile", see Profiles above).
 
-Screens: Welcome, Internet, Admin account, Options, Apps, Disk, Summary; when the disks hold an
+Screens: Welcome, Internet, HinterOS version (only while online, when the chosen channel has a
+newer HinterOS than the USB stick: after Internet, and again after Options when the channel
+changed; not with Keep data), Admin account, Options, Apps, Disk, Summary; when the disks hold an
 install that can be kept, Disk comes right after Internet (decided once, when Internet is first
 left, after the first disk listing, which starts with the installer). Internet (cable status; Wi-Fi
 list and join through `nmcli`, scanned again by itself while offline, every 3 s while the list is
 empty, else every 10 s; or carry on offline), Disk (internal disks from `hinteros-install --list-disks`, or plain `lsblk --json` when
-that fails or takes over a minute; removable, in-use and under 16 GiB disks, and
-disks without a `DISK-SEQ`, are listed with the reason and cannot be picked; a full-screen warning
-and then a second "last check"; the plan carries the disk's path and its disk sequence number,
+that fails or takes over a minute, with "Cannot look for HinterOS on the disks. To keep data, select Refresh." and no Keep data; such a listing does not decide the order of the steps; removable, in-use and under 16 GiB disks, and
+disks without a `DISK-SEQ`, are listed with the reason and cannot be picked; the plan carries the disk's path and its disk sequence number,
 `diskSeq`, which is new each time a disk is plugged in, so `hinteros-install` refuses a disk that was
 replaced under the same name with `disk-changed`; "Refresh" also drops such a choice),
 Admin account (user name, password and the password again, typed on the in-app keyboard), Options
 (computer name, default `hinteros`; Enable SSH, off by default, with what it means; update
 channel stable or beta), Apps (`AppSelectionView`: YouTube and Firefox ticked, apps that need a
-download disabled with "Needs internet" while offline, vendor terms read and accepted), Summary,
+download disabled with "Needs internet" while offline, vendor terms read and accepted), Summary (the disk by path, model and size, and every answer; the
+one confirmation: A held 5 s on "Erase and install" or "Keep data and install"; a shorter hold or
+Back changes nothing),
 Installing (`hinteros-install --validate-only`, then the install, with the stages in plain words,
 a percentage and the warnings; on an error the explanation of its code, the log path
-`/var/log/hinteros-install.log`, Try again or Change my choices; after `disk-changed` only "Select
+`/var/log/hinteros-install.log`, Try again (an Erase goes back to the Summary to be held again; Keep data runs again at once, or Change my choices); after `disk-changed` only "Select
 the disk", back to the Disk screen with no disk chosen) and Done (remove the stick,
-Restart now = `systemctl reboot`).
+Restart now = `systemctl reboot`; if that fails, "Cannot restart. Try again." and Restart now stays).
 
 **Keep data.** On a disk that holds an install the backend can keep (`existing.schemaOk`), the Disk
 screen offers Keep data (the default) and Erase all; on an install it cannot keep, only Erase all,
@@ -686,11 +690,11 @@ flutter run -d linux --dart-entrypoint-args=--installer,--mock,--windowed
 the password `correct horse`, a successful install after about ten seconds), `online` (a cable is
 plugged in), `refused` (`hinteros-install` exits 2 with `disk-in-use`), `disk-changed` (the disk is
 plugged in again after the check: exit 2 with `disk-changed`; chosen again, it installs) or `failed`
-(exit 1 with `install-failed`). The fake backend never runs a program. Without `--mock` the real backend
+(exit 1 with `install-failed`); the other scenarios are listed at `mockBackend` in `lib/src/installer/installer_main.dart`. The fake backend never runs a program. Without `--mock` the real backend
 runs `lsblk`, `nmcli`, `hinteros-install` and `systemctl`: do not do that on a machine you care
 about, the install erases the disk.
 
-**Two stages.** `hinteros-install` installs the HinterOS base system first (`phase:"system"`), then the picked apps (`phase:"apps"`, an optional `app` id per line). The progress screen has two sections, "Installing HinterOS" (the stage checklist and its own percentage; once the apps stage starts it shows 100%) and "Installing apps" (one row per picked app: waiting, installing, done or failed, and a percentage of apps finished). A `level:"warn"` line with `code:"app-failed"` and `app` marks that app failed; the exit status stays 0 and the last line is `{stage:"done", failed_apps:[...]}`. Done then says "HinterOS is installed. These apps couldn't be installed and can be added later from the Store: ...". Lines without `phase` count as the system (older backends), and the apps' percentage does not depend on the backend's `percent` being per phase or overall. `--mock-scenario=apps-failed` shows the failure on the desktop.
+**Two stages.** `hinteros-install` installs the HinterOS base system first (`phase:"system"`), then the picked apps (`phase:"apps"`, an optional `app` id per line). The progress screen has one caption line with its own bar: in the system phase "Step n of N · stage" over the stage checklist, in the apps phase one line for the app worked on now ("Downloading Steam · 2 of 3"; apps on the stick say "Installing") with that app's bar, and no checklist. A `level:"warn"` line with `code:"app-failed"` and `app` marks that app failed; the exit status stays 0 and the last line is `{stage:"done", failed_apps:[...]}`. Done then says "These apps did not install. Add them later from the Store: ...". Lines without `phase` count as the system (older backends). `--mock-scenario=apps-failed` shows the failure on the desktop.
 
 **Keyboard focus fallback.** On real hardware under cage the window sometimes does not get the compositor's keyboard focus at first (the pad still works, it is read from evdev). While the window has no keyboard focus the installer therefore reads the USB keyboards from evdev itself (`evdev_keyboard.dart`: devices with letters, Enter and Space, never grabbed, same hotplug rescan as the pad; US layout with Shift and Caps Lock; the kernel's key repeat becomes repeat events) and feeds the same actions and text input as hardware keys. `keyboard_fallback.dart` decides when: the runner reports focus over the `hinteros/window` channel (`focus` bool, `isActive` query), any Flutter key event proves the compositor delivers keys (the evdev keys are then ignored, so nothing is typed twice), and an evdev key while GTK claims focus but no Flutter key arrives within 300 ms switches the fallback on. Focus changes, the first Flutter key event and the fallback switching on and off are logged to stderr (`hinteros-focus:` / `hinteros-evdev:`), as are GTK's toplevels and the runner's `present` retries (`linux/runner/my_application.cc`).
 
@@ -701,13 +705,13 @@ about, the install erases the disk.
 | `lib/src/installer/backend.dart` | `InstallerBackend`: network, Wi-Fi, disks, catalog, `validate(plan)`, `install(plan)` (an `InstallRun`: progress events plus the exit status), `reboot()` |
 | `lib/src/installer/process_backend.dart` | The real one. Every command is an executable with a fixed argument list, no shell. The plan, with the admin password, goes to `hinteros-install --plan -` on stdin; a Wi-Fi password goes to `nmcli --ask` on stdin; nothing on a command line, nothing the tools print on stderr is kept or logged |
 | `lib/src/installer/fake_backend.dart` | The fake: scripted progress, refusals (exit 2), failures (exit 1), the plans it was given, a mock machine (disks, Wi-Fi, catalog with placeholder vendor terms) |
-| `lib/src/installer/plan.dart` | `InstallPlan`: the JSON the backend wants (`disk`, `hostname`, `admin {user, password}`, `ssh {enable}`, `channel`, `base`, `network`, `apps`, `wifi {ssid, psk}`), and the UI checks that mirror the backend's |
+| `lib/src/installer/plan.dart` | `InstallPlan`: the JSON the backend wants (`disk`, `diskSeq`, `keepData`, `hostname`, `admin {user, password}`, `ssh {enable}`, `channel`, `base`, `network`, `apps`, `acceptedTerms`, `wifi {ssid, psk}`, `rev` for a newer HinterOS), and the UI checks that mirror the backend's |
 | `lib/src/installer/progress.dart` | The stdout lines `{stage, percent, level, message, code?}`, the verdict (exit 0 and a `done` line is success; 2 is "refused, nothing was touched"; 1 or anything else is "failed part-way"; exit 0 with an error line is a failure too), and the plain-words text for every error code |
 | `lib/src/installer/parsers.dart` | `lsblk --json -b` and `nmcli -t` output (`\:` escapes) |
 | `lib/src/system/catalog.dart` | The catalog index (version 4), shared with the Store: `parseCatalogIndex`, `loadCatalogIndex`, the terms reader |
 | `lib/src/installer/gamepad.dart` | Controller input without the daemon: reads the evdev gamepads under `/dev/input` (A accepts, B back, X/Y, bumpers, View/Menu; D-pad and the left stick with a 0.5 deadzone, hysteresis and the daemon's key repeat; a rescan every 2 s for hotplug; `evdev_ioctl.dart` reads the stick range with `EVIOCGABS`) |
 | `lib/src/installer/flow.dart` | `InstallerFlow`: the answers, the steps, the install run |
-| `lib/src/installer/ui/` | The screens, the shared input host (`host.dart`), the in-app keyboard (`text_entry.dart`), the first-boot wizard |
+| `lib/src/installer/ui/` | The screens, the shared input host (`host.dart`), the in-app keyboard (`text_entry.dart`) |
 
 **Keyboard.** There is no daemon on the ISO to type for us, so the installer shows the same
 on-screen keyboard (`OskScreen`, same layouts) with an `InProcessKeyboard` as its `OskBackend`: the
@@ -757,15 +761,6 @@ from the daemon (`StoreRepository.resolveIcon`: installed desktop icon, `iconUrl
 - Network: NetworkManager with `connectivity` checking on (`general CONNECTIVITY` is how the UI
   knows it is online). Without checking, a connected cable or Wi-Fi counts as online and the
   backend's own probe of cache.nixos.org has the last word.
-
-### First-boot wizard
-
-`--first-boot` shows the wizard on the running system: Welcome, Internet, Controllers
-(Bluetooth pairing through the existing `BluetoothRepository`), a display check, All set. It is a
-skeleton: the first profile, the update channel, the app step (`apps.install`, needs M8), a
-display mode picker with keep and revert, skipping steps that are already done, and handing the
-session over to the launcher are TODOs listed in `lib/src/installer/ui/first_boot.dart`. It uses the
-daemon's runtime settings (`daemonSystemServices`), or the mock with `--mock`.
 
 ## On-screen keyboard
 
@@ -1064,7 +1059,7 @@ through their stages by themselves.
   the real index format, plus three mock-only apps for dependencies.
 
 - **Installer app selection** (`lib/src/ui/app_selection.dart`): `AppSelectionController` and
-  `AppSelectionView` for the M9 installer and first-boot wizard: a checklist with the `installerDefault` apps
+  `AppSelectionView` for the M9 installer: a checklist with the `installerDefault` apps
   ticked, "On the installer" vs "Download, size" per app, terms acceptance for ticked apps with terms,
   Continue off until accepted. It needs a `ModalHost` above it (see `test/support/modal_host_harness.dart`).
 
@@ -1088,6 +1083,12 @@ simplifies and quantizes them (its header has the commands, the file hashes and 
 Atkinson Hyperlegible Regular and Bold (`assets/fonts/`), SIL Open Font License 1.1, licence text in
 `assets/fonts/OFL.txt` (copied from the `atkinson-hyperlegible` package in nixpkgs). Declared in
 `pubspec.yaml` as family `AtkinsonHyperlegible`.
+
+### Test fixtures
+
+`test/fixtures/catalog/readme/` has unmodified upstream app READMEs (MIT, GPL-2.0, GPL-3.0,
+MPL-2.0), copied from hinteros-catalog. They are not under this repository's license; see the
+`NOTICE` there.
 
 ### Golden tests
 

@@ -29,10 +29,18 @@ enum PlanNetwork {
 /// can say no early. The backend checks again; it has the last word.
 const minDiskBytes = 16 * 1024 * 1024 * 1024;
 
-/// Names the backend refuses for the admin account.
+/// [minDiskBytes] as the screens give sizes (GB, 10^9 bytes): 16 GiB is
+/// 17.2 GB, so a disk sold as 16 GB is not enough.
+const minDiskLabel = '17.2 GB';
+
+/// Names the backend refuses for the admin account (hinteros-install.sh,
+/// admin-user-reserved), with the prefixes in [PlanChecks.username].
 const _reservedUsers = {
   'root',
   'hinteros',
+  'hinteros-guest',
+  'hinteros-greeter',
+  'hinteros-kbd',
   'nobody',
   'deploy',
   'sshd',
@@ -46,29 +54,32 @@ abstract final class PlanChecks {
   static final _user = RegExp(r'^[a-z_][a-z0-9_-]{0,31}$');
   static final _host = RegExp(r'^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$');
 
-  /// Shortest admin password the installer asks for. The backend only needs
-  /// it to be non-empty; this is the UI's own rule (it is the sudo and SSH
-  /// password).
+  /// The accounts of the profiles (hinteros-p1, ...).
+  static final _profileUser = RegExp(r'^hinteros-p[0-9]');
+
+  /// Shortest admin password the installer asks for (it is the sudo and SSH
+  /// password). The backend has the same minimum (admin-password-short).
   static const minPassword = 8;
 
   static String? username(String v) {
     if (v.isEmpty) return 'Choose a user name.';
     if (!_user.hasMatch(v)) {
-      return 'User name: use only lowercase letters, digits, - and _. Start '
-          'with a letter. Use at most 32 characters.';
+      return 'Use only lowercase letters, digits, - and _ (at most 32). Start '
+          'with a letter or _.';
     }
     if (_reservedUsers.contains(v) ||
         v.startsWith('systemd-') ||
-        v.startsWith('nixbld')) {
-      return 'The user name "$v" is reserved for the system. Choose another '
-          'name.';
+        v.startsWith('nixbld') ||
+        _profileUser.hasMatch(v)) {
+      return 'The name "$v" is reserved. Choose another name.';
     }
     return null;
   }
 
   static String? password(String v) {
     if (v.isEmpty) return 'Choose a password.';
-    if (v.length < minPassword) {
+    // Characters as the backend counts them (jq length: code points).
+    if (v.runes.length < minPassword) {
       return 'The password needs at least $minPassword characters.';
     }
     if (v.contains(RegExp(r'[\n\r\u0000]'))) {

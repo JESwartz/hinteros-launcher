@@ -9,6 +9,8 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
+import 'plan.dart' show minDiskLabel;
+
 /// Where the backend writes its tool output (shown on error screens).
 const installLogPath = '/var/log/hinteros-install.log';
 
@@ -253,7 +255,7 @@ String explainCode(String? code) => switch (code) {
     'The disk you chose is in use. It may be the installer USB stick. '
         'Choose a different disk.',
   'disk-too-small' =>
-    'The disk you chose is too small. HinterOS needs at least 16 GB.',
+    'The disk you chose is too small. HinterOS needs at least $minDiskLabel.',
   'mnt-in-use' =>
     'An earlier try is still in the way. Restart the installer and try '
         'again.',

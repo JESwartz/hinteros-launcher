@@ -189,7 +189,7 @@ class _NetworkStepState extends State<NetworkStep> {
               net.online
                   ? 'This computer is online.'
                   : (net.linkUp
-                        ? "Connected, but can't reach the internet."
+                        ? 'Connected. No internet.'
                         : 'This computer is not online.'),
               ok: net.online,
             ),
@@ -426,11 +426,19 @@ class DiskStep extends StatelessWidget {
             ),
           );
         }
+        if (!f.loadingDisks && f.disksUnchecked) {
+          p.add(
+            const StatusLine(
+              'Cannot look for HinterOS on the disks. To keep data, select '
+              'Refresh.',
+            ),
+          );
+        }
         if (disks != null && disks.isNotEmpty && !disks.any((d) => d.usable)) {
           p.add(
             const StatusLine(
               'No disk can be used. HinterOS needs an internal disk of at '
-              'least 16 GB.',
+              'least $minDiskLabel.',
               error: true,
             ),
           );
@@ -720,6 +728,7 @@ class SummaryStep extends StatelessWidget {
         );
         final d = f.disk;
         final keep = f.keepData;
+        final down = f.keepDowngrade;
         final action = keep ? 'Keep data and install' : 'Erase and install';
         final mark = keep ? t.accent : t.danger;
         final appNames = [
@@ -727,8 +736,16 @@ class SummaryStep extends StatelessWidget {
         ];
         // The danger does not rely on colour alone: a heading and a border.
         // Keeping the data looks different, and says so in the same place.
-        p.add(
-          Container(
+        // It stays out of the scroll: with large text the rest scrolls to the
+        // buttons, and the disk must stay in view.
+        final card = Padding(
+          padding: const EdgeInsets.fromLTRB(
+            HinterTokens.s2,
+            HinterTokens.s2,
+            HinterTokens.s2,
+            0,
+          ),
+          child: Container(
             width: double.infinity,
             padding: const EdgeInsets.all(HinterTokens.s3),
             decoration: BoxDecoration(
@@ -746,6 +763,13 @@ class SummaryStep extends StatelessWidget {
                             '${d.title}, ${d.sizeLabel}',
                   style: t.headline.copyWith(color: keep ? t.text : t.danger),
                 ),
+                // Two disks of the same model and size: the path tells them
+                // apart, as on the disk step.
+                if (d != null)
+                  Text(
+                    '${d.path}${d.transport != null ? ', ${d.transport}' : ''}',
+                    style: t.bodyDim,
+                  ),
                 const SizedBox(height: HinterTokens.s1),
                 Text(
                   keep
@@ -755,6 +779,12 @@ class SummaryStep extends StatelessWidget {
                             'this.',
                   style: t.body,
                 ),
+                if (keep && down != null)
+                  Text(
+                    'This replaces HinterOS ${down.disk} with the older '
+                    '${down.usb}.',
+                    style: t.body,
+                  ),
               ],
             ),
           ),
@@ -778,9 +808,7 @@ class SummaryStep extends StatelessWidget {
               line(
                 'Internet',
                 f.online
-                    ? (f.joinedSsid != null
-                          ? 'Wi-Fi: ${f.joinedSsid}'
-                          : 'Online')
+                    ? (f.planWifi != null ? 'Wi-Fi: ${f.planWifi}' : 'Online')
                     : 'Not used',
               ),
             ],
@@ -829,7 +857,23 @@ class SummaryStep extends StatelessWidget {
         return StepPage(
           step: InstallerStep.summary,
           flow: env.flow,
-          child: scrolling(p.build()),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              card,
+              Expanded(
+                child: PageScroll(
+                  padding: const EdgeInsets.fromLTRB(
+                    HinterTokens.s2,
+                    HinterTokens.s3,
+                    HinterTokens.s2,
+                    HinterTokens.s2,
+                  ),
+                  child: p.build(),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );

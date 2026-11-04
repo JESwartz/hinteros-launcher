@@ -290,6 +290,21 @@ void main() {
       fb.dispose();
     });
 
+    testWidgets('a key held when Flutter keys start still gets its release', (
+      t,
+    ) async {
+      make();
+      fb.setWindowFocus(false);
+      await send(t, press);
+      fb.flutterKeyArrived();
+      const release = SoftKey(LogicalKeyboardKey.enter, NavPhase.release);
+      await send(t, release);
+      expect(got, [press, release]);
+      await send(t, release);
+      expect(got, hasLength(2), reason: 'only the one held key');
+      fb.dispose();
+    });
+
     testWidgets('focused and Flutter delivers: the evdev twin is dropped', (
       t,
     ) async {

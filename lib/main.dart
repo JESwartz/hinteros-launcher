@@ -32,13 +32,11 @@ bool _flag(List<String> args, String flag, String env) =>
 Future<void> main(List<String> args) async {
   // One binary, two apps: `--osk` (the hinteros-osk wrapper) is the keyboard.
   if (args.contains('--osk')) return runOsk(args);
-  // The installer (ISO) and the first-boot wizard are modes of the same
-  // binary too: controller-only, no session daemon needed for the installer.
+  // The installer (ISO) is a mode of the same binary too: controller-only,
+  // no session daemon needed.
   // The profile picker of the greeter session (M7).
   if (wantsGreeter(args)) return runGreeter(args);
-  if (wantsInstaller(args) || wantsFirstBoot(args)) {
-    return runInstallerMode(args);
-  }
+  if (wantsInstaller(args)) return runInstallerMode(args);
   WidgetsFlutterBinding.ensureInitialized();
   final showFps = _flag(args, '--fps', 'HINTEROS_FPS');
   final mock = _flag(args, '--mock', 'HINTEROS_MOCK');

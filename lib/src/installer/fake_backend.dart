@@ -356,9 +356,13 @@ class FakeInstallerBackend implements InstallerBackend {
     return state.withOnline(state.linkUp && state.online && reachable);
   }
 
+  /// When set, `networkLink()` waits for it (a slow nmcli, for tests).
+  Future<void>? linkHold;
+
   @override
   Future<NetworkState> networkLink() async {
     calls.add('networkLink');
+    await linkHold;
     return state.withOnline(false);
   }
 
@@ -407,11 +411,15 @@ class FakeInstallerBackend implements InstallerBackend {
   /// When set, `disks()` waits for it (a slow listing, for tests).
   Future<void>? disksHold;
 
+  /// The listing does not look inside the disks (`--list-disks` gave no
+  /// answer in time, plain lsblk listed them).
+  bool disksUnchecked = false;
+
   @override
   Future<List<DiskInfo>> disks() async {
     calls.add('disks');
     await disksHold;
-    return List.of(_disks);
+    return [for (final d in _disks) disksUnchecked ? d.unchecked() : d];
   }
 
   /// The disk at [path] is unplugged and plugged in again: the same path, a
@@ -556,8 +564,16 @@ class FakeInstallerBackend implements InstallerBackend {
     );
   }
 
+  /// The reboot fails (systemctl refused it).
+  bool rebootFails = false;
+
   @override
-  Future<void> reboot() async => calls.add('reboot');
+  Future<void> reboot() async {
+    calls.add('reboot');
+    if (rebootFails) {
+      throw const InstallerException('systemctl failed (status 1).');
+    }
+  }
 }
 
 const _gib = 1024 * 1024 * 1024;

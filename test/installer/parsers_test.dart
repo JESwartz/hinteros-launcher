@@ -141,6 +141,11 @@ void main() {
           DiskInfo(path: '/dev/x', name: 'x', sizeBytes: size, diskSeq: 1);
       expect(disk(16 * 1024 * 1024 * 1024).usable, isTrue);
       expect(disk(16 * 1024 * 1024 * 1024 - 1).usable, isFalse);
+      // A disk sold as 16 GB: shown as 16 GB, and the limit is not 16 GB.
+      final sold = disk(16000000000);
+      expect(sold.sizeLabel, '16 GB');
+      expect(sold.unusableReason, 'Too small: at least 17.2 GB needed.');
+      expect(minDiskLabel, '${(minDiskBytes / 1e9).toStringAsFixed(1)} GB');
     });
 
     test('not lsblk output is an error', () {
@@ -242,23 +247,22 @@ void main() {
       expect(c.connecting, isTrue);
       expect(c.linkUp, isFalse);
       expect(c.online, isFalse);
-      expect(c.pending, isTrue);
 
       // A cable just plugged in: disconnected, not yet "unavailable".
       final p = parseNetwork('ethernet:disconnected:\nwifi:disconnected:\n');
       expect(p.cableWaiting, isTrue);
       expect(p.connecting, isFalse);
-      expect(p.pending, isTrue);
 
       // No cable, only an idle Wi-Fi adapter: nothing is coming.
       final n = parseNetwork('ethernet:unavailable:\nwifi:disconnected:\n');
-      expect(n.pending, isFalse);
+      expect(n.cableWaiting, isFalse);
+      expect(n.connecting, isFalse);
 
       final done = parseNetwork(
         'ethernet:connected:Wired\nwifi:connecting:Home\n',
         reachable: true,
       );
-      expect(done.pending, isFalse, reason: 'already connected');
+      expect(done.linkUp, isTrue, reason: 'already connected');
       expect(done.connecting, isTrue);
       expect(done.withOnline(false).connecting, isTrue);
     });

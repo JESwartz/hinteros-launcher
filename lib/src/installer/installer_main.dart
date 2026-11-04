@@ -2,10 +2,6 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 
-import '../api/api.dart';
-import '../system/daemon_system.dart';
-import '../system/mock_system.dart';
-import '../system/repositories.dart' show SystemServices;
 import 'backend.dart';
 import 'fake_backend.dart';
 import 'flow.dart';
@@ -13,17 +9,14 @@ import 'gamepad.dart';
 import 'keyboard_fallback.dart';
 import 'plan.dart' show InstallChannel;
 import 'process_backend.dart';
-import 'ui/first_boot.dart';
 import 'ui/installer_app.dart';
 
 bool _flag(List<String> args, String flag, String env) =>
     args.contains(flag) || (Platform.environment[env] ?? '').isNotEmpty;
 
-/// Whether the command line asks for the installer or the first-boot wizard.
+/// Whether the command line asks for the installer.
 bool wantsInstaller(List<String> args) =>
     _flag(args, '--installer', 'HINTEROS_INSTALLER');
-bool wantsFirstBoot(List<String> args) =>
-    _flag(args, '--first-boot', 'HINTEROS_FIRST_BOOT');
 
 /// A scripted backend for `--installer --mock`: `--mock-scenario=NAME` picks
 /// what happens (`ok` is the default). Nothing here touches the machine.
@@ -108,8 +101,8 @@ FakeInstallerBackend mockBackend(String scenario) {
   return b;
 }
 
-/// Runs the installer (`--installer`) or the first-boot wizard
-/// (`--first-boot`). With `--mock` nothing touches this machine.
+/// Runs the installer (`--installer`). With `--mock` nothing touches this
+/// machine.
 Future<void> runInstallerMode(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   final mock = _flag(args, '--mock', 'HINTEROS_MOCK');
@@ -118,25 +111,6 @@ Future<void> runInstallerMode(List<String> args) async {
   // Keys read from evdev too, but used only while the window has no keyboard
   // focus (see keyboard_fallback.dart).
   final InstallerKeyboard? kb = mock ? null : InstallerKeyboard.start();
-  if (wantsFirstBoot(args) && !wantsInstaller(args)) {
-    final SystemServices services;
-    if (mock) {
-      services = MockSystemServices(autoRunJobs: true);
-    } else {
-      services = daemonSystemServices(
-        DaemonClient(socketPath: defaultSocketPath()),
-      );
-    }
-    runApp(
-      FirstBootApp(
-        services: services,
-        pad: pad?.events,
-        keyboard: kb?.fallback,
-        hideCursor: !windowed,
-      ),
-    );
-    return;
-  }
   final scenario = args
       .where((a) => a.startsWith('--mock-scenario='))
       .map((a) => a.substring('--mock-scenario='.length))

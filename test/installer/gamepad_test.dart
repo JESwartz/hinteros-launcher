@@ -170,6 +170,15 @@ void main() {
       });
       expect(m.releaseAll(), isEmpty);
     });
+
+    test('releaseAll lets go of held buttons too', () {
+      final m = pad();
+      m.map(1, 0x130, 1);
+      m.map(1, 0x131, 1);
+      m.map(1, 0x131, 0);
+      expect(m.releaseAll(), [(NavAction.accept, NavPhase.release)]);
+      expect(m.releaseAll(), isEmpty);
+    });
   });
 
   group('key repeat', () {

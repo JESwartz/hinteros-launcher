@@ -89,6 +89,42 @@ void main() {
       expect(find.textContaining('It will be erased'), findsOneWidget);
     });
 
+    testWidgets('a listing that did not look inside: says so; Refresh', (
+      t,
+    ) async {
+      final backend = FakeInstallerBackend()..disksUnchecked = true;
+      final h = await toDisk(t, backend: backend);
+      expect(h.flow.diskFirst, isFalse);
+      const line =
+          'Cannot look for HinterOS on the disks. To keep data, select '
+          'Refresh.';
+      expect(find.text(line), findsOneWidget);
+      await h.choose(t, 'd1');
+      expect(find.text('Keep data'), findsNothing);
+
+      backend.disksUnchecked = false;
+      await h.choose(t, 'actions'); // Refresh
+      await h.settle(t);
+      expect(find.text(line), findsNothing);
+      expect(find.text('Keep data'), findsOneWidget);
+      expect(h.flow.keepData, isTrue);
+    });
+
+    testWidgets('an unchecked listing does not decide the order', (t) async {
+      final backend = FakeInstallerBackend()..disksUnchecked = true;
+      final h = InstallerHarness(backend: backend);
+      await h.start(t);
+      await h.choose(t, 'actions', 1);
+      expect(h.flow.step, InstallerStep.account);
+      backend.disksUnchecked = false;
+      await h.flow.loadDisks();
+      h.flow.go(InstallerStep.network);
+      await t.pumpAndSettle();
+      await h.choose(t, 'actions', 1);
+      expect(h.flow.diskFirst, isTrue);
+      expect(h.flow.step, InstallerStep.disk);
+    });
+
     testWidgets('an install that can be kept: Keep data is the default', (
       t,
     ) async {
@@ -128,7 +164,7 @@ void main() {
     testWidgets('a newer install than the medium: both versions, once', (
       t,
     ) async {
-      await toChoice(
+      final h = await toChoice(
         t,
         backend: FakeInstallerBackend(
           disks: disksWith(
@@ -136,10 +172,13 @@ void main() {
           ),
         ),
       );
-      expect(
-        find.text('This replaces HinterOS 0.9.0 with the older 0.7.0.'),
-        findsOneWidget,
-      );
+      const line = 'This replaces HinterOS 0.9.0 with the older 0.7.0.';
+      expect(find.text(line), findsOneWidget);
+      // The summary says it again, and names the disk by its path.
+      h.flow.go(InstallerStep.summary);
+      await t.pumpAndSettle();
+      expect(find.text(line), findsOneWidget);
+      expect(find.text('$_sda, sata'), findsOneWidget);
     });
 
     for (final (name, version, infoError) in [
@@ -567,7 +606,7 @@ void main() {
       await t.pump(const Duration(seconds: 5));
       await t.pumpAndSettle();
       expect(h.flow.step, InstallerStep.done);
-      expect(h.flow.appProgress, isEmpty);
+      expect(h.flow.failedAppNames, isEmpty);
       expect(
         find.text('HinterOS 0.7.0 stable (1a2b3c4) is installed'),
         findsOneWidget,
@@ -625,7 +664,7 @@ void main() {
       final h = await toKeepSummary(t, backend: backend);
       await h.eraseAndInstall(t);
       expect(h.flow.phase, InstallPhase.failed);
-      expect(find.textContaining('Your files stay on the disk'), findsWidgets);
+      expect(find.textContaining('Your files stay, but'), findsWidgets);
       expect(find.textContaining('The disk may be changed'), findsNothing);
       backend.installScript = null;
       await h.choose(t, 'actions');
@@ -678,7 +717,6 @@ void main() {
       await h.eraseAndInstall(t);
       expect(h.flow.phase, InstallPhase.failed);
       backend.setDisk(_sda, leftBehind());
-      await h.moveTo(t, 'actions', 1);
       await h.accept(t);
       h.flow.go(InstallerStep.disk);
       await h.settle(t);

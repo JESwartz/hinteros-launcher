@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../log.dart';
 import '../../theme/hinter_theme.dart';
 import '../../ui/widgets.dart';
+import '../backend.dart';
 import '../flow.dart';
 import '../progress.dart';
 import 'steps.dart';
@@ -167,10 +169,10 @@ class InstallStepView extends StatelessWidget {
         refused
             ? 'Nothing was changed on your disk.'
             : f.runKeep
-            ? 'The install stopped before the end. Your files stay on the '
-                  'disk, but HinterOS may not start. "Try again" starts over.'
-            : 'The install stopped before the end. The disk may be changed '
-                  'and HinterOS may not start. "Try again" starts over.',
+            ? 'The install stopped. Your files stay, but HinterOS may not '
+                  'start.'
+            : 'The install stopped. The disk may be changed and HinterOS '
+                  'may not start.',
         error: !refused,
       ),
     );
@@ -203,12 +205,13 @@ class InstallStepView extends StatelessWidget {
       return;
     }
     p.buttons('actions', [
-      btn('Try again', f.startInstall, primary: true),
+      // An erase goes back to the summary, to be held again.
+      btn('Try again', f.retry, primary: true),
       // A newer HinterOS that did not install: choose the version again
       // (the one on the USB stick, for example).
       if (f.newerFailed)
         btn('Choose another version', f.chooseVersionAgain)
-      else
+      else if (f.runKeep)
         btn('Change my choices', f.leaveFailure),
     ], gap: HinterTokens.s4);
   }
@@ -292,10 +295,23 @@ class DoneStepView extends StatefulWidget {
 
 class _DoneStepViewState extends State<DoneStepView> {
   bool _restarting = false;
+  bool _rebootFailed = false;
 
   Future<void> _reboot() async {
-    setState(() => _restarting = true);
-    await widget.env.flow.reboot();
+    setState(() {
+      _restarting = true;
+      _rebootFailed = false;
+    });
+    try {
+      await widget.env.flow.reboot();
+    } on InstallerException catch (e) {
+      logFailure('restarting', e);
+      if (!mounted) return;
+      setState(() {
+        _restarting = false;
+        _rebootFailed = true;
+      });
+    }
   }
 
   @override
@@ -326,6 +342,12 @@ class _DoneStepViewState extends State<DoneStepView> {
       p.add(const StatusLine('Restarting...'), gap: HinterTokens.s3);
       env.region.setRows(const []);
     } else {
+      if (_rebootFailed) {
+        p.add(
+          const StatusLine('Cannot restart. Try again.', error: true),
+          gap: HinterTokens.s3,
+        );
+      }
       p.buttons('actions', [
         btn('Restart now', _reboot, primary: true),
       ], gap: HinterTokens.s4);

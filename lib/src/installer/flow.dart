@@ -26,9 +26,6 @@ String installVersionLabel(String version, String rev, InstallChannel channel) {
   return name.contains(short) ? 'HinterOS $name' : 'HinterOS $name ($short)';
 }
 
-/// One app in the second stage of the install.
-enum AppInstallState { waiting, installing, done, failed }
-
 enum InstallerStep {
   welcome('Welcome'),
   network('Internet'),
@@ -210,11 +207,15 @@ class InstallerFlow extends ChangeNotifier {
       default:
         final o = _order;
         final prev = o[o.indexOf(_step) - 1];
-        go(
-          prev == InstallerStep.network && versionOffered
-              ? InstallerStep.version
-              : prev,
-        );
+        if (prev == InstallerStep.network && versionOffered) {
+          // The version step between the internet and this one: it goes on
+          // to here again, not where it went after the options.
+          _versionNext = _step;
+          _versionBack = InstallerStep.network;
+          go(InstallerStep.version);
+        } else {
+          go(prev);
+        }
     }
   }
 
@@ -253,7 +254,9 @@ class InstallerFlow extends ChangeNotifier {
         notifyListeners();
         if (token != _diskToken || _step != InstallerStep.network) return;
       }
-      _diskFirst = disks!.any((d) => d.canKeep);
+      // A listing that did not look inside the disks decides nothing: the
+      // next time the internet step is left, a new listing may.
+      if (!disksUnchecked) _diskFirst = disks!.any((d) => d.canKeep);
     }
     await _askVersion(
       after: _after(InstallerStep.network),
@@ -425,6 +428,20 @@ class InstallerFlow extends ChangeNotifier {
 
   bool get online => net?.online ?? false;
 
+  /// The Wi-Fi network the plan keeps on the installed box (only while
+  /// online): the one this installer joined, else the one the box is on (it
+  /// was joined before this UI started, or from the console). The backend
+  /// copies its saved connection.
+  String? get planWifi {
+    if (!online) return null;
+    final inUse = wifi.where((a) => a.inUse).firstOrNull?.ssid;
+    return joinedSsid ?? inUse ?? net?.wifiSsid;
+  }
+
+  /// The password of [planWifi], when this installer joined it.
+  String? get _planWifiPsk =>
+      planWifi != null && planWifi == joinedSsid ? _joinedPsk : null;
+
   // Steps that show the network state follow it live.
   bool get _watching =>
       _step == InstallerStep.network || _step == InstallerStep.apps;
@@ -452,20 +469,38 @@ class InstallerFlow extends ChangeNotifier {
     }
   }
 
-  Future<void> _onNetworkEvent(void _) async {
-    // Losing the link means offline right now, without waiting for a probe.
-    try {
-      final link = await backend.networkLink().timeout(checkTimeout);
-      if (!link.linkUp && _netSub != null) {
-        net = link;
-        apps?.dropDownloads();
-        notifyListeners();
-      }
-    } catch (_) {}
+  void _onNetworkEvent(void _) {
+    unawaited(_readLink());
     _netDebounce?.cancel();
     _netDebounce = Timer(const Duration(milliseconds: 500), () {
       if (_netSub != null) refreshNetwork(quiet: true);
     });
+  }
+
+  bool _linkReading = false;
+  bool _linkAgain = false;
+
+  /// Losing the link means offline right now, without waiting for a probe.
+  /// One read at a time (`nmcli monitor` prints lines in bursts): events
+  /// while it runs give one more read after it.
+  Future<void> _readLink() async {
+    if (_linkReading) {
+      _linkAgain = true;
+      return;
+    }
+    _linkReading = true;
+    do {
+      _linkAgain = false;
+      try {
+        final link = await backend.networkLink().timeout(checkTimeout);
+        if (!link.linkUp && _netSub != null && !_disposed) {
+          net = link;
+          apps?.dropDownloads();
+          notifyListeners();
+        }
+      } catch (_) {}
+    } while (_linkAgain && !_disposed);
+    _linkReading = false;
   }
 
   @override
@@ -650,6 +685,11 @@ class InstallerFlow extends ChangeNotifier {
   /// The list of disks is being read: it can take long, as the backend looks
   /// inside each disk.
   bool get loadingDisks => _disksRun != null;
+
+  /// The last listing did not look for an install on the disks: Keep data
+  /// cannot be offered, though an install may be there.
+  bool get disksUnchecked =>
+      disks?.any((d) => d.usable && d.installUnknown) ?? false;
 
   /// Whether the plan keeps the data of the install on the chosen disk: the
   /// default wherever that can be done. Read from the disk and not stored,
@@ -861,8 +901,8 @@ class InstallerFlow extends ChangeNotifier {
         ssh: ssh,
         channel: channel,
         network: online ? PlanNetwork.auto : PlanNetwork.offline,
-        wifiSsid: online ? joinedSsid : null,
-        wifiPsk: online && joinedSsid != null ? _joinedPsk : null,
+        wifiSsid: planWifi,
+        wifiPsk: _planWifiPsk,
       );
     }
     final a = apps!;
@@ -880,8 +920,8 @@ class InstallerFlow extends ChangeNotifier {
           : (needsDownload ? PlanNetwork.online : PlanNetwork.auto),
       apps: [for (final x in a.selectedApps) x.id],
       acceptedTerms: a.acceptances,
-      wifiSsid: online ? joinedSsid : null,
-      wifiPsk: online && joinedSsid != null ? _joinedPsk : null,
+      wifiSsid: planWifi,
+      wifiPsk: _planWifiPsk,
       rev: installsNewer ? chosenRev : null,
     );
   }
@@ -898,37 +938,8 @@ class InstallerFlow extends ChangeNotifier {
   /// Which of the two stages the install is in.
   InstallSection section = InstallSection.system;
 
-  /// Progress of the system stage (0..100; 100 once the apps stage began).
-  int get systemPercent =>
-      section == InstallSection.apps || phase == InstallPhase.succeeded
-      ? 100
-      : percent;
-
-  /// The apps stage, one entry per selected app (in the order of the plan).
-  List<({String id, String name, AppInstallState state})> get appProgress => [
-    for (final a in _planApps)
-      (
-        id: a.id,
-        name: a.name,
-        state: _appStates[a.id] ?? AppInstallState.waiting,
-      ),
-  ];
-
+  /// The apps of the plan, in its order.
   List<({String id, String name, bool onIso})> _planApps = const [];
-  final _appStates = <String, AppInstallState>{};
-
-  /// Progress of the apps stage (0..100): apps finished or failed of those
-  /// picked; with none picked, what the backend says.
-  int get appsPercent {
-    if (phase == InstallPhase.succeeded) return 100;
-    if (section != InstallSection.apps) return 0;
-    if (_planApps.isEmpty) return percent;
-    final finished = _planApps.where((a) {
-      final s = _appStates[a.id];
-      return s == AppInstallState.done || s == AppInstallState.failed;
-    }).length;
-    return (finished * 100 / _planApps.length).round();
-  }
 
   /// Progress of the stage or app being worked on, on its own (0..100); null
   /// when the backend cannot measure it (an indeterminate bar).
@@ -1033,31 +1044,13 @@ class InstallerFlow extends ChangeNotifier {
     } else if (e.stage != 'done') {
       _currentAppId = null;
     }
-    if (id != null) {
-      if (e.code == 'app-failed') {
-        _fail(id);
-      } else if (_appStates[id] != AppInstallState.failed) {
-        // The previous app is over when the next one starts.
-        for (final k in _appStates.keys.toList()) {
-          if (k != id && _appStates[k] == AppInstallState.installing) {
-            _appStates[k] = AppInstallState.done;
-          }
-        }
-        _appStates[id] = AppInstallState.installing;
-      }
-    }
+    if (id != null && e.code == 'app-failed') _fail(id);
     if (e.stage == 'done' && e.level != InstallLevel.error) {
       e.failedApps.forEach(_fail);
-      for (final k in _appStates.keys.toList()) {
-        if (_appStates[k] != AppInstallState.failed) {
-          _appStates[k] = AppInstallState.done;
-        }
-      }
     }
   }
 
   void _fail(String id) {
-    _appStates[id] = AppInstallState.failed;
     if (!_failedIds.contains(id)) _failedIds.add(id);
   }
 
@@ -1083,7 +1076,6 @@ class InstallerFlow extends ChangeNotifier {
     progressMessage = '';
     section = InstallSection.system;
     _failedIds.clear();
-    _appStates.clear();
     _planApps = [
       for (final a in plan.keepData ? const <StoreApp>[] : apps!.selectedApps)
         (id: a.id, name: a.name, onIso: a.onIso),
@@ -1138,6 +1130,18 @@ class InstallerFlow extends ChangeNotifier {
       _step = InstallerStep.done;
     }
     notifyListeners();
+  }
+
+  /// "Try again" after a refused or failed run. The hold on the summary is
+  /// the one confirmation of an erase, and the plan is built again from what
+  /// is true now (online, for example), so an Erase run goes back there; a
+  /// run that keeps the data starts again at once.
+  void retry() {
+    if (runKeep) {
+      unawaited(startInstall());
+    } else {
+      leaveFailure();
+    }
   }
 
   /// Back from a failed run to the summary.

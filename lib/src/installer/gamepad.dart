@@ -72,6 +72,9 @@ class PadMapper {
   final AxisRange _rangeX;
   final AxisRange _rangeY;
   final _held = <NavAction, int>{};
+  // Buttons that are down, so releaseAll can let go of them: a pad that goes
+  // away while A is held must not keep a hold (Erase) running.
+  final _buttons = <NavAction>{};
   double _nx = 0;
   double _ny = 0;
   NavAction? _stick;
@@ -105,7 +108,12 @@ class PadMapper {
       }
       final a = _button(code);
       if (a == null) return const [];
-      return [(a, value == 0 ? NavPhase.release : NavPhase.press)];
+      if (value == 0) {
+        _buttons.remove(a);
+        return [(a, NavPhase.release)];
+      }
+      _buttons.add(a);
+      return [(a, NavPhase.press)];
     }
     if (type != _evAbs) return const [];
     switch (code) {
@@ -190,8 +198,10 @@ class PadMapper {
     final out = <PadEvent>[
       for (final d in _dirs)
         if (_held.containsKey(d)) (d, NavPhase.release),
+      for (final a in _buttons) (a, NavPhase.release),
     ];
     _held.clear();
+    _buttons.clear();
     _stick = null;
     _nx = _ny = 0;
     return out;

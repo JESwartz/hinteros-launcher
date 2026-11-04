@@ -1,0 +1,8 @@
+The files in this directory are copies of README files from hinteros-catalog (apps/readme/),
+which reproduces them unmodified from the upstream projects of catalog apps. They are test
+fixtures for the Store's app page.
+
+They are NOT covered by this repository's GPL-3.0-only license. Each text remains under the
+license of its project's repository (jellyfin-desktop: GPL-2.0; moonlight-qt: GPL-3.0;
+VacuumTube: MIT; Firefox: MPL-2.0). The source URL (at the exact commit) and retrieval date of
+each file are recorded in its hinteros-catalog entry (apps/<id>.nix).

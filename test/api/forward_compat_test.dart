@@ -144,10 +144,51 @@ void main() {
       'KeyAction': (api.KeyAction.fromJson, api.KeyAction.values),
       'EventName': (api.EventName.fromJson, api.EventName.values),
     };
-    final defs =
-        (jsonDecode(File('schema/session-api.json').readAsStringSync())
-                as Map<String, dynamic>)[r'$defs']
-            as Map<String, dynamic>;
+    // Sent but open on purpose (see tool/gen_api.dart): the client sends only
+    // values of its own enum and reads a new one as `unknown`.
+    const openSent = {'ProfileColor'};
+    final doc = jsonDecode(
+      File('schema/session-api.json').readAsStringSync(),
+    ) as Map<String, dynamic>;
+    final defs = doc[r'$defs'] as Map<String, dynamic>;
+
+    test('every enum a client sends is closed', () {
+      final sent = <String>{};
+      void walk(Object? s) {
+        if (s is Map<String, dynamic>) {
+          final ref = s[r'$ref'];
+          if (ref is String && ref.startsWith(r'#/$defs/')) {
+            final name = ref.substring(8);
+            if (sent.add(name)) walk(defs[name]);
+          }
+          s.values.forEach(walk);
+        } else if (s is List) {
+          s.forEach(walk);
+        }
+      }
+
+      for (final m in (doc['methods'] as Map<String, dynamic>).values) {
+        walk((m as Map<String, dynamic>)['params']);
+      }
+      final enums = sent.where(
+        (n) => (defs[n] as Map<String, dynamic>).containsKey('enum'),
+      );
+      expect({...closed.keys, ...openSent}, containsAll(enums));
+    });
+    test('ProfileColor reads a new value as unknown', () {
+      expect(api.ProfileColor.fromJson(_new), api.ProfileColor.unknown);
+      expect(
+        ProfileColor.parse(api.ProfileColor.unknown.value),
+        ProfileColor.teal,
+      );
+    });
+    test('the launcher sends only ProfileColor values of the schema', () {
+      final schema =
+          ((defs['ProfileColor'] as Map<String, dynamic>)['enum'] as List)
+              .cast<String>();
+      expect(schema, containsAll(ProfileColor.values.map((c) => c.name)));
+      expect(schema, isNot(contains('unknown')));
+    });
     for (final MapEntry(key: name, value: (read, values)) in closed.entries) {
       test('$name has no catch-all and refuses a new value', () {
         expect(() => read(_new), throwsFormatException);

@@ -292,6 +292,31 @@ void main() {
       expect(h.flow.chosenRev, isNull);
       expect(h.flow.installsNewer, isFalse);
     });
+
+    testWidgets('back to the version step after it was asked after the '
+        'options: on to the disk again', (t) async {
+      final b = FakeInstallerBackend(state: wired, newer: mockNewer());
+      final h = await pastNetwork(t, b);
+      await h.choose(t, 'iso');
+      expect(h.flow.step, InstallerStep.disk);
+      h.flow.go(InstallerStep.options);
+      await t.pumpAndSettle();
+      await h.choose(t, 'channel'); // Beta
+      await h.choose(t, 'actions');
+      expect(h.flow.step, InstallerStep.version);
+      await h.choose(t, 'iso');
+      expect(h.flow.step, InstallerStep.apps);
+
+      h.flow.go(InstallerStep.disk);
+      await t.pumpAndSettle();
+      await h.back(t);
+      expect(h.flow.step, InstallerStep.version);
+      await h.choose(t, 'iso');
+      expect(h.flow.step, InstallerStep.disk);
+      await h.back(t);
+      await h.back(t);
+      expect(h.flow.step, InstallerStep.network);
+    });
   });
 
   group('the newer HinterOS does not install', () {
@@ -321,8 +346,11 @@ void main() {
       expect(find.text('Choose another version'), findsOneWidget);
       expect(find.text('Change my choices'), findsNothing);
 
-      // Try again runs the same newer install.
+      // Try again: the summary, held again, runs the same newer install.
       await h.accept(t);
+      expect(h.flow.step, InstallerStep.summary);
+      expect(b.calls.where((c) => c == 'install').length, 1);
+      await h.eraseAndInstall(t);
       expect(h.flow.phase, InstallPhase.failed);
       expect(b.calls.where((c) => c == 'install').length, 2);
       expect(b.plans.last['rev'], stableRev);

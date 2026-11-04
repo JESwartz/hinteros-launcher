@@ -169,7 +169,7 @@ void main() {
         expect(find.textContaining('In use (mounted at /iso)'), findsOneWidget);
         expect(find.textContaining('Removable drive'), findsOneWidget);
         expect(
-          find.textContaining('Too small: at least 16 GB'),
+          find.textContaining('Too small: at least 17.2 GB'),
           findsOneWidget,
         );
         expect(find.text('Cannot be used'), findsNWidgets(3));
@@ -284,7 +284,7 @@ void main() {
       final h = await toAccount(t);
       await h.choose(t, 'user');
       await h.type(t, 'root');
-      expect(find.textContaining('reserved for the system'), findsOneWidget);
+      expect(find.textContaining('is reserved'), findsOneWidget);
       await h.choose(t, 'user');
       await h.type(t, 'Mixed Case');
       expect(find.textContaining('lowercase letters'), findsOneWidget);
@@ -517,6 +517,25 @@ void main() {
       });
     });
 
+    testWidgets('on Wi-Fi before the installer started: it is kept too', (
+      t,
+    ) async {
+      final h = await toSummary(
+        t,
+        backend: FakeInstallerBackend(
+          state: const NetworkState(
+            wifiAvailable: true,
+            wifiSsid: 'Living Room',
+            online: true,
+          ),
+        ),
+      );
+      expect(h.flow.joinedSsid, isNull);
+      // No password: the backend copies the saved connection.
+      expect(h.flow.buildPlan().toJson()['wifi'], {'ssid': 'Living Room'});
+      expect(find.text('Wi-Fi: Living Room'), findsOneWidget);
+    });
+
     testWidgets('wired and only apps from the ISO: network auto', (t) async {
       final h = await toSummary(
         t,
@@ -656,6 +675,20 @@ void main() {
       expect(find.text('Restarting...'), findsOneWidget);
     });
 
+    testWidgets('the restart fails: says so, Restart now again', (t) async {
+      final backend = FakeInstallerBackend()..rebootFails = true;
+      final h = await toSummary(t, backend: backend);
+      await h.eraseAndInstall(t);
+      expect(h.flow.step, InstallerStep.done);
+      await h.accept(t); // Restart now
+      expect(find.text('Restarting...'), findsNothing);
+      expect(find.text('Cannot restart. Try again.'), findsOneWidget);
+      backend.rebootFails = false;
+      await h.accept(t);
+      expect(backend.calls.where((c) => c == 'reboot').length, 2);
+      expect(find.text('Restarting...'), findsOneWidget);
+    });
+
     testWidgets('progress: stage, percent, warnings, no Back while it runs', (
       t,
     ) async {
@@ -728,9 +761,13 @@ void main() {
       );
       expect(h.focus, 'content/actions:0');
 
-      // Try again, now it passes.
+      // Try again: an erase is held again on the summary; now it passes.
       backend.validateScript = null;
       await h.accept(t);
+      expect(h.flow.step, InstallerStep.summary);
+      expect(h.flow.phase, InstallPhase.idle);
+      expect(backend.calls.where((c) => c == 'validate').length, 1);
+      await h.eraseAndInstall(t);
       expect(h.flow.step, InstallerStep.done);
       expect(backend.calls.where((c) => c == 'validate').length, 2);
     });
@@ -775,7 +812,9 @@ void main() {
       expect(backend.plans.last['diskSeq'], 6);
     });
 
-    testWidgets('exit 1: failed part-way; Change my choices', (t) async {
+    testWidgets('exit 1: failed part-way; Try again goes to the summary', (
+      t,
+    ) async {
       final backend = FakeInstallerBackend()
         ..installScript = FakeScript.failed();
       final h = await toSummary(t, backend: backend);
@@ -783,7 +822,7 @@ void main() {
       expect(h.flow.phase, InstallPhase.failed);
       expect(h.flow.outcome!.exitCode, 1);
       expect(find.text('The install did not finish'), findsOneWidget);
-      expect(find.textContaining('stopped before the end'), findsOneWidget);
+      expect(find.textContaining('The install stopped.'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('spinner')),
         findsNothing,
@@ -800,8 +839,14 @@ void main() {
       );
       expect(backend.calls, containsAllInOrder(['validate', 'install']));
 
-      await h.choose(t, 'actions', 1); // Change my choices
+      expect(find.text('Change my choices'), findsNothing);
+      await h.accept(t); // Try again
       expect(h.flow.step, InstallerStep.summary);
+      expect(
+        backend.calls.where((c) => c == 'install').length,
+        1,
+        reason: 'nothing runs before the hold',
+      );
       expect(h.flow.phase, InstallPhase.idle);
       expect(h.flow.password, 'change-me-now', reason: 'kept for another try');
     });

@@ -179,6 +179,7 @@ echo '$answer'
       expect(File('${dir.path}/argv').readAsLinesSync(), ['--list-disks']);
       expect(d.existing!.schemaOk, isTrue);
       expect(d.existing!.version, '0.7.0');
+      expect(d.installUnknown, isFalse);
       expect(usedLsblk(), isFalse);
     });
 
@@ -187,6 +188,7 @@ echo '$answer'
       final d = (await backend().disks()).single;
       expect(d.path, '/dev/vdc');
       expect(d.existing, isNull);
+      expect(d.installUnknown, isTrue, reason: 'nobody looked');
       expect(File('${dir.path}/lsblk-argv').readAsLinesSync().length, 4);
     });
 
@@ -212,12 +214,30 @@ exec sleep 300
       final d = await backend(timeout: const Duration(milliseconds: 500))
           .disks();
       expect(d.single.existing, isNull);
+      expect(d.single.installUnknown, isTrue);
       expect(usedLsblk(), isTrue);
       final pid = File('${dir.path}/pid').readAsStringSync().trim();
       for (var i = 0; i < 100 && Directory('/proc/$pid').existsSync(); i++) {
         await Future<void>.delayed(const Duration(milliseconds: 20));
       }
       expect(Directory('/proc/$pid').existsSync(), isFalse);
+    });
+
+    test('the next listing waits until a stopped one has cleaned up', () async {
+      write('''
+if [ ! -e "\$OUT/first" ]; then
+  touch "\$OUT/first"
+  trap 'kill \$!; sleep 1; touch "\$OUT/undone"; exit 143' TERM
+  sleep 300 &
+  wait
+fi
+if [ -e "\$OUT/undone" ]; then echo after > "\$OUT/order"; else echo before > "\$OUT/order"; fi
+echo '$answer'
+''');
+      final b = backend(timeout: const Duration(milliseconds: 500));
+      expect((await b.disks()).single.installUnknown, isTrue);
+      expect((await b.disks()).single.existing, isNotNull);
+      expect(File('${dir.path}/order').readAsStringSync().trim(), 'after');
     });
 
     test('neither answers: the error of lsblk', () async {
