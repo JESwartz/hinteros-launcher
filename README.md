@@ -1074,6 +1074,12 @@ Atkinson Hyperlegible Regular and Bold (`assets/fonts/`), SIL Open Font License 
 `assets/fonts/OFL.txt` (copied from the `atkinson-hyperlegible` package in nixpkgs). Declared in
 `pubspec.yaml` as family `AtkinsonHyperlegible`.
 
+### Test fixtures
+
+`test/fixtures/catalog/readme/` has unmodified upstream app READMEs (MIT, GPL-2.0, GPL-3.0,
+MPL-2.0), copied from hinteros-catalog. They are not under this repository's license; see the
+`NOTICE` there.
+
 ### Golden tests
 
 `test/golden/screens_test.dart` captures every screen at 1920x1080 and Home and Games at 3840x2160
