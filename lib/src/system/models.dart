@@ -576,14 +576,6 @@ enum SecuritySeverity {
 
   const SecuritySeverity(this.label);
   final String label;
-
-  static SecuritySeverity parse(String? s) => switch (s?.toLowerCase()) {
-    'low' => low,
-    'moderate' || 'medium' => moderate,
-    'high' => high,
-    'critical' => critical,
-    _ => unknown,
-  };
 }
 
 /// An app an update adds to the catalog or takes away from this box.
