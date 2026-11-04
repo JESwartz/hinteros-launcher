@@ -651,10 +651,17 @@ class DaemonJobs implements JobsRepository {
 // ---------------------------------------------------------------- updates
 
 class DaemonUpdates implements UpdatesRepository {
-  DaemonUpdates(this._conn, this._jobs);
+  DaemonUpdates(this._conn, this._jobs) {
+    _events = _conn.events.listen((ev) {
+      if (ev is api.JobFinishedEvent && ev.ok && _switches(ev.kind)) {
+        unawaited(_switched(ev.kind, ev.subject.rev));
+      }
+    });
+  }
 
   final api.DaemonConnection _conn;
   final DaemonJobs _jobs;
+  late final StreamSubscription<api.SessionEvent> _events;
   final _changes = StreamController<UpdateStatus>.broadcast();
   UpdateStatus _status = const UpdateStatus(
     currentVersion: 'unknown',
@@ -665,6 +672,42 @@ class DaemonUpdates implements UpdatesRepository {
   UpdateStatus get status => _status;
   @override
   Stream<UpdateStatus> get changes => _changes.stream;
+
+  /// Jobs that change the revision the box runs.
+  static bool _switches(api.JobKind k) =>
+      k == api.JobKind.updateApply ||
+      k == api.JobKind.rollback ||
+      k == api.JobKind.channel ||
+      k == api.JobKind.base;
+
+  /// The box now runs another revision (from this launcher or not), so the
+  /// last check is out of date: the update it found is gone. After an update
+  /// the box is on the checked revision, so it stays "up to date"; after
+  /// anything else it is "not checked" until the next check (a check is a
+  /// job, so it is not started here).
+  Future<void> _switched(api.JobKind kind, String? rev) async {
+    final update = kind == api.JobKind.updateApply;
+    var version = _status.currentVersion;
+    var current = update && rev != null ? rev : _status.currentRev;
+    try {
+      final info = await _conn.systemInfo();
+      version = releaseName(info.version, info.rev, _channel(info.channel));
+      current = info.rev ?? current;
+    } catch (_) {
+      // Kept as it was: the next check names it.
+    }
+    _status = UpdateStatus(
+      currentVersion: version,
+      currentRev: current,
+      checkedAt: update ? _status.checkedAt : null,
+    );
+    _changes.add(_status);
+  }
+
+  Future<void> dispose() async {
+    await _events.cancel();
+    await _changes.close();
+  }
 
   /// The startup check can come before the socket is up: wait a moment for
   /// the connection rather than report "unavailable" at once.

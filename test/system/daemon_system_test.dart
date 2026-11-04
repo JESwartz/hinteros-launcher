@@ -642,6 +642,34 @@ void main() {
       expect(gens.last.rev, isNull);
     });
 
+    test('a finished update or rollback clears the update found', () async {
+      final (mock, s) = await _setup();
+      mock.system.nextUpdate = _update(security: api.Severity.high);
+      final f = s.updates.check();
+      await pumpEventQueue();
+      mock.system.finishJob(mock.system.runningJobId!);
+      final checked = await f;
+      expect(checked.available, isNotNull);
+      final h = await s.updates.apply(_rev, adminPin: _pin);
+      // A failed update leaves it.
+      mock.system.finishJob(h.jobId, ok: false);
+      await pumpEventQueue();
+      expect(s.updates.status.available, isNotNull);
+      final h2 = await s.updates.apply(_rev, adminPin: _pin);
+      mock.system.finishJob(h2.jobId);
+      await pumpEventQueue();
+      expect(s.updates.status.available, isNull);
+      expect(s.updates.status.currentRev, _rev);
+      // Checked, and the box is on that revision: up to date.
+      expect(s.updates.status.checkedAt, checked.checkedAt);
+
+      final r = await s.updates.rollback(adminPin: _pin);
+      mock.system.finishJob(r.jobId);
+      await pumpEventQueue();
+      expect(s.updates.status.available, isNull);
+      expect(s.updates.status.checkedAt, isNull);
+    });
+
     test('a channel switch takes the revision the check verified', () async {
       final (mock, s) = await _setup();
       mock.system.channel = api.Channel.beta;
