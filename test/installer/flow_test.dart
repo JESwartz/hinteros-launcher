@@ -517,6 +517,25 @@ void main() {
       });
     });
 
+    testWidgets('on Wi-Fi before the installer started: it is kept too', (
+      t,
+    ) async {
+      final h = await toSummary(
+        t,
+        backend: FakeInstallerBackend(
+          state: const NetworkState(
+            wifiAvailable: true,
+            wifiSsid: 'Living Room',
+            online: true,
+          ),
+        ),
+      );
+      expect(h.flow.joinedSsid, isNull);
+      // No password: the backend copies the saved connection.
+      expect(h.flow.buildPlan().toJson()['wifi'], {'ssid': 'Living Room'});
+      expect(find.text('Wi-Fi: Living Room'), findsOneWidget);
+    });
+
     testWidgets('wired and only apps from the ISO: network auto', (t) async {
       final h = await toSummary(
         t,

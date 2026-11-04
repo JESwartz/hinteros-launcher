@@ -800,9 +800,7 @@ class SummaryStep extends StatelessWidget {
               line(
                 'Internet',
                 f.online
-                    ? (f.joinedSsid != null
-                          ? 'Wi-Fi: ${f.joinedSsid}'
-                          : 'Online')
+                    ? (f.planWifi != null ? 'Wi-Fi: ${f.planWifi}' : 'Online')
                     : 'Not used',
               ),
             ],

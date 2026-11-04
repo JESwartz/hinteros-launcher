@@ -431,6 +431,20 @@ class InstallerFlow extends ChangeNotifier {
 
   bool get online => net?.online ?? false;
 
+  /// The Wi-Fi network the plan keeps on the installed box (only while
+  /// online): the one this installer joined, else the one the box is on (it
+  /// was joined before this UI started, or from the console). The backend
+  /// copies its saved connection.
+  String? get planWifi {
+    if (!online) return null;
+    final inUse = wifi.where((a) => a.inUse).firstOrNull?.ssid;
+    return joinedSsid ?? inUse ?? net?.wifiSsid;
+  }
+
+  /// The password of [planWifi], when this installer joined it.
+  String? get _planWifiPsk =>
+      planWifi != null && planWifi == joinedSsid ? _joinedPsk : null;
+
   // Steps that show the network state follow it live.
   bool get _watching =>
       _step == InstallerStep.network || _step == InstallerStep.apps;
@@ -872,8 +886,8 @@ class InstallerFlow extends ChangeNotifier {
         ssh: ssh,
         channel: channel,
         network: online ? PlanNetwork.auto : PlanNetwork.offline,
-        wifiSsid: online ? joinedSsid : null,
-        wifiPsk: online && joinedSsid != null ? _joinedPsk : null,
+        wifiSsid: planWifi,
+        wifiPsk: _planWifiPsk,
       );
     }
     final a = apps!;
@@ -891,8 +905,8 @@ class InstallerFlow extends ChangeNotifier {
           : (needsDownload ? PlanNetwork.online : PlanNetwork.auto),
       apps: [for (final x in a.selectedApps) x.id],
       acceptedTerms: a.acceptances,
-      wifiSsid: online ? joinedSsid : null,
-      wifiPsk: online && joinedSsid != null ? _joinedPsk : null,
+      wifiSsid: planWifi,
+      wifiPsk: _planWifiPsk,
       rev: installsNewer ? chosenRev : null,
     );
   }
