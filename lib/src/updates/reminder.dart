@@ -9,8 +9,10 @@ import '../system/repositories.dart';
 /// decision 2). Never installs anything.
 ///
 /// - At startup the box checks. A check that fails (no network yet, the
-///   update server down) is tried again when the network comes up, and
-///   every day the session lasts the box checks again.
+///   update server down) is tried again when the network comes up and
+///   every hour, [hourlyTries] times, then once a day. Every day the
+///   session lasts the box checks again, and within the hour after a
+///   switch to another revision (rollback, channel, base).
 /// - When it is behind its channel, an ordinary update shows a non-modal
 ///   reminder on Home, again on every return to Home (the shell's
 ///   `_homeEntered`).
@@ -29,6 +31,7 @@ class UpdateReminders extends ChangeNotifier {
     ],
     this.recheckAfter = const Duration(hours: 24),
     this.tick = const Duration(hours: 1),
+    this.hourlyTries = 3,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
@@ -49,6 +52,11 @@ class UpdateReminders extends ChangeNotifier {
   /// not count the time the box sleeps, so a long [recheckAfter] is measured
   /// on the clock instead.
   final Duration tick;
+
+  /// How many [tick]s in a row a failing check is tried again before it
+  /// waits [recheckAfter]: a check holds the single job slot, and it can
+  /// fail for a long time (no update source, the update server down).
+  final int hourlyTries;
   final DateTime Function() _now;
 
   bool _started = false;
@@ -58,6 +66,11 @@ class UpdateReminders extends ChangeNotifier {
 
   /// When the last check worked; null: none has yet.
   DateTime? _checkedAt;
+
+  /// Retries after startup that failed since the last good check, and when
+  /// the last one was.
+  int _failed = 0;
+  DateTime? _failedAt;
   bool _checking = false;
   bool _wasOnline = false;
 
@@ -79,7 +92,14 @@ class UpdateReminders extends ChangeNotifier {
   Future<void> start() async {
     if (_started) return;
     _started = true;
-    _sub = updates.changes.listen((_) => notifyListeners());
+    _sub = updates.changes.listen((s) {
+      // The box switched revision: the last check is out of date.
+      if (s.checkedAt == null && _checkedAt != null) {
+        _checkedAt = null;
+        _failed = 0;
+      }
+      notifyListeners();
+    });
     _netSub = network?.listen((s) {
       // `unknown`: NetworkManager does not check; a connection is enough.
       final online =
@@ -98,16 +118,26 @@ class UpdateReminders extends ChangeNotifier {
     _ticker = Timer.periodic(tick, (_) {
       final at = _checkedAt;
       if (at == null) {
-        if (!_offline) unawaited(_again());
+        final failedAt = _failedAt;
+        if (_offline ||
+            (_failed >= hourlyTries && failedAt != null && !_old(failedAt))) {
+          return;
+        }
+        unawaited(_again());
         return;
       }
-      // A clock set back counts as old too.
-      final age = _now().difference(at);
-      if (age.isNegative || age >= recheckAfter) unawaited(_again());
+      if (_old(at)) unawaited(_again());
     });
     await _check(0);
     if (_disposed) return;
     notifyListeners();
+  }
+
+  /// [recheckAfter] has passed since [at]. A clock set back counts as old
+  /// too.
+  bool _old(DateTime at) {
+    final age = _now().difference(at);
+    return age.isNegative || age >= recheckAfter;
   }
 
   Timer? _retry;
@@ -116,18 +146,26 @@ class UpdateReminders extends ChangeNotifier {
   /// A check after startup; the shell shows the notice if it is due.
   Future<void> _again() async {
     if (_checking || _disposed || (_retry?.isActive ?? false)) return;
-    await _check(retryDelays.length);
+    if (await _check(retryDelays.length)) {
+      _failed = 0;
+    } else {
+      _failed++;
+      _failedAt = _now();
+    }
     if (!_disposed) {
       notifyListeners();
       onLateResult?.call();
     }
   }
 
-  Future<void> _check(int attempt) async {
+  /// True when the check worked.
+  Future<bool> _check(int attempt) async {
     _checking = true;
+    var ok = false;
     try {
       await updates.check();
       _checkedAt = _now();
+      ok = true;
     } on SystemException catch (e) {
       if (e.kind == SystemErrorKind.unavailable &&
           attempt < retryDelays.length &&
@@ -149,6 +187,7 @@ class UpdateReminders extends ChangeNotifier {
       _againAfter = false;
       if (_checkedAt == null) unawaited(Future(_again));
     }
+    return ok;
   }
 
   /// A check after startup finished (the shell shows the notice if due).

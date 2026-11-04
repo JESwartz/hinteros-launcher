@@ -164,6 +164,50 @@ void main() {
     await net.close();
   });
 
+  test('a check that keeps failing: three hourly tries, then daily', () async {
+    var now = DateTime(2026, 11, 3, 8);
+    const tick = Duration(milliseconds: 5);
+    final ups = MockUpdates(MockJobs())
+      ..failCheckWith = const SystemException(SystemErrorKind.failed, 'x');
+    final r = UpdateReminders(ups, tick: tick, now: () => now);
+    await r.start();
+    expect(ups.checks, 1);
+    await Future<void>.delayed(tick * 10);
+    expect(ups.checks, 4, reason: 'startup, then three hourly tries');
+    now = now.add(const Duration(hours: 25));
+    await Future<void>.delayed(tick * 10);
+    expect(ups.checks, 5, reason: 'one try a day');
+    ups.failCheckWith = null;
+    now = now.add(const Duration(hours: 25));
+    await Future<void>.delayed(tick * 10);
+    expect(ups.checks, 6);
+    await Future<void>.delayed(tick * 10);
+    expect(ups.checks, 6, reason: 'worked: next check in a day');
+    r.dispose();
+  });
+
+  test('a switch to another revision checks again at the next tick', () async {
+    const tick = Duration(milliseconds: 5);
+    final ups = MockUpdates(MockJobs());
+    final r = UpdateReminders(ups, tick: tick);
+    await r.start();
+    expect(ups.checks, 1);
+    await Future<void>.delayed(tick * 4);
+    expect(ups.checks, 1);
+    // A rollback finished: DaemonUpdates says "not checked".
+    ups.setStatus(
+      UpdateStatus(
+        currentVersion: ups.status.currentVersion,
+        currentRev: 'older',
+      ),
+    );
+    await Future<void>.delayed(tick * 4);
+    expect(ups.checks, 2);
+    await Future<void>.delayed(tick * 4);
+    expect(ups.checks, 2);
+    r.dispose();
+  });
+
   test('disposed during the startup check: no notify after dispose', () async {
     final gate = Completer<void>();
     final ups = _GatedUpdates(MockJobs(), gate.future);

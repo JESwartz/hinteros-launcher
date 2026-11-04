@@ -1010,11 +1010,12 @@ through their stages by themselves.
   yet, since it can start after the session; the update check is a job whose result arrives with
   `job_finished`, or comes straight back when cached within 60 s). A check that fails (no network
   yet on a Wi-Fi box, the update server down) is tried again when `network_changed` says the box is
-  online (connectivity full, or a connection when NetworkManager does not check) and every hour
-  until one works; after that the box checks again once the last good check is a day old (on the
-  clock, so the time the box sleeps counts). It only checks, never installs. When an update,
-  rollback, channel or base switch finishes, the update found by the last check is cleared (after an
-  update the box is "up to date", after the others "Not checked yet"). The version of an update is
+  online (connectivity full, or a connection when NetworkManager does not check) and every hour,
+  three times, then once a day until one works (a check holds the single job slot); after that the
+  box checks again once the last good check is a day old (on the clock, so the time the box sleeps
+  counts). It only checks, never installs. When an update, rollback, channel or base switch
+  finishes, the update found by the last check is cleared (after an update the box is "up to date",
+  after the others "Not checked yet", and the box checks again within the hour). The version of an update is
   `available.version` ("HinterOS 0.6.1", session API 0.11) when that is a release version, else
   its date (the daemon's short-rev fallback, or an older daemon); the notice's severity is
   `available.security`, with `available.security_summary` under it when the release has one (also
