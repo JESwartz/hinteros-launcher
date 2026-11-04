@@ -527,6 +527,8 @@ void main() {
     await choose(t, 'Save token');
     expect(find.text('Type the token.'), findsOneWidget);
     await t.enterText(field, 'eyJhIjoiYiJ9');
+    // A credential: hidden like a password.
+    expect(t.widget<TextField>(field).obscureText, isTrue);
     await choose(t, 'Save token');
     await enterPin(t, '2468');
     expect(find.text('This is not a tunnel token.'), findsOneWidget);
