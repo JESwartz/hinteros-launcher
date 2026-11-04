@@ -400,6 +400,46 @@ void main() {
       await jobs2.dispose();
     });
 
+    test('a job kind of a newer daemon is "Working", no restart', () async {
+      final (mock, s) = await _setup();
+      const id = 'bbbbbbbbbbbbbbbb';
+      final all = <JobSnapshot>[];
+      mock.emitRaw('job_started', {
+        'job_id': id,
+        'kind': 'firmware',
+        'uid': 0,
+        'subject': <String, dynamic>{},
+        'started_at': 1791300000,
+      });
+      await pumpEventQueue();
+      final sub = s.jobs.watch(id).listen(all.add);
+      await pumpEventQueue();
+      expect(all.last.kind, JobKind.other);
+      expect(all.last.kind.title, 'Working');
+      expect(all.last.kind.mayRestartSession, isFalse);
+      expect(all.last.kind.stages, [JobStage.preparing, JobStage.finishing]);
+      await sub.cancel();
+    });
+
+    test('finished jobs seen only in events are pruned', () async {
+      final (mock, s) = await _setup();
+      final jobs = s.jobs as DaemonJobs;
+      for (var i = 0; i < 25; i++) {
+        final id = i.toRadixString(16).padLeft(16, 'c');
+        mock.emitRaw('job_finished', {
+          'job_id': id,
+          'kind': 'storage_measure',
+          'ok': true,
+          'session_restart_required': false,
+          'subject': <String, dynamic>{},
+          'started_at': 1791300000,
+          'finished_at': 1791300001,
+        });
+      }
+      await pumpEventQueue();
+      expect(jobs.known, 20);
+    });
+
     test('building: the count, the name, the subject, heartbeats', () async {
       final (mock, s) = await _setup();
       mock.system.channel = api.Channel.beta;

@@ -58,7 +58,7 @@ JobKind _jobKind(api.JobKind k) => switch (k) {
   api.JobKind.cloudflareSetToken => JobKind.cloudflareSetToken,
   api.JobKind.cloudflareClearToken => JobKind.cloudflareClearToken,
   api.JobKind.appsClearData => JobKind.clearData,
-  api.JobKind.unknown => JobKind.rebuild,
+  api.JobKind.unknown => JobKind.other,
 };
 
 JobStage? _stage(api.Stage? s) => switch (s) {
@@ -330,13 +330,9 @@ T? _readResult<T>(
 // ---------------------------------------------------------------- jobs
 
 class _Entry {
-  _Entry(this.snap, {required this.kindKnown});
+  _Entry(this.snap);
 
   JobSnapshot snap;
-
-  /// `job_progress` does not carry the kind: an entry made from one waits
-  /// for `job_started`, `job_finished` or the method that started the job.
-  bool kindKnown;
   bool refreshed = false;
   final changes = StreamController<JobSnapshot>.broadcast(sync: true);
 }
@@ -368,18 +364,15 @@ class DaemonJobs implements JobsRepository {
   late final StreamSubscription<api.ConnectionStatus> _status;
   final _jobs = <String, _Entry>{};
 
+  /// How many jobs are followed (for the tests).
+  int get known => _jobs.length;
+
   /// Remembers a job this client started (the kind comes from the method).
   void track(String jobId, JobKind kind) {
-    final e = _jobs[jobId];
-    if (e == null) {
-      _jobs[jobId] = _Entry(
-        JobSnapshot(jobId: jobId, kind: kind),
-        kindKnown: true,
-      );
-    } else if (!e.kindKnown) {
-      e.kindKnown = true;
-      e.snap = e.snap.copyWith(kind: kind);
-    }
+    _jobs.putIfAbsent(
+      jobId,
+      () => _Entry(JobSnapshot(jobId: jobId, kind: kind)),
+    );
     _prune();
   }
 
@@ -397,20 +390,26 @@ class DaemonJobs implements JobsRepository {
     return JobHandle(id, kind);
   }
 
+  /// Keeps the last 20 finished jobs. Jobs other clients start come only
+  /// from events, so this runs after each `job_finished` too.
   void _prune() {
     final done = _jobs.entries.where((e) => e.value.snap.finished).toList();
     for (final e in done.take((done.length - 20).clamp(0, done.length))) {
       _jobs.remove(e.key);
+      // A watcher closes on the finished snapshot: nobody listens now.
+      unawaited(e.value.changes.close());
     }
   }
 
-  _Entry _entry(String id, {JobKind? kind}) => _jobs.putIfAbsent(
-    id,
-    () => _Entry(
-      JobSnapshot(jobId: id, kind: kind ?? JobKind.rebuild),
-      kindKnown: kind != null,
-    ),
-  );
+  _Entry _entry(String id, JobKind kind) =>
+      _jobs.putIfAbsent(id, () => _Entry(JobSnapshot(jobId: id, kind: kind)));
+
+  /// The kind an event gives; one this launcher does not know keeps the kind
+  /// of the method that started the job, if this client started it.
+  static JobKind _kindOf(_Entry e, api.JobKind k) {
+    final kind = _jobKind(k);
+    return kind == JobKind.other ? e.snap.kind : kind;
+  }
 
   void _set(_Entry e, JobSnapshot s) {
     e.snap = s;
@@ -420,29 +419,26 @@ class DaemonJobs implements JobsRepository {
   void _onEvent(api.SessionEvent ev) {
     switch (ev) {
       case api.JobStartedEvent():
-        final e = _entry(ev.jobId, kind: _jobKind(ev.kind));
-        e.kindKnown = true;
+        final e = _entry(ev.jobId, _jobKind(ev.kind));
         _set(
           e,
           e.snap.copyWith(
-            kind: _jobKind(ev.kind),
+            kind: _kindOf(e, ev.kind),
             subject: _subject(ev.subject),
             startedAt: _unix(ev.startedAt),
             heardAt: now(),
           ),
         );
       case api.JobProgressEvent():
-        final e = _entry(ev.jobId, kind: _jobKind(ev.kind));
+        final e = _entry(ev.jobId, _jobKind(ev.kind));
         if (e.snap.finished) return;
         final stage = _stage(ev.stage) ?? e.snap.stage;
-        final known = e.kindKnown;
-        e.kindKnown = true;
         // Also a heartbeat (at least every 2 s, maybe with nothing new):
         // it says the job is alive.
         _set(
           e,
           e.snap.copyWith(
-            kind: known ? null : _jobKind(ev.kind),
+            kind: _kindOf(e, ev.kind),
             stage: stage,
             percent: ev.percent,
             clearPercent: ev.percent == null,
@@ -460,9 +456,8 @@ class DaemonJobs implements JobsRepository {
           ),
         );
       case api.JobFinishedEvent():
-        final e = _entry(ev.jobId, kind: _jobKind(ev.kind));
-        final kind = _jobKind(ev.kind);
-        if (!e.kindKnown) e.kindKnown = true;
+        final e = _entry(ev.jobId, _jobKind(ev.kind));
+        final kind = _kindOf(e, ev.kind);
         final cancelled = !ev.ok && _isCancel(ev.error);
         if (!ev.ok && !cancelled) {
           final err = ev.error;
@@ -475,7 +470,7 @@ class DaemonJobs implements JobsRepository {
         _set(
           e,
           e.snap.copyWith(
-            kind: e.snap.kind == JobKind.rebuild ? kind : e.snap.kind,
+            kind: kind,
             finished: true,
             ok: ev.ok,
             cancelled: cancelled,
@@ -492,6 +487,7 @@ class DaemonJobs implements JobsRepository {
             clearBuild: true,
           ),
         );
+        _prune();
       default:
     }
   }
@@ -503,7 +499,9 @@ class DaemonJobs implements JobsRepository {
         (j.state == api.JobState.failed && _isCancel(j.error));
     return JobSnapshot(
       jobId: j.jobId,
-      kind: _jobKind(j.kind),
+      kind: old != null && _jobKind(j.kind) == JobKind.other
+          ? old.kind
+          : _jobKind(j.kind),
       stage: _stage(j.stage) ?? old?.stage ?? JobStage.preparing,
       percent: finished ? null : j.percent,
       detail: finished ? null : _progressText(j.detail),
@@ -538,7 +536,7 @@ class DaemonJobs implements JobsRepository {
     }
     final e = _jobs[id];
     if (e == null) {
-      final fresh = _entry(id, kind: _jobKind(job.kind));
+      final fresh = _entry(id, _jobKind(job.kind));
       fresh.refreshed = true;
       _set(fresh, _fromJob(job, null));
       return;
@@ -654,7 +652,7 @@ class DaemonJobs implements JobsRepository {
     // The running job, if any, comes first.
     final j = r.jobs.where((j) => j.state == api.JobState.running).firstOrNull;
     if (j == null) return null;
-    final e = _entry(j.jobId, kind: _jobKind(j.kind));
+    final e = _entry(j.jobId, _jobKind(j.kind));
     e.refreshed = true;
     if (!e.snap.finished) _set(e, _fromJob(j, e.snap));
     return e.snap;
