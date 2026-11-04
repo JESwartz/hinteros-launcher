@@ -184,6 +184,69 @@ void main() {
     expect(h.services.mockProfiles.log, contains('unlock'));
   });
 
+  testWidgets('the sleep lock over Settings: B and A reach nothing under it', (
+    t,
+  ) async {
+    setView(t);
+    final h = harness(current: 'p3');
+    await h.pump(t);
+    await enterSettingsEntry(t, 'profiles');
+    h.services.mockProfiles.sleep();
+    await t.pumpAndSettle();
+    expect(find.text('Type the PIN to unlock.'), findsOneWidget);
+    await keys(t, [escape]);
+    expect(find.text('Type the PIN to unlock.'), findsOneWidget);
+    expect(focusLabel(), startsWith('modal-'));
+    await keys(t, [escape, enter, escape, enter]);
+    expect(find.text('Type the PIN to unlock.'), findsOneWidget);
+    expect(focusLabel(), startsWith('modal-'));
+    expect(h.mock.running, isEmpty);
+  });
+
+  testWidgets('Switch profile from the sleep lock, then Cancel switch: '
+      'the lock stays', (t) async {
+    setView(t);
+    final h = harness(current: 'p3');
+    h.services.mockProfiles.blockingApp = (id: 'youtube', name: 'YouTube');
+    await h.pump(t);
+    h.services.mockProfiles.sleep();
+    await t.pumpAndSettle();
+    expect(find.text('Type the PIN to unlock.'), findsOneWidget);
+    // Down past the pad to Switch profile.
+    for (var i = 0; i < 6 && !focusLabel()!.endsWith('/extra:0'); i++) {
+      await keys(t, [down]);
+    }
+    expect(focusLabel(), endsWith('/extra:0'));
+    await keys(t, [enter]);
+    expect(find.text('Who is watching?'), findsOneWidget);
+    // James (not locked): the switch starts at once.
+    await keys(t, [left, enter], settle: false);
+    await frames(t, 15);
+    expect(find.textContaining("YouTube isn't responding ("), findsOneWidget);
+    await keys(t, [right, right, enter], settle: false); // Cancel switch
+    await frames(t, 10);
+    expect(h.services.mockProfiles.log, contains('switch_cancel'));
+    expect(find.textContaining('Switching to'), findsNothing);
+    expect(find.text('Type the PIN to unlock.'), findsOneWidget);
+    expect(focusLabel(), startsWith('modal-'));
+  });
+
+  testWidgets('the in-session picker focuses the open profile', (t) async {
+    setView(t);
+    final h = harness(current: 'p3');
+    await h.pump(t);
+    await openChip(t);
+    expect(find.text('Who is watching?'), findsOneWidget);
+    // Sam is the second tile.
+    expect(focusLabel(), endsWith('/tiles:1'));
+    await keys(t, [enter]);
+    expect(find.text('Who is watching?'), findsNothing);
+    expect(
+      h.services.mockProfiles.log.where((l) => l.startsWith('switch')),
+      isEmpty,
+    );
+  });
+
   testWidgets('first-boot mode creates the admin profile', (t) async {
     setView(t);
     final box = MockProfileBox(profiles: [], now: fixedNow);

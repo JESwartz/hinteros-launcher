@@ -240,16 +240,17 @@ class _LauncherShellState extends State<LauncherShell> {
       widget.data.cancelClose();
       return true;
     };
-    _tabs.onBack = () {
+    // Back to Home, but never from under a page or dialog: focus would go
+    // to the hidden Home row (behind the sleep lock, too).
+    bool backHome() {
+      if (_modals.isOpen || _dialogOpen) return true;
       if (_section == Section.home) return false;
       _goHome(reset: false);
       return true;
-    };
-    _nav.onBack = () {
-      if (_section == Section.home) return false;
-      _goHome(reset: false);
-      return true;
-    };
+    }
+
+    _tabs.onBack = backHome;
+    _nav.onBack = backHome;
     _nav.onOther = (a) {
       if (_dialogOpen || _modals.isOpen) return;
       if (a == NavAction.secondary && _bannerVisible) {

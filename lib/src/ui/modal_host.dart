@@ -65,7 +65,8 @@ class ModalController extends ChangeNotifier {
     ModalBuilder<T> builder,
   ) {
     final id = _nextId++;
-    final region = NavRegion('modal-$id', rememberPerRow: false);
+    final region = NavRegion('modal-$id', rememberPerRow: false)
+      ..holdsBack = true;
     nav.adopt(region);
     final completer = Completer<Object?>();
     late final _Entry entry;

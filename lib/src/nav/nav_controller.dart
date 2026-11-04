@@ -49,6 +49,11 @@ class NavRegion extends ChangeNotifier {
   /// Back handler for this region; takes precedence over [backTarget].
   bool Function()? onBack;
 
+  /// Back never leaves this region (a modal page): when [onBack] and
+  /// [backTarget] do nothing, Back is consumed. [NavController.onBack]
+  /// would act on the screen under the modal.
+  bool holdsBack = false;
+
   /// Asked first on every direction press or repeat while this region holds
   /// focus; return true to consume it (a scroll area scrolling, a slider
   /// stepping) instead of moving focus.
@@ -306,6 +311,7 @@ class NavController {
           focusRegion(t);
           return true;
         }
+        if (region?.holdsBack ?? false) return true;
         return onBack?.call() ?? false;
       default:
         if (phase != NavPhase.press) return false;

@@ -292,12 +292,11 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
               controller: _pin,
               submitLabel: 'Next',
               onSubmit: _pinNext,
+              // The pad deletes digits; then B goes back a step.
+              onBackEmpty: _back,
             ),
           ],
         );
-        // The pad set the region's Back to its own; deleting then going
-        // back a step is ours.
-        _region.onBack = _back;
       case _Step.lock:
         _region.setRows([const NavRow('lock', 1), const NavRow('next', 1)]);
         body = _column([
