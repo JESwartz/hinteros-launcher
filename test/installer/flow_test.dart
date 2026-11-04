@@ -169,7 +169,7 @@ void main() {
         expect(find.textContaining('In use (mounted at /iso)'), findsOneWidget);
         expect(find.textContaining('Removable drive'), findsOneWidget);
         expect(
-          find.textContaining('Too small: at least 16 GB'),
+          find.textContaining('Too small: at least 17.2 GB'),
           findsOneWidget,
         );
         expect(find.text('Cannot be used'), findsNWidgets(3));

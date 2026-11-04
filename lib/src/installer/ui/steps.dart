@@ -438,7 +438,7 @@ class DiskStep extends StatelessWidget {
           p.add(
             const StatusLine(
               'No disk can be used. HinterOS needs an internal disk of at '
-              'least 16 GB.',
+              'least $minDiskLabel.',
               error: true,
             ),
           );

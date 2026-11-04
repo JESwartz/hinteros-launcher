@@ -141,6 +141,11 @@ void main() {
           DiskInfo(path: '/dev/x', name: 'x', sizeBytes: size, diskSeq: 1);
       expect(disk(16 * 1024 * 1024 * 1024).usable, isTrue);
       expect(disk(16 * 1024 * 1024 * 1024 - 1).usable, isFalse);
+      // A disk sold as 16 GB: shown as 16 GB, and the limit is not 16 GB.
+      final sold = disk(16000000000);
+      expect(sold.sizeLabel, '16 GB');
+      expect(sold.unusableReason, 'Too small: at least 17.2 GB needed.');
+      expect(minDiskLabel, '${(minDiskBytes / 1e9).toStringAsFixed(1)} GB');
     });
 
     test('not lsblk output is an error', () {

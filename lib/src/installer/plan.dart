@@ -29,6 +29,10 @@ enum PlanNetwork {
 /// can say no early. The backend checks again; it has the last word.
 const minDiskBytes = 16 * 1024 * 1024 * 1024;
 
+/// [minDiskBytes] as the screens give sizes (GB, 10^9 bytes): 16 GiB is
+/// 17.2 GB, so a disk sold as 16 GB is not enough.
+const minDiskLabel = '17.2 GB';
+
 /// Names the backend refuses for the admin account (hinteros-install.sh,
 /// admin-user-reserved), with the prefixes in [PlanChecks.username].
 const _reservedUsers = {

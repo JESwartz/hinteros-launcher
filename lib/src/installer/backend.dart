@@ -254,7 +254,9 @@ class DiskInfo {
     if (removable) {
       return 'Removable drive. It may be the installer USB stick.';
     }
-    if (sizeBytes < minDiskBytes) return 'Too small: at least 16 GB needed.';
+    if (sizeBytes < minDiskBytes) {
+      return 'Too small: at least $minDiskLabel needed.';
+    }
     if (diskSeq == null) return 'Cannot identify this disk.';
     return null;
   }
