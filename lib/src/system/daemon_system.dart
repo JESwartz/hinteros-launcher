@@ -19,6 +19,7 @@ import 'daemon_server.dart';
 import 'daemon_storage.dart';
 import 'daemon_store.dart';
 import 'daemon_time_zone.dart';
+import 'daemon_util.dart';
 import 'models.dart';
 import 'repositories.dart';
 
@@ -123,15 +124,12 @@ final _hexRev = RegExp(r'^[0-9a-f]{7,}$');
 
 /// A daemon-provided line, trimmed to one line of at most 120 characters;
 /// null when empty.
-String? _oneLine(String? s) {
+String? _firstLine(String? s) {
   if (s == null) return null;
   final line = s.split(RegExp(r'[\r\n]')).first.trim();
   if (line.isEmpty) return null;
   return line.length > 120 ? line.substring(0, 120) : line;
 }
-
-DateTime _unix(int seconds) =>
-    DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
 
 String _size(int bytes) => bytes >= 1 << 30
     ? '${(bytes / (1 << 30)).toStringAsFixed(1)} GB'
@@ -154,10 +152,10 @@ JobSubject _subject(api.JobSubject? s) {
   return JobSubject(
     owner: s.owner,
     profileId: s.profile?.id,
-    profileName: _oneLine(s.profile?.name),
+    profileName: _firstLine(s.profile?.name),
     apps: [
       for (final a in s.apps ?? const <api.CatalogApp>[])
-        (id: a.id, name: _oneLine(a.name) ?? a.id),
+        (id: a.id, name: _firstLine(a.name) ?? a.id),
     ],
     deleteData: s.deleteData ?? false,
     fromOwner: s.fromOwner,
@@ -192,9 +190,9 @@ JobSubject _subject(api.JobSubject? s) {
     keepProfiles: s.keepProfiles,
     services: [
       for (final a in s.services ?? const <api.CatalogApp>[])
-        (id: a.id, name: _oneLine(a.name) ?? a.id),
+        (id: a.id, name: _firstLine(a.name) ?? a.id),
     ],
-    library: _oneLine(s.library?.name),
+    library: _firstLine(s.library?.name),
   );
 }
 
@@ -207,9 +205,9 @@ BuildProgress? _build(api.ProgressDetail? d) {
     done: d.buildsDone,
     total: d.buildsTotal,
     running: d.buildsRunning,
-    name: _oneLine(b?.name),
-    version: _oneLine(b?.version),
-    phase: _oneLine(b?.phase),
+    name: _firstLine(b?.name),
+    version: _firstLine(b?.version),
+    phase: _firstLine(b?.phase),
     percent: b?.percent?.clamp(0, 99),
   );
 }
@@ -222,7 +220,8 @@ String? _authUrl(api.ProgressDetail? d) {
   return RegExp(r'^https://[!-~]+$').hasMatch(u) ? u : null;
 }
 
-DateTime? _unixOrNull(int? seconds) => seconds == null ? null : _unix(seconds);
+DateTime? _unixOrNull(int? seconds) =>
+    seconds == null ? null : unixTime(seconds);
 
 /// `update_verification_failed {reason: older_than_seen}` (session API 0.17):
 /// the server offers an older version than one this box already verified.
@@ -425,7 +424,7 @@ class DaemonJobs implements JobsRepository {
           e.snap.copyWith(
             kind: _kindOf(e, ev.kind),
             subject: _subject(ev.subject),
-            startedAt: _unix(ev.startedAt),
+            startedAt: unixTime(ev.startedAt),
             heardAt: now(),
           ),
         );
@@ -450,7 +449,7 @@ class DaemonJobs implements JobsRepository {
             authUrl: _authUrl(ev.detail),
             clearAuthUrl: stage != JobStage.signingIn,
             subject: ev.subject == null ? null : _subject(ev.subject),
-            startedAt: _unix(ev.startedAt),
+            startedAt: unixTime(ev.startedAt),
             lastActivityAt: _unixOrNull(ev.lastActivityAt),
             heardAt: now(),
           ),
@@ -480,8 +479,8 @@ class DaemonJobs implements JobsRepository {
             sessionRestartRequired: ev.sessionRestartRequired,
             result: _asMap(ev.result),
             subject: _subject(ev.subject),
-            startedAt: _unix(ev.startedAt),
-            finishedAt: _unix(ev.finishedAt),
+            startedAt: unixTime(ev.startedAt),
+            finishedAt: unixTime(ev.finishedAt),
             heardAt: now(),
             clearPercent: true,
             clearBuild: true,
@@ -516,7 +515,7 @@ class DaemonJobs implements JobsRepository {
       sessionRestartRequired: j.sessionRestartRequired,
       result: _asMap(j.result),
       subject: _subject(j.subject),
-      startedAt: _unix(j.startedAt),
+      startedAt: unixTime(j.startedAt),
       finishedAt: _unixOrNull(j.finishedAt),
       lastActivityAt: _unixOrNull(j.lastActivityAt),
       heardAt: now(),
@@ -785,12 +784,12 @@ class DaemonUpdates implements UpdatesRepository {
           : AvailableUpdate(
               rev: a.rev,
               version: releaseVersion(a.version) == null
-                  ? _dateVersion(_unix(a.date))
+                  ? _dateVersion(unixTime(a.date))
                   : releaseName(a.version!, a.rev, channel),
-              date: _unix(a.date),
+              date: unixTime(a.date),
               summary: a.summary,
               severity: a.security == null ? null : _severity(a.security!),
-              securitySummary: _oneLine(a.securitySummary),
+              securitySummary: _firstLine(a.securitySummary),
               signer: a.signer,
               newApps: a.newApps == null
                   ? null
@@ -802,7 +801,7 @@ class DaemonUpdates implements UpdatesRepository {
                         CatalogChange(n.id, n.name, reason: n.reason),
                     ],
             ),
-      checkedAt: _unix(result.checkedAt),
+      checkedAt: unixTime(result.checkedAt),
     );
     _changes.add(_status);
     return _status;
@@ -827,7 +826,7 @@ class DaemonUpdates implements UpdatesRepository {
       for (final g in r.generations)
         Generation(
           generation: g.generation,
-          date: _unix(g.date),
+          date: unixTime(g.date),
           rev: g.rev,
           current: g.current,
           booted: g.booted,
@@ -884,9 +883,9 @@ class DaemonUpdates implements UpdatesRepository {
           channel: channel,
           rev: t.rev,
           version: releaseVersion(t.version) == null
-              ? _dateVersion(_unix(t.date))
+              ? _dateVersion(unixTime(t.date))
               : releaseName(t.version!, t.rev, channel),
-          date: _unix(t.date),
+          date: unixTime(t.date),
           older: r.older,
         );
       });

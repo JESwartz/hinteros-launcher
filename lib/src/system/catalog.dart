@@ -61,6 +61,21 @@ String? readReadmeFile(String path) {
   return t == null || t.trim().isEmpty ? null : t;
 }
 
+/// A terms text the system names by its absolute path on this box
+/// (`store.list`, `services.list`); null when it is missing, empty,
+/// unreadable or over 1 MiB. A Nix store path never changes, so its text is
+/// read once: every `store_changed` lists every app again.
+String? readBoxTerms(String path) {
+  final cached = _boxTerms[path];
+  if (cached != null) return cached;
+  final t = readLocalText(path, maxBytes: 1024 * 1024);
+  if (t == null || t.isEmpty) return null;
+  if (path.startsWith('/nix/store/')) _boxTerms[path] = t;
+  return t;
+}
+
+final _boxTerms = <String, String>{};
+
 /// The apps of an index, in its order: `status` available only (retired and
 /// removed entries are hidden), each with its terms text read through
 /// [readTerms]. An unfree entry (not `unfree: false`) whose terms are missing,
