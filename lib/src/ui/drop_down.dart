@@ -106,6 +106,21 @@ class _DropDownState<T> extends State<DropDown<T>> {
   final _field = GlobalKey();
   bool _open = false;
 
+  /// The open list. It follows the field, so it closes when the field
+  /// goes (a pane rebuilt without it): else an invisible modal holds focus.
+  ModalHandle<DropDownChoice<T>>? _list;
+
+  @override
+  void dispose() {
+    final l = _list;
+    // After the frame: the modal stack does not change while the tree is
+    // being torn down.
+    if (l != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => l.close());
+    }
+    super.dispose();
+  }
+
   /// Room left over [DropDown.keepInView] when it is scrolled to the top:
   /// past the fade at the top of a pane.
   static const _topRoom = HinterTokens.s4;
@@ -168,7 +183,7 @@ class _DropDownState<T> extends State<DropDown<T>> {
     final screen = MediaQuery.sizeOf(context);
     final textScale = MediaQuery.textScalerOf(context).scale(1);
     final onHighlight = widget.onHighlight;
-    final chosen = await ModalScope.of(context).show<DropDownChoice<T>>(
+    final opened = ModalScope.of(context).open<DropDownChoice<T>>(
       (c, modal) => DropDownList<T>(
         key: widget.listKey,
         modal: modal,
@@ -182,6 +197,9 @@ class _DropDownState<T> extends State<DropDown<T>> {
         onHighlight: onHighlight == null ? null : (c) => onHighlight(c.value),
       ),
     );
+    _list = opened.handle;
+    final chosen = await opened.result;
+    if (identical(_list, opened.handle)) _list = null;
     if (mounted && chosen != null && !chosen.current) {
       widget.onChoose(chosen.value);
     }
