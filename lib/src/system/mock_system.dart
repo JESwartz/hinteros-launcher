@@ -1361,6 +1361,12 @@ class MockStore implements StoreRepository {
   /// `<id>=<terms version>` for every acceptance the box would record.
   final List<String> acceptances = [];
 
+  /// Test hook: a catalog change brings [a] (store_changed).
+  void addApp(StoreApp a) {
+    _catalog.add(a);
+    _changes.add(null);
+  }
+
   /// The next install or remove fails with this (a conflict, no space...).
   SystemException? failNext;
 

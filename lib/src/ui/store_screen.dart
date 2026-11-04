@@ -65,7 +65,10 @@ class _StoreScreenState extends State<StoreScreen> {
   List<StoreApp>? _catalog;
   Object? _error;
   final _icons = <String, String?>{};
-  int _cat = 0;
+
+  /// The chosen category, by id: the list can change under it (a
+  /// category with no apps is left out).
+  String _cat = StoreScreen.installedCat;
   final _subs = <StreamSubscription<void>>[];
   Timer? _retry;
 
@@ -171,6 +174,27 @@ class _StoreScreenState extends State<StoreScreen> {
     ],
   };
 
+  /// A category's row, by id: the focus stays on it when a category before
+  /// it comes or goes.
+  static String _catKey(String id) => 'c-$id';
+
+  /// The category rows, with the position on the chosen one.
+  void _syncCats(List<(String id, String label)> cats) {
+    final r = widget.cats;
+    final before = r.model.currentRow?.key;
+    final hadFocus = before != null && r.nodeAt(before, 0).hasFocus;
+    r.setRows([for (final c in cats) NavRow(_catKey(c.$1), 1)]);
+    final want = _catKey(_cat);
+    if (r.model.currentRow?.key == want) return;
+    r.model.goTo(cats.indexWhere((c) => c.$1 == _cat), 0);
+    // The focused row went: the focus goes to the chosen one.
+    if (hadFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(r.focusCurrent());
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = HinterTheme.of(context);
@@ -186,11 +210,10 @@ class _StoreScreenState extends State<StoreScreen> {
       );
     }
     final cats = _categories(apps);
-    _cat = _cat.clamp(0, cats.length - 1);
-    final shown = _appsIn(cats[_cat].$1, apps);
-    widget.cats.setRows([
-      for (var i = 0; i < cats.length; i++) NavRow('c$i', 1),
-    ]);
+    // A category left out now (its last app went): All instead.
+    if (!cats.any((c) => c.$1 == _cat)) _cat = StoreScreen.all;
+    final shown = _appsIn(_cat, apps);
+    _syncCats(cats);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -228,17 +251,19 @@ class _StoreScreenState extends State<StoreScreen> {
                       for (var i = 0; i < cats.length; i++) ...[
                         if (i > 0) const SizedBox(height: HinterTokens.s1 + 4),
                         NavFocusable(
+                          key: ValueKey(cats[i].$1),
                           region: widget.cats,
-                          rowKey: 'c$i',
+                          rowKey: _catKey(cats[i].$1),
                           col: 0,
                           onFocused: () {
-                            if (_cat != i) setState(() => _cat = i);
+                            final id = cats[i].$1;
+                            if (_cat != id) setState(() => _cat = id);
                           },
                           builder: (_, f) => _CategoryRow(
                             label: cats[i].$2,
                             count: _appsIn(cats[i].$1, apps).length,
                             focused: f,
-                            selected: i == _cat,
+                            selected: cats[i].$1 == _cat,
                           ),
                         ),
                       ],
@@ -248,7 +273,7 @@ class _StoreScreenState extends State<StoreScreen> {
               ),
               Expanded(
                 child: shown.isEmpty
-                    ? _emptyGrid(t, cats[_cat].$1)
+                    ? _emptyGrid(t, _cat)
                     : NavGridView(
                         region: widget.grid,
                         itemCount: shown.length,
