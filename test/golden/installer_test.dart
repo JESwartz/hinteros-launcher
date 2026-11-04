@@ -313,7 +313,15 @@ void main() {
       t,
       'summary_keep_highcontrast',
       settings: const LauncherSettings(highContrast: true, textScale: 1.4),
-      setup: (h) => keepSummary(h, t),
+      setup: (h) async {
+        await keepSummary(h, t);
+        // The rest scrolls to the buttons; the disk stays in view.
+        final heading = t.getRect(find.textContaining('Keep data on'));
+        expect(
+          heading.top,
+          greaterThanOrEqualTo(t.getRect(find.text('Step 5 of 5')).bottom),
+        );
+      },
     );
   });
 

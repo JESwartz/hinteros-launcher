@@ -736,8 +736,16 @@ class SummaryStep extends StatelessWidget {
         ];
         // The danger does not rely on colour alone: a heading and a border.
         // Keeping the data looks different, and says so in the same place.
-        p.add(
-          Container(
+        // It stays out of the scroll: with large text the rest scrolls to the
+        // buttons, and the disk must stay in view.
+        final card = Padding(
+          padding: const EdgeInsets.fromLTRB(
+            HinterTokens.s2,
+            HinterTokens.s2,
+            HinterTokens.s2,
+            0,
+          ),
+          child: Container(
             width: double.infinity,
             padding: const EdgeInsets.all(HinterTokens.s3),
             decoration: BoxDecoration(
@@ -849,7 +857,23 @@ class SummaryStep extends StatelessWidget {
         return StepPage(
           step: InstallerStep.summary,
           flow: env.flow,
-          child: scrolling(p.build()),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              card,
+              Expanded(
+                child: PageScroll(
+                  padding: const EdgeInsets.fromLTRB(
+                    HinterTokens.s2,
+                    HinterTokens.s3,
+                    HinterTokens.s2,
+                    HinterTokens.s2,
+                  ),
+                  child: p.build(),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
