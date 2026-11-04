@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../log.dart';
 import 'daemon.dart';
 import 'errors.dart';
 import 'generated.dart';
@@ -45,13 +46,46 @@ class DaemonClient extends DaemonConnection {
   final String clientApiVersion;
   final Duration initialBackoff;
   final Duration maxBackoff;
+
+  /// How long a call waits that the daemon answers at once.
   final Duration requestTimeout;
 
   /// How long a relayed call may wait for the admin password (the system
-  /// service waits up to 300 s, the daemon up to 330 s): `system.ssh.set`.
+  /// service waits up to 300 s, the daemon up to 330 s).
   final Duration interactiveTimeout;
 
-  static const _interactive = {'system.ssh.set'};
+  /// Relayed calls that may wait for the admin password (the daemon's
+  /// `system::may_interact`).
+  static const _interactive = {'system.ssh.set', 'system.profiles.reset_pin'};
+
+  /// Calls the daemon may take longer to answer, each 5 s over the daemon's
+  /// own limit, so its answer (or its own timeout error) arrives: NetworkManager
+  /// and BlueZ calls (30 s; wifi.connect 60 s, bluetooth.pair 90 s), relayed
+  /// system calls (60 s).
+  static const _slow = {
+    'wifi.connect': Duration(seconds: 65),
+    'bluetooth.pair': Duration(seconds: 95),
+  };
+  static const _runtimeTimeout = Duration(seconds: 35);
+  static const _relayTimeout = Duration(seconds: 65);
+  static const _runtimePrefixes = [
+    'wifi.',
+    'bluetooth.',
+    'audio.',
+    'display.',
+    'power.',
+    'network.',
+  ];
+
+  /// How long [rpc] waits for an answer to [method].
+  Duration timeoutFor(String method) {
+    if (_interactive.contains(method)) return interactiveTimeout;
+    final slow = _slow[method];
+    if (slow != null) return slow;
+    if (method.startsWith('system.')) return _relayTimeout;
+    if (_runtimePrefixes.any(method.startsWith)) return _runtimeTimeout;
+    return requestTimeout;
+  }
 
   ConnectionStatus _status = const Connecting();
   final _statusController = StreamController<ConnectionStatus>.broadcast();
@@ -166,11 +200,27 @@ class DaemonClient extends DaemonConnection {
     if (!theirs.isCompatibleWith(mine)) {
       throw _Mismatch(clientApiVersion, hello.apiVersion);
     }
-    if (_desired.isNotEmpty) {
-      await conn.request(
-        'subscribe',
-        SubscribeParams(events: _desired.toList()).toJson(),
-      );
+    // subscribeTo and unsubscribeFrom only record names until the handshake
+    // is done, so send again until what is sent is what is wanted.
+    final sent = <EventName>{};
+    for (;;) {
+      final add = _desired.difference(sent);
+      final drop = sent.difference(_desired);
+      if (add.isEmpty && drop.isEmpty) break;
+      if (add.isNotEmpty) {
+        await conn.request(
+          'subscribe',
+          SubscribeParams(events: add.toList()).toJson(),
+        );
+        sent.addAll(add);
+      }
+      if (drop.isNotEmpty) {
+        await conn.request(
+          'unsubscribe',
+          UnsubscribeParams(events: drop.toList()).toJson(),
+        );
+        sent.removeAll(drop);
+      }
     }
     conn.handshaken = true;
     _setStatus(Connected(apiVersion: hello.apiVersion, server: hello.server));
@@ -178,7 +228,16 @@ class DaemonClient extends DaemonConnection {
 
   void _onNotification(String method, Map<String, dynamic> params) {
     if (_closed) return;
-    _eventController.add(SessionEvent.fromNotification(method, params));
+    SessionEvent event;
+    try {
+      event = SessionEvent.fromNotification(method, params);
+    } catch (e) {
+      // A known event this client cannot read (a value of a newer daemon):
+      // it goes on like an event this client does not know.
+      logFailure('reading the $method event', e);
+      event = UnknownSessionEvent(method, params);
+    }
+    _eventController.add(event);
   }
 
   @override
@@ -187,11 +246,7 @@ class DaemonClient extends DaemonConnection {
     if (conn == null || !conn.handshaken) {
       return Future.error(const DaemonUnavailableException());
     }
-    return conn.request(
-      method,
-      params,
-      timeout: _interactive.contains(method) ? interactiveTimeout : null,
-    );
+    return conn.request(method, params, timeout: timeoutFor(method));
   }
 
   @override
@@ -295,9 +350,10 @@ class _Connection {
       if (c == null) return;
       final err = msg['error'];
       if (err is Map) {
+        final code = err['code'];
         c.completeError(
           ApiException(
-            (err['code'] as num?)?.toInt() ?? -32603,
+            code is num ? code.toInt() : ApiErrorCode.internalError,
             '${err['message'] ?? ''}',
             err['data'],
           ),

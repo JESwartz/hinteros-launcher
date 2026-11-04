@@ -1,9 +1,11 @@
 // DaemonClient against a scripted fake server on a real Unix socket.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/api/api.dart';
+import 'package:hinteros_launcher/src/log.dart';
 
 /// A tiny NDJSON JSON-RPC server. [onRequest] returns the full response
 /// message for a request (or null to stay silent); it may also push events
@@ -274,6 +276,119 @@ void main() {
         .timeout(const Duration(seconds: 5));
     final methods = server!.requests.map((r) => r['method']).toList();
     expect(methods, ['hello', 'subscribe', 'hello', 'subscribe']);
+  });
+
+  test(
+    'a subscription made while the handshake subscribes is sent too',
+    () async {
+      server = await FakeServer.bind(path);
+      final firstSubscribe = Completer<Map<String, dynamic>>();
+      server!.onRequest = (c, req) {
+        switch (req['method']) {
+          case 'hello':
+            return helloOk(req['id']);
+          case 'subscribe':
+            if (!firstSubscribe.isCompleted) {
+              firstSubscribe.complete(req); // answered below
+              return null;
+            }
+            return ok(req['id'], {'events': req['params']['events']});
+          case 'unsubscribe':
+            return ok(req['id'], {'events': req['params']['events']});
+        }
+        return err(req['id'], -32601, 'nope');
+      };
+      final c = mk();
+      await c.subscribeTo([EventName.homePressed, EventName.appStarted]);
+      c.start();
+      final held = await firstSubscribe.future.timeout(
+        const Duration(seconds: 5),
+      );
+      await c.subscribeTo([EventName.lockChanged]);
+      await c.unsubscribeFrom([EventName.appStarted]);
+      server!.conns.single.send(
+        ok(held['id'], {'events': held['params']['events']}),
+      );
+      await c.waitConnected();
+      final sent = server!.requests
+          .map((r) => [r['method'], ...?(r['params']?['events'] as List?)])
+          .toList();
+      expect(sent, [
+        ['hello'],
+        ['subscribe', 'home_pressed', 'app_started'],
+        ['subscribe', 'lock_changed'],
+        ['unsubscribe', 'app_started'],
+      ]);
+    },
+  );
+
+  test('each call waits longer than the daemon may take for it', () {
+    final c = mk();
+    expect(c.timeoutFor('ping'), const Duration(seconds: 2));
+    expect(c.timeoutFor('apps.list'), const Duration(seconds: 2));
+    expect(c.timeoutFor('wifi.connect'), const Duration(seconds: 65));
+    expect(c.timeoutFor('bluetooth.pair'), const Duration(seconds: 95));
+    expect(c.timeoutFor('bluetooth.connect'), const Duration(seconds: 35));
+    expect(c.timeoutFor('wifi.scan'), const Duration(seconds: 35));
+    expect(c.timeoutFor('system.time_zone.set'), const Duration(seconds: 65));
+    expect(c.timeoutFor('system.ssh.set'), const Duration(seconds: 340));
+    expect(
+      c.timeoutFor('system.profiles.reset_pin'),
+      const Duration(seconds: 340),
+    );
+  });
+
+  test('a slow wifi.connect is not cut off at the request timeout', () async {
+    server = await FakeServer.bind(path);
+    server!.onRequest = (c, req) {
+      if (req['method'] == 'hello') return helloOk(req['id']);
+      Future<void>.delayed(
+        const Duration(seconds: 3),
+        () => c.send(ok(req['id'], {})),
+      );
+      return null;
+    };
+    final c = mk(); // requestTimeout 2 s
+    await c.waitConnected();
+    await c.rpc('wifi.connect', {'ssid': 'x'});
+  });
+
+  test('an event or error this client cannot read does not throw', () async {
+    final logged = <String>[];
+    final sink = logSink;
+    logSink = logged.add;
+    addTearDown(() => logSink = sink);
+    server = await FakeServer.bind(path);
+    server!.onRequest = (c, req) {
+      if (req['method'] == 'hello') return helloOk(req['id']);
+      c.send({
+        'jsonrpc': '2.0',
+        'method': 'app_exited',
+        'params': {'id': 5, 'reason': 'closed'},
+      });
+      return {
+        'jsonrpc': '2.0',
+        'id': req['id'],
+        'error': {'code': 'bad', 'message': 'odd'},
+      };
+    };
+    final c = mk();
+    await c.waitConnected();
+    final seen = c.events.first;
+    await expectLater(
+      c.ping(const PingParams(nonce: 'n')),
+      throwsA(
+        isA<ApiException>().having(
+          (e) => e.code,
+          'code',
+          ApiErrorCode.internalError,
+        ),
+      ),
+    );
+    final e = await seen.timeout(const Duration(seconds: 5));
+    expect(e, isA<UnknownSessionEvent>());
+    expect(e.name, 'app_exited');
+    expect(logged.single, contains('app_exited'));
   });
 
   test('pending requests fail when the connection drops', () async {
