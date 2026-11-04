@@ -10,6 +10,7 @@ import '../api/api.dart' as api;
 import 'catalog.dart';
 import 'daemon_errors.dart';
 import 'daemon_system.dart' show DaemonJobs;
+import 'daemon_util.dart';
 import 'models.dart';
 import 'repositories.dart';
 
@@ -267,7 +268,7 @@ class DaemonStore implements StoreRepository {
       for (final g in r.generations)
         AppGeneration(
           generation: g.generation,
-          date: DateTime.fromMillisecondsSinceEpoch(g.date * 1000),
+          date: unixTime(g.date),
           ids: g.ids,
           systemRev: g.systemRev,
           current: g.current,

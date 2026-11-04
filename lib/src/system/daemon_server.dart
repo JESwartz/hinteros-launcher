@@ -104,9 +104,7 @@ ServiceDetail? _detail(ServiceSetup setup, Object? d) {
           ip4: oneLine(w.ip4),
           dnsName: oneLine(w.dnsName, 256),
           tailnet: oneLine(w.tailnet),
-          keyExpiry: w.keyExpiry == null
-              ? null
-              : DateTime.fromMillisecondsSinceEpoch(w.keyExpiry! * 1000),
+          keyExpiry: w.keyExpiry == null ? null : unixTime(w.keyExpiry!),
         );
       case ServiceSetup.cloudflareTunnel:
         final w = api.CloudflareDetail.fromJson(j);
