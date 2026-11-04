@@ -54,6 +54,18 @@ enum Section {
   final String label;
 }
 
+/// How long the clock waits after [now] for its next tick: just after the
+/// next minute starts, so the top bar shows the new minute at once.
+@visibleForTesting
+Duration untilNextMinute(DateTime now) {
+  final into = Duration(
+    seconds: now.second,
+    milliseconds: now.millisecond,
+    microseconds: now.microsecond,
+  );
+  return const Duration(minutes: 1) - into + const Duration(milliseconds: 50);
+}
+
 /// The top-level layout: a top bar with the section tabs, the current section
 /// below. Owns the [NavController] and every [NavRegion], and is the single
 /// place where keyboard and `input_nav` become navigation.
@@ -339,11 +351,7 @@ class _LauncherShellState extends State<LauncherShell> {
     unawaited(_reminders.start().then((_) => _homeEntered()));
     _subs.add(widget.services.timeZone.changes.listen(_setZone));
     unawaited(_loadZone());
-    if (widget.now == null) {
-      _clock = Timer.periodic(const Duration(seconds: 20), (_) {
-        if (mounted) setState(() => _time = _clockTime());
-      });
-    }
+    if (widget.now == null) _tickClock();
     // First item focused, as soon as Home has items (the daemon answers later).
     _nav.fallback = () => _modals.topRegion ?? _contentOf(_section);
     _home.addListener(_initialFocus);
@@ -363,6 +371,16 @@ class _LauncherShellState extends State<LauncherShell> {
   }
 
   DateTime _now() => (widget.now ?? DateTime.now)();
+
+  /// Ticks just after each minute starts (timed again every time, so a
+  /// clock that is set does not leave it behind).
+  void _tickClock() {
+    _clock = Timer(untilNextMinute(_clockTime()), () {
+      if (!mounted) return;
+      setState(() => _time = _clockTime());
+      _tickClock();
+    });
+  }
 
   /// The time the top bar shows: UTC plus the box's offset.
   DateTime _clockTime() {
