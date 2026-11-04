@@ -64,15 +64,14 @@ abstract final class PlanChecks {
   static String? username(String v) {
     if (v.isEmpty) return 'Choose a user name.';
     if (!_user.hasMatch(v)) {
-      return 'User name: use only lowercase letters, digits, - and _. Start '
-          'with a letter. Use at most 32 characters.';
+      return 'Use only lowercase letters, digits, - and _ (at most 32). Start '
+          'with a letter or _.';
     }
     if (_reservedUsers.contains(v) ||
         v.startsWith('systemd-') ||
         v.startsWith('nixbld') ||
         _profileUser.hasMatch(v)) {
-      return 'The user name "$v" is reserved for the system. Choose another '
-          'name.';
+      return 'The name "$v" is reserved. Choose another name.';
     }
     return null;
   }

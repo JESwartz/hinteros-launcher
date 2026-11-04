@@ -189,7 +189,7 @@ class _NetworkStepState extends State<NetworkStep> {
               net.online
                   ? 'This computer is online.'
                   : (net.linkUp
-                        ? "Connected, but can't reach the internet."
+                        ? 'Connected. No internet.'
                         : 'This computer is not online.'),
               ok: net.online,
             ),

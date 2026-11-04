@@ -169,10 +169,10 @@ class InstallStepView extends StatelessWidget {
         refused
             ? 'Nothing was changed on your disk.'
             : f.runKeep
-            ? 'The install stopped before the end. Your files stay on the '
-                  'disk, but HinterOS may not start. "Try again" starts over.'
-            : 'The install stopped before the end. The disk may be changed '
-                  'and HinterOS may not start. "Try again" starts over.',
+            ? 'The install stopped. Your files stay, but HinterOS may not '
+                  'start.'
+            : 'The install stopped. The disk may be changed and HinterOS '
+                  'may not start.',
         error: !refused,
       ),
     );

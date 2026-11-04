@@ -284,7 +284,7 @@ void main() {
       final h = await toAccount(t);
       await h.choose(t, 'user');
       await h.type(t, 'root');
-      expect(find.textContaining('reserved for the system'), findsOneWidget);
+      expect(find.textContaining('is reserved'), findsOneWidget);
       await h.choose(t, 'user');
       await h.type(t, 'Mixed Case');
       expect(find.textContaining('lowercase letters'), findsOneWidget);
@@ -822,7 +822,7 @@ void main() {
       expect(h.flow.phase, InstallPhase.failed);
       expect(h.flow.outcome!.exitCode, 1);
       expect(find.text('The install did not finish'), findsOneWidget);
-      expect(find.textContaining('stopped before the end'), findsOneWidget);
+      expect(find.textContaining('The install stopped.'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('spinner')),
         findsNothing,

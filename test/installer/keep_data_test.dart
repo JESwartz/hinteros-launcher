@@ -664,7 +664,7 @@ void main() {
       final h = await toKeepSummary(t, backend: backend);
       await h.eraseAndInstall(t);
       expect(h.flow.phase, InstallPhase.failed);
-      expect(find.textContaining('Your files stay on the disk'), findsWidgets);
+      expect(find.textContaining('Your files stay, but'), findsWidgets);
       expect(find.textContaining('The disk may be changed'), findsNothing);
       backend.installScript = null;
       await h.choose(t, 'actions');

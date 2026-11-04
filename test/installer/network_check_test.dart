@@ -224,10 +224,7 @@ void liveTests() {
     await h.flow.refreshNetwork(force: true);
     await t.pumpAndSettle();
     expect(find.text('Network cable: connected.'), findsOneWidget);
-    expect(
-      find.text("Connected, but can't reach the internet."),
-      findsOneWidget,
-    );
+    expect(find.text('Connected. No internet.'), findsOneWidget);
     expect(find.text('This computer is online.'), findsNothing);
     expect(h.flow.online, isFalse);
   });
