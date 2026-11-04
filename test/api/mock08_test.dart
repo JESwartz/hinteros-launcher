@@ -1,7 +1,7 @@
 // Behaviour of the mock daemon's 0.8 parts that the schema examples do not
 // show: the order of events and answers around the admin password prompt
 // (the waiting call answers last), who gets the events, the Store's states
-// while a job runs, and store_changed.
+// while a job runs, store_changed, and the handshake status.
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -284,5 +284,28 @@ void main() {
         ),
       ),
     );
+  });
+
+  group('the handshake reports what DaemonClient reports', () {
+    final v = ApiVersionNumber.parse(apiVersion);
+
+    test('a newer minor: Connected with the client version', () async {
+      final m = MockDaemon(serverApiVersion: '${v.major}.${v.minor + 1}');
+      final status = m.statusChanges.first;
+      m.start();
+      expect(await status, isA<Connected>());
+      expect((m.status as Connected).apiVersion, apiVersion);
+    });
+
+    test('another major: VersionMismatch, not Unreachable', () async {
+      final m = MockDaemon(serverApiVersion: '${v.major + 1}.0');
+      final status = m.statusChanges.first;
+      m.start();
+      final s = await status;
+      expect(s, isA<VersionMismatch>());
+      s as VersionMismatch;
+      expect(s.clientApiVersion, apiVersion);
+      expect(s.serverApiVersion, '${v.major + 1}.0');
+    });
   });
 }
