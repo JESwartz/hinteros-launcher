@@ -356,9 +356,13 @@ class FakeInstallerBackend implements InstallerBackend {
     return state.withOnline(state.linkUp && state.online && reachable);
   }
 
+  /// When set, `networkLink()` waits for it (a slow nmcli, for tests).
+  Future<void>? linkHold;
+
   @override
   Future<NetworkState> networkLink() async {
     calls.add('networkLink');
+    await linkHold;
     return state.withOnline(false);
   }
 

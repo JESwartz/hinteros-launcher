@@ -171,6 +171,28 @@ void liveTests() {
     expect(h.backend.calls.where((c) => c == 'network').length, before + 1);
   });
 
+  testWidgets('a burst of events: one link read at a time, one more after', (
+    t,
+  ) async {
+    final h = await _onStep(t, _wired);
+    final gate = Completer<void>();
+    h.backend.linkHold = gate.future;
+    int reads() => h.backend.calls.where((c) => c == 'networkLink').length;
+    final before = reads();
+    for (var i = 0; i < 20; i++) {
+      h.backend.emitNetworkEvent();
+    }
+    await t.pump();
+    expect(reads(), before + 1);
+    h.backend.linkHold = null;
+    gate.complete();
+    await t.pump();
+    await t.pump();
+    expect(reads(), before + 2);
+    await t.pump(const Duration(seconds: 1));
+    await t.pumpAndSettle();
+  });
+
   testWidgets('Refresh forces a connectivity check', (t) async {
     final h = await _onStep(t, _wired);
     h.backend.calls.clear();

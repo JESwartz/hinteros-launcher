@@ -472,20 +472,38 @@ class InstallerFlow extends ChangeNotifier {
     }
   }
 
-  Future<void> _onNetworkEvent(void _) async {
-    // Losing the link means offline right now, without waiting for a probe.
-    try {
-      final link = await backend.networkLink().timeout(checkTimeout);
-      if (!link.linkUp && _netSub != null) {
-        net = link;
-        apps?.dropDownloads();
-        notifyListeners();
-      }
-    } catch (_) {}
+  void _onNetworkEvent(void _) {
+    unawaited(_readLink());
     _netDebounce?.cancel();
     _netDebounce = Timer(const Duration(milliseconds: 500), () {
       if (_netSub != null) refreshNetwork(quiet: true);
     });
+  }
+
+  bool _linkReading = false;
+  bool _linkAgain = false;
+
+  /// Losing the link means offline right now, without waiting for a probe.
+  /// One read at a time (`nmcli monitor` prints lines in bursts): events
+  /// while it runs give one more read after it.
+  Future<void> _readLink() async {
+    if (_linkReading) {
+      _linkAgain = true;
+      return;
+    }
+    _linkReading = true;
+    do {
+      _linkAgain = false;
+      try {
+        final link = await backend.networkLink().timeout(checkTimeout);
+        if (!link.linkUp && _netSub != null && !_disposed) {
+          net = link;
+          apps?.dropDownloads();
+          notifyListeners();
+        }
+      } catch (_) {}
+    } while (_linkAgain && !_disposed);
+    _linkReading = false;
   }
 
   @override
