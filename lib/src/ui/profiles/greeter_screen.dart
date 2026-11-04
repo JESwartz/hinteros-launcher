@@ -271,13 +271,22 @@ class _GreeterScreenState extends State<GreeterScreen> {
     widget.onEntered?.call();
   }
 
+  /// A tile's login (or Add profile) runs: another A press does nothing.
+  bool _choosing = false;
+
   Future<void> _choose(PickerTile e) async {
-    switch (e.kind) {
-      case PickerTileKind.add:
-        await _add();
-      case PickerTileKind.guest:
-      case PickerTileKind.profile:
-        await _enter(e);
+    if (_choosing) return;
+    _choosing = true;
+    try {
+      switch (e.kind) {
+        case PickerTileKind.add:
+          await _add();
+        case PickerTileKind.guest:
+        case PickerTileKind.profile:
+          await _enter(e);
+      }
+    } finally {
+      _choosing = false;
     }
   }
 
@@ -287,7 +296,7 @@ class _GreeterScreenState extends State<GreeterScreen> {
     try {
       r = await widget.greeter.login(id);
     } on SystemException catch (e) {
-      setState(() => _message = e.message);
+      if (mounted) setState(() => _message = e.message);
       return;
     }
     if (!mounted) return;
@@ -376,6 +385,7 @@ class _GreeterScreenState extends State<GreeterScreen> {
         locked: form.locked,
       );
     } on SystemException catch (e) {
+      if (!mounted) return;
       setState(
         () => _message = e.kind == SystemErrorKind.profileLimit
             ? 'This box has the maximum number of profiles.'

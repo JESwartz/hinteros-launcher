@@ -225,6 +225,20 @@ void main() {
     expect(focusLabel(), 'content/tiles:1');
   });
 
+  testWidgets('a second A while a login runs does nothing', (t) async {
+    final p = Picker(t);
+    await p.pump();
+    await p.press(NavAction.right);
+    final gate = Completer<void>();
+    p.greeter.loginGate = gate.future;
+    await p.press(NavAction.accept, settle: false);
+    await p.press(NavAction.accept, settle: false);
+    gate.complete();
+    await t.pumpAndSettle();
+    expect(find.text("Type Sam's PIN."), findsOneWidget);
+    expect(p.greeter.log.where((l) => l == 'login:p3'), hasLength(1));
+  });
+
   testWidgets('the D-pad presses the keys of the pad', (t) async {
     final p = Picker(t);
     await p.pump();
