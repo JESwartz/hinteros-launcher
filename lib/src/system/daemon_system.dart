@@ -301,11 +301,13 @@ String _verb(JobStage s) => switch (s) {
 };
 
 /// A job that ended because of `jobs.cancel` (state `cancelled`, or
-/// `job_finished` with `job_failed` and the message "cancelled").
-bool _isCancel(api.ErrorObject? e) =>
-    e != null &&
-    e.code == api.ApiErrorCode.jobFailed &&
-    e.message == 'cancelled';
+/// `job_finished` with `job_failed` and the reason "cancelled"). The message
+/// is text, not contract: it is looked at only when no reason is given.
+bool _isCancel(api.ErrorObject? e) {
+  if (e == null || e.code != api.ApiErrorCode.jobFailed) return false;
+  final reason = _asMap(e.data)?['reason'];
+  return reason == null ? e.message == 'cancelled' : reason == 'cancelled';
+}
 
 Map<String, dynamic>? _asMap(Object? o) =>
     o is Map ? o.cast<String, dynamic>() : null;

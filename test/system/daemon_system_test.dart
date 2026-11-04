@@ -363,6 +363,24 @@ void main() {
       );
     });
 
+    test('a cancel is read from the reason, not the message', () async {
+      final (mock, s) = await _setup();
+      mock.system.adminAuthorized = true;
+      final job = await s.system.setSsh(true);
+      mock.system.finishJob(
+        job.jobId,
+        ok: false,
+        error: const api.ErrorObject(
+          code: api.ApiErrorCode.jobFailed,
+          message: 'cancelled by the user',
+          data: {'stage': 'building', 'log_hint': '', 'reason': 'cancelled'},
+        ),
+      );
+      final last = await s.jobs.watch(job.jobId).last;
+      expect(last.cancelled, isTrue);
+      expect(last.failed, isFalse);
+    });
+
     test('cancel works before activating, then job_busy', () async {
       final (mock, s) = await _setup();
       mock.system.adminAuthorized = true;
