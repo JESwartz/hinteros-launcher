@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hinteros_launcher/src/api/api.dart' show MockDaemon;
+import 'package:hinteros_launcher/src/api/api.dart'
+    show DaemonUnavailableException, MockDaemon;
 import 'package:hinteros_launcher/src/system/daemon_profiles.dart';
 import 'package:hinteros_launcher/src/system/daemon_system.dart';
 import 'package:hinteros_launcher/src/system/models.dart';
@@ -175,6 +176,22 @@ void main() {
       expect((await refused('2468')).rebootRequired, isTrue);
     });
 
+    test('a failed login call leaves no wait for its answer behind', () async {
+      final m = _FailsLogin();
+      m.start();
+      await m.waitConnected();
+      m.profiles.greeterMode = true;
+      final g = DaemonGreeter(
+        m,
+        DaemonJobs(m),
+        answerTimeout: const Duration(milliseconds: 10),
+      );
+      await Future<void>.delayed(Duration.zero);
+      await expectLater(g.login('p1'), throwsA(isA<SystemException>()));
+      // The answer's timeout passes: no uncaught TimeoutException.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+
     test('Add profile, then in with the one-time token', () async {
       final m = await connected();
       m.profiles.greeterMode = true;
@@ -191,4 +208,15 @@ void main() {
       expect(await g.login(job.id), isA<LoginStarted>());
     });
   });
+}
+
+/// greeter.login fails (the session daemon went away).
+class _FailsLogin extends MockDaemon {
+  @override
+  Future<Map<String, dynamic>> rpc(String method, Map<String, dynamic> params) {
+    if (method == 'greeter.login') {
+      return Future.error(const DaemonUnavailableException());
+    }
+    return super.rpc(method, params);
+  }
 }
