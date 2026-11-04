@@ -1443,30 +1443,32 @@ class SteamWindow {
 
 enum Channel {
   stable('stable'),
-  beta('beta');
+  beta('beta'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
 
   const Channel(this.value);
   final String value;
 
-  factory Channel.fromJson(String value) => values.firstWhere(
-    (e) => e.value == value,
-    orElse: () => throw FormatException('not a Channel', value),
-  );
+  factory Channel.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
 
 enum Base {
   stable('stable'),
-  unstable('unstable');
+  unstable('unstable'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
 
   const Base(this.value);
   final String value;
 
-  factory Base.fromJson(String value) => values.firstWhere(
-    (e) => e.value == value,
-    orElse: () => throw FormatException('not a Base', value),
-  );
+  factory Base.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -2540,7 +2542,7 @@ class AppliedResult {
   /// App envs the final apps stage could not rebuild; each keeps its previous generation, which still works. Absent when there were none.
   final List<AppliedResultAppsNotUpdatedItem>? appsNotUpdated;
 
-  /// 0.5 (rollback jobs): box features turned back on after the rollback, because the profiles' apps need them and the restored generation lacked them. Absent when there were none.
+  /// Rollback jobs: box features turned back on after the rollback, because the profiles' apps need them and the restored generation lacked them. Absent when there were none.
   final List<BoxFeature>? featuresReadded;
 
   factory AppliedResult.fromJson(Map<String, dynamic> json) => AppliedResult(
@@ -2614,15 +2616,16 @@ class CleanupParams {
 enum CleanupFrequency {
   daily('daily'),
   weekly('weekly'),
-  monthly('monthly');
+  monthly('monthly'),
+
+  /// A value this client does not know (newer daemon).
+  unknown('unknown');
 
   const CleanupFrequency(this.value);
   final String value;
 
-  factory CleanupFrequency.fromJson(String value) => values.firstWhere(
-    (e) => e.value == value,
-    orElse: () => throw FormatException('not a CleanupFrequency', value),
-  );
+  factory CleanupFrequency.fromJson(String value) =>
+      values.firstWhere((e) => e.value == value, orElse: () => unknown);
 
   String toJson() => value;
 }
@@ -3039,7 +3042,7 @@ class Measurement {
   String toString() => 'Measurement(${jsonEncode(toJson())})';
 }
 
-/// 0.6, storage_measure jobs.
+/// storage_measure jobs.
 class MeasuredResult {
   const MeasuredResult({required this.measuredAt});
 
@@ -3062,7 +3065,7 @@ class MeasuredResult {
   String toString() => 'MeasuredResult(${jsonEncode(toJson())})';
 }
 
-/// 0.6, cleanup_system and cleanup_profiles jobs. freed_bytes: free space after minus before on the store's filesystem (never negative).
+/// cleanup_system and cleanup_profiles jobs. freed_bytes: free space after minus before on the store's filesystem (never negative).
 class CleanedResult {
   const CleanedResult({
     required this.freedBytes,
@@ -13136,7 +13139,7 @@ final class JobFinishedEvent extends SessionEvent {
   /// A JSON-RPC error object (codes from this document's errors).
   final ErrorObject? error;
 
-  /// update_check jobs: an UpdateCheckResult; jobs that change the system: an AppliedResult; storage_measure: a MeasuredResult; cleanup_system and cleanup_profiles: a CleanedResult; channel_check: a ChannelCheckResult.
+  /// The shape is set by the job's kind, not by its fields: update_check jobs: an UpdateCheckResult; jobs that change the system: an AppliedResult; storage_measure: a MeasuredResult; cleanup_system and cleanup_profiles: a CleanedResult; channel_check: a ChannelCheckResult. Pick the shape by kind; a later minor may add a kind with a new shape that has the same required fields as another (a kind this client does not know: ignore the result).
   final Object? result;
   final bool sessionRestartRequired;
 
@@ -14630,7 +14633,7 @@ mixin SessionApiMethods {
 
   /// Version handshake. Must be the first request on a connection.
   ///
-  /// The client sends the API version it was built against. The server takes the same major and an equal or lower minor. The result carries the negotiated version: the client's. On a mismatch the server answers with version_mismatch and closes the connection. The client name 'hinteros-osk' is reserved for the on-screen keyboard: such connections receive input_nav while the keyboard is visible, and only then.
+  /// The client sends the API version it was built against. The server takes the same major and an equal or lower minor. The result carries the negotiated version: the client's. On a mismatch the server answers with version_mismatch and closes the connection; it reads api_version first, so a client of another version gets version_mismatch even when its params have fields this server does not know. The client name 'hinteros-osk' is reserved for the on-screen keyboard: such connections receive input_nav while the keyboard is visible, and only then.
   Future<HelloResult> hello(HelloParams params) async =>
       HelloResult.fromJson(await rpc('hello', params.toJson()));
 

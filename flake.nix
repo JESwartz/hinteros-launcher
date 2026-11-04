@@ -29,6 +29,17 @@
         overlays = [ self.overlays.default ];
       };
 
+      # The package version, from pubspec.yaml (`version: 1.0.0+1` is 1.0.0).
+      version = pkgs.lib.head (
+        builtins.concatMap (
+          l:
+          let
+            m = builtins.match "version: ([0-9.]+)[+].*" l;
+          in
+          if m == null then [ ] else m
+        ) (pkgs.lib.splitString "\n" (builtins.readFile ./pubspec.yaml))
+      );
+
       # Sources that matter to the build; keeps build/ and .dart_tool/ out.
       src = pkgs.lib.fileset.toSource {
         root = ./.;
@@ -79,8 +90,10 @@
       overlays.default = final: _prev: {
         hinteros-launcher = final.flutter.buildFlutterApplication {
           pname = "hinteros-launcher";
-          version = "0.1.0";
+          inherit version;
           inherit src;
+          # The build version hello sends (launcherVersion).
+          flutterBuildFlags = [ "--dart-define=HINTEROS_LAUNCHER_VERSION=${version}" ];
           autoPubspecLock = src + "/pubspec.lock";
           # One Flutter build, two apps: the same binary started with --osk is
           # the on-screen keyboard (transparent ARGB window, WM_CLASS

@@ -152,7 +152,7 @@ class DaemonOskBackend implements OskBackend {
   }
 
   /// The hello client name the daemon recognises as the on-screen keyboard.
-  static const oskPeer = Peer(name: 'hinteros-osk', version: apiVersion);
+  static const oskPeer = Peer(name: 'hinteros-osk', version: launcherVersion);
 
   final DaemonConnection connection;
 

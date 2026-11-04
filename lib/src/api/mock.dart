@@ -323,14 +323,31 @@ class MockDaemon extends DaemonConnection {
       'hello',
       HelloParams(
         apiVersion: apiVersion,
-        client: Peer(name: clientName, version: apiVersion),
+        client: Peer(name: clientName, version: launcherVersion),
       ).toJson(),
-    ).then((_) {
-      if (_desired.isNotEmpty) {
-        _subscribed.addAll(_desired.map((e) => e.value));
-      }
-      _setStatus(Connected(apiVersion: serverApiVersion, server: serverPeer));
-    }, onError: (Object e) => _setStatus(Unreachable('$e')));
+    ).then(
+      (r) {
+        if (_desired.isNotEmpty) {
+          _subscribed.addAll(_desired.map((e) => e.value));
+        }
+        // What DaemonClient reports: the negotiated version (the client's).
+        final hello = HelloResult.fromJson(r);
+        _setStatus(
+          Connected(apiVersion: hello.apiVersion, server: hello.server),
+        );
+      },
+      onError: (Object e) {
+        final mismatch = e is ApiException ? e.versionMismatch : null;
+        _setStatus(
+          mismatch != null
+              ? VersionMismatch(
+                  clientApiVersion: mismatch.clientApiVersion,
+                  serverApiVersion: mismatch.serverApiVersion,
+                )
+              : Unreachable('$e'),
+        );
+      },
+    );
   }
 
   @override
