@@ -191,9 +191,3 @@ class ProfilePickerView extends StatelessWidget {
     ),
   };
 }
-
-/// Focus [index] of the tile row once the page is laid out.
-void focusPickerTile(NavRegion region, int index, VoidCallback refocus) {
-  region.model.goTo(0, index < 0 ? 0 : index);
-  WidgetsBinding.instance.addPostFrameCallback((_) => refocus());
-}

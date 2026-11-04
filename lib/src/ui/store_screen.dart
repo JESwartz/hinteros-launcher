@@ -98,11 +98,6 @@ class _StoreScreenState extends State<StoreScreen> {
   }
 
   @override
-  void didUpdateWidget(StoreScreen old) {
-    super.didUpdateWidget(old);
-  }
-
-  @override
   void dispose() {
     _retry?.cancel();
     for (final s in _subs) {

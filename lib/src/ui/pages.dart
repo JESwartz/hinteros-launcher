@@ -1034,16 +1034,8 @@ const securityLockout = Duration(seconds: 5);
 
 /// The full-screen security-update notice: states the severity. "Update now"
 /// works at once and has the focus; "Later" and Back wait [securityLockout]
-/// (a countdown on Later). Never updates by itself.
-Future<SecurityChoice?> showSecurityNotice(
-  BuildContext context,
-  AvailableUpdate update, {
-  Duration lockout = securityLockout,
-}) => ModalScope.of(context).show<SecurityChoice>(
-  (context, modal) =>
-      SecurityNotice(modal: modal, update: update, lockout: lockout),
-);
-
+/// (a countdown on Later). Never updates by itself. The shell shows it in
+/// its own modal layer.
 class SecurityNotice extends StatefulWidget {
   const SecurityNotice({
     super.key,
