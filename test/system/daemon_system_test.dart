@@ -66,6 +66,21 @@ class _Recording extends api.MockDaemon {
   }
 }
 
+/// A system service that restarted: once [lost], it knows no job.
+class _LosesJobs extends api.MockDaemon {
+  bool lost = false;
+
+  @override
+  Future<Map<String, dynamic>> rpc(String method, Map<String, dynamic> params) {
+    if (lost && method == 'system.jobs.get') {
+      return Future.error(
+        const api.ApiException(api.ApiErrorCode.notFound, 'no such job'),
+      );
+    }
+    return super.rpc(method, params);
+  }
+}
+
 /// A connection that is not there (the real client throws this).
 class _Offline extends api.MockDaemon {
   @override
@@ -466,6 +481,19 @@ void main() {
         await jobs2.dispose();
       },
     );
+
+    test('a job the system service lost ends its watchers', () async {
+      final mock = _LosesJobs();
+      await mock.waitConnected();
+      addTearDown(mock.close);
+      final s = daemonSystemServices(mock);
+      final h = await s.system.redetectHardware(adminPin: _pin);
+      mock.lost = true;
+      final done = await s.jobs.watch(h.jobId).last;
+      expect(done.finished, isTrue);
+      expect(done.ok, isFalse);
+      expect(done.error!.kind, SystemErrorKind.notFound);
+    });
 
     test('an unknown job is not_found', () async {
       final (_, s) = await _setup();

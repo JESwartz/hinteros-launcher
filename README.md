@@ -119,8 +119,7 @@ Per profile: which button does which action, the keys of keyboard-mode apps, the
 mock `lib/src/api/mock_input.dart`), the sections in `lib/src/ui/system/controller_sections.dart`.
 Every change is stored at once (the whole stored form; what the launcher does not know, such as a
 newer daemon's part or pointer field, is sent back as the daemon gave it, so a save keeps it) and
-the four sections follow
-`ControllerRepository.changes`.
+the four sections follow `ControllerRepository.changes`.
 
 - **Buttons:** one row per action with its button. Select, "Press a button" (`input.capture`), and
   the pressed button goes to the action; the action that had it gets the old one, so the map stays

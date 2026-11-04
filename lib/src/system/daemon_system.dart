@@ -531,7 +531,7 @@ class DaemonJobs implements JobsRepository {
     try {
       job = (await _conn.systemJobsGet(api.SystemJobsGetParams(jobId: id))).job;
     } on api.ApiException catch (e) {
-      if (e.code == api.ApiErrorCode.notFound) _jobs.remove(id);
+      if (e.code == api.ApiErrorCode.notFound) _lost(id);
       return;
     } catch (_) {
       return;
@@ -546,6 +546,31 @@ class DaemonJobs implements JobsRepository {
     e.refreshed = true;
     if (e.snap.finished) return;
     _set(e, _fromJob(job, e.snap));
+  }
+
+  /// The system service no longer knows job [id] (it restarted, or dropped
+  /// the job). Whoever follows it gets a failed end, so no page or
+  /// [finished] waits for ever, then the entry goes.
+  void _lost(String id) {
+    final e = _jobs.remove(id);
+    if (e == null) return;
+    if (!e.snap.finished) {
+      _set(
+        e,
+        e.snap.copyWith(
+          finished: true,
+          ok: false,
+          error: const JobError(
+            message: 'Job stopped',
+            kind: SystemErrorKind.notFound,
+          ),
+          heardAt: now(),
+          clearPercent: true,
+          clearBuild: true,
+        ),
+      );
+    }
+    unawaited(e.changes.close());
   }
 
   /// After a reconnect: events may have been missed, so look at every job
