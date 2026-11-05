@@ -168,6 +168,57 @@ void main() {
     expect(h.services.mockProfiles.log, contains('remove:p3'));
   });
 
+  /// Into the Profiles pane, then no PIN on the admin profile or on Sam
+  /// (the profile in use must have one to get there).
+  Future<Harness> openNoPins(WidgetTester t, {String current = 'p1'}) async {
+    setView(t);
+    final h = harness(current: current);
+    final box = h.services.mockProfiles.box;
+    final sam = box.profiles.firstWhere((p) => p.id == 'p3')..locked = false;
+    await h.pump(t);
+    await enterSettingsEntry(t, 'profiles');
+    box.admin.pin = null;
+    sam.pin = null;
+    return h;
+  }
+
+  testWidgets('removing another profile: no admin PIN set, no PIN pad', (
+    t,
+  ) async {
+    final h = await openNoPins(t);
+    await keys(t, [kDown, kEnter]); // Sam
+    // Switch to this profile, Rename, Give it a new PIN, Remove.
+    await keys(t, [kDown, kDown, kDown, kEnter]);
+    expect(find.text('Remove Sam?'), findsOneWidget);
+    await keys(t, [kRight, kEnter], settle: false);
+    await frames(t);
+    expect(find.text("Type the admin profile's PIN."), findsNothing);
+    expect(h.services.mockProfiles.log, contains('remove:p3'));
+    expect(find.text('Removing the profile'), findsOneWidget);
+  });
+
+  testWidgets('removing a PIN set since: the PIN pad still opens', (t) async {
+    final h = await openNoPins(t);
+    await keys(t, [kDown, kEnter]); // Sam
+    await keys(t, [kDown, kDown, kDown, kEnter]); // Remove
+    h.services.mockProfiles.box.admin.pin = '2468';
+    await keys(t, [kRight, kEnter]);
+    expect(find.text("Type the admin profile's PIN."), findsOneWidget);
+    expect(h.services.mockProfiles.log, isNot(contains('remove:p3')));
+  });
+
+  testWidgets('removing your own profile with no PIN: no PIN pad', (t) async {
+    final h = await openNoPins(t, current: 'p3');
+    await keys(t, [kDown, kEnter]); // Sam, the own profile
+    // Rename, Colour, Change PIN, Lock this profile, App history, Remove.
+    await keys(t, [kDown, kDown, kDown, kDown, kDown, kEnter]);
+    expect(find.text('Remove Sam?'), findsOneWidget);
+    await keys(t, [kRight, kEnter], settle: false);
+    await frames(t);
+    expect(find.text('Type your PIN.'), findsNothing);
+    expect(h.services.mockProfiles.log, contains('remove:p3'));
+  });
+
   testWidgets('Switch to this profile: its PIN first, then the switch', (
     t,
   ) async {
