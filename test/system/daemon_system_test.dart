@@ -398,6 +398,38 @@ void main() {
       );
     });
 
+    test('a job another profile started: the admin PIN cancels it', () async {
+      final (mock, s) = await _setup();
+      final a = await s.updates.rollback(adminPin: _pin);
+      mock.system.startedByOther.add(a.jobId);
+      final e = await _fails(s.jobs.cancel(a.jobId));
+      expect(e.kind, SystemErrorKind.permissionDenied);
+      expect(e.data['reason'], 'starter');
+      expect(e.message, 'Only the profile that started it can cancel it.');
+      final wrong = await _fails(s.jobs.cancel(a.jobId, adminPin: '1111'));
+      expect(wrong.kind, SystemErrorKind.pinRequired);
+      expect(wrong.data['pin'], 'admin');
+      await s.jobs.cancel(a.jobId, adminPin: _pin);
+      expect((await s.jobs.watch(a.jobId).last).cancelled, isTrue);
+    });
+
+    test('a progress without a stage (unknown to the daemon) keeps the '
+        'last one', () async {
+      final (mock, s) = await _setup();
+      final a = await s.updates.rollback(adminPin: _pin);
+      mock.system.progressJob(a.jobId, api.Stage.building);
+      await pumpEventQueue();
+      mock.emitRaw('job_progress', {
+        'job_id': a.jobId,
+        'kind': 'unknown',
+        'started_at': 1790000000,
+      });
+      await pumpEventQueue();
+      final snap = await s.jobs.watch(a.jobId).first;
+      expect(snap.stage, JobStage.building);
+      expect(snap.kind, JobKind.rollback);
+    });
+
     test('one mutating job at a time', () async {
       final (_, s) = await _setup();
       await s.updates.rollback(adminPin: _pin);

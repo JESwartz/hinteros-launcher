@@ -454,6 +454,8 @@ class StoreCard extends StatelessWidget {
                           StoreState.removing => 'Removing...',
                           StoreState.retired => 'Installed, no longer offered',
                           StoreState.unavailable => 'Installed, going away',
+                          StoreState.leftover => 'Removed, data stays',
+                          StoreState.unknown => 'Not available',
                           StoreState.available => app.sizeLabel,
                         },
                         maxLines: 1,
@@ -639,11 +641,19 @@ class _AppDetailPageState extends State<AppDetailPage> {
     final t = HinterTheme.of(context);
     final store = widget.services.store;
     // The listing follows `store_changed` (a permission changed, for one).
-    final app =
-        store.apps.where((a) => a.id == widget.app.id).firstOrNull ??
-        widget.app;
-    final state = store.stateOf(app.id);
+    final listed = store.apps.where((a) => a.id == widget.app.id).firstOrNull;
+    final app = listed ?? widget.app;
+    // Left-over data goes from the listing once it is cleared: the page
+    // stays as it was until it closes.
+    final state = listed == null && widget.app.state == StoreState.leftover
+        ? StoreState.leftover
+        : store.stateOf(app.id);
     final installed = state.isInstalled;
+    // Not installed and still in the catalog: it can be installed.
+    final offered =
+        !installed &&
+        state != StoreState.leftover &&
+        state != StoreState.unknown;
     final deps = missingDependencies(app, widget.catalog, store.installed);
     final inTheWay = [
       for (final id in app.conflicts)
@@ -654,15 +664,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
     p.add(
       Text(switch (state) {
         StoreState.available => 'Not installed.',
+        StoreState.leftover => 'Removed. Its data stays on the box.',
+        StoreState.unknown => 'Not available.',
         StoreState.installing => 'Installing...',
         StoreState.removing => 'Removing...',
         _ => 'Installed.',
       }, style: t.label),
     );
-    if (!installed && app.sizeMiB > 0) {
+    if (offered && app.sizeMiB > 0) {
       p.add(Text('Size: ${app.sizeLabel}.', style: t.bodyDim));
     }
-    if (!installed && deps.isNotEmpty) {
+    if (offered && deps.isNotEmpty) {
       p.add(
         Text(
           'Also installs: ${[for (final d in deps) d.name].join(', ')}.',
@@ -670,7 +682,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         ),
       );
     }
-    if (!installed && inTheWay.isNotEmpty) {
+    if (offered && inTheWay.isNotEmpty) {
       p.add(
         StatusLine(
           "Can't be installed with ${inTheWay.join(', ')}. Remove "
@@ -685,7 +697,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     }
     // An app that needs a service the box does not run cannot be installed
     // here; only the admin profile can add the service (owner answer).
-    final needs = installed
+    final needs = !offered
         ? const <String>[]
         : [for (final s in app.missingServices) s.name];
     if (needs.isNotEmpty) {
@@ -710,9 +722,26 @@ class _AppDetailPageState extends State<AppDetailPage> {
       enabled: app.hasData && widget.changes,
     );
     p.buttons('actions', [
-      if (state.busy)
+      if (state.busy || state == StoreState.unknown)
         btn('Back', widget.modal.close, primary: true)
-      else if (installed) ...[
+      else if (state == StoreState.leftover) ...[
+        // Only its data is left: once cleared, there is nothing to show.
+        btn(
+          'Clear user data',
+          () async {
+            final ok = await clearDataFlow(
+              context,
+              widget.services,
+              app,
+              data: data,
+            );
+            if (ok && mounted) widget.modal.close();
+          },
+          primary: true,
+          enabled: app.hasData && widget.changes,
+        ),
+        btn('Back', widget.modal.close),
+      ] else if (installed) ...[
         btn('Back', widget.modal.close),
         btn(
           'Force stop',

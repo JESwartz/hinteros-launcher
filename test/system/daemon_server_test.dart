@@ -136,7 +136,8 @@ void main() {
     final b = await _setup();
     final none = await _fails(b.server.enable('tailscale'));
     expect(none.kind, SystemErrorKind.pinRequired);
-    expect(b.mock.system.log, isEmpty, reason: 'no PIN, no call');
+    expect(none.data['pin'], 'admin');
+    expect(b.mock.system.log, ['services.enable:tailscale']);
     final wrong = await _fails(b.server.enable('tailscale', pin: '1111'));
     expect(wrong.kind, SystemErrorKind.pinRequired);
     expect(wrong.data['pin'], 'admin');
@@ -158,6 +159,15 @@ void main() {
     expect(p.state, ServiceState.needsSetup);
     final on = await _fails(b.server.enable('jellyfin-server', pin: _pin));
     expect(on.kind, SystemErrorKind.nothingToDo);
+  });
+
+  test('an admin profile without a PIN: no admin_pin is sent', () async {
+    final b = await _setup();
+    b.mock.profiles.admin.pin = null;
+    final h = await b.server.enable('tailscale');
+    expect(h.kind, JobKind.servicesEnable);
+    final accounts = await b.server.revealAccounts();
+    expect(accounts.users, isNotEmpty);
   });
 
   test('disable sends delete_data with the revision', () async {
@@ -272,6 +282,17 @@ void main() {
       b.server.setCloudflareToken('eyJhIjoiYiJ9', pin: _pin),
     );
     expect(token.message, 'This is not a tunnel token.');
+  });
+
+  test('client_token: a refused Jellyfin sign-in has its own text', () {
+    final e = systemExceptionFrom(
+      const api.ApiException(api.ApiErrorCode.unavailable, 'refused', {
+        'service': 'jellyfin',
+        'reason': 'sign_in_refused',
+      }),
+    );
+    expect(e.kind, SystemErrorKind.unavailable);
+    expect(e.message, 'Jellyfin did not accept the sign-in.');
   });
 
   test('libraries: add with the kind and folder, remove by id', () async {

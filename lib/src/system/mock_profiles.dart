@@ -407,7 +407,7 @@ class MockProfiles implements ProfilesRepository {
   Future<void> rename(String id, String name, {String? adminPin}) async {
     _maybeFail();
     final p = _profile(id);
-    if (id != currentId) box.checkPin(box.admin, adminPin, PinKind.admin);
+    if (id != currentId) box.checkBoxAdmin(adminPin);
     log.add('rename:$id:${name.trim()}');
     p.name = name.trim();
     _changed();
@@ -477,7 +477,7 @@ class MockProfiles implements ProfilesRepository {
   }
 
   @override
-  Future<JobHandle> remove(String id, String pin) async {
+  Future<JobHandle> remove(String id, {String? pin, String? adminPin}) async {
     _maybeFail();
     final p = _profile(id);
     if (p.admin) {
@@ -487,10 +487,10 @@ class MockProfiles implements ProfilesRepository {
         data: {'field': 'id', 'reason': 'admin'},
       );
     }
-    if (id == currentId) {
+    if (id != currentId) {
+      box.checkBoxAdmin(adminPin);
+    } else if (p.pin != null) {
       box.checkPin(p, pin, PinKind.self);
-    } else {
-      box.checkPin(box.admin, pin, PinKind.admin);
     }
     log.add('remove:$id');
     return jobs.start(
@@ -504,9 +504,9 @@ class MockProfiles implements ProfilesRepository {
   }
 
   @override
-  Future<JobHandle?> setGuest(bool enabled, String adminPin) async {
+  Future<JobHandle?> setGuest(bool enabled, String? adminPin) async {
     _maybeFail();
-    box.checkPin(box.admin, adminPin, PinKind.admin);
+    box.checkBoxAdmin(adminPin);
     if (box.guestEnabled == enabled) return null;
     log.add('guest:$enabled');
     return jobs.start(
@@ -523,9 +523,9 @@ class MockProfiles implements ProfilesRepository {
   Future<StarterSet> starterSet() async => starter;
 
   @override
-  Future<JobHandle?> setStarterSet(List<String> ids, String adminPin) async {
+  Future<JobHandle?> setStarterSet(List<String> ids, String? adminPin) async {
     _maybeFail();
-    box.checkPin(box.admin, adminPin, PinKind.admin);
+    box.checkBoxAdmin(adminPin);
     final have = _adminApps();
     for (final id in ids) {
       if (!have.contains(id)) {

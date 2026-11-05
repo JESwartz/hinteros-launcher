@@ -179,7 +179,7 @@ class _FirstBootPageState extends State<FirstBootPage> {
         submitLabel: 'Join',
         submit: (pw) async {
           try {
-            await _s.network.connect(ap.ssid, password: pw);
+            await _s.network.connect(ap.id, password: pw);
             return null;
           } on SystemException catch (e) {
             return e.message;
@@ -187,7 +187,7 @@ class _FirstBootPageState extends State<FirstBootPage> {
         },
       );
     } else {
-      await _try(() => _s.network.connect(ap.ssid));
+      await _try(() => _s.network.connect(ap.id));
     }
     await _loadNetwork();
   }
@@ -440,9 +440,12 @@ class _FirstBootPageState extends State<FirstBootPage> {
             ok: n?.online ?? false,
           ),
         );
+        // Names can repeat (one per security): the list's own flag says
+        // which one is joined; the name only when the list has none.
+        final listed = _wifi.any((ap) => ap.connected);
         for (var i = 0; i < _wifi.length; i++) {
           final ap = _wifi[i];
-          final joined = ap.connected || ap.ssid == n?.wifiSsid;
+          final joined = ap.connected || (!listed && ap.ssid == n?.wifiSsid);
           p.item(
             'w$i',
             onSelect: joined ? null : () => unawaited(_join(ap)),

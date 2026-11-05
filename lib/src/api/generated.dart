@@ -264,16 +264,16 @@ abstract final class ApiErrorCode {
   /// apps.launch: every app display is in use (apps.displays.get). apps: the running apps that hold one; closing one frees it once it has exited (app_exited).
   static const noAppDisplay = 2009;
 
-  /// Not allowed: the caller does not own seat0's active session (seat), polkit said no (polkit), or the peer cannot be identified safely (peer: no SO_PEERPIDFD, or the process is gone).
+  /// Not allowed: the caller does not own seat0's active session (seat), polkit said no (polkit), the peer cannot be identified safely (peer: no SO_PEERPIDFD, or the process is gone), the caller's profile may not do it (profile), or jobs.cancel of a job another profile started without admin_pin (starter).
   static const permissionDenied = 3002;
 
-  /// Only in job_finished.error and jobs.get: the job failed (or was cancelled) at stage; log_hint is the last relevant log line. Reason says why a Server section job failed: unreachable (the service does not answer), not_ready (its setup is not done), refused (the service or tool said no; log_hint says why), timeout (nobody signed in in time), not_connected (the Cloudflare tunnel did not connect).
+  /// Only in job_finished.error and jobs.get: the job failed (or was cancelled) at stage; log_hint is the last relevant log line. Reason cancelled: the job was cancelled (jobs.cancel; any kind). Else reason says why a Server section job failed: unreachable (the service does not answer), not_ready (its setup is not done), refused (the service or tool said no; log_hint says why), timeout (nobody signed in in time), not_connected (the Cloudflare tunnel did not connect).
   static const jobFailed = 3003;
 
   /// Not enough memory or free disk space for a rebuild.
   static const insufficientResources = 3004;
 
-  /// Another job runs (only one at a time), or the job is past the point of cancelling.
+  /// Another job runs (only one at a time), or the job is past the point of cancelling. data.job_id is that job; data can be absent when the running job cannot be read (a job a later version started, after a rollback).
   static const jobBusy = 3005;
 
   /// Too many mutating requests from this user (10 per minute, burst 3).
@@ -312,7 +312,7 @@ abstract final class ApiErrorCode {
   /// A relayed method could not reach the system service: it is down (reason down) or speaks another system API version (reason version_mismatch, e.g. after a switch until the session restarts). The session API keeps working.
   static const systemUnavailable = 3001;
 
-  /// A runtime-settings method needs a service that is not there (not installed, not running, no permission to reach it, or no such hardware). Also store.list without a readable catalog index (service catalog), session.restart without a greetd session on seat0 (service logind), and auth.respond when polkit's agent helper cannot be run (service polkit). The relayed Server section methods: service jellyfin, plex, tailscale or cloudflare with reason off or not_ready. System.base.set to a base that is not built: service base, reason not_built.
+  /// A runtime-settings method needs a service that is not there (not installed, not running, no permission to reach it, or no such hardware). Also store.list without a readable catalog index (service catalog), session.restart without a greetd session on seat0 (service logind), and auth.respond when polkit's agent helper cannot be run (service polkit). The relayed Server section methods: service jellyfin, plex, tailscale or cloudflare with reason off or not_ready (system.jellyfin.client_token also unreachable or sign_in_refused). System.base.set to a base that is not built: service base, reason not_built.
   static const unavailable = 4001;
 
   /// The service accepted the request but the operation failed (a connection or pairing attempt, a mode change). The message says why in words; reason is for code.
@@ -419,6 +419,9 @@ typedef TunnelToken = String;
 
 /// A Bluetooth address, upper case.
 typedef BtAddress = String;
+
+/// Opaque: a network in wifi.list, for wifi.connect and wifi.forget (one id per raw SSID and security; stable while they stay the same). Clients must not build or parse it.
+typedef WifiNetworkId = String;
 
 /// Name and build version of one side of the connection (informational, for logs).
 class Peer {
@@ -1473,6 +1476,7 @@ enum Base {
   String toJson() => value;
 }
 
+/// unknown: a kind of a later version (a server sends it after a rollback, for a job a later version started).
 enum JobKind {
   settings('settings'),
   ssh('ssh'),
@@ -1506,8 +1510,6 @@ enum JobKind {
   cloudflareSetToken('cloudflare_set_token'),
   cloudflareClearToken('cloudflare_clear_token'),
   appsClearData('apps_clear_data'),
-
-  /// A value this client does not know (newer daemon).
   unknown('unknown');
 
   const JobKind(this.value);
@@ -1760,6 +1762,7 @@ enum AuthOutcome {
   String toJson() => value;
 }
 
+/// leftover: not installed and removed from the catalog, its data still in this profile's home; only Clear data is offered.
 enum StoreState {
   available('available'),
   installed('installed'),
@@ -1767,6 +1770,7 @@ enum StoreState {
   removing('removing'),
   retired('retired'),
   unavailable('unavailable'),
+  leftover('leftover'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -1946,7 +1950,7 @@ class StoreAppReadme {
   String toString() => 'StoreAppReadme(${jsonEncode(toJson())})';
 }
 
-/// A catalog entry (hinteros-catalog index version 4, fields in snake_case) with its state on this box. Removed entries (tombstones) only have id, name and status_reason; the other fields are empty.
+/// A catalog entry (hinteros-catalog index version 4, fields in snake_case) with its state on this box. Removed entries (tombstones) only have id, name, status_reason and data_paths; the other fields are empty.
 class StoreApp {
   const StoreApp({
     required this.id,
@@ -2012,6 +2016,8 @@ class StoreApp {
   final Delivery delivery;
   final CatalogStatus status;
   final String? statusReason;
+
+  /// leftover: not installed and removed from the catalog, its data still in this profile's home; only Clear data is offered.
   final StoreState state;
 
   /// What the app may use in its sandbox, in catalog order. Not installed: the stored choice for its install (default granted). Empty for Steam, apps without a sandbox and tombstones.
@@ -2100,13 +2106,12 @@ class StoreApp {
   String toString() => 'StoreApp(${jsonEncode(toJson())})';
 }
 
+/// unknown: a state of a later version (a server may send it after a rollback, for a job a later version started).
 enum JobState {
   running('running'),
   succeeded('succeeded'),
   failed('failed'),
   cancelled('cancelled'),
-
-  /// A value this client does not know (newer daemon).
   unknown('unknown');
 
   const JobState(this.value);
@@ -2118,6 +2123,7 @@ enum JobState {
   String toJson() => value;
 }
 
+/// unknown: a stage of a later version (a server may send it after a rollback, in job_failed's stage; job_progress and jobs.get leave it out).
 enum Stage {
   preparing('preparing'),
   fetching('fetching'),
@@ -2134,8 +2140,6 @@ enum Stage {
   configuring('configuring'),
   signingIn('signing_in'),
   finishing('finishing'),
-
-  /// A value this client does not know (newer daemon).
   unknown('unknown');
 
   const Stage(this.value);
@@ -2872,7 +2876,7 @@ class StorageNode {
   String toString() => 'StorageNode(${jsonEncode(toJson())})';
 }
 
-/// The Nix store's filesystem, like df: used = total minus free blocks, free = available blocks.
+/// The Nix store's filesystem: used = total minus available blocks (f_bavail), free = available blocks, so used + free = total. Blocks reserved for root count as used.
 class DiskUsage {
   const DiskUsage({
     required this.totalBytes,
@@ -3002,7 +3006,7 @@ class Measurement {
   /// When it finished (Unix seconds).
   final int measuredAt;
 
-  /// The Nix store's filesystem, like df: used = total minus free blocks, free = available blocks.
+  /// The Nix store's filesystem: used = total minus available blocks (f_bavail), free = available blocks, so used + free = total. Blocks reserved for root count as used.
   final DiskUsage disk;
 
   /// A segment of the storage ring. Children always add up to bytes (the disk root: to the filesystem's size, unless the measured parts exceed it). Zero-byte nodes are left out except app_env, profile, guest and free. Order: generations newest first, other named nodes largest first, then common, shared, files, other, free. The launcher names kinds itself; name is data (a folder or a game).
@@ -4137,10 +4141,14 @@ class Job {
 
   /// Server-issued job id.
   final String jobId;
+
+  /// unknown: a kind of a later version (a server sends it after a rollback, for a job a later version started).
   final JobKind kind;
 
   /// Who started it.
   final int uid;
+
+  /// unknown: a state of a later version (a server may send it after a rollback, for a job a later version started).
   final JobState state;
 
   /// Current or last reached stage.
@@ -4323,6 +4331,7 @@ enum WifiSecurity {
 
 class WifiNetwork {
   const WifiNetwork({
+    required this.id,
     required this.ssid,
     required this.signal,
     required this.security,
@@ -4330,6 +4339,10 @@ class WifiNetwork {
     required this.connected,
   });
 
+  /// Opaque: a network in wifi.list, for wifi.connect and wifi.forget (one id per raw SSID and security; stable while they stay the same). Clients must not build or parse it.
+  final String id;
+
+  /// The name to show: an SSID that is not UTF-8 has U+FFFD in place of its bad bytes, so two networks can show the same name (their ids differ).
   final String ssid;
   final int signal;
 
@@ -4341,6 +4354,7 @@ class WifiNetwork {
   final bool connected;
 
   factory WifiNetwork.fromJson(Map<String, dynamic> json) => WifiNetwork(
+    id: json['id'] as String,
     ssid: json['ssid'] as String,
     signal: json['signal'] as int,
     security: WifiSecurity.fromJson(json['security'] as String),
@@ -4349,6 +4363,7 @@ class WifiNetwork {
   );
 
   Map<String, dynamic> toJson() => {
+    'id': id,
     'ssid': ssid,
     'signal': signal,
     'security': security.toJson(),
@@ -7531,7 +7546,7 @@ class SystemProfilesRenameParams {
   const SystemProfilesRenameParams({
     required this.id,
     required this.name,
-    this.pin,
+    this.adminPin,
   });
 
   /// A profile id.
@@ -7541,16 +7556,22 @@ class SystemProfilesRenameParams {
   final String name;
 
   /// 4 to 8 digits. Never logged.
-  final String? pin;
+  final String? adminPin;
 
   factory SystemProfilesRenameParams.fromJson(Map<String, dynamic> json) =>
       SystemProfilesRenameParams(
         id: json['id'] as String,
         name: json['name'] as String,
-        pin: json['pin'] == null ? null : json['pin'] as String,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
       );
 
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'pin': ?pin};
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'admin_pin': ?adminPin,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -7823,7 +7844,8 @@ class SystemProfilesRemoveParams {
   const SystemProfilesRemoveParams({
     required this.id,
     required this.confirmId,
-    required this.pin,
+    this.pin,
+    this.adminPin,
     required this.revision,
   });
 
@@ -7834,7 +7856,10 @@ class SystemProfilesRemoveParams {
   final String confirmId;
 
   /// 4 to 8 digits. Never logged.
-  final String pin;
+  final String? pin;
+
+  /// 4 to 8 digits. Never logged.
+  final String? adminPin;
 
   /// SHA-256 of state.json, hex.
   final String revision;
@@ -7843,14 +7868,18 @@ class SystemProfilesRemoveParams {
       SystemProfilesRemoveParams(
         id: json['id'] as String,
         confirmId: json['confirm_id'] as String,
-        pin: json['pin'] as String,
+        pin: json['pin'] == null ? null : json['pin'] as String,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
         revision: json['revision'] as String,
       );
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'confirm_id': confirmId,
-    'pin': pin,
+    'pin': ?pin,
+    'admin_pin': ?adminPin,
     'revision': revision,
   };
 
@@ -7935,20 +7964,22 @@ class SystemProfilesUnlockResult {
 }
 
 class SystemGuestSetParams {
-  const SystemGuestSetParams({required this.enabled, required this.adminPin});
+  const SystemGuestSetParams({required this.enabled, this.adminPin});
 
   final bool enabled;
 
   /// 4 to 8 digits. Never logged.
-  final String adminPin;
+  final String? adminPin;
 
   factory SystemGuestSetParams.fromJson(Map<String, dynamic> json) =>
       SystemGuestSetParams(
         enabled: json['enabled'] as bool,
-        adminPin: json['admin_pin'] as String,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
       );
 
-  Map<String, dynamic> toJson() => {'enabled': enabled, 'admin_pin': adminPin};
+  Map<String, dynamic> toJson() => {'enabled': enabled, 'admin_pin': ?adminPin};
 
   @override
   bool operator ==(Object other) =>
@@ -8139,20 +8170,22 @@ class SystemStarterSetGetResult {
 }
 
 class SystemStarterSetSetParams {
-  const SystemStarterSetSetParams({required this.ids, required this.pin});
+  const SystemStarterSetSetParams({required this.ids, this.adminPin});
 
   final List<String> ids;
 
   /// 4 to 8 digits. Never logged.
-  final String pin;
+  final String? adminPin;
 
   factory SystemStarterSetSetParams.fromJson(Map<String, dynamic> json) =>
       SystemStarterSetSetParams(
         ids: (json['ids'] as List).map((x) => x as String).toList(),
-        pin: json['pin'] as String,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
       );
 
-  Map<String, dynamic> toJson() => {'ids': ids, 'pin': pin};
+  Map<String, dynamic> toJson() => {'ids': ids, 'admin_pin': ?adminPin};
 
   @override
   bool operator ==(Object other) =>
@@ -8874,7 +8907,7 @@ class SystemServicesListResult {
 class SystemServicesEnableParams {
   const SystemServicesEnableParams({
     required this.ids,
-    required this.pin,
+    this.adminPin,
     required this.revision,
     this.acceptedTerms,
   });
@@ -8882,7 +8915,7 @@ class SystemServicesEnableParams {
   final List<String> ids;
 
   /// 4 to 8 digits. Never logged.
-  final String pin;
+  final String? adminPin;
 
   /// SHA-256 of state.json, hex.
   final String revision;
@@ -8893,7 +8926,9 @@ class SystemServicesEnableParams {
   factory SystemServicesEnableParams.fromJson(Map<String, dynamic> json) =>
       SystemServicesEnableParams(
         ids: (json['ids'] as List).map((x) => x as String).toList(),
-        pin: json['pin'] as String,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
         revision: json['revision'] as String,
         acceptedTerms: json['accepted_terms'] == null
             ? null
@@ -8902,7 +8937,7 @@ class SystemServicesEnableParams {
 
   Map<String, dynamic> toJson() => {
     'ids': ids,
-    'pin': pin,
+    'admin_pin': ?adminPin,
     'revision': revision,
     'accepted_terms': ?acceptedTerms,
   };
@@ -8947,7 +8982,7 @@ class SystemServicesEnableResult {
 class SystemServicesDisableParams {
   const SystemServicesDisableParams({
     required this.ids,
-    required this.pin,
+    this.adminPin,
     required this.revision,
     required this.deleteData,
   });
@@ -8955,7 +8990,7 @@ class SystemServicesDisableParams {
   final List<String> ids;
 
   /// 4 to 8 digits. Never logged.
-  final String pin;
+  final String? adminPin;
 
   /// SHA-256 of state.json, hex.
   final String revision;
@@ -8964,14 +8999,16 @@ class SystemServicesDisableParams {
   factory SystemServicesDisableParams.fromJson(Map<String, dynamic> json) =>
       SystemServicesDisableParams(
         ids: (json['ids'] as List).map((x) => x as String).toList(),
-        pin: json['pin'] as String,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
         revision: json['revision'] as String,
         deleteData: json['delete_data'] as bool,
       );
 
   Map<String, dynamic> toJson() => {
     'ids': ids,
-    'pin': pin,
+    'admin_pin': ?adminPin,
     'revision': revision,
     'delete_data': deleteData,
   };
@@ -9077,14 +9114,14 @@ class SystemMediaFoldersResult {
 
 class SystemJellyfinLibrariesAddParams {
   const SystemJellyfinLibrariesAddParams({
-    required this.pin,
+    this.adminPin,
     required this.name,
     required this.kind,
     required this.folder,
   });
 
   /// 4 to 8 digits. Never logged.
-  final String pin;
+  final String? adminPin;
 
   /// 1 to 64 characters after trimming, without control or format characters or /\:*?"&lt;&gt;|.
   final String name;
@@ -9098,14 +9135,14 @@ class SystemJellyfinLibrariesAddParams {
   factory SystemJellyfinLibrariesAddParams.fromJson(
     Map<String, dynamic> json,
   ) => SystemJellyfinLibrariesAddParams(
-    pin: json['pin'] as String,
+    adminPin: json['admin_pin'] == null ? null : json['admin_pin'] as String,
     name: json['name'] as String,
     kind: LibraryKind.fromJson(json['kind'] as String),
     folder: json['folder'] as String,
   );
 
   Map<String, dynamic> toJson() => {
-    'pin': pin,
+    'admin_pin': ?adminPin,
     'name': name,
     'kind': kind.toJson(),
     'folder': folder,
@@ -9153,12 +9190,12 @@ class SystemJellyfinLibrariesAddResult {
 
 class SystemJellyfinLibrariesRemoveParams {
   const SystemJellyfinLibrariesRemoveParams({
-    required this.pin,
+    this.adminPin,
     required this.libraryId,
   });
 
   /// 4 to 8 digits. Never logged.
-  final String pin;
+  final String? adminPin;
 
   /// A Jellyfin item id.
   final String libraryId;
@@ -9166,11 +9203,14 @@ class SystemJellyfinLibrariesRemoveParams {
   factory SystemJellyfinLibrariesRemoveParams.fromJson(
     Map<String, dynamic> json,
   ) => SystemJellyfinLibrariesRemoveParams(
-    pin: json['pin'] as String,
+    adminPin: json['admin_pin'] == null ? null : json['admin_pin'] as String,
     libraryId: json['library_id'] as String,
   );
 
-  Map<String, dynamic> toJson() => {'pin': pin, 'library_id': libraryId};
+  Map<String, dynamic> toJson() => {
+    'admin_pin': ?adminPin,
+    'library_id': libraryId,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -9213,15 +9253,19 @@ class SystemJellyfinLibrariesRemoveResult {
 }
 
 class SystemJellyfinUsersRevealParams {
-  const SystemJellyfinUsersRevealParams({required this.pin});
+  const SystemJellyfinUsersRevealParams({this.adminPin});
 
   /// 4 to 8 digits. Never logged.
-  final String pin;
+  final String? adminPin;
 
   factory SystemJellyfinUsersRevealParams.fromJson(Map<String, dynamic> json) =>
-      SystemJellyfinUsersRevealParams(pin: json['pin'] as String);
+      SystemJellyfinUsersRevealParams(
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
+      );
 
-  Map<String, dynamic> toJson() => {'pin': pin};
+  Map<String, dynamic> toJson() => {'admin_pin': ?adminPin};
 
   @override
   bool operator ==(Object other) =>
@@ -9345,21 +9389,23 @@ class SystemJellyfinClientTokenResult {
 }
 
 class SystemPlexClaimParams {
-  const SystemPlexClaimParams({required this.pin, required this.code});
+  const SystemPlexClaimParams({this.adminPin, required this.code});
 
   /// 4 to 8 digits. Never logged.
-  final String pin;
+  final String? adminPin;
 
   /// A plex.tv/claim code. Never logged.
   final String code;
 
   factory SystemPlexClaimParams.fromJson(Map<String, dynamic> json) =>
       SystemPlexClaimParams(
-        pin: json['pin'] as String,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
         code: json['code'] as String,
       );
 
-  Map<String, dynamic> toJson() => {'pin': pin, 'code': code};
+  Map<String, dynamic> toJson() => {'admin_pin': ?adminPin, 'code': code};
 
   @override
   bool operator ==(Object other) =>
@@ -9399,15 +9445,19 @@ class SystemPlexClaimResult {
 }
 
 class SystemTailscaleLoginParams {
-  const SystemTailscaleLoginParams({required this.pin});
+  const SystemTailscaleLoginParams({this.adminPin});
 
   /// 4 to 8 digits. Never logged.
-  final String pin;
+  final String? adminPin;
 
   factory SystemTailscaleLoginParams.fromJson(Map<String, dynamic> json) =>
-      SystemTailscaleLoginParams(pin: json['pin'] as String);
+      SystemTailscaleLoginParams(
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
+      );
 
-  Map<String, dynamic> toJson() => {'pin': pin};
+  Map<String, dynamic> toJson() => {'admin_pin': ?adminPin};
 
   @override
   bool operator ==(Object other) =>
@@ -9447,15 +9497,19 @@ class SystemTailscaleLoginResult {
 }
 
 class SystemTailscaleLogoutParams {
-  const SystemTailscaleLogoutParams({required this.pin});
+  const SystemTailscaleLogoutParams({this.adminPin});
 
   /// 4 to 8 digits. Never logged.
-  final String pin;
+  final String? adminPin;
 
   factory SystemTailscaleLogoutParams.fromJson(Map<String, dynamic> json) =>
-      SystemTailscaleLogoutParams(pin: json['pin'] as String);
+      SystemTailscaleLogoutParams(
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
+      );
 
-  Map<String, dynamic> toJson() => {'pin': pin};
+  Map<String, dynamic> toJson() => {'admin_pin': ?adminPin};
 
   @override
   bool operator ==(Object other) =>
@@ -9495,24 +9549,23 @@ class SystemTailscaleLogoutResult {
 }
 
 class SystemCloudflareSetTokenParams {
-  const SystemCloudflareSetTokenParams({
-    required this.pin,
-    required this.token,
-  });
+  const SystemCloudflareSetTokenParams({this.adminPin, required this.token});
 
   /// 4 to 8 digits. Never logged.
-  final String pin;
+  final String? adminPin;
 
   /// A Cloudflare tunnel token (standard padded base64). Never logged.
   final String token;
 
   factory SystemCloudflareSetTokenParams.fromJson(Map<String, dynamic> json) =>
       SystemCloudflareSetTokenParams(
-        pin: json['pin'] as String,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
         token: json['token'] as String,
       );
 
-  Map<String, dynamic> toJson() => {'pin': pin, 'token': token};
+  Map<String, dynamic> toJson() => {'admin_pin': ?adminPin, 'token': token};
 
   @override
   bool operator ==(Object other) =>
@@ -9554,16 +9607,18 @@ class SystemCloudflareSetTokenResult {
 }
 
 class SystemCloudflareClearTokenParams {
-  const SystemCloudflareClearTokenParams({required this.pin});
+  const SystemCloudflareClearTokenParams({this.adminPin});
 
   /// 4 to 8 digits. Never logged.
-  final String pin;
+  final String? adminPin;
 
   factory SystemCloudflareClearTokenParams.fromJson(
     Map<String, dynamic> json,
-  ) => SystemCloudflareClearTokenParams(pin: json['pin'] as String);
+  ) => SystemCloudflareClearTokenParams(
+    adminPin: json['admin_pin'] == null ? null : json['admin_pin'] as String,
+  );
 
-  Map<String, dynamic> toJson() => {'pin': pin};
+  Map<String, dynamic> toJson() => {'admin_pin': ?adminPin};
 
   @override
   bool operator ==(Object other) =>
@@ -9701,15 +9756,23 @@ class SystemJobsListResult {
 }
 
 class SystemJobsCancelParams {
-  const SystemJobsCancelParams({required this.jobId});
+  const SystemJobsCancelParams({required this.jobId, this.adminPin});
 
   /// Server-issued job id.
   final String jobId;
 
-  factory SystemJobsCancelParams.fromJson(Map<String, dynamic> json) =>
-      SystemJobsCancelParams(jobId: json['job_id'] as String);
+  /// 4 to 8 digits. Never logged.
+  final String? adminPin;
 
-  Map<String, dynamic> toJson() => {'job_id': jobId};
+  factory SystemJobsCancelParams.fromJson(Map<String, dynamic> json) =>
+      SystemJobsCancelParams(
+        jobId: json['job_id'] as String,
+        adminPin: json['admin_pin'] == null
+            ? null
+            : json['admin_pin'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {'job_id': jobId, 'admin_pin': ?adminPin};
 
   @override
   bool operator ==(Object other) =>
@@ -9927,20 +9990,21 @@ class WifiListResult {
 }
 
 class WifiConnectParams {
-  const WifiConnectParams({required this.ssid, this.password});
+  const WifiConnectParams({required this.id, this.password});
 
-  final String ssid;
+  /// Opaque: a network in wifi.list, for wifi.connect and wifi.forget (one id per raw SSID and security; stable while they stay the same). Clients must not build or parse it.
+  final String id;
 
   /// 8 to 63 characters (WPA), or 64 hex digits (the raw key).
   final String? password;
 
   factory WifiConnectParams.fromJson(Map<String, dynamic> json) =>
       WifiConnectParams(
-        ssid: json['ssid'] as String,
+        id: json['id'] as String,
         password: json['password'] == null ? null : json['password'] as String,
       );
 
-  Map<String, dynamic> toJson() => {'ssid': ssid, 'password': ?password};
+  Map<String, dynamic> toJson() => {'id': id, 'password': ?password};
 
   @override
   bool operator ==(Object other) =>
@@ -10099,14 +10163,15 @@ class WifiDisconnectResult {
 }
 
 class WifiForgetParams {
-  const WifiForgetParams({required this.ssid});
+  const WifiForgetParams({required this.id});
 
-  final String ssid;
+  /// Opaque: a network in wifi.list, for wifi.connect and wifi.forget (one id per raw SSID and security; stable while they stay the same). Clients must not build or parse it.
+  final String id;
 
   factory WifiForgetParams.fromJson(Map<String, dynamic> json) =>
-      WifiForgetParams(ssid: json['ssid'] as String);
+      WifiForgetParams(id: json['id'] as String);
 
-  Map<String, dynamic> toJson() => {'ssid': ssid};
+  Map<String, dynamic> toJson() => {'id': id};
 
   @override
   bool operator ==(Object other) =>
@@ -12997,6 +13062,8 @@ final class JobStartedEvent extends SessionEvent {
 
   /// Server-issued job id.
   final String jobId;
+
+  /// unknown: a kind of a later version (a server sends it after a rollback, for a job a later version started).
   final JobKind kind;
   final int uid;
 
@@ -13041,12 +13108,12 @@ final class JobStartedEvent extends SessionEvent {
   String toString() => 'JobStartedEvent(${jsonEncode(toJson())})';
 }
 
-/// Relayed from the system service. A job reached a stage or made progress (at most 4 per second), and at least every 2 s while the job runs (a heartbeat repeats the latest values). percent where meaningful: downloading and building (never goes back within a stage run, below 100 while nix runs), measuring. last_activity_at: the last time the job's process printed anything (nix log lines included). subject only when it changed during the job (it replaces the one from job_started).
+/// Relayed from the system service. A job reached a stage or made progress (at most 4 per second), and at least every 2 s while the job runs (a heartbeat repeats the latest values). percent where meaningful: downloading and building (never goes back within a stage run, below 100 while nix runs), measuring. last_activity_at: the last time the job's process printed anything (nix log lines included). subject only when it changed during the job (it replaces the one from job_started). stage is left out when it is unknown (a job a later version started, after a rollback).
 final class JobProgressEvent extends SessionEvent {
   const JobProgressEvent({
     required this.jobId,
     required this.kind,
-    required this.stage,
+    this.stage,
     this.percent,
     this.detail,
     required this.startedAt,
@@ -13056,8 +13123,12 @@ final class JobProgressEvent extends SessionEvent {
 
   /// Server-issued job id.
   final String jobId;
+
+  /// unknown: a kind of a later version (a server sends it after a rollback, for a job a later version started).
   final JobKind kind;
-  final Stage stage;
+
+  /// unknown: a stage of a later version (a server may send it after a rollback, in job_failed's stage; job_progress and jobs.get leave it out).
+  final Stage? stage;
   final int? percent;
   final ProgressDetail? detail;
   final int startedAt;
@@ -13070,7 +13141,9 @@ final class JobProgressEvent extends SessionEvent {
       JobProgressEvent(
         jobId: json['job_id'] as String,
         kind: JobKind.fromJson(json['kind'] as String),
-        stage: Stage.fromJson(json['stage'] as String),
+        stage: json['stage'] == null
+            ? null
+            : Stage.fromJson(json['stage'] as String),
         percent: json['percent'] == null ? null : json['percent'] as int,
         detail: json['detail'] == null
             ? null
@@ -13091,7 +13164,7 @@ final class JobProgressEvent extends SessionEvent {
   Map<String, dynamic> toJson() => {
     'job_id': jobId,
     'kind': kind.toJson(),
-    'stage': stage.toJson(),
+    if (stage != null) 'stage': stage!.toJson(),
     'percent': ?percent,
     if (detail != null) 'detail': detail!.toJson(),
     'started_at': startedAt,
@@ -13133,6 +13206,8 @@ final class JobFinishedEvent extends SessionEvent {
 
   /// Server-issued job id.
   final String jobId;
+
+  /// unknown: a kind of a later version (a server sends it after a rollback, for a job a later version started).
   final JobKind kind;
   final bool ok;
 
@@ -14020,6 +14095,7 @@ enum PermissionDeniedDataReason {
   polkit('polkit'),
   peer('peer'),
   profile('profile'),
+  starter('starter'),
 
   /// A value this client does not know (newer daemon).
   unknown('unknown');
@@ -14063,6 +14139,7 @@ class PermissionDeniedData {
 }
 
 enum JobFailedDataReason {
+  cancelled('cancelled'),
   unreachable('unreachable'),
   notReady('not_ready'),
   refused('refused'),
@@ -14088,6 +14165,7 @@ class JobFailedData {
     this.reason,
   });
 
+  /// unknown: a stage of a later version (a server may send it after a rollback, in job_failed's stage; job_progress and jobs.get leave it out).
   final Stage stage;
   final String logHint;
   final JobFailedDataReason? reason;
@@ -14964,7 +15042,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's profiles.rename. Rename a profile. Own: no PIN; another: the admin PIN.
   ///
-  /// pin_required {pin: admin} (with retry_after_ms during the backoff lock) when renaming another profile without the right admin PIN.
+  /// pin_required {pin: admin} (with retry_after_ms during the backoff lock) when renaming another profile without the right admin_pin.
   Future<SystemProfilesRenameResult> systemProfilesRename(
     SystemProfilesRenameParams params,
   ) async => SystemProfilesRenameResult.fromJson(
@@ -15008,7 +15086,7 @@ mixin SessionApiMethods {
 
   /// Relayed to the system service's profiles.remove. Remove a profile, its home and its apps (job, a rebuild). Own PIN for yourself, the admin PIN for others; never the admin profile.
   ///
-  /// confirm_id must equal id. The job kills every process of the account, rebuilds without it, then deletes the home (no symlink is followed, one filesystem), the PIN, the metadata, the app profile links and the registry entry. A failed or cancelled job deletes nothing. Removing your own profile: end the session first (the launcher switches to the picker). invalid_params {field: id, reason: admin} for the admin profile. Job kind profiles_remove.
+  /// confirm_id must equal id. The job kills every process of the account, rebuilds without it, then deletes the home (no symlink is followed, one filesystem), the PIN, the metadata, the app profile links and the registry entry. A failed or cancelled job deletes nothing. Removing your own profile: end the session first (the launcher switches to the picker). invalid_params {field: id, reason: admin} for the admin profile. pin: the caller's own PIN, to remove the caller's own profile (pin_required {pin: self}). admin_pin: the admin PIN, to remove another profile (pin_required {pin: admin}). Job kind profiles_remove.
   Future<SystemProfilesRemoveResult> systemProfilesRemove(
     SystemProfilesRemoveParams params,
   ) async => SystemProfilesRemoveResult.fromJson(
@@ -15210,15 +15288,16 @@ mixin SessionApiMethods {
   /// Relayed to the system service's jellyfin.users.reveal. the Jellyfin passwords, for other devices: the admin user's and each profile's (admin PIN; not a job). Action org.hinteros.system.services.
   ///
   /// Makes missing profile users first (one Jellyfin user per profile, not the guest; named after the profile: letters, digits, space and _-'.@+ kept, unique in any case with a number added; not an administrator, no media deletion; random 16-character password), when Jellyfin answers within 3 s. admin: null until HinterOS's first-run setup wrote it. users: every profile that has a user, with the profile's name now. The answer is never logged; the audit records only that it was asked. Jellyfin off: unavailable {service: jellyfin, reason: off}.
-  Future<SystemJellyfinUsersRevealResult> systemJellyfinUsersReveal(
-    SystemJellyfinUsersRevealParams params,
-  ) async => SystemJellyfinUsersRevealResult.fromJson(
+  Future<SystemJellyfinUsersRevealResult> systemJellyfinUsersReveal([
+    SystemJellyfinUsersRevealParams params =
+        const SystemJellyfinUsersRevealParams(),
+  ]) async => SystemJellyfinUsersRevealResult.fromJson(
     await rpc('system.jellyfin.users.reveal', params.toJson()),
   );
 
   /// Relayed to the system service's jellyfin.client_token. a Jellyfin access token for the caller's own profile, so the Jellyfin app on the box signs in by itself (spike S1). No PIN; read-only for the caller (no seat check, no rate limit).
   ///
-  /// The profile comes from the caller's uid (SO_PEERCRED): the guest, spare accounts and other users get permission_denied {reason: profile}. Jellyfin off or not set up: unavailable {service: jellyfin, reason: off | not_ready}; Jellyfin does not answer or refuses: unavailable {service: jellyfin, reason: unreachable}. The profile's Jellyfin user is made first if it has none. The token is made with POST /Users/AuthenticateByName as device hinteros-&lt;profile id&gt; (Jellyfin ends that device's older token, so a profile has one live token), kept in users.json (root only) and made again when Jellyfin answers 401 to it. Never logged.
+  /// The profile comes from the caller's uid (SO_PEERCRED): the guest, spare accounts and other users get permission_denied {reason: profile}. Jellyfin off or not set up: unavailable {service: jellyfin, reason: off | not_ready}; Jellyfin does not answer or refuses: unavailable {service: jellyfin, reason: unreachable}; it refuses the profile's sign-in (401) even after the user was made again and its recorded password set back: unavailable {service: jellyfin, reason: sign_in_refused}. The profile's Jellyfin user is made first if it has none. The token is made with POST /Users/AuthenticateByName as device hinteros-&lt;profile id&gt; (Jellyfin ends that device's older token, so a profile has one live token), kept in users.json (root only) and made again when Jellyfin answers 401 to it. Never logged.
   Future<SystemJellyfinClientTokenResult> systemJellyfinClientToken([
     SystemJellyfinClientTokenParams params =
         const SystemJellyfinClientTokenParams(),
@@ -15238,24 +15317,24 @@ mixin SessionApiMethods {
   /// Relayed to the system service's tailscale.login. sign the box in to Tailscale (job tailscale_login). Admin PIN. Action org.hinteros.system.services.
   ///
   /// Tailscale off: unavailable {service: tailscale, reason: off}; signed in already (Running): job_id null. The job runs tailscale up --reset --json --timeout=600s (the defaults: no exit node, no subnet routes, no Tailscale SSH; --force-reauth when an expired key needs a new sign-in). When Tailscale has the sign-in URL, job_progress has stage signing_in and detail.auth_url (https, at most 512 printable ASCII characters; the launcher shows it as a QR code; jobs.get's detail has it too); a newer URL comes in a new job_progress. The job succeeds when tailscaled is Running (the person signed in, and the tailnet approved the device if it must). jobs.cancel stops the wait. Failures: job_failed with reason timeout (nobody signed in within 10 minutes), refused (the CLI failed; log_hint says why) or unreachable (no tailscale CLI).
-  Future<SystemTailscaleLoginResult> systemTailscaleLogin(
-    SystemTailscaleLoginParams params,
-  ) async => SystemTailscaleLoginResult.fromJson(
+  Future<SystemTailscaleLoginResult> systemTailscaleLogin([
+    SystemTailscaleLoginParams params = const SystemTailscaleLoginParams(),
+  ]) async => SystemTailscaleLoginResult.fromJson(
     await rpc('system.tailscale.login', params.toJson()),
   );
 
   /// Relayed to the system service's tailscale.logout. sign the box out of Tailscale (job tailscale_logout; tailscale logout). Admin PIN. Action org.hinteros.system.services.
   ///
   /// Tailscale off: unavailable {service: tailscale, reason: off}; signed out already (NeedsLogin): job_id null. Stages preparing, configuring, finishing.
-  Future<SystemTailscaleLogoutResult> systemTailscaleLogout(
-    SystemTailscaleLogoutParams params,
-  ) async => SystemTailscaleLogoutResult.fromJson(
+  Future<SystemTailscaleLogoutResult> systemTailscaleLogout([
+    SystemTailscaleLogoutParams params = const SystemTailscaleLogoutParams(),
+  ]) async => SystemTailscaleLogoutResult.fromJson(
     await rpc('system.tailscale.logout', params.toJson()),
   );
 
   /// Relayed to the system service's cloudflare.set_token. set the Cloudflare tunnel token and (re)start the tunnel (job cloudflare_set_token). Admin PIN. Action org.hinteros.system.services.
   ///
-  /// token: the token of a remotely managed tunnel from the Zero Trust dashboard, checked strictly: at most 512 characters, standard padded base64 of a JSON object with exactly a (account tag, 32 hex digits), t (tunnel id, a UUID), s (secret: base64 of 32 to 256 bytes) and optionally e (endpoint, lower-case letters), each once; else invalid_params {field: token, reason: bad_length | not_base64 | not_a_token | bad_account | bad_tunnel_id | bad_secret | bad_endpoint}. Never logged. Cloudflare off: unavailable {service: cloudflare, reason: off}. The service writes it to /var/lib/hinteros/services/cloudflare-tunnel/token (0600 root, atomically); the job restarts hinteros-cloudflared.service and waits up to 30 s for a connection (stages configuring, finishing). Failures: job_failed with reason not_connected (the token is kept: check it, or clear it) or unreachable (systemd refused the restart).
+  /// token: the token of a remotely managed tunnel from the Zero Trust dashboard, checked strictly: at most 512 characters, standard padded base64 of a JSON object with a (account tag, 32 hex digits), t (tunnel id, a UUID), s (secret: base64 of 32 to 256 bytes) and optionally e (endpoint, 1 to 16 lower-case letters), each at most once; other keys are ignored (a later cloudflared may add some); else invalid_params {field: token, reason: bad_length | not_base64 | not_a_token | bad_account | bad_tunnel_id | bad_secret | bad_endpoint}. Never logged. Cloudflare off: unavailable {service: cloudflare, reason: off}. The service writes it to /var/lib/hinteros/services/cloudflare-tunnel/token (0600 root, atomically); the job restarts hinteros-cloudflared.service and waits up to 30 s for a connection (stages configuring, finishing). Failures: job_failed with reason not_connected (the token is kept: check it, or clear it) or unreachable (systemd refused the restart).
   Future<SystemCloudflareSetTokenResult> systemCloudflareSetToken(
     SystemCloudflareSetTokenParams params,
   ) async => SystemCloudflareSetTokenResult.fromJson(
@@ -15265,9 +15344,10 @@ mixin SessionApiMethods {
   /// Relayed to the system service's cloudflare.clear_token. stop the Cloudflare tunnel and delete its token (job cloudflare_clear_token). Admin PIN. Action org.hinteros.system.services.
   ///
   /// No token: job_id null. Cloudflare off: unavailable {service: cloudflare, reason: off}. Stages configuring, finishing.
-  Future<SystemCloudflareClearTokenResult> systemCloudflareClearToken(
-    SystemCloudflareClearTokenParams params,
-  ) async => SystemCloudflareClearTokenResult.fromJson(
+  Future<SystemCloudflareClearTokenResult> systemCloudflareClearToken([
+    SystemCloudflareClearTokenParams params =
+        const SystemCloudflareClearTokenParams(),
+  ]) async => SystemCloudflareClearTokenResult.fromJson(
     await rpc('system.cloudflare.clear_token', params.toJson()),
   );
 
@@ -15285,6 +15365,8 @@ mixin SessionApiMethods {
   );
 
   /// Relayed to the system service's jobs.cancel. Cancel a running job before its activation stage; the box stays unchanged. Action org.hinteros.system.jobs.cancel.
+  ///
+  /// Without admin_pin only the job's starter, root and the admin profile may cancel it; anyone else gets permission_denied {reason: starter}. With admin_pin (the admin profile's PIN) any profile may: pin_required {pin: admin} when it is wrong (it counts toward the admin PIN's tries). The cancelled job ends with job_finished, ok false, error job_failed with data.reason cancelled.
   Future<SystemJobsCancelResult> systemJobsCancel(
     SystemJobsCancelParams params,
   ) async => SystemJobsCancelResult.fromJson(
@@ -15314,7 +15396,7 @@ mixin SessionApiMethods {
 
   /// Join a network, creating a system-wide connection for it.
   ///
-  /// The password is needed unless the network is open or already known; it is stored in NetworkManager's system connection (readable by the session user, as accepted in the threat model) and is never logged by the daemon. Returns when the connection is up (or has failed, at most about 45 s). A failed new connection is removed again. 802.1X (enterprise) networks are refused with invalid_params.
+  /// id: the network's id from wifi.list or wifi.scan (not_found when no access point with that SSID and security is in range; invalid_params {field: id, reason: bad_format} when it is not an id). The password is needed unless the network is open or already known; it is stored in NetworkManager's system connection (readable by the session user, as accepted in the threat model) and is never logged by the daemon. Returns when the connection is up (or has failed, at most about 45 s). A failed new connection is removed again. 802.1X (enterprise) and WEP networks are refused with invalid_params {field: id, reason: unsupported_security}.
   Future<WifiConnectResult> wifiConnect(WifiConnectParams params) async =>
       WifiConnectResult.fromJson(await rpc('wifi.connect', params.toJson()));
 
@@ -15327,7 +15409,7 @@ mixin SessionApiMethods {
 
   /// Delete the stored connections of a network.
   ///
-  /// Disconnects if it is the network in use. Forgetting a network that is not stored is not an error.
+  /// id: the network's id from wifi.list (invalid_params {field: id, reason: bad_format} when it is not an id). Deletes every stored connection with that SSID. Disconnects if it is the network in use. Forgetting a network that is not stored is not an error.
   Future<WifiForgetResult> wifiForget(WifiForgetParams params) async =>
       WifiForgetResult.fromJson(await rpc('wifi.forget', params.toJson()));
 
@@ -15595,7 +15677,7 @@ mixin SessionApiMethods {
 
   /// The App Store: the running generation's catalog, merged with what is installed.
   ///
-  /// From the catalog index of the running generation (/run/current-system/sw/share/hinteros/catalog.json) and system.settings.get's installed apps. Lists available apps and installed ones whatever their catalog status (retired: still works, can be removed; removed: the next update takes it away), sorted by name; apps being installed or removed through this daemon have state installing/removing. Terms carry the full text's path on this box, so the launcher can show it offline before system.apps.install. more_after_update: the last update check found apps that the next update makes installable. unavailable {service: catalog}: no index, or an index version this daemon does not read.
+  /// From the catalog index of the running generation (/run/current-system/sw/share/hinteros/catalog.json) and system.settings.get's installed apps. Lists available apps and installed ones whatever their catalog status (retired: still works, can be removed; removed: the next update takes it away), and removed apps that are not installed but whose data (dataPaths) is still in this profile's home (state leftover: only Clear data, system.apps.clear_data, is offered), sorted by name; apps being installed or removed through this daemon have state installing/removing. Terms carry the full text's path on this box, so the launcher can show it offline before system.apps.install. more_after_update: the last update check found apps that the next update makes installable. unavailable {service: catalog}: no index, or an index version this daemon does not read.
   Future<StoreListResult> storeList([
     StoreListParams params = const StoreListParams(),
   ]) async =>

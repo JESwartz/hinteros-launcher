@@ -1,6 +1,7 @@
 /// Settings -> Profiles: every profile with its storage, Add profile, and per
 /// profile Switch to this profile (another one), Rename, Colour, PIN,
-/// Lock/Unlock, App history and Remove (a held Delete on its PIN pad).
+/// Lock/Unlock, App history and Remove (a held Delete on its PIN pad; no pad
+/// when there is no PIN to ask for).
 /// Actions on another profile ask for the admin PIN on the same pad. The admin profile
 /// also gets Starter apps and Guest on/off. In the guest's session only
 /// Switch profile and End guest session.
@@ -103,13 +104,17 @@ class _ProfilesSectionState extends State<ProfilesSection> {
   Future<void> _actions(
     ProfileInfo p,
     CurrentProfile me,
+    ProfilesState state,
     Future<void> Function() reload,
   ) async {
     final own = p.id == me.id;
     final choice = await showChoice<String>(
       context,
       title: p.name,
-      body: own ? null : "Changes need the admin profile's PIN.",
+      // Only when there is an admin PIN to ask for.
+      body: own || !(state.admin?.pinSet ?? false)
+          ? null
+          : "Changes need the admin profile's PIN.",
       choices: [
         if (!own && !me.guest && widget.session != null)
           const Choice('Switch to this profile', 'switch'),
@@ -165,11 +170,19 @@ class _ProfilesSectionState extends State<ProfilesSection> {
       }
       return;
     }
-    await withAdminPin(
-      context,
-      title: 'Rename ${p.name}',
-      action: (pin) => _p.rename(p.id, name, adminPin: pin),
-    );
+    try {
+      await withBoxAdminPin(
+        context,
+        _p,
+        title: 'Rename ${p.name}',
+        action: (pin) async {
+          await _p.rename(p.id, name, adminPin: pin);
+          return true;
+        },
+      );
+    } catch (e) {
+      if (mounted) await _failed(e);
+    }
   }
 
   Future<void> _color(ProfileInfo p) async {
@@ -299,24 +312,28 @@ class _ProfilesSectionState extends State<ProfilesSection> {
       title: 'Removing ${p.name}…',
       identity: LoadingIdentity(name: p.name, color: p.color),
     );
-    // The PIN, then Delete held for 3 seconds (letting go early starts over).
-    await showPinEntry(
-      context,
-      title: 'Remove ${p.name}',
-      body: own ? 'Type your PIN.' : "Type the admin profile's PIN.",
-      forgotPinFor: own ? p.name : forgotPinAdmin,
-      submitLabel: 'Delete',
-      holdToSubmit: const Duration(seconds: 3),
-      check: (pin) async {
-        try {
-          job = await _p.remove(p.id, pin);
-          endings?.begin(ending);
-          return const PinAccepted();
-        } catch (e) {
-          return PinAttempt.fromError(e);
+    // No PIN to ask for (your own profile has none, or the admin profile has
+    // none): the Remove above is the confirmation. A pin_required answer
+    // (a PIN was set since) still opens the pad.
+    if (!await _removeNeedsPin(p, own)) {
+      try {
+        job = await _p.remove(p.id);
+        endings?.begin(ending);
+      } on SystemException catch (e) {
+        if (PinRefusal.of(e) == null) {
+          if (mounted) await _failed(e);
+          return;
         }
-      },
-    );
+      }
+      if (!mounted) return;
+    }
+    // The PIN, then Delete held for 3 seconds (letting go early starts over).
+    if (job == null) {
+      await _removeWithPin(p, own, (j) {
+        job = j;
+        endings?.begin(ending);
+      });
+    }
     final j = job;
     if (j == null || !mounted) return;
     await showProfileJob(
@@ -328,6 +345,47 @@ class _ProfilesSectionState extends State<ProfilesSection> {
       // It failed while the service still answers: the error shows.
       onFinished: (s) {
         if (!s.ok) endings?.abandon(ending);
+      },
+    );
+  }
+
+  /// Whether removing [p] asks for a PIN: your own PIN for your own
+  /// profile, the admin profile's for another, as the box has it now. Not
+  /// known (no connection): as the list shows it for your own profile, none
+  /// for another (a pin_required answer still opens the pad).
+  Future<bool> _removeNeedsPin(ProfileInfo p, bool own) async {
+    try {
+      final s = await _p.list();
+      return (own ? s.byId(p.id) : s.admin)?.pinSet ?? false;
+    } on SystemException {
+      return own && p.pinSet;
+    }
+  }
+
+  /// The PIN pad with Delete held for 3 seconds; [started] gets the job.
+  Future<void> _removeWithPin(
+    ProfileInfo p,
+    bool own,
+    void Function(JobHandle) started,
+  ) async {
+    await showPinEntry(
+      context,
+      title: 'Remove ${p.name}',
+      body: own ? 'Type your PIN.' : "Type the admin profile's PIN.",
+      forgotPinFor: own ? p.name : forgotPinAdmin,
+      submitLabel: 'Delete',
+      holdToSubmit: const Duration(seconds: 3),
+      check: (pin) async {
+        try {
+          started(
+            own
+                ? await _p.remove(p.id, pin: pin)
+                : await _p.remove(p.id, adminPin: pin),
+          );
+          return const PinAccepted();
+        } catch (e) {
+          return PinAttempt.fromError(e);
+        }
       },
     );
   }
@@ -378,33 +436,45 @@ class _ProfilesSectionState extends State<ProfilesSection> {
           _StarterPage(modal: modal, apps: apps, chosen: set.ids.toSet()),
     );
     if (ids == null || !mounted) return;
-    JobHandle? job;
-    var nothing = false;
-    final ran = await withAdminPin(
-      context,
-      title: 'Starter apps',
-      action: (pin) async {
-        job = await _p.setStarterSet(ids, pin);
-        nothing = job == null;
-      },
-    );
-    if (!ran || !mounted) return;
-    if (nothing) {
+    final JobHandle? job;
+    try {
+      // The job, or false: nothing changed. Null: Back left the pad.
+      final r = await withBoxAdminPin<Object>(
+        context,
+        _p,
+        title: 'Starter apps',
+        action: (pin) async => await _p.setStarterSet(ids, pin) ?? false,
+      );
+      if (r == null) return;
+      job = r is JobHandle ? r : null;
+    } catch (e) {
+      if (mounted) await _failed(e);
+      return;
+    }
+    if (!mounted) return;
+    if (job == null) {
       await _message('Starter apps', 'Nothing changed.');
       return;
     }
-    await showJobProgress(context, _s, job!);
+    await showJobProgress(context, _s, job);
   }
 
   Future<void> _guest(bool enabled) async {
-    JobHandle? job;
-    final ran = await withAdminPin(
-      context,
-      title: enabled ? 'Turn off Guest' : 'Turn on Guest',
-      action: (pin) async => job = await _p.setGuest(!enabled, pin),
-    );
-    if (!ran || job == null || !mounted) return;
-    await showJobProgress(context, _s, job!);
+    final Object? r;
+    try {
+      // The job, or false: it already was so. Null: Back left the pad.
+      r = await withBoxAdminPin<Object>(
+        context,
+        _p,
+        title: enabled ? 'Turn off Guest' : 'Turn on Guest',
+        action: (pin) async => await _p.setGuest(!enabled, pin) ?? false,
+      );
+    } catch (e) {
+      if (mounted) await _failed(e);
+      return;
+    }
+    if (r is! JobHandle || !mounted) return;
+    await showJobProgress(context, _s, r);
   }
 
   // ---- the pane
@@ -461,7 +531,7 @@ class _ProfilesSectionState extends State<ProfilesSection> {
           ];
           p.item(
             'p-${x.id}',
-            onSelect: () => unawaited(_actions(x, me, reload)),
+            onSelect: () => unawaited(_actions(x, me, state, reload)),
             builder: (f) => SettingRow(
               title: x.name,
               subtitle: bits.join(' · '),

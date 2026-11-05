@@ -215,7 +215,7 @@ class _NetworkSectionState extends State<NetworkSection> {
       );
       if (c == null || !mounted) return;
       await _guard(
-        () => c == 'disconnect' ? _net.disconnect() : _net.forget(n.ssid),
+        () => c == 'disconnect' ? _net.disconnect() : _net.forget(n.id),
       );
     } else if (n.secured && !n.saved) {
       await _askPassword(n);
@@ -230,7 +230,7 @@ class _NetworkSectionState extends State<NetworkSection> {
   Future<void> _join(WifiNetwork n) async {
     setState(() => _joining = n.ssid);
     try {
-      await _net.connect(n.ssid);
+      await _net.connect(n.id);
     } on SystemException catch (e) {
       if (!mounted) return;
       setState(() => _joining = null);
@@ -259,7 +259,7 @@ class _NetworkSectionState extends State<NetworkSection> {
       submit: (pw) async {
         if (pw.isEmpty) return 'Type the password first.';
         try {
-          await _net.connect(n.ssid, password: pw);
+          await _net.connect(n.id, password: pw);
           return null;
         } on SystemException catch (e) {
           return e.kind == SystemErrorKind.wrongPassword

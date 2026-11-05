@@ -434,18 +434,20 @@ abstract class ProfilesRepository {
   /// `profiles.reset_pin` of another profile, with the admin PIN.
   Future<void> resetPin(String id, String newPin, {required String adminPin});
 
-  /// `profiles.remove` (a job): the own PIN for the own profile, else the
-  /// admin PIN.
-  Future<JobHandle> remove(String id, String pin);
+  /// `profiles.remove` (a job): the own [pin] for the own profile, else the
+  /// admin PIN [adminPin]. Each is needed only when that profile has one.
+  Future<JobHandle> remove(String id, {String? pin, String? adminPin});
 
-  /// `guest.set` with the admin PIN. Null when it already was so.
-  Future<JobHandle?> setGuest(bool enabled, String adminPin);
+  /// `guest.set` with the admin PIN (null: none known yet). Null when it
+  /// already was so.
+  Future<JobHandle?> setGuest(bool enabled, String? adminPin);
 
   /// `starter_set.get`.
   Future<StarterSet> starterSet();
 
-  /// `starter_set.set` with the admin PIN. Null: nothing changed.
-  Future<JobHandle?> setStarterSet(List<String> ids, String adminPin);
+  /// `starter_set.set` with the admin PIN (null: none known yet). Null:
+  /// nothing changed.
+  Future<JobHandle?> setStarterSet(List<String> ids, String? adminPin);
 
   /// `session.switch_profile`. The session ends afterwards; follow
   /// [switchEvents] until then. A locked target needs its [pin]: wrong or

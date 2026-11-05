@@ -256,7 +256,6 @@ class MockServer implements ServerRepository {
   /// The checks of every change: the admin PIN, then [failNext].
   void _check(String what, String? pin) {
     log.add(what);
-    if (pin == null) throw missingAdminPin;
     box.checkBoxAdmin(pin);
     _fail();
   }

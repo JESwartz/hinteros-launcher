@@ -227,14 +227,14 @@ class DaemonServer implements ServerRepository {
     ];
   });
 
-  /// Starts a job with the admin [pin]; none yet asks for it.
+  /// Starts a job with the admin [pin]. Without it the daemon asks for it
+  /// (pin_required) only when the admin profile has a PIN.
   Future<JobHandle> _start(
     JobKind kind,
     String? pin,
-    Future<String?> Function(String pin) call, {
+    Future<String?> Function(String? pin) call, {
     String nothingToDo = 'Nothing to change.',
   }) async {
-    if (pin == null) throw missingAdminPin;
     try {
       return await _jobs.start(kind, () => call(pin), nothingToDo: nothingToDo);
     } on SystemException catch (e) {
@@ -268,7 +268,7 @@ class DaemonServer implements ServerRepository {
       (revision) async => (await _conn.systemServicesEnable(
         api.SystemServicesEnableParams(
           ids: [id],
-          pin: pin,
+          adminPin: pin,
           revision: revision,
           acceptedTerms: acceptedTerms.isEmpty ? null : {...acceptedTerms},
         ),
@@ -289,7 +289,7 @@ class DaemonServer implements ServerRepository {
       (revision) async => (await _conn.systemServicesDisable(
         api.SystemServicesDisableParams(
           ids: [id],
-          pin: pin,
+          adminPin: pin,
           revision: revision,
           deleteData: deleteData,
         ),
@@ -309,7 +309,7 @@ class DaemonServer implements ServerRepository {
     pin,
     (pin) async => (await _conn.systemJellyfinLibrariesAdd(
       api.SystemJellyfinLibrariesAddParams(
-        pin: pin,
+        adminPin: pin,
         name: name,
         kind: _wireKind(kind),
         folder: folder,
@@ -322,43 +322,40 @@ class DaemonServer implements ServerRepository {
     JobKind.libraryRemove,
     pin,
     (pin) async => (await _conn.systemJellyfinLibrariesRemove(
-      api.SystemJellyfinLibrariesRemoveParams(pin: pin, libraryId: libraryId),
+      api.SystemJellyfinLibrariesRemoveParams(
+        adminPin: pin,
+        libraryId: libraryId,
+      ),
     )).jobId,
   );
 
   @override
-  Future<JellyfinAccounts> revealAccounts({String? pin}) async {
-    if (pin == null) throw missingAdminPin;
-    return guardCall(() async {
-      final r = await _conn.systemJellyfinUsersReveal(
-        api.SystemJellyfinUsersRevealParams(pin: pin),
-      );
-      final a = r.admin;
-      return JellyfinAccounts(
-        admin: a == null
-            ? null
-            : JellyfinAccount(
-                name: oneLine(a.name) ?? '',
-                password: a.password,
-              ),
-        users: [
-          for (final u in r.users)
-            JellyfinAccount(
-              name: oneLine(u.name) ?? '',
-              password: u.password,
-              profileName: oneLine(u.profileName) ?? u.profileId,
-            ),
-        ],
-      );
-    });
-  }
+  Future<JellyfinAccounts> revealAccounts({String? pin}) => guardCall(() async {
+    final r = await _conn.systemJellyfinUsersReveal(
+      api.SystemJellyfinUsersRevealParams(adminPin: pin),
+    );
+    final a = r.admin;
+    return JellyfinAccounts(
+      admin: a == null
+          ? null
+          : JellyfinAccount(name: oneLine(a.name) ?? '', password: a.password),
+      users: [
+        for (final u in r.users)
+          JellyfinAccount(
+            name: oneLine(u.name) ?? '',
+            password: u.password,
+            profileName: oneLine(u.profileName) ?? u.profileId,
+          ),
+      ],
+    );
+  });
 
   @override
   Future<JobHandle> claimPlex(String code, {String? pin}) => _start(
     JobKind.plexClaim,
     pin,
     (pin) async => (await _conn.systemPlexClaim(
-      api.SystemPlexClaimParams(pin: pin, code: code),
+      api.SystemPlexClaimParams(adminPin: pin, code: code),
     )).jobId,
     nothingToDo: 'Plex is linked already.',
   );
@@ -368,7 +365,7 @@ class DaemonServer implements ServerRepository {
     JobKind.tailscaleLogin,
     pin,
     (pin) async => (await _conn.systemTailscaleLogin(
-      api.SystemTailscaleLoginParams(pin: pin),
+      api.SystemTailscaleLoginParams(adminPin: pin),
     )).jobId,
     nothingToDo: 'Tailscale is signed in already.',
   );
@@ -378,7 +375,7 @@ class DaemonServer implements ServerRepository {
     JobKind.tailscaleLogout,
     pin,
     (pin) async => (await _conn.systemTailscaleLogout(
-      api.SystemTailscaleLogoutParams(pin: pin),
+      api.SystemTailscaleLogoutParams(adminPin: pin),
     )).jobId,
     nothingToDo: 'Tailscale is signed out already.',
   );
@@ -388,7 +385,7 @@ class DaemonServer implements ServerRepository {
     JobKind.cloudflareSetToken,
     pin,
     (pin) async => (await _conn.systemCloudflareSetToken(
-      api.SystemCloudflareSetTokenParams(pin: pin, token: token),
+      api.SystemCloudflareSetTokenParams(adminPin: pin, token: token),
     )).jobId,
   );
 
@@ -397,7 +394,7 @@ class DaemonServer implements ServerRepository {
     JobKind.cloudflareClearToken,
     pin,
     (pin) async => (await _conn.systemCloudflareClearToken(
-      api.SystemCloudflareClearTokenParams(pin: pin),
+      api.SystemCloudflareClearTokenParams(adminPin: pin),
     )).jobId,
     nothingToDo: 'There is no token.',
   );

@@ -44,6 +44,15 @@ class MockAccessPoint {
   });
 
   final String ssid;
+
+  /// The SSID's bytes in lower-case hex, the daemon's id without the
+  /// security.
+  String get ssidHex =>
+      utf8.encode(ssid).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+
+  /// The daemon's opaque `WifiNetworkId`: [ssidHex], `-`, the security.
+  String get id => '$ssidHex-${security.toJson()}';
+
   int signal;
   final WifiSecurity security;
 
@@ -186,6 +195,7 @@ class MockRuntime {
       if (wifiEnabled)
         for (final a in [...accessPoints]..sort((a, b) => b.signal - a.signal))
           WifiNetwork(
+            id: a.id,
             ssid: a.ssid,
             signal: a.signal,
             security: a.security,
@@ -214,12 +224,24 @@ class MockRuntime {
   /// Something else changes the network (the cable is plugged in, ...).
   void networkChanged() => _emitNetwork();
 
-  MockAccessPoint _ap(String ssid) => accessPoints.firstWhere(
-    (a) => a.ssid == ssid,
-    orElse: () => throw ApiException(
-      ApiErrorCode.notFound,
-      'no network named $ssid in range',
-    ),
+  /// The `id` param: a `WifiNetworkId`, else `invalid_params {field: id,
+  /// reason: bad_format}`.
+  static String _networkId(Map<String, dynamic> p) {
+    final id = _string(p, 'id');
+    if (!RegExp(r'^([0-9a-f]{2}){1,32}-[a-z0-9_]{1,16}$').hasMatch(id)) {
+      throw const ApiException(
+        ApiErrorCode.invalidParams,
+        'id is not a network id',
+        {'field': 'id', 'reason': 'bad_format'},
+      );
+    }
+    return id;
+  }
+
+  MockAccessPoint _ap(String id) => accessPoints.firstWhere(
+    (a) => a.id == id,
+    orElse: () =>
+        throw ApiException(ApiErrorCode.notFound, 'no network $id in range'),
   );
 
   void _needWifi() {
@@ -233,16 +255,17 @@ class MockRuntime {
   }
 
   Map<String, dynamic> _connect(Map<String, dynamic> p) {
-    final ssid = _string(p, 'ssid');
+    final id = _networkId(p);
     final password = p['password'] as String?;
     _needWifi();
-    final ap = _ap(ssid);
+    final ap = _ap(id);
+    final ssid = ap.ssid;
     if (ap.security == WifiSecurity.enterprise ||
         ap.security == WifiSecurity.wep) {
       throw ApiException(
         ApiErrorCode.invalidParams,
         '$ssid uses a security the daemon does not join',
-        const {'field': 'ssid', 'reason': 'unsupported_security'},
+        const {'field': 'id', 'reason': 'unsupported_security'},
       );
     }
     if (ap.security != WifiSecurity.open) {
@@ -714,15 +737,15 @@ class MockRuntime {
         _emitNetwork();
         return status().toJson();
       case 'wifi.forget':
-        final ap = accessPoints
-            .where((a) => a.ssid == _string(p, 'ssid'))
-            .firstOrNull;
-        if (ap != null) {
+        // Every stored connection with that SSID, whatever the security.
+        final ssid = _networkId(p).split('-').first;
+        final gone = accessPoints.where((a) => a.ssidHex == ssid).toList();
+        for (final ap in gone) {
           ap
             ..known = false
             ..connected = false;
-          _emitNetwork();
         }
+        if (gone.isNotEmpty) _emitNetwork();
         return const {};
       case 'wifi.enable':
         final on = p['enabled'];

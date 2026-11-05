@@ -118,6 +118,33 @@ unknown `AuthOutcome` is no authorization. Unknown fields are ignored, an unknow
 `UnknownSessionEvent`, an unknown error code is a plain failure, and a job `result` or a service
 `setup` or `detail` it cannot read is null. `test/api/forward_compat_test.dart` covers this.
 
+The 1.0 contract also has these rules:
+
+- **Admin PIN:** a param named `admin_pin` is always the admin profile's PIN and is always
+  optional; `pin` is the caller's own or the target's. The launcher sends `admin_pin` only when it
+  has one. `withBoxAdminPin` shows the pad first only when the admin profile has a PIN; else the
+  call goes without one and a `pin_required {pin: admin}` answer opens the pad. This applies to
+  the Server tab, Rename of another profile, Guest and Starter apps. Remove profile asks for a
+  PIN only when there is one: your own profile's (`pin`) or, for another, the admin profile's
+  (`admin_pin`), on a PIN pad with Delete held for 3 s. With no PIN, the Remove confirm is enough;
+  a `pin_required` answer still opens the pad.
+- **Cancel:** `jobs.cancel` of a job another profile started is `permission_denied {reason:
+  starter}`; the job page then asks for the admin PIN and cancels with `admin_pin`. A cancelled
+  job is `job_failed` with `data.reason: cancelled` (the message `cancelled` only when no reason
+  is given).
+- **Unknown job values:** `JobKind`, `JobState` and `Stage` can be `unknown` (a job a later version
+  started, after a rollback). An unknown kind is "Working"; `job_progress` without `stage` keeps
+  the last stage; `job_busy` may come without data.
+- **Left-over app data:** `StoreState.leftover` is an app the catalog removed whose data is still
+  in this profile's home. The Store card says "Removed, data stays"; its page offers only Clear
+  user data and Back, and closes when the data is gone. A `StoreState` the launcher does not know
+  (a later daemon) is "Not available" with only Back: never Install.
+- **Wi-Fi:** each network has an opaque `id` (one per SSID and security); `wifi.connect` and
+  `wifi.forget` take it. The launcher never builds or parses one. Names can repeat; ids cannot,
+  so the joined network is the entry marked `connected`, not the one with the joined name.
+- **Jellyfin:** `unavailable {service: jellyfin, reason: sign_in_refused}` is "Jellyfin did not
+  accept the sign-in.".
+
 ### Session API 0.20: Settings > Controller
 
 Per profile: which button does which action, the keys of keyboard-mode apps, the pointer
@@ -159,7 +186,7 @@ Server, Tailscale, Cloudflare Tunnel. `ServerRepository` (`lib/src/system/server
   their `iconUrl`, Tailscale and Cloudflare by `siteUrl` discovery); none yet: the letter tile.
   While one is missing, `store_changed` reads the list again (`DaemonServer` subscribes to it).
   The mock uses the generic fixtures.
-- **Every change** asks for the admin profile's PIN on the admin-PIN pad (`runAdminJob`, the same
+- **Every change** asks for the admin profile's PIN (when it has one) on the admin-PIN pad (`runAdminJob`, the same
   as Settings: a wrong PIN asks again, Back changes nothing) and runs on the job page (Hide puts it
   in the top bar). New job kinds: turning a service on or off, adding or removing a library,
   linking Plex, Tailscale sign-in and sign-out, saving or removing the tunnel token; new stages

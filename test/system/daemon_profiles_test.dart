@@ -100,7 +100,7 @@ void main() {
       expect(job.job.kind, JobKind.profileCreate);
       m.system.finishJob(job.job.jobId);
       expect(m.profiles.byId('p4')!.name, 'Robin');
-      final r = await p.remove('p4', '2468');
+      final r = await p.remove('p4', adminPin: '2468');
       expect(r.kind, JobKind.profileRemove);
       expect(m.profiles.log, contains('remove:p4'));
     });
