@@ -151,6 +151,10 @@ Future<void> _prepareSystem(
     case ('system.jobs.list', 'one running'):
     case ('system.jobs.cancel', 'cancelling'):
       await rebuilding();
+    case ('system.jobs.cancel', 'with the admin PIN'):
+    case ('system.jobs.cancel', 'started by another profile'):
+      await rebuilding();
+      s.startedByOther.add(exampleJob);
     case ('system.jobs.cancel', 'already activating'):
       await rebuilding();
       s.progressJob(exampleJob, Stage.activating);
@@ -400,7 +404,7 @@ Future<void> _prepareRuntime(
   switch ((method, name)) {
     // A network that is not stored needs its password.
     case ('wifi.connect', 'password missing'):
-      await mock.rpc('wifi.forget', {'ssid': 'Home'});
+      await mock.rpc('wifi.forget', {'id': '486f6d65-wpa'});
     // The devices a scan finds.
     case ('bluetooth.pair', _) || ('bluetooth.connect', _):
       if (err?['code'] != ApiErrorCode.notFound) {

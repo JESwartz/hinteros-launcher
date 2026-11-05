@@ -98,10 +98,10 @@ void main() {
       'networkmanager/scan': () => c.wifiScan(),
       'networkmanager/list': () => c.wifiList(),
       'networkmanager/connect': () =>
-          c.wifiConnect(const WifiConnectParams(ssid: 'Home')),
+          c.wifiConnect(const WifiConnectParams(id: '486f6d65-wpa')),
       'networkmanager/disconnect': () => c.wifiDisconnect(),
       'networkmanager/forget': () =>
-          c.wifiForget(const WifiForgetParams(ssid: 'Home')),
+          c.wifiForget(const WifiForgetParams(id: '486f6d65-wpa')),
       'networkmanager/enable': () =>
           c.wifiEnable(const WifiEnableParams(enabled: true)),
       'bluez': () => c.bluetoothStatus(),

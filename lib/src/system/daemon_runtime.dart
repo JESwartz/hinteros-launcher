@@ -50,6 +50,7 @@ NetworkStatus _status(
 List<WifiNetwork> _networks(List<api.WifiNetwork> list) => [
   for (final n in list)
     WifiNetwork(
+      id: n.id,
       ssid: n.ssid,
       signal: n.signal,
       secured: n.security != api.WifiSecurity.open,
@@ -127,18 +128,16 @@ class DaemonNetwork implements NetworkRepository {
       guardCall(() async => _networks((await _conn.wifiList()).networks));
 
   @override
-  Future<void> connect(String ssid, {String? password}) => guardCall(
-    () => _conn.wifiConnect(
-      api.WifiConnectParams(ssid: ssid, password: password),
-    ),
+  Future<void> connect(String id, {String? password}) => guardCall(
+    () => _conn.wifiConnect(api.WifiConnectParams(id: id, password: password)),
   );
 
   @override
   Future<void> disconnect() => guardCall(() => _conn.wifiDisconnect());
 
   @override
-  Future<void> forget(String ssid) =>
-      guardCall(() => _conn.wifiForget(api.WifiForgetParams(ssid: ssid)));
+  Future<void> forget(String id) =>
+      guardCall(() => _conn.wifiForget(api.WifiForgetParams(id: id)));
 
   @override
   Future<void> setWifiEnabled(bool enabled) =>

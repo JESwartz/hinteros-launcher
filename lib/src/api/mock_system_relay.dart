@@ -292,6 +292,10 @@ class MockSystemRelay {
   /// [MockDaemon] sets it to its profiles' check.
   void Function(String? adminPin)? checkAdminPin;
 
+  /// Jobs another profile started: `jobs.cancel` without `admin_pin` is
+  /// `permission_denied {reason: starter}`.
+  final Set<String> startedByOther = {};
+
   // ---- storage (0.14)
 
   /// The last measurement (`storage.get`); null until a `storage_measure`
@@ -918,9 +922,24 @@ class MockSystemRelay {
           ],
         ).toJson();
       case 'system.jobs.cancel':
-        _closed(p, const ['job_id']);
-        final j = _find(SystemJobsCancelParams.fromJson(p).jobId);
+        _closed(p, const ['job_id', 'admin_pin']);
+        final cp = SystemJobsCancelParams.fromJson(p);
+        final j = _find(cp.jobId);
         _mutating('jobs.cancel');
+        // A job another profile started: only with the admin PIN.
+        if (startedByOther.contains(j.id)) {
+          if (cp.adminPin == null) {
+            throw ApiException(
+              ApiErrorCode.permissionDenied,
+              'another profile started this job',
+              PermissionDeniedData(
+                action: 'org.hinteros.system.jobs.cancel',
+                reason: PermissionDeniedDataReason.starter,
+              ).toJson(),
+            );
+          }
+          checkAdminPin?.call(cp.adminPin);
+        }
         if (j.state != JobState.running ||
             j.stage.index >= Stage.activating.index) {
           throw ApiException(
@@ -974,6 +993,20 @@ class MockSystemRelay {
     final apps = <StoreApp>[];
     for (final a in catalog) {
       final installed = installedApps.contains(a.id);
+      // Removed from the catalog, but its data is still in the home: only
+      // Clear data, no permissions.
+      if (a.status == CatalogStatus.removed && !installed) {
+        if (_hasData(a.id)) {
+          apps.add(
+            StoreApp.fromJson({
+              ...with_(a, StoreState.leftover).toJson(),
+              'permissions': const [],
+              'full_access': false,
+            }),
+          );
+        }
+        continue;
+      }
       if (a.status != CatalogStatus.available && !installed) continue;
       apps.add(
         with_(
@@ -1363,7 +1396,11 @@ class MockSystemRelay {
           ErrorObject(
             code: ApiErrorCode.jobFailed,
             message: cancelled ? 'cancelled' : 'the job failed',
-            data: JobFailedData(stage: j.stage, logHint: '').toJson(),
+            data: JobFailedData(
+              stage: j.stage,
+              logHint: '',
+              reason: cancelled ? JobFailedDataReason.cancelled : null,
+            ).toJson(),
           );
     }
     if (ok) {

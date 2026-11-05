@@ -27,7 +27,9 @@ abstract class JobsRepository {
   Stream<JobSnapshot> watch(String jobId);
 
   /// `jobs.cancel`: [SystemErrorKind.jobBusy] once activation has started.
-  Future<void> cancel(String jobId);
+  /// A job another profile started: `permission_denied {reason: starter}`
+  /// without [adminPin], `pin_required {pin: admin}` with a wrong one.
+  Future<void> cancel(String jobId, {String? adminPin});
 
   /// The job that runs on the box now, if any (`jobs.list`): after a
   /// launcher restart its progress shows again.
@@ -180,9 +182,10 @@ abstract class NetworkRepository {
 
   /// [SystemErrorKind.wrongPassword] for a bad password, `deviceFailed` for
   /// anything else (the message says why), `invalidParams` for WEP and 802.1X.
-  Future<void> connect(String ssid, {String? password});
+  /// [id] is [WifiNetwork.id].
+  Future<void> connect(String id, {String? password});
   Future<void> disconnect();
-  Future<void> forget(String ssid);
+  Future<void> forget(String id);
   Future<void> setWifiEnabled(bool enabled);
 }
 

@@ -374,6 +374,36 @@ void main() {
       );
       expect(find.text('Remove'), findsOneWidget);
     });
+
+    testWidgets('a removed app with data left: only Clear user data', (
+      t,
+    ) async {
+      setView(t);
+      final h = harness(installed: {});
+      // The catalog removed Steam after a remove that kept its data.
+      final cat = h.mock.system.catalog;
+      final i = cat.indexWhere((a) => a.id == 'steam');
+      cat[i] = api.StoreApp.fromJson({...cat[i].toJson(), 'status': 'removed'});
+      h.mock.system.dataLeft.add('steam');
+      await h.pump(t);
+      await endStartupCheck(t, h);
+      await openSteam(t);
+      expect(find.text('Removed. Its data stays on the box.'), findsOneWidget);
+      expect(find.text('Install'), findsNothing);
+      expect(find.text('Remove'), findsNothing);
+      expect(find.text('Back'), findsOneWidget);
+      expect(buttonEnabled(t, 'Clear user data'), isTrue);
+      await press(t, [kEnter]); // Clear user data
+      expect(find.text('Clear the data of Steam?'), findsOneWidget);
+      await press(t, [kRight, kEnter]); // Clear data
+      expect(appsLog(h).last, 'apps.clear_data:steam');
+      h.mock.system.finishJob(h.mock.system.runningJobId!);
+      await t.pumpAndSettle();
+      await press(t, [kEnter]); // Done
+      // Nothing is left: the page closed and the Store no longer lists it.
+      expect(find.text('Clear user data'), findsNothing);
+      expect(find.text('Removed, data stays'), findsNothing);
+    });
   });
 
   group('after the next update', () {

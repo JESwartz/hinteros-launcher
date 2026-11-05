@@ -276,6 +276,22 @@ void main() {
     );
   });
 
+  testWidgets('starter apps: no admin PIN set, no PIN pad', (t) async {
+    final h = await open(t);
+    h.services.mockProfiles.box.admin.pin = null;
+    await keys(t, [kDown, kDown, kDown, kEnter]); // Starter apps
+    await keys(t, [kEnter]);
+    for (var i = 0; i < 10; i++) {
+      await keys(t, [kDown]);
+    }
+    await keys(t, [kRight, kEnter]); // Save
+    expect(find.text("Type the admin profile's PIN."), findsNothing);
+    expect(
+      h.services.mockProfiles.log.where((l) => l.startsWith('starter:')),
+      hasLength(1),
+    );
+  });
+
   testWidgets('the guest sees only switch and end', (t) async {
     setView(t);
     final h = harness(current: 'guest');

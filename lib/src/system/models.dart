@@ -797,6 +797,7 @@ class SshState {
 @immutable
 class WifiNetwork {
   const WifiNetwork({
+    required this.id,
     required this.ssid,
     required this.signal,
     this.secured = true,
@@ -805,6 +806,11 @@ class WifiNetwork {
     this.supported = true,
   });
 
+  /// The daemon's opaque network id (one per SSID and security), for
+  /// connect and forget. Never built or parsed here.
+  final String id;
+
+  /// The shown name. It can repeat (a name that is not UTF-8); [id] cannot.
   final String ssid;
 
   /// 0..100
@@ -1038,11 +1044,15 @@ enum StoreState {
   retired,
 
   /// Installed, but the next update takes it away.
-  unavailable;
+  unavailable,
+
+  /// Not installed and gone from the catalog, but its data is still in this
+  /// profile's home: it can only be cleared.
+  leftover;
 
   /// The app is on the box (it is still there while being removed).
   bool get isInstalled => switch (this) {
-    available || installing => false,
+    available || installing || leftover => false,
     _ => true,
   };
 

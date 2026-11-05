@@ -179,7 +179,7 @@ class _FirstBootPageState extends State<FirstBootPage> {
         submitLabel: 'Join',
         submit: (pw) async {
           try {
-            await _s.network.connect(ap.ssid, password: pw);
+            await _s.network.connect(ap.id, password: pw);
             return null;
           } on SystemException catch (e) {
             return e.message;
@@ -187,7 +187,7 @@ class _FirstBootPageState extends State<FirstBootPage> {
         },
       );
     } else {
-      await _try(() => _s.network.connect(ap.ssid));
+      await _try(() => _s.network.connect(ap.id));
     }
     await _loadNetwork();
   }

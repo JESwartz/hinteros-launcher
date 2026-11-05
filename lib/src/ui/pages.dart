@@ -13,6 +13,7 @@ import 'focus_frame.dart';
 import 'jobs.dart';
 import 'modal_host.dart';
 import 'nav_focusable.dart';
+import 'profiles/profile_ui.dart' show withBoxAdminPin;
 import 'qr_code.dart';
 import 'restart_countdown.dart';
 import 'session_ending.dart';
@@ -244,10 +245,30 @@ class _JobProgressScreenState extends State<JobProgressScreen> with JobTicker {
   }
 
   Future<void> _cancel() async {
+    final jobs = widget.services.jobs;
     try {
-      await widget.services.jobs.cancel(widget.job.jobId);
+      await jobs.cancel(widget.job.jobId);
     } on SystemException catch (e) {
-      if (mounted) setState(() => _cancelNote = e.message);
+      if (!mounted) return;
+      // Another profile started it: the admin PIN lets this one cancel.
+      if (e.kind == SystemErrorKind.permissionDenied &&
+          e.data['reason'] == 'starter') {
+        try {
+          await withBoxAdminPin(
+            context,
+            widget.services.profiles,
+            title: 'Cancel this change',
+            action: (pin) async {
+              await jobs.cancel(widget.job.jobId, adminPin: pin);
+              return true;
+            },
+          );
+        } on SystemException catch (e) {
+          if (mounted) setState(() => _cancelNote = e.message);
+        }
+        return;
+      }
+      setState(() => _cancelNote = e.message);
     }
   }
 

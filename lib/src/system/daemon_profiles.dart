@@ -198,7 +198,11 @@ class DaemonProfiles implements ProfilesRepository {
   @override
   Future<void> rename(String id, String name, {String? adminPin}) => guardCall(
     () => _conn.systemProfilesRename(
-      api.SystemProfilesRenameParams(id: id, name: name.trim(), pin: adminPin),
+      api.SystemProfilesRenameParams(
+        id: id,
+        name: name.trim(),
+        adminPin: adminPin,
+      ),
     ),
   );
 
@@ -251,22 +255,24 @@ class DaemonProfiles implements ProfilesRepository {
       );
 
   @override
-  Future<JobHandle> remove(String id, String pin) => _jobs.start(
-    JobKind.profileRemove,
-    () => _withRevision(
-      (revision) async => (await _conn.systemProfilesRemove(
-        api.SystemProfilesRemoveParams(
-          id: id,
-          confirmId: id,
-          pin: pin,
-          revision: revision,
+  Future<JobHandle> remove(String id, {String? pin, String? adminPin}) =>
+      _jobs.start(
+        JobKind.profileRemove,
+        () => _withRevision(
+          (revision) async => (await _conn.systemProfilesRemove(
+            api.SystemProfilesRemoveParams(
+              id: id,
+              confirmId: id,
+              pin: pin,
+              adminPin: adminPin,
+              revision: revision,
+            ),
+          )).jobId,
         ),
-      )).jobId,
-    ),
-  );
+      );
 
   @override
-  Future<JobHandle?> setGuest(bool enabled, String adminPin) async {
+  Future<JobHandle?> setGuest(bool enabled, String? adminPin) async {
     try {
       return await _jobs.start(
         JobKind.guest,
@@ -287,12 +293,12 @@ class DaemonProfiles implements ProfilesRepository {
   });
 
   @override
-  Future<JobHandle?> setStarterSet(List<String> ids, String adminPin) async {
+  Future<JobHandle?> setStarterSet(List<String> ids, String? adminPin) async {
     try {
       return await _jobs.start(
         JobKind.starterSet,
         () async => (await _conn.systemStarterSetSet(
-          api.SystemStarterSetSetParams(ids: ids, pin: adminPin),
+          api.SystemStarterSetSetParams(ids: ids, adminPin: adminPin),
         )).jobId,
       );
     } on SystemException catch (e) {

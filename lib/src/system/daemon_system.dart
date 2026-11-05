@@ -640,8 +640,10 @@ class DaemonJobs implements JobsRepository {
   }
 
   @override
-  Future<void> cancel(String jobId) => guardCall(
-    () => _conn.systemJobsCancel(api.SystemJobsCancelParams(jobId: jobId)),
+  Future<void> cancel(String jobId, {String? adminPin}) => guardCall(
+    () => _conn.systemJobsCancel(
+      api.SystemJobsCancelParams(jobId: jobId, adminPin: adminPin),
+    ),
   ).then((_) {});
 
   @override

@@ -530,7 +530,7 @@ void pickerRefreshTests() {
     await openChip(t);
     expect(find.text('Sam'), findsOneWidget);
     // Removed meanwhile (from another session, or a job that just ended).
-    final job = await h.services.mockProfiles.remove('p3', '2468');
+    final job = await h.services.mockProfiles.remove('p3', adminPin: '2468');
     h.services.mockJobs.finish(job.jobId);
     await t.pumpAndSettle();
     expect(find.text('Who is watching?'), findsOneWidget);

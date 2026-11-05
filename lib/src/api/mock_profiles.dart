@@ -459,7 +459,7 @@ class MockProfileSession {
       case 'system.profiles.rename':
         final c = SystemProfilesRenameParams.fromJson(p);
         final x = _profile(c.id);
-        if (c.id != current) _check(admin, c.pin, 'admin');
+        if (c.id != current) checkBoxAdminPin(c.adminPin);
         x.name = c.name.trim();
         log.add('rename:${c.id}');
         _changed();
@@ -515,11 +515,11 @@ class MockProfileSession {
             {'field': 'id', 'reason': 'admin'},
           );
         }
-        _check(
-          c.id == current ? x : admin,
-          c.pin,
-          c.id == current ? 'self' : 'admin',
-        );
+        if (c.id == current) {
+          if (x.pin != null) _check(x, c.pin, 'self');
+        } else {
+          checkBoxAdminPin(c.adminPin);
+        }
         _staleRevision(c.revision);
         log.add('remove:${c.id}');
         return JobRef(
@@ -536,7 +536,7 @@ class MockProfileSession {
         ).toJson();
       case 'system.guest.set':
         final c = SystemGuestSetParams.fromJson(p);
-        _check(admin, c.adminPin, 'admin');
+        checkBoxAdminPin(c.adminPin);
         if (c.enabled == guestEnabled) {
           return const JobRef(jobId: null).toJson();
         }
@@ -653,7 +653,7 @@ class MockProfileSession {
         ).toJson();
       case 'system.starter_set.set':
         final c = SystemStarterSetSetParams.fromJson(p);
-        _check(admin, c.pin, 'admin');
+        checkBoxAdminPin(c.adminPin);
         for (final id in c.ids) {
           if (!relay.installedApps.contains(id)) {
             throw ApiException(

@@ -165,11 +165,19 @@ class _ProfilesSectionState extends State<ProfilesSection> {
       }
       return;
     }
-    await withAdminPin(
-      context,
-      title: 'Rename ${p.name}',
-      action: (pin) => _p.rename(p.id, name, adminPin: pin),
-    );
+    try {
+      await withBoxAdminPin(
+        context,
+        _p,
+        title: 'Rename ${p.name}',
+        action: (pin) async {
+          await _p.rename(p.id, name, adminPin: pin);
+          return true;
+        },
+      );
+    } catch (e) {
+      if (mounted) await _failed(e);
+    }
   }
 
   Future<void> _color(ProfileInfo p) async {
@@ -309,7 +317,9 @@ class _ProfilesSectionState extends State<ProfilesSection> {
       holdToSubmit: const Duration(seconds: 3),
       check: (pin) async {
         try {
-          job = await _p.remove(p.id, pin);
+          job = own
+              ? await _p.remove(p.id, pin: pin)
+              : await _p.remove(p.id, adminPin: pin);
           endings?.begin(ending);
           return const PinAccepted();
         } catch (e) {
@@ -378,33 +388,45 @@ class _ProfilesSectionState extends State<ProfilesSection> {
           _StarterPage(modal: modal, apps: apps, chosen: set.ids.toSet()),
     );
     if (ids == null || !mounted) return;
-    JobHandle? job;
-    var nothing = false;
-    final ran = await withAdminPin(
-      context,
-      title: 'Starter apps',
-      action: (pin) async {
-        job = await _p.setStarterSet(ids, pin);
-        nothing = job == null;
-      },
-    );
-    if (!ran || !mounted) return;
-    if (nothing) {
+    final JobHandle? job;
+    try {
+      // The job, or false: nothing changed. Null: Back left the pad.
+      final r = await withBoxAdminPin<Object>(
+        context,
+        _p,
+        title: 'Starter apps',
+        action: (pin) async => await _p.setStarterSet(ids, pin) ?? false,
+      );
+      if (r == null) return;
+      job = r is JobHandle ? r : null;
+    } catch (e) {
+      if (mounted) await _failed(e);
+      return;
+    }
+    if (!mounted) return;
+    if (job == null) {
       await _message('Starter apps', 'Nothing changed.');
       return;
     }
-    await showJobProgress(context, _s, job!);
+    await showJobProgress(context, _s, job);
   }
 
   Future<void> _guest(bool enabled) async {
-    JobHandle? job;
-    final ran = await withAdminPin(
-      context,
-      title: enabled ? 'Turn off Guest' : 'Turn on Guest',
-      action: (pin) async => job = await _p.setGuest(!enabled, pin),
-    );
-    if (!ran || job == null || !mounted) return;
-    await showJobProgress(context, _s, job!);
+    final Object? r;
+    try {
+      // The job, or false: it already was so. Null: Back left the pad.
+      r = await withBoxAdminPin<Object>(
+        context,
+        _p,
+        title: enabled ? 'Turn off Guest' : 'Turn on Guest',
+        action: (pin) async => await _p.setGuest(!enabled, pin) ?? false,
+      );
+    } catch (e) {
+      if (mounted) await _failed(e);
+      return;
+    }
+    if (r is! JobHandle || !mounted) return;
+    await showJobProgress(context, _s, r);
   }
 
   // ---- the pane

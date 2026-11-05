@@ -29,6 +29,10 @@ Future<SystemException> _fails(Future<Object?> f) async {
 /// Lets queued events through.
 Future<void> _settle() => Future<void>.delayed(Duration.zero);
 
+/// The id of the listed network named [ssid] (the launcher never builds one).
+Future<String> _id(SystemServices s, String ssid) async =>
+    (await s.network.list()).firstWhere((n) => n.ssid == ssid).id;
+
 void main() {
   group('Wi-Fi', () {
     test('status and list map the wire objects', () async {
@@ -49,7 +53,7 @@ void main() {
     test('a wrong password is wrong_password, the right one joins', () async {
       final (mock, s) = await _setup();
       final e = await _fails(
-        s.network.connect('Neighbour', password: 'nope nope'),
+        s.network.connect(await _id(s, 'Neighbour'), password: 'nope nope'),
       );
       expect(e.kind, SystemErrorKind.wrongPassword);
       expect(
@@ -57,25 +61,53 @@ void main() {
         isFalse,
         reason: 'a rejected key stores nothing',
       );
-      await s.network.connect('Neighbour', password: 'wifi-pass');
+      await s.network.connect(await _id(s, 'Neighbour'), password: 'wifi-pass');
       expect(mock.runtime.status().wifiSsid, 'Neighbour');
       // Stored now: no password needed again.
-      await s.network.connect('Home');
+      await s.network.connect(await _id(s, 'Home'));
       expect(mock.runtime.status().wifiSsid, 'Home');
     });
 
     test('a new network needs its password, enterprise is refused', () async {
       final (_, s) = await _setup();
       expect(
-        (await _fails(s.network.connect('Neighbour'))).kind,
+        (await _fails(s.network.connect(await _id(s, 'Neighbour')))).kind,
         SystemErrorKind.invalidParams,
       );
-      final e = await _fails(s.network.connect('Office', password: 'x'));
+      final e = await _fails(
+        s.network.connect(await _id(s, 'Office'), password: 'x'),
+      );
       expect(e.kind, SystemErrorKind.invalidParams);
       expect(e.message, contains("isn't supported"));
       expect(
-        (await _fails(s.network.connect('Gone'))).kind,
+        // "Gone" with WPA: an id the daemon could give, out of range now.
+        (await _fails(s.network.connect('476f6e65-wpa'))).kind,
         SystemErrorKind.notFound,
+      );
+      // A name is not an id.
+      final bad = await _fails(s.network.connect('Gone'));
+      expect(bad.kind, SystemErrorKind.invalidParams);
+      expect(bad.data, {'field': 'id', 'reason': 'bad_format'});
+    });
+
+    test('connect and forget send the id: one name, two networks', () async {
+      final (mock, s) = await _setup();
+      // The same name with another security is another network.
+      mock.runtime.accessPoints.add(
+        api.MockAccessPoint('Home', 40, api.WifiSecurity.open),
+      );
+      final homes = (await s.network.list()).where((n) => n.ssid == 'Home');
+      expect(homes.map((n) => n.id).toSet(), hasLength(2));
+      final open = homes.firstWhere((n) => !n.secured);
+      await s.network.connect(open.id);
+      final now = (await s.network.list()).firstWhere((n) => n.connected);
+      expect(now.id, open.id);
+      expect(now.secured, isFalse);
+      // forget deletes every stored connection with that SSID.
+      await s.network.forget(open.id);
+      expect(
+        (await s.network.list()).where((n) => n.ssid == 'Home' && n.saved),
+        isEmpty,
       );
     });
 
@@ -85,7 +117,7 @@ void main() {
       final lists = <List<WifiNetwork>>[];
       s.network.statusChanges.listen(statuses.add);
       s.network.listChanges.listen(lists.add);
-      await s.network.connect('Neighbour', password: 'wifi-pass');
+      await s.network.connect(await _id(s, 'Neighbour'), password: 'wifi-pass');
       await _settle();
       expect(statuses.last.wifiSsid, 'Neighbour');
       expect(lists.last.firstWhere((n) => n.connected).ssid, 'Neighbour');

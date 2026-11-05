@@ -196,6 +196,29 @@ void main() {
     expect(find.text('Sign in'), findsOneWidget);
   });
 
+  testWidgets('an admin profile without a PIN: no PIN pad', (t) async {
+    setView(t);
+    final h = harness();
+    await h.pump(t);
+    h.services.mockProfiles.box.admin.pin = null;
+    await openService(t, tailscaleRow);
+    await choose(t, 'Turn on');
+    expect(find.text("Type the admin profile's PIN."), findsNothing);
+    expect(h.services.mockJobs.started.single.kind, JobKind.servicesEnable);
+    await finishJob(t, h);
+    expect(server(h).tailscale.enabled, isTrue);
+  });
+
+  testWidgets('Show accounts without an admin PIN: no PIN pad', (t) async {
+    setView(t);
+    final h = harness();
+    await h.pump(t);
+    h.services.mockProfiles.box.admin.pin = null;
+    await openService(t, jellyfinRow);
+    await choose(t, 'Show accounts');
+    expect(find.text('Jellyfin accounts'), findsOneWidget);
+  });
+
   testWidgets('Back on the PIN pad changes nothing', (t) async {
     setView(t);
     final h = harness();

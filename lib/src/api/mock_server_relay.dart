@@ -177,13 +177,18 @@ class MockServerRelay {
       case 'system.services.enable':
         _relay.closedParams(p, const [
           'ids',
-          'pin',
+          'admin_pin',
           'revision',
           'accepted_terms',
         ]);
         return _enable(SystemServicesEnableParams.fromJson(p));
       case 'system.services.disable':
-        _relay.closedParams(p, const ['ids', 'pin', 'revision', 'delete_data']);
+        _relay.closedParams(p, const [
+          'ids',
+          'admin_pin',
+          'revision',
+          'delete_data',
+        ]);
         return _disable(SystemServicesDisableParams.fromJson(p));
       case 'system.media.folders':
         _relay.closedParams(p, const ['folder_id']);
@@ -205,13 +210,13 @@ class MockServerRelay {
           ],
         ).toJson();
       case 'system.jellyfin.libraries.add':
-        _relay.closedParams(p, const ['pin', 'name', 'kind', 'folder']);
+        _relay.closedParams(p, const ['admin_pin', 'name', 'kind', 'folder']);
         return _addLibrary(SystemJellyfinLibrariesAddParams.fromJson(p));
       case 'system.jellyfin.libraries.remove':
-        _relay.closedParams(p, const ['pin', 'library_id']);
+        _relay.closedParams(p, const ['admin_pin', 'library_id']);
         final r = SystemJellyfinLibrariesRemoveParams.fromJson(p);
         _relay.mutating('jellyfin.libraries.remove:${r.libraryId}');
-        _relay.checkAdminPin?.call(r.pin);
+        _relay.checkAdminPin?.call(r.adminPin);
         _ready(jellyfin, 'jellyfin');
         final l = jellyfin.libraries
             .where((l) => l.id == r.libraryId)
@@ -230,10 +235,10 @@ class MockServerRelay {
           ],
         );
       case 'system.jellyfin.users.reveal':
-        _relay.closedParams(p, const ['pin']);
+        _relay.closedParams(p, const ['admin_pin']);
         final r = SystemJellyfinUsersRevealParams.fromJson(p);
         _relay.mutating('jellyfin.users.reveal');
-        _relay.checkAdminPin?.call(r.pin);
+        _relay.checkAdminPin?.call(r.adminPin);
         _on(jellyfin, 'jellyfin');
         return SystemJellyfinUsersRevealResult(
           admin: jellyfin.setupDone
@@ -270,7 +275,7 @@ class MockServerRelay {
           accessToken: '4a7b9c2d1e3f5a6b8c0d2e4f6a8b0c1d',
         ).toJson();
       case 'system.plex.claim':
-        _relay.closedParams(p, const ['pin', 'code']);
+        _relay.closedParams(p, const ['admin_pin', 'code']);
         final r = SystemPlexClaimParams.fromJson(p);
         if (!RegExp(r'^claim-[A-Za-z0-9_-]{20}$').hasMatch(r.code)) {
           throw const ApiException(ApiErrorCode.invalidParams, 'bad code', {
@@ -279,14 +284,16 @@ class MockServerRelay {
           });
         }
         _relay.mutating('plex.claim');
-        _relay.checkAdminPin?.call(r.pin);
+        _relay.checkAdminPin?.call(r.adminPin);
         _on(plex, 'plex');
         if (plex.claimed) return const JobRef(jobId: null).toJson();
         return _job(JobKind.plexClaim, onSuccess: () => plex.claimed = true);
       case 'system.tailscale.login':
-        _relay.closedParams(p, const ['pin']);
+        _relay.closedParams(p, const ['admin_pin']);
         _relay.mutating('tailscale.login');
-        _relay.checkAdminPin?.call(SystemTailscaleLoginParams.fromJson(p).pin);
+        _relay.checkAdminPin?.call(
+          SystemTailscaleLoginParams.fromJson(p).adminPin,
+        );
         _on(tailscale, 'tailscale');
         if (tailscale.tailscale == TailscaleState.running) {
           return const JobRef(jobId: null).toJson();
@@ -299,9 +306,11 @@ class MockServerRelay {
           ),
         ).toJson();
       case 'system.tailscale.logout':
-        _relay.closedParams(p, const ['pin']);
+        _relay.closedParams(p, const ['admin_pin']);
         _relay.mutating('tailscale.logout');
-        _relay.checkAdminPin?.call(SystemTailscaleLogoutParams.fromJson(p).pin);
+        _relay.checkAdminPin?.call(
+          SystemTailscaleLogoutParams.fromJson(p).adminPin,
+        );
         _on(tailscale, 'tailscale');
         if (tailscale.tailscale == TailscaleState.needsLogin) {
           return const JobRef(jobId: null).toJson();
@@ -311,7 +320,7 @@ class MockServerRelay {
           onSuccess: () => tailscale.tailscale = TailscaleState.needsLogin,
         );
       case 'system.cloudflare.set_token':
-        _relay.closedParams(p, const ['pin', 'token']);
+        _relay.closedParams(p, const ['admin_pin', 'token']);
         final r = SystemCloudflareSetTokenParams.fromJson(p);
         final bad = tokenProblem(r.token);
         if (bad != null) {
@@ -321,7 +330,7 @@ class MockServerRelay {
           });
         }
         _relay.mutating('cloudflare.set_token');
-        _relay.checkAdminPin?.call(r.pin);
+        _relay.checkAdminPin?.call(r.adminPin);
         _on(cloudflare, 'cloudflare');
         return _job(
           JobKind.cloudflareSetToken,
@@ -330,10 +339,10 @@ class MockServerRelay {
             ..connected = true,
         );
       case 'system.cloudflare.clear_token':
-        _relay.closedParams(p, const ['pin']);
+        _relay.closedParams(p, const ['admin_pin']);
         _relay.mutating('cloudflare.clear_token');
         _relay.checkAdminPin?.call(
-          SystemCloudflareClearTokenParams.fromJson(p).pin,
+          SystemCloudflareClearTokenParams.fromJson(p).adminPin,
         );
         _on(cloudflare, 'cloudflare');
         if (!cloudflare.tokenSet) return const JobRef(jobId: null).toJson();
@@ -488,7 +497,7 @@ class MockServerRelay {
 
   Map<String, dynamic> _enable(SystemServicesEnableParams p) {
     _relay.mutating('services.enable:${p.ids.join(',')}');
-    _relay.checkAdminPin?.call(p.pin);
+    _relay.checkAdminPin?.call(p.adminPin);
     final want = [
       for (final s in _services(p.ids))
         if (!s.enabled) s,
@@ -526,7 +535,7 @@ class MockServerRelay {
 
   Map<String, dynamic> _disable(SystemServicesDisableParams p) {
     _relay.mutating('services.disable:${p.ids.join(',')}:data=${p.deleteData}');
-    _relay.checkAdminPin?.call(p.pin);
+    _relay.checkAdminPin?.call(p.adminPin);
     final off = _services(p.ids);
     _relay.staleRevision(p.revision);
     for (final s in off) {
@@ -572,7 +581,7 @@ class MockServerRelay {
       });
     }
     _relay.mutating('jellyfin.libraries.add:$name:${p.kind.value}:${p.folder}');
-    _relay.checkAdminPin?.call(p.pin);
+    _relay.checkAdminPin?.call(p.adminPin);
     _ready(jellyfin, 'jellyfin');
     if (jellyfin.libraries.any(
       (l) => l.name.toLowerCase() == name.toLowerCase(),

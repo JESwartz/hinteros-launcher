@@ -48,6 +48,8 @@ SystemException systemExceptionFrom(Object e) {
           ('jellyfin' || 'plex' || 'tailscale' || 'cloudflare', 'not_ready') =>
             '${runtimeServiceName(service)} is not ready. Try again in a '
                 'moment.',
+          ('jellyfin', 'sign_in_refused') =>
+            'Jellyfin did not accept the sign-in.',
           _ => "${runtimeServiceName(service)} isn't available on this box.",
         }, data: data);
       case api.ApiErrorCode.deviceFailed:
@@ -99,6 +101,7 @@ SystemException systemExceptionFrom(Object e) {
             'polkit' =>
               'Wrong admin password too many times. Nothing was changed.',
             'profile' => 'Only a profile can do this.',
+            'starter' => 'Only the profile that started it can cancel it.',
             _ => 'This is not allowed on this box right now.',
           },
           data: data,

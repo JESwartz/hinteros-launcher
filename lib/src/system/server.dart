@@ -396,13 +396,6 @@ const serverJobKinds = {
   JobKind.cloudflareClearToken,
 };
 
-/// A service's admin PIN that is not there yet: the pad asks for it.
-const missingAdminPin = SystemException(
-  SystemErrorKind.pinRequired,
-  "This needs the admin profile's PIN.",
-  data: {'pin': 'admin'},
-);
-
 /// Why a job of the Server section failed (`job_failed.data.reason`), as
 /// the job page says it; null for another reason.
 String? serverFailureText(Object? reason) => switch (reason) {

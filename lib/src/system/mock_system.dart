@@ -7,6 +7,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 
 import '../api/mock_store.dart' show mockCatalogDir;
 import '../platform/local_files.dart';
@@ -100,6 +101,14 @@ class MockJobs implements JobsRepository {
 
   /// Every job started, in order.
   final List<JobHandle> started = [];
+
+  /// Jobs another profile started: `jobs.cancel` needs the admin PIN
+  /// (`permission_denied {reason: starter}` without it).
+  final Set<String> startedByOther = {};
+
+  /// Checks the admin PIN of a cancel (the box's rule; set by
+  /// [MockSystemServices]).
+  void Function(String? pin)? checkAdminPin;
 
   JobSnapshot? snapshot(String jobId) => _jobs[jobId]?.snap;
 
@@ -340,10 +349,23 @@ class MockJobs implements JobsRepository {
   }
 
   @override
-  Future<void> cancel(String jobId) async {
+  Future<void> cancel(String jobId, {String? adminPin}) async {
     final j = _jobs[jobId];
     if (j == null) {
       throw const SystemException(SystemErrorKind.notFound, 'No such job.');
+    }
+    if (startedByOther.contains(jobId)) {
+      if (adminPin == null) {
+        throw const SystemException(
+          SystemErrorKind.permissionDenied,
+          'Only the profile that started it can cancel it.',
+          data: {
+            'action': 'org.hinteros.system.jobs.cancel',
+            'reason': 'starter',
+          },
+        );
+      }
+      checkAdminPin?.call(adminPin);
     }
     if (!j.snap.canCancel) {
       throw SystemException(
@@ -891,18 +913,32 @@ class MockAuth implements AuthRepository {
 class MockNetwork implements NetworkRepository {
   MockNetwork() {
     _networks = [
-      const WifiNetwork(
-        ssid: 'Hinter-Home',
-        signal: 88,
-        connected: true,
-        saved: true,
-      ),
-      const WifiNetwork(ssid: 'Hinter-Home-5G', signal: 72, saved: true),
-      const WifiNetwork(ssid: 'Neighbour Net', signal: 54),
-      const WifiNetwork(ssid: 'Cafe Guest', signal: 33, secured: false),
-      const WifiNetwork(ssid: 'Basement', signal: 12),
+      _net(ssid: 'Hinter-Home', signal: 88, connected: true, saved: true),
+      _net(ssid: 'Hinter-Home-5G', signal: 72, saved: true),
+      _net(ssid: 'Neighbour Net', signal: 54),
+      _net(ssid: 'Cafe Guest', signal: 33, secured: false),
+      _net(ssid: 'Basement', signal: 12),
     ];
   }
+
+  /// A network with the daemon's id: the SSID's bytes in hex, `-`, the
+  /// security. Only the mock builds it; the launcher treats it as opaque.
+  static WifiNetwork _net({
+    required String ssid,
+    required int signal,
+    bool secured = true,
+    bool connected = false,
+    bool saved = false,
+  }) => WifiNetwork(
+    id:
+        '${utf8.encode(ssid).map((b) => b.toRadixString(16).padLeft(2, '0')).join()}'
+        '-${secured ? 'wpa' : 'open'}',
+    ssid: ssid,
+    signal: signal,
+    secured: secured,
+    connected: connected,
+    saved: saved,
+  );
 
   late List<WifiNetwork> _networks;
   bool _wifi = true;
@@ -944,22 +980,18 @@ class MockNetwork implements NetworkRepository {
   @override
   Stream<List<WifiNetwork>> get listChanges => const Stream.empty();
 
-  WifiNetwork _find(String ssid) => _networks.firstWhere(
-    (n) => n.ssid == ssid,
+  WifiNetwork _find(String id) => _networks.firstWhere(
+    (n) => n.id == id,
     orElse: () => throw const SystemException(
       SystemErrorKind.deviceFailed,
       'That network is no longer in range.',
     ),
   );
 
-  void _replace(String ssid, WifiNetwork Function(WifiNetwork) f) {
-    _networks = [for (final n in _networks) n.ssid == ssid ? f(n) : n];
-  }
-
   @override
-  Future<void> connect(String ssid, {String? password}) async {
-    final n = _find(ssid);
-    log.add('connect:$ssid');
+  Future<void> connect(String id, {String? password}) async {
+    final n = _find(id);
+    log.add('connect:${n.ssid}');
     if (n.secured && !n.saved) {
       if (password == null) {
         throw const SystemException(
@@ -976,12 +1008,12 @@ class MockNetwork implements NetworkRepository {
     }
     _networks = [
       for (final w in _networks)
-        WifiNetwork(
+        _net(
           ssid: w.ssid,
           signal: w.signal,
           secured: w.secured,
-          connected: w.ssid == ssid,
-          saved: w.saved || w.ssid == ssid,
+          connected: w.id == id,
+          saved: w.saved || w.id == id,
         ),
     ];
   }
@@ -991,7 +1023,7 @@ class MockNetwork implements NetworkRepository {
     log.add('disconnect');
     _networks = [
       for (final w in _networks)
-        WifiNetwork(
+        _net(
           ssid: w.ssid,
           signal: w.signal,
           secured: w.secured,
@@ -1001,12 +1033,15 @@ class MockNetwork implements NetworkRepository {
   }
 
   @override
-  Future<void> forget(String ssid) async {
-    log.add('forget:$ssid');
-    _replace(
-      ssid,
-      (w) => WifiNetwork(ssid: w.ssid, signal: w.signal, secured: w.secured),
-    );
+  Future<void> forget(String id) async {
+    final n = _networks.where((w) => w.id == id).firstOrNull;
+    log.add('forget:${n?.ssid ?? id}');
+    _networks = [
+      for (final w in _networks)
+        w.id == id
+            ? _net(ssid: w.ssid, signal: w.signal, secured: w.secured)
+            : w,
+    ];
   }
 
   @override
@@ -1741,6 +1776,7 @@ class MockSystemServices extends SystemServices {
   }) {
     final jobs = MockJobs(autoRun: autoRunJobs, now: now);
     final box = profileBox ?? MockProfileBox(now: now);
+    jobs.checkAdminPin = box.checkBoxAdmin;
     final updates = MockUpdates(
       jobs,
       status: status,

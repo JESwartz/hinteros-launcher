@@ -75,6 +75,24 @@ Future<void> openIndicatorFromSettings(WidgetTester t) async {
 void main() {
   mockScript();
   group('the page', () {
+    testWidgets('a job another profile started: Cancel asks for the admin '
+        'PIN', (t) async {
+      setView(t);
+      final (h, _) = harness();
+      await h.pump(t);
+      await toUpdateNow(t, h);
+      final job = h.services.mockJobs.started.single;
+      h.services.mockJobs.startedByOther.add(job.jobId);
+      await press(t, [kRight, kEnter]); // Cancel (after Hide)
+      expect(find.text("Type the admin profile's PIN."), findsOneWidget);
+      await enterPin(t, '1111');
+      expect(find.text('Wrong PIN.'), findsOneWidget);
+      expect(h.services.mockJobs.snapshot(job.jobId)!.running, isTrue);
+      await enterPin(t, '2468');
+      expect(h.services.mockJobs.snapshot(job.jobId)!.cancelled, isTrue);
+      expect(find.text('Cancelled'), findsOneWidget);
+    });
+
     testWidgets('building: the count, the name, the time, and it moves', (
       t,
     ) async {
