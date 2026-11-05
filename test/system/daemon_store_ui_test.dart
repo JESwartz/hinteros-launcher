@@ -380,14 +380,38 @@ void main() {
     ) async {
       setView(t);
       final h = harness(installed: {});
-      // The catalog removed Steam after a remove that kept its data.
+      // The catalog removed Steam after a remove that kept its data: its
+      // tombstone has only an id, a name, a reason and the data paths.
       final cat = h.mock.system.catalog;
       final i = cat.indexWhere((a) => a.id == 'steam');
-      cat[i] = api.StoreApp.fromJson({...cat[i].toJson(), 'status': 'removed'});
+      cat[i] = api.StoreApp.fromJson({
+        ...cat[i].toJson(),
+        'summary': '',
+        'description': '',
+        'category': '',
+        'homepage': '',
+        'size_mib': 0,
+        'icon': {'firefox_profile': false},
+        'depends': <String>[],
+        'conflicts': <String>[],
+        'terms': null,
+        'readme': null,
+        'unfree': false,
+        'status': 'removed',
+        'status_reason': 'Gone.',
+        'data_paths': ['.local/share/Steam'],
+      });
       h.mock.system.dataLeft.add('steam');
       await h.pump(t);
       await endStartupCheck(t, h);
-      await openSteam(t);
+      // With no category it is the only app under Other, after Utilities.
+      await openStore(t);
+      await press(t, List.filled(storeRow(3) + 1, kDown));
+      expect(focusLabel(), 'store-cats/c-other:0');
+      await press(t, [kRight]);
+      expect(find.text('Removed, data stays'), findsOneWidget);
+      await press(t, [kEnter]);
+      expect(find.text('Steam'), findsWidgets);
       expect(find.text('Removed. Its data stays on the box.'), findsOneWidget);
       expect(find.text('Install'), findsNothing);
       expect(find.text('Remove'), findsNothing);

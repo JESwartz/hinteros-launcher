@@ -15,7 +15,9 @@ import 'models.dart';
 import 'repositories.dart';
 
 StoreState _state(api.StoreState s) => switch (s) {
-  api.StoreState.available || api.StoreState.unknown => StoreState.available,
+  api.StoreState.available => StoreState.available,
+  // Never offered for install: what it means is not known here.
+  api.StoreState.unknown => StoreState.unknown,
   api.StoreState.installed => StoreState.installed,
   api.StoreState.installing => StoreState.installing,
   api.StoreState.removing => StoreState.removing,

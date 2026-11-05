@@ -455,6 +455,7 @@ class StoreCard extends StatelessWidget {
                           StoreState.retired => 'Installed, no longer offered',
                           StoreState.unavailable => 'Installed, going away',
                           StoreState.leftover => 'Removed, data stays',
+                          StoreState.unknown => 'Not available',
                           StoreState.available => app.sizeLabel,
                         },
                         maxLines: 1,
@@ -649,7 +650,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
         : store.stateOf(app.id);
     final installed = state.isInstalled;
     // Not installed and still in the catalog: it can be installed.
-    final offered = !installed && state != StoreState.leftover;
+    final offered =
+        !installed &&
+        state != StoreState.leftover &&
+        state != StoreState.unknown;
     final deps = missingDependencies(app, widget.catalog, store.installed);
     final inTheWay = [
       for (final id in app.conflicts)
@@ -661,6 +665,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       Text(switch (state) {
         StoreState.available => 'Not installed.',
         StoreState.leftover => 'Removed. Its data stays on the box.',
+        StoreState.unknown => 'Not available.',
         StoreState.installing => 'Installing...',
         StoreState.removing => 'Removing...',
         _ => 'Installed.',
@@ -717,7 +722,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       enabled: app.hasData && widget.changes,
     );
     p.buttons('actions', [
-      if (state.busy)
+      if (state.busy || state == StoreState.unknown)
         btn('Back', widget.modal.close, primary: true)
       else if (state == StoreState.leftover) ...[
         // Only its data is left: once cleared, there is nothing to show.

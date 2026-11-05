@@ -124,8 +124,10 @@ The 1.0 contract also has these rules:
   optional; `pin` is the caller's own or the target's. The launcher sends `admin_pin` only when it
   has one. `withBoxAdminPin` shows the pad first only when the admin profile has a PIN; else the
   call goes without one and a `pin_required {pin: admin}` answer opens the pad. This applies to
-  the Server tab, Rename of another profile, Guest and Starter apps. Remove profile keeps its
-  PIN pad with Delete held for 3 s (own profile: `pin`; another: `admin_pin`).
+  the Server tab, Rename of another profile, Guest and Starter apps. Remove profile asks for a
+  PIN only when there is one: your own profile's (`pin`) or, for another, the admin profile's
+  (`admin_pin`), on a PIN pad with Delete held for 3 s. With no PIN, the Remove confirm is enough;
+  a `pin_required` answer still opens the pad.
 - **Cancel:** `jobs.cancel` of a job another profile started is `permission_denied {reason:
   starter}`; the job page then asks for the admin PIN and cancels with `admin_pin`. A cancelled
   job is `job_failed` with `data.reason: cancelled` (the message `cancelled` only when no reason
@@ -135,9 +137,11 @@ The 1.0 contract also has these rules:
   the last stage; `job_busy` may come without data.
 - **Left-over app data:** `StoreState.leftover` is an app the catalog removed whose data is still
   in this profile's home. The Store card says "Removed, data stays"; its page offers only Clear
-  user data and Back, and closes when the data is gone.
+  user data and Back, and closes when the data is gone. A `StoreState` the launcher does not know
+  (a later daemon) is "Not available" with only Back: never Install.
 - **Wi-Fi:** each network has an opaque `id` (one per SSID and security); `wifi.connect` and
-  `wifi.forget` take it. The launcher never builds or parses one. Names can repeat; ids cannot.
+  `wifi.forget` take it. The launcher never builds or parses one. Names can repeat; ids cannot,
+  so the joined network is the entry marked `connected`, not the one with the joined name.
 - **Jellyfin:** `unavailable {service: jellyfin, reason: sign_in_refused}` is "Jellyfin did not
   accept the sign-in.".
 

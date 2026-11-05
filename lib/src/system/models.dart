@@ -1048,11 +1048,15 @@ enum StoreState {
 
   /// Not installed and gone from the catalog, but its data is still in this
   /// profile's home: it can only be cleared.
-  leftover;
+  leftover,
+
+  /// A state of a newer daemon that this launcher does not know: nothing is
+  /// offered but Back.
+  unknown;
 
   /// The app is on the box (it is still there while being removed).
   bool get isInstalled => switch (this) {
-    available || installing || leftover => false,
+    available || installing || leftover || unknown => false,
     _ => true,
   };
 

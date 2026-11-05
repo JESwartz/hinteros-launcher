@@ -342,6 +342,26 @@ void main() {
     expect(c.frequency, CleanupFrequency.weekly);
   });
 
+  test('a Store app in a newer state is not offered for install', () async {
+    final mock = _Newer(
+      'store.list',
+      (r) => {
+        ...r,
+        'apps': [
+          for (final a in (r['apps'] as List).cast<Map<String, dynamic>>())
+            a['id'] == 'steam' ? {...a, 'state': _new} : a,
+        ],
+      },
+    );
+    await mock.waitConnected();
+    addTearDown(mock.close);
+    final store = daemonSystemServices(mock).store;
+    final steam = (await store.catalog()).firstWhere((a) => a.id == 'steam');
+    expect(steam.state, StoreState.unknown);
+    expect(steam.state.isInstalled, isFalse);
+    expect(store.installed, isNot(contains('steam')));
+  });
+
   test('an unknown error code is a plain failure', () {
     final e = systemExceptionFrom(
       const api.ApiException(9999, 'new', {'a': 1}),
