@@ -41,6 +41,7 @@ const _reservedUsers = {
   'hinteros-guest',
   'hinteros-greeter',
   'hinteros-kbd',
+  'hinteros-system',
   'nobody',
   'deploy',
   'sshd',

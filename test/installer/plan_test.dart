@@ -196,6 +196,7 @@ void main() {
         'hinteros-guest',
         'hinteros-greeter',
         'hinteros-kbd',
+        'hinteros-system',
         'hinteros-p1',
         'hinteros-p12x',
         'nobody',
