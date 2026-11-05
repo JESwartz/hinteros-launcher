@@ -943,6 +943,14 @@ class MockNetwork implements NetworkRepository {
   late List<WifiNetwork> _networks;
   bool _wifi = true;
 
+  /// One more network in range (for tests: a name that repeats with
+  /// another security).
+  void addNetwork({
+    required String ssid,
+    required int signal,
+    bool secured = true,
+  }) => _networks.add(_net(ssid: ssid, signal: signal, secured: secured));
+
   /// False: the box has no Wi-Fi adapter.
   bool wifiAvailable = true;
 

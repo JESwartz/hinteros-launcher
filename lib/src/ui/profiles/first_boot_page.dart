@@ -440,9 +440,12 @@ class _FirstBootPageState extends State<FirstBootPage> {
             ok: n?.online ?? false,
           ),
         );
+        // Names can repeat (one per security): the list's own flag says
+        // which one is joined; the name only when the list has none.
+        final listed = _wifi.any((ap) => ap.connected);
         for (var i = 0; i < _wifi.length; i++) {
           final ap = _wifi[i];
-          final joined = ap.connected || ap.ssid == n?.wifiSsid;
+          final joined = ap.connected || (!listed && ap.ssid == n?.wifiSsid);
           p.item(
             'w$i',
             onSelect: joined ? null : () => unawaited(_join(ap)),

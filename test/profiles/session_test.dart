@@ -403,6 +403,27 @@ void main() {
     expect(bt.scanning, isFalse);
   });
 
+  testWidgets('first-boot mode: one name, two networks, one connected', (
+    t,
+  ) async {
+    setView(t);
+    final box = MockProfileBox(profiles: [], now: fixedNow);
+    final h = harness(current: 'p1', setupRequired: true, box: box);
+    await h.services.mockBluetooth.forget('AA:00:11'); // no controller: Skip
+    // Hinter-Home with WPA is connected; the open one is another network.
+    h.services.mockNetwork.addNetwork(
+      ssid: 'Hinter-Home',
+      signal: 80,
+      secured: false,
+    );
+    await h.pump(t);
+    await keys(t, [enter]); // Start
+    await keys(t, [enter]); // Skip
+    expect(find.text('Connected to Hinter-Home.'), findsOneWidget);
+    expect(find.text('Hinter-Home'), findsNWidgets(2));
+    expect(find.text('Connected'), findsOneWidget);
+  });
+
   testWidgets('a profile without a PIN sets one first', (t) async {
     setView(t);
     final box = MockProfileBox(now: fixedNow);
