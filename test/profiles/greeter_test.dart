@@ -297,6 +297,10 @@ void main() {
     await p.typePin('2580');
     await p.typePin('2580');
     expect(find.text('Lock this profile'), findsOneWidget);
+    expect(
+      find.text('Removing the profile always needs a PIN.'),
+      findsOneWidget,
+    );
     await p.press(NavAction.accept); // lock it
     await p.press(NavAction.down);
     await p.press(NavAction.accept, settle: false); // Create profile

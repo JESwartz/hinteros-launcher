@@ -307,10 +307,8 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
               trailing: ToggleMark(on: _locked),
             ),
           ),
-          Text(
-            'Changing or removing the profile always needs the PIN.',
-            style: t.bodyDim,
-          ),
+          if (!widget.admin)
+            Text('Removing the profile always needs a PIN.', style: t.bodyDim),
           _buttons('next', [
             btn(
               widget.admin ? 'Create my profile' : 'Create profile',

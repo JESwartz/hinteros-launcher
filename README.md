@@ -581,7 +581,8 @@ screen. It takes all input until answered: Cancel is focused first, Left/Right m
 chooses, Back cancels, the Home button dismisses it, and it goes away by itself if the app ends
 meanwhile. Confirming calls `apps.close {id}`; `app_exited` (reason `closed`) updates Continue (the
 card stays as a plain recent launch for apps, and disappears for games). For Steam the dialog says
-that only Big Picture closes, as the daemon never kills the client.
+"Steam closes." (other apps: "Unsaved work may be lost."), as the daemon asks Steam to exit
+(`steam -shutdown`; it never kills Steam).
 
 **Steam attention:** while `steam_attention` lists windows (also queried with `steam.attention` on
 every connect), a non-modal banner "Steam needs your attention: <title>" ("and N more" for several)
@@ -992,7 +993,7 @@ the client handles by matching on the request id; `system.ssh.set` has a 340 s t
 | `AuthRepository` | `authentication_requested` / `authentication_finished`, `auth.respond`, `auth.cancel` | the admin password prompt (shell-wide) |
 | `UpdatesRepository` | `update.check`, `update.apply`, `generations.list`, `rollback`, `channel.check`, `channel.set`, `base.set` | Updates, reminders |
 | `JobsRepository` | `jobs.get` / `jobs.list` / `jobs.cancel`, `job_started` / `job_progress` / `job_finished` | the progress page |
-| `NetworkRepository` | `network.status`, `wifi.*`, `network_changed`, `wifi_list_changed` | Network |
+| `NetworkRepository` | `network.status`, `wifi.*`, `network_changed`, `wifi_list_changed` | Network; the address in Remote access and About |
 | `BluetoothRepository` | `bluetooth.*`, `bluetooth_changed`, `bluetooth_confirm` | Bluetooth |
 | `DisplayAudioRepository` | `display.modes` / `set_mode` / `keep` / `revert`, `audio.*`, `audio_changed` | Display, Audio |
 | `StoreRepository` | `store.list`, `store_changed`, `system.apps.install` / `remove` (+ the job events), `apps.set_permission` | Store, Games |
@@ -1021,7 +1022,12 @@ through their stages by themselves.
   is on the hardware checklist.) "Hold Guide, press Y" is no longer printed in the dialogs; it is
   kept in Settings > Accessibility, under "Show typed passwords", as the way to open the keyboard anywhere else.
 - **Remote access:** one SSH toggle. SSH is plain username and password for now (you log in as the
-  admin account). Key import and key-only login are in the backlog. The toggle just calls
+  admin account). While SSH is on, the section says "Log in as the admin account at <address>,
+  with its password.", where the address is the box's IPv4 address from `network.status`
+  (`NetworkStatus.address`, the one Network shows); with no connection it says "No network.". The
+  box runs no mDNS responder, so `<host>.local` is never shown as a name to connect to. About shows
+  "Host name" and "IP address" (or "No network") the same way. Key import and key-only login are
+  in the backlog. The toggle just calls
   `ssh.set`; turning it on makes the daemon ask for the admin password, which shows as the prompt
   described in "Admin password and polkit".
 - **Progress page** (`pages.dart`, see "Session API 0.15: job progress"): what the job does, the

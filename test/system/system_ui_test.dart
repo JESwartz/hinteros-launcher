@@ -197,7 +197,20 @@ void main() {
       await h.pump(t);
       await enterSettingsEntry(t, 'about');
       expect(find.text('0.6.0'), findsOneWidget);
-      expect(find.text('hinteros-livingroom.local'), findsOneWidget);
+      expect(find.text('hinteros-livingroom'), findsOneWidget);
+      // The box runs no mDNS: the address to connect to is the IP address.
+      expect(find.text('192.168.1.42'), findsOneWidget);
+      expect(find.textContaining('.local'), findsNothing);
+    });
+
+    testWidgets('About without a network says so', (t) async {
+      setView(t);
+      final h = harness();
+      await h.services.mockNetwork.disconnect();
+      await h.pump(t);
+      await enterSettingsEntry(t, 'about');
+      expect(find.text('No network'), findsOneWidget);
+      expect(find.text('192.168.1.42'), findsNothing);
     });
   });
 
@@ -244,9 +257,27 @@ void main() {
       await t.pumpAndSettle();
       await press(t, [kEnter]); // Close
       expect(
-        find.textContaining('Log in as the admin account at'),
+        find.text(
+          'Log in as the admin account at 192.168.1.42, with its password.',
+        ),
         findsOneWidget,
       );
+    });
+
+    testWidgets('SSH on without a network says so', (t) async {
+      setView(t);
+      final h = harness();
+      await h.services.mockNetwork.disconnect();
+      await h.pump(t);
+      await enterSettingsEntry(t, 'ssh');
+      await press(t, [kEnter]);
+      await t.enterText(find.byType(TextField), 'correct horse');
+      await press(t, [kEnter]);
+      h.services.mockJobs.finish(h.services.mockJobs.started.single.jobId);
+      await t.pumpAndSettle();
+      await press(t, [kEnter]); // Close
+      expect(find.text('No network.'), findsOneWidget);
+      expect(find.textContaining('Log in as'), findsNothing);
     });
 
     testWidgets('three wrong passwords: the prompt closes, nothing changes', (

@@ -104,6 +104,7 @@ void main() {
       expect(focusLabel(), 'home/continue:0');
       await keys(t, [escape]);
       expect(find.text('Close Jellyfin?'), findsOneWidget);
+      expect(find.text('Unsaved work may be lost.'), findsOneWidget);
       expect(focusLabel(), 'dialog/buttons:0', reason: 'Cancel is focused');
       // Nothing behind the dialog moves.
       await keys(t, [down, down]);
@@ -146,6 +147,20 @@ void main() {
       h.mock.emitNav(NavAction.back); // on Continue: running apps first
       await t.pumpAndSettle();
       expect(find.textContaining('Close '), findsOneWidget);
+    });
+
+    testWidgets('closing Steam says Steam closes', (t) async {
+      setView(t);
+      final h = Harness();
+      await h.pump(t);
+      await h.launch(t, 'steam'); // Steam has focus; Home gives it back
+      h.mock.pressHome();
+      await t.pumpAndSettle();
+      h.mock.emitNav(NavAction.back); // on Continue: Steam
+      await t.pumpAndSettle();
+      // The daemon runs `steam -shutdown`: Steam itself exits.
+      expect(find.text('Steam closes.'), findsOneWidget);
+      expect(find.text('Unsaved work may be lost.'), findsNothing);
     });
 
     testWidgets('Y no longer closes a running app', (t) async {

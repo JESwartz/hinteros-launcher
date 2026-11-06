@@ -292,6 +292,9 @@ void main() {
     await keys(t, [down, enter]); // the first colour
     await typePin(t, '2468');
     await typePin(t, '2468');
+    // The admin profile cannot be removed: no note about removing it.
+    expect(find.text('Lock this profile'), findsOneWidget);
+    expect(find.textContaining('Removing the profile'), findsNothing);
     await keys(t, [down, enter]); // Create my profile
     expect(find.text('All set'), findsOneWidget);
     expect(h.services.mockProfiles.log, contains('setup_admin:p1:James'));

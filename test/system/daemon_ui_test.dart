@@ -141,7 +141,9 @@ void main() {
       await t.pumpAndSettle();
       await press(t, [kEnter]); // Close
       expect(
-        find.textContaining('Log in as the admin account at'),
+        find.text(
+          'Log in as the admin account at 192.168.1.20, with its password.',
+        ),
         findsOneWidget,
       );
     });
@@ -197,7 +199,8 @@ void main() {
       expect(find.byType(DevBadge), findsOneWidget);
       expect(find.text('DEV'), findsOneWidget);
       expect(find.text('0.1.0 stable'), findsOneWidget);
-      expect(find.text('hinteros.local'), findsOneWidget);
+      expect(find.text('192.168.1.20'), findsOneWidget);
+      expect(find.textContaining('.local'), findsNothing);
       expect(
         find.text('SHA256:2CixtE95MNbZHanQGv6hP2D3qfguu9QZfjca2OaupKI'),
         findsOneWidget,

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../system/models.dart';
-import '../../system/profiles.dart';
+import '../../system/repositories.dart';
 import '../../theme/hinter_theme.dart';
 import '../dialogs.dart';
 import '../widgets.dart';
@@ -9,8 +9,21 @@ import 'common.dart';
 
 // ------------------------------------------------------------------ remote access
 
+/// The box's IPv4 address on the local network (`network.status`), or null
+/// when it is not connected or the network service does not answer.
+Future<String?> boxAddress(SystemServices services) async {
+  try {
+    final n = await services.network.status();
+    return n.online ? n.address : null;
+  } on SystemException {
+    return null;
+  }
+}
+
 /// SSH on or off. SSH is plain username and password for now: you log in as
-/// the admin account with its password, over the local network.
+/// the admin account with its password, over the local network, at the box's
+/// address ([boxAddress]; the box runs no mDNS, so `<host>.local` does not
+/// resolve).
 ///
 /// Turning it on needs the admin password (polkit `auth_admin`). This just
 /// calls `ssh.set`: the session daemon is polkit's authentication agent, and
@@ -26,11 +39,11 @@ class RemoteAccessSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sys = env.services.system;
-    return Loaded<(SshState, SystemInfo)>(
+    return Loaded<(SshState, String?)>(
       region: env.region,
-      load: () async => (await sys.ssh(), await sys.info()),
+      load: () async => (await sys.ssh(), await boxAddress(env.services)),
       builder: (context, data, reload) {
-        final (ssh, info) = data;
+        final (ssh, address) = data;
         final p = Pane(env.region);
         p.item(
           'ssh',
@@ -48,11 +61,13 @@ class RemoteAccessSection extends StatelessWidget {
         );
         if (ssh.enabled) {
           p.add(
-            StatusLine(
-              'Log in as the admin account at ${info.hostname}.local, with '
-              'its password.',
-              ok: true,
-            ),
+            address == null
+                ? const StatusLine('No network.')
+                : StatusLine(
+                    'Log in as the admin account at $address, with its '
+                    'password.',
+                    ok: true,
+                  ),
             gap: HinterTokens.s2,
           );
         }
@@ -408,10 +423,12 @@ class AboutSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Loaded<SystemInfo>(
+    return Loaded<(SystemInfo, String?)>(
       region: env.region,
-      load: env.services.system.info,
-      builder: (context, i, _) {
+      load: () async =>
+          (await env.services.system.info(), await boxAddress(env.services)),
+      builder: (context, data, _) {
+        final (i, address) = data;
         final t = HinterTheme.of(context);
         final p = Pane(env.region);
         void line(String key, String title, String value) => p.item(
@@ -439,7 +456,8 @@ class AboutSection extends StatelessWidget {
         line('base', 'Software base', i.base.label);
         line('rev', 'Revision', i.rev == null ? 'None' : shortRev(i.rev, 12));
         line('gen', 'Generation', i.generation?.toString() ?? 'None');
-        line('host', 'Name on the network', '${i.hostname}.local');
+        line('host', 'Host name', i.hostname);
+        line('ip', 'IP address', address ?? 'No network');
         for (var k = 0; k < i.hostKeyFingerprints.length; k++) {
           p.item(
             'fp$k',
