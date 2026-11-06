@@ -819,8 +819,8 @@ class SummaryStep extends StatelessWidget {
           'actions',
           2,
           Wrap(
-            spacing: HinterTokens.s2,
-            runSpacing: HinterTokens.s1,
+            spacing: HinterTokens.s3,
+            runSpacing: HinterTokens.s2,
             children: [
               NavFocusable(
                 region: env.region,

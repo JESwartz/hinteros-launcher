@@ -12,6 +12,7 @@ import '../focus_frame.dart';
 import '../modal_host.dart';
 import '../nav_focusable.dart';
 import '../system/common.dart' show describeError;
+import '../visible_box.dart';
 import 'server_model.dart';
 import 'service_page.dart';
 
@@ -170,7 +171,7 @@ class ServiceRow extends StatelessWidget {
       focused: focused,
       radius: HinterTokens.radiusCard,
       scale: 1.02,
-      child: DecoratedBox(
+      child: VisibleDecoratedBox(
         decoration: BoxDecoration(
           color: t.surface,
           borderRadius: BorderRadius.circular(HinterTokens.radiusCard),

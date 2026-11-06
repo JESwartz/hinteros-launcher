@@ -20,6 +20,7 @@ import '../theme/hinter_theme.dart';
 import 'focus_frame.dart';
 import 'modal_host.dart';
 import 'nav_focusable.dart';
+import 'visible_box.dart';
 import 'widgets.dart' show Spinner;
 
 /// One choice of the list: [build] makes its content (after the mark of the
@@ -250,7 +251,7 @@ class DropDownField extends StatelessWidget {
       focused: focused,
       radius: HinterTokens.radiusSmall,
       scale: 1,
-      child: DecoratedBox(
+      child: VisibleDecoratedBox(
         decoration: BoxDecoration(
           color: t.surface,
           borderRadius: BorderRadius.circular(HinterTokens.radiusSmall),

@@ -487,6 +487,7 @@ class _JobIndicatorState extends State<JobIndicator> with JobTicker {
       focused: widget.focused,
       radius: HinterTokens.radiusPill,
       scale: 1.05,
+      gap: HinterTokens.s2,
       style: t.focusStyle == FocusStyle.bar ? FocusStyle.ring : null,
       child: Container(
         key: const ValueKey('job-indicator'),

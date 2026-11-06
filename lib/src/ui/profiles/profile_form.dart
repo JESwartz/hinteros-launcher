@@ -375,6 +375,7 @@ class _Swatch extends StatelessWidget {
       focused: focused,
       radius: HinterTokens.radiusPill,
       scale: 1.1,
+      gap: HinterTokens.s2,
       child: Container(
         width: 96,
         height: 96,

@@ -111,11 +111,23 @@ class HinterTokens {
 
   /// Focus scale-up (skipped when reducing motion). Rows in a list do not
   /// grow (scale 1): they fill their column, so growing would cut them off.
+  /// A large item grows less (see [focusSpacing]), so it never covers the next.
   static const double focusScale = 1.08;
 
   /// How far the focus marker reaches outside its card (the ring is 9 px out).
   /// A scrolling list keeps this much room at its edges, beyond its fade.
   static const double focusRoom = 12;
+
+  /// The ring's reach outside its card, before the scale-up.
+  static const double focusReach = 9;
+
+  /// The usual space between two focusable items side by side (buttons in a
+  /// row, cards in a grid). A focused item grows only as far as keeps its
+  /// ring [focusClear] away from neighbours this far off.
+  static const double focusSpacing = s3;
+
+  /// The least space between a focused item's ring and its neighbours.
+  static const double focusClear = 4;
 
   Duration get fast => reduceMotion ? Duration.zero : _fast;
   Duration get medium => reduceMotion ? Duration.zero : _medium;

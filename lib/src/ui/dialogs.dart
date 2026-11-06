@@ -9,6 +9,7 @@ import '../theme/hinter_theme.dart';
 import 'focus_frame.dart';
 import 'modal_host.dart';
 import 'nav_focusable.dart';
+import 'visible_box.dart';
 import 'widgets.dart';
 
 /// A modal card over a dimmed screen. Content goes in [children].
@@ -455,7 +456,7 @@ class _NavTextFieldState extends State<NavTextField> {
       focused: _focused,
       radius: HinterTokens.radiusSmall,
       scale: 1.0,
-      child: DecoratedBox(
+      child: VisibleDecoratedBox(
         decoration: BoxDecoration(
           color: t.background,
           borderRadius: BorderRadius.circular(HinterTokens.radiusSmall),

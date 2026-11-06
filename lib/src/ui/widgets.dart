@@ -5,6 +5,7 @@ import '../nav/nav_model.dart';
 import '../theme/hinter_theme.dart';
 import 'focus_frame.dart';
 import 'nav_focusable.dart';
+import 'visible_box.dart';
 
 /// A pill button: focus shown by [FocusFrame]. A disabled button stays
 /// focusable (so the user can see what it is and why) but dimmed, dashed and
@@ -44,7 +45,7 @@ class HButton extends StatelessWidget {
       focused: focused,
       radius: HinterTokens.radiusPill,
       scale: 1.05,
-      child: DecoratedBox(
+      child: VisibleDecoratedBox(
         decoration: BoxDecoration(
           color: fill,
           border: primary && enabled
@@ -98,7 +99,7 @@ class SettingRow extends StatelessWidget {
       focused: focused,
       radius: HinterTokens.radiusSmall,
       scale: 1,
-      child: DecoratedBox(
+      child: VisibleDecoratedBox(
         decoration: BoxDecoration(
           color: t.surface,
           borderRadius: BorderRadius.circular(HinterTokens.radiusSmall),
@@ -543,8 +544,8 @@ class Pane {
     _rows.add(NavRow(key, buttons.length));
     add(
       Wrap(
-        spacing: HinterTokens.s2,
-        runSpacing: HinterTokens.s1,
+        spacing: HinterTokens.s3,
+        runSpacing: HinterTokens.s2,
         children: [
           for (var i = 0; i < buttons.length; i++)
             NavFocusable(

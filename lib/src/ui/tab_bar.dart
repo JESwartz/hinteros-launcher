@@ -174,6 +174,7 @@ class _Chip extends StatelessWidget {
       focused: focused,
       radius: HinterTokens.radiusPill,
       scale: 1.05,
+      gap: HinterTokens.s2,
       style: t.focusStyle == FocusStyle.bar ? FocusStyle.ring : null,
       child: Padding(
         padding: const EdgeInsets.all(4),

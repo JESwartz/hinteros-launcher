@@ -940,7 +940,14 @@ Code: `lib/src/nav/` (pure rules in `nav_model.dart`, binding to Flutter `FocusN
 from 24 px caption to 56 px headline, durations), provided by `HinterTheme.of(context)`. Focus is
 shown by scale-up plus a marker that differs in **shape and thickness**, not only colour: a thick
 white ring with a dark gap (default), a thin ring with a glow, or a bar under the card. High contrast
-is black/white with a yellow focus marker. Text scale 1.0 to 1.6 applies through `MediaQuery`
+is black/white with a yellow focus marker. The focus never covers a neighbour: `FocusFrame`'s scale
+is an upper bound, and an item grows only as far as keeps its ring 4 px (`focusClear`) clear of the
+next item `gap` away (default `focusSpacing`, 24 px; tiles and game cards 32 px, the PIN pad and
+the colour swatches 16 px). Small items get the full scale, wide ones (a Store card) grow less;
+rows of buttons are 24 px apart. A bordered box that a vertical scroll view cuts
+(`VisibleDecoratedBox`: text fields, setting rows, buttons, the About box, the focus ring) stays a
+closed box: fill and border are drawn around the part that shows, and under an `EdgeFade` that part
+ends where the fade starts. Text scale 1.0 to 1.6 applies through `MediaQuery`
 (layouts make room; the wordmark yields above 1.3x). Reduce motion removes scale and scroll
 animations.
 

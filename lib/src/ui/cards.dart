@@ -189,6 +189,7 @@ class AppTile extends StatelessWidget {
     }
     return FocusFrame(
       focused: focused,
+      gap: HinterTokens.s4,
       child: SizedBox(width: width, height: height, child: body),
     );
   }
@@ -448,6 +449,7 @@ class GameCard extends StatelessWidget {
         children: [
           FocusFrame(
             focused: focused,
+            gap: HinterTokens.s4,
             child: SizedBox(
               width: width,
               height: height,

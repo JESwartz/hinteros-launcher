@@ -12,6 +12,7 @@ import '../focus_frame.dart';
 import '../modal_host.dart';
 import '../nav_focusable.dart';
 import '../pages.dart';
+import '../visible_box.dart';
 import '../widgets.dart';
 import 'common.dart';
 
@@ -552,7 +553,7 @@ class _KeyPickerState extends State<_KeyPicker> {
       s.modifiers.length,
       Wrap(
         spacing: HinterTokens.s2,
-        runSpacing: HinterTokens.s1,
+        runSpacing: HinterTokens.s2,
         children: [
           for (var i = 0; i < s.modifiers.length; i++)
             SizedBox(
@@ -591,7 +592,7 @@ class _KeyPickerState extends State<_KeyPicker> {
         Row(
           children: [
             for (var c = 0; c < _perRow; c++) ...[
-              if (c > 0) const SizedBox(width: HinterTokens.s1),
+              if (c > 0) const SizedBox(width: HinterTokens.s2),
               Expanded(
                 child: c < row.length
                     ? NavFocusable(
@@ -613,7 +614,7 @@ class _KeyPickerState extends State<_KeyPicker> {
             ],
           ],
         ),
-        gap: r == 0 ? HinterTokens.s3 : HinterTokens.s1,
+        gap: r == 0 ? HinterTokens.s3 : HinterTokens.s2,
       );
     }
     p.buttons('cancel', [
@@ -654,27 +655,30 @@ class _KeyCap extends StatelessWidget {
       focused: focused,
       radius: HinterTokens.radiusSmall,
       scale: 1,
-      child: Container(
+      child: SizedBox(
         height: 72,
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: HinterTokens.s1),
-        decoration: BoxDecoration(
-          color: current ? t.surfaceHigh : t.surface,
-          borderRadius: BorderRadius.circular(HinterTokens.radiusSmall),
-          border: current || t.highContrast
-              ? Border.all(
-                  color: current ? t.accent : t.textDim,
-                  width: current ? 4 : 2,
-                )
-              : null,
-        ),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            label,
-            maxLines: 1,
-            style: t.label.copyWith(
-              fontWeight: current ? FontWeight.w700 : FontWeight.w400,
+        child: VisibleDecoratedBox(
+          padding: const EdgeInsets.symmetric(horizontal: HinterTokens.s1),
+          decoration: BoxDecoration(
+            color: current ? t.surfaceHigh : t.surface,
+            borderRadius: BorderRadius.circular(HinterTokens.radiusSmall),
+            border: current || t.highContrast
+                ? Border.all(
+                    color: current ? t.accent : t.textDim,
+                    width: current ? 4 : 2,
+                  )
+                : null,
+          ),
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: t.label.copyWith(
+                  fontWeight: current ? FontWeight.w700 : FontWeight.w400,
+                ),
+              ),
             ),
           ),
         ),

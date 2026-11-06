@@ -17,6 +17,7 @@ import 'profiles/profile_ui.dart' show withBoxAdminPin;
 import 'qr_code.dart';
 import 'restart_countdown.dart';
 import 'session_ending.dart';
+import 'visible_box.dart';
 import 'widgets.dart';
 
 /// A full-screen page: opaque, with the overscan-safe margin, a title and
@@ -982,7 +983,7 @@ class NavFocusableBox extends StatelessWidget {
         focused: focused,
         radius: HinterTokens.radiusCard,
         scale: 1.0,
-        child: DecoratedBox(
+        child: VisibleDecoratedBox(
           decoration: BoxDecoration(
             color: t.surface,
             borderRadius: BorderRadius.circular(HinterTokens.radiusCard),

@@ -20,6 +20,7 @@ import 'nav_grid_view.dart';
 import 'pages.dart';
 import 'store_flows.dart';
 import 'system/common.dart';
+import 'visible_box.dart';
 import 'widgets.dart';
 
 /// The Store tab: categories on the left, the apps of the highlighted
@@ -360,7 +361,7 @@ class _CategoryRow extends StatelessWidget {
       focused: focused,
       radius: HinterTokens.radiusSmall,
       scale: 1,
-      child: DecoratedBox(
+      child: VisibleDecoratedBox(
         decoration: BoxDecoration(
           color: selected ? t.surfaceHigh : t.surface,
           borderRadius: BorderRadius.circular(HinterTokens.radiusSmall),
@@ -416,7 +417,7 @@ class StoreCard extends StatelessWidget {
       child: SizedBox(
         width: 520,
         height: _StoreScreenState._cardHeight(context),
-        child: DecoratedBox(
+        child: VisibleDecoratedBox(
           decoration: BoxDecoration(
             color: t.surface,
             borderRadius: BorderRadius.circular(HinterTokens.radiusCard),

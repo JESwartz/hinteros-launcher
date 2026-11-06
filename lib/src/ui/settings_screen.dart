@@ -18,6 +18,7 @@ import 'nav_focusable.dart';
 import 'profiles/profiles_section.dart';
 import 'profiles/session_profile.dart';
 import 'screen_saver.dart';
+import 'visible_box.dart';
 
 /// One setting: a section of a group's pane.
 class _Setting {
@@ -413,7 +414,7 @@ class _ListRow extends StatelessWidget {
       focused: focused,
       radius: HinterTokens.radiusSmall,
       scale: 1,
-      child: DecoratedBox(
+      child: VisibleDecoratedBox(
         decoration: BoxDecoration(
           color: selected ? t.surfaceHigh : t.surface,
           borderRadius: BorderRadius.circular(HinterTokens.radiusSmall),
@@ -589,7 +590,7 @@ class _OptionRow extends StatelessWidget {
       scale: 1,
       child: SizedBox(
         width: 520,
-        child: DecoratedBox(
+        child: VisibleDecoratedBox(
           decoration: BoxDecoration(
             color: t.surface,
             borderRadius: BorderRadius.circular(HinterTokens.radiusSmall),

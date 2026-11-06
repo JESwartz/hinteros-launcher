@@ -70,6 +70,12 @@ class EdgeFade extends StatelessWidget {
   final double top;
   final double bottom;
 
+  /// The fade right around the scroll view of [scrollable] (its context), if
+  /// any: a bordered box ends where the fade starts (see
+  /// `VisibleDecoratedBox`).
+  static EdgeFade? of(BuildContext scrollable) =>
+      scrollable.getInheritedWidgetOfExactType<_EdgeFadeScope>()?.fade;
+
   @override
   Widget build(BuildContext context) {
     final bg = HinterTheme.of(context).background;
@@ -95,10 +101,22 @@ class EdgeFade extends StatelessWidget {
     );
     return Stack(
       children: [
-        Positioned.fill(child: child),
+        Positioned.fill(
+          child: _EdgeFadeScope(fade: this, child: child),
+        ),
         if (top > 0) fade(true, top),
         if (bottom > 0) fade(false, bottom),
       ],
     );
   }
+}
+
+class _EdgeFadeScope extends InheritedWidget {
+  const _EdgeFadeScope({required this.fade, required super.child});
+
+  final EdgeFade fade;
+
+  @override
+  bool updateShouldNotify(_EdgeFadeScope old) =>
+      old.fade.top != fade.top || old.fade.bottom != fade.bottom;
 }

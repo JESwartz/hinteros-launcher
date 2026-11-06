@@ -195,6 +195,7 @@ class ProfileTile extends StatelessWidget {
     return FocusFrame(
       focused: focused,
       radius: HinterTokens.radiusCard,
+      gap: HinterTokens.s4,
       child: Container(
         width: 260,
         padding: const EdgeInsets.symmetric(
@@ -526,6 +527,8 @@ class _Key extends StatelessWidget {
       focused: focused,
       radius: HinterTokens.radiusSmall,
       scale: 1.06,
+      // The pad keys are s2 apart.
+      gap: HinterTokens.s2,
       child: HoldFill(
         fill: h,
         width: 150,
@@ -914,8 +917,8 @@ class DialogButtonsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Wrap(
-    spacing: HinterTokens.s2,
-    runSpacing: HinterTokens.s1,
+    spacing: HinterTokens.s3,
+    runSpacing: HinterTokens.s2,
     children: [
       for (var i = 0; i < buttons.length; i++)
         NavFocusable(
