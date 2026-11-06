@@ -32,9 +32,8 @@ After changing `pubspec.yaml`, run `flutter pub get` and commit `pubspec.lock`; 
 
 ## Daemon API
 
-The launcher talks to `hinteros-session` over a Unix socket (JSON-RPC 2.0, one message per line;
-rules in `hinteros-docs/design/api.md`). The socket is `$HINTEROS_SESSION_SOCKET`, else
-`$XDG_RUNTIME_DIR/hinteros/session.sock`. If the daemon is missing or speaks another API version,
+The launcher talks to `hinteros-session` over a Unix socket (JSON-RPC 2.0, one message per line).
+The socket is `$HINTEROS_SESSION_SOCKET`, else `$XDG_RUNTIME_DIR/hinteros/session.sock`. If the daemon is missing or speaks another API version,
 the home screen says so and the client keeps retrying with backoff. `hello` sends the build
 version (`launcherVersion`: the Nix build passes the pubspec version with `--dart-define`).
 Each call waits a little longer than the daemon's own limit for it (`DaemonClient.timeoutFor`):
@@ -170,8 +169,7 @@ the four sections follow `ControllerRepository.changes`.
 
 ### Session API 0.19: the Server tab
 
-Design: `hinteros-docs/design/server.md` ("Launcher: Server tab") and `design/system-api.md` (system
-API 0.11, relayed as `system.*`). The box-wide services of the catalog: Jellyfin server, Plex Media
+Over system API 0.11, relayed as `system.*`. The box-wide services of the catalog: Jellyfin server, Plex Media
 Server, Tailscale, Cloudflare Tunnel. `ServerRepository` (`lib/src/system/server.dart`;
 `daemon_server.dart` over the relay, `mock_server.dart` for `--mock`), the screens in
 `lib/src/ui/server/` (`ServerModel` holds the last `services.list`; the shell owns it).
@@ -229,7 +227,7 @@ Server, Tailscale, Cloudflare Tunnel. `ServerRepository` (`lib/src/system/server
 ### Session API 0.18: app permissions
 
 `store.list` and `apps.list` carry each app's `permissions` (`{name, required, granted}`, catalog
-order; see hinteros-docs `design/sandbox.md`). `StoreApp.permissions` holds them
+order). `StoreApp.permissions` holds them
 (`AppPermission`, labels: `gamepad` "Controller", `mic` "Microphone", `downloads` "Downloads
 folder", an unknown name as it is). **Install:** an app with permissions gets them in the confirm
 dialog as switches under "Permissions", all on; a required one is locked on and says "Required";
@@ -285,7 +283,7 @@ channel_rev}` gives "The channel changed. Try again.". The mock relay keeps the 
 
 ### Session API 0.16: time zone
 
-Design: `hinteros-docs/design/time-zone.md`. The box's zone (`TimeZoneRepository` in
+The box's zone (`TimeZoneRepository` in
 `lib/src/system/time_zone.dart`, over the relayed `system.time_zone.get` / `list` / `set` and
 `time_zone_changed` in `daemon_time_zone.dart`, faked in `mock_time_zone.dart`).
 
@@ -370,7 +368,7 @@ API 0.15 (`job_started` / `job_progress` / `job_finished` with `subject`, `start
 
 ### Session API 0.14: Storage
 
-Design: `hinteros-docs/design/storage.md`. Settings > Storage
+Settings > Storage
 (`lib/src/ui/system/storage_section.dart`, the ring in `storage_ring.dart`;
 `StorageRepository` in `lib/src/system/storage.dart`, over the relayed `system.storage.*` and
 `system.cleanup.*` in `daemon_storage.dart`, faked in `mock_storage.dart`).
@@ -437,8 +435,7 @@ Design: `hinteros-docs/design/storage.md`. Settings > Storage
 
 ### Session API 0.12: profiles (M7)
 
-Design: `hinteros-docs/design/profiles.md` and `apps.md`. The schema's profile parts are the
-launcher's proposal until the daemon's M7 schema is vendored (see `m7/DECISIONS.md`).
+The schema's profile parts are the launcher's proposal until the daemon's M7 schema is vendored (see `m7/DECISIONS.md`).
 
 - **Picker** (`--greeter`, `lib/src/greeter_main.dart`, `lib/src/ui/profiles/greeter_screen.dart`):
   the greeter session's launcher, against the greeter-mode daemon (`greeter.*`). Profile tiles,
@@ -959,8 +956,7 @@ back per field:
 ### System screens, jobs and the Store
 
 Everything below is built against **repository interfaces** (`lib/src/system/repositories.dart`).
-Since session API 0.6 the daemon relays the privileged system service (`system.*`, design in
-`design/system-api.md` in hinteros-docs), and `lib/src/system/daemon_system.dart` implements
+Since session API 0.6 the daemon relays the privileged system service (`system.*`), and `lib/src/system/daemon_system.dart` implements
 `SystemRepository` (info, SSH, power), `UpdatesRepository` and `JobsRepository` over it. Since 0.7
 the runtime settings (Wi-Fi, Bluetooth, audio, display, power) are served by the session daemon
 itself, and `lib/src/system/daemon_runtime.dart` implements `NetworkRepository`,

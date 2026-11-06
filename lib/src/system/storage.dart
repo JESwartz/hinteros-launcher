@@ -1,4 +1,4 @@
-/// Storage (session API 0.14, `hinteros-docs/design/storage.md`): what uses
+/// Storage (session API 0.14): what uses
 /// the disk, the two clean-ups and the automatic clean-up. The data types
 /// and [StorageRepository]; `daemon_storage.dart` implements it over the
 /// relayed `system.storage.*` / `system.cleanup.*` methods,

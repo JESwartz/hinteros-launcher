@@ -1,5 +1,4 @@
-/// The Server section (session API 0.19, system API 0.11; design in
-/// hinteros-docs `design/server.md`): the box-wide services of the catalog
+/// The Server section (session API 0.19, system API 0.11): the box-wide services of the catalog
 /// (Jellyfin, Plex, Tailscale, Cloudflare Tunnel), their state and their
 /// setup. Everyone sees the state; every change takes the admin profile's
 /// PIN and runs as a job.

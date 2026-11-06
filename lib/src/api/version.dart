@@ -1,4 +1,5 @@
-/// API version rules (hinteros-docs/design/api.md, "Handshake and versioning").
+/// API version rules: parsing `MAJOR.MINOR` and the handshake's compatibility
+/// check.
 library;
 
 /// A parsed `MAJOR.MINOR` API version.

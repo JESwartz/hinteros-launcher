@@ -1,8 +1,8 @@
 /// Data types of the system layer: what the Settings -> System sections, the
 /// update reminders, the progress screen and the Store show.
 ///
-/// These mirror `hinteros-docs/design/system-api.md` (privileged service,
-/// relayed by the session daemon) and `design/catalog.md` (index entries), but
+/// These mirror the system API (privileged service, relayed by the session
+/// daemon) and the catalog's index entries, but
 /// the launcher only depends on these types and the repository interfaces in
 /// `repositories.dart`, not on the wire schema.
 library;

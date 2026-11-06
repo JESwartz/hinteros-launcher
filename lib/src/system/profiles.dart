@@ -1,5 +1,5 @@
 /// Profiles (M7): the data types and repository interfaces of the profile
-/// screens (`hinteros-docs/design/profiles.md`). The session side
+/// screens. The session side
 /// ([ProfilesRepository]: the current profile, the box's profiles, switching,
 /// the sleep lock, the starter set) and the greeter side ([GreeterRepository]:
 /// the picker before any profile's session runs). Implementations:
