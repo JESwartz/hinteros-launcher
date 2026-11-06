@@ -9,13 +9,13 @@
     };
     # The API schema (and the real session daemon for the integration check).
     hinteros-daemon = {
-      url = "git+https://justsomeshed.com/JSwartz/HinterOS/hinteros-daemon.git";
+      url = "git+https://git.hinteros.org/hinteros-daemon.git";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.git-hooks.follows = "git-hooks";
     };
     # The Store index the browser demo shows (its free-software entries).
     hinteros-catalog = {
-      url = "git+https://justsomeshed.com/JSwartz/HinterOS/hinteros-catalog.git";
+      url = "git+https://git.hinteros.org/hinteros-catalog.git";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.git-hooks.follows = "git-hooks";
     };
