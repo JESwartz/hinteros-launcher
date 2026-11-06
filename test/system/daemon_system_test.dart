@@ -729,7 +729,7 @@ void main() {
         error: const api.ErrorObject(
           code: api.ApiErrorCode.updateUnreachable,
           message: 'cannot reach the update server',
-          data: {'host': 'justsomeshed.com'},
+          data: {'host': 'git.hinteros.org'},
         ),
       );
       final e = await _fails(f);
