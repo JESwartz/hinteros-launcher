@@ -21,8 +21,7 @@ import '../nav_focusable.dart';
 import '../pages.dart' show FullPage;
 import '../widgets.dart';
 
-/// The wording every PIN screen carries (profiles.md: no screen calls a PIN
-/// secure).
+/// The wording every PIN screen carries (no screen calls a PIN secure).
 const pinDisclaimer =
     'Your PIN stops others from using your profile by mistake. Someone with '
     'access to this box can get around it.';

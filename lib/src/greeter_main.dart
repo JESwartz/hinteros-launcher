@@ -1,5 +1,5 @@
-/// `hinteros-launcher --greeter`: the profile picker of the greeter session
-/// (profiles.md, "The picker"). It talks to the greeter-mode session daemon
+/// `hinteros-launcher --greeter`: the profile picker of the greeter session.
+/// It talks to the greeter-mode session daemon
 /// only; `--mock` uses the in-process fakes (PINs: James 2468, Sam 1357).
 library;
 

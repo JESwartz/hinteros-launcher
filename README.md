@@ -435,7 +435,7 @@ Settings > Storage
 
 ### Session API 0.12: profiles (M7)
 
-The schema's profile parts are the launcher's proposal until the daemon's M7 schema is vendored (see `m7/DECISIONS.md`).
+The schema's profile parts are the launcher's proposal until the daemon's M7 schema is vendored.
 
 - **Picker** (`--greeter`, `lib/src/greeter_main.dart`, `lib/src/ui/profiles/greeter_screen.dart`):
   the greeter session's launcher, against the greeter-mode daemon (`greeter.*`). Profile tiles,
@@ -1154,7 +1154,7 @@ git diff --stat test/golden && git add test/golden   # look at the images, commi
 
 `nix flake check` (check `test`) runs `flutter test` including the golden comparison in the sandbox.
 Goldens are generated on this machine, the future CI runner host; moving the runner to other
-hardware means regenerating all of them in one reviewed commit (TESTING.md). Plain `flutter test`
+hardware means regenerating all of them in one reviewed commit. Plain `flutter test`
 in `nix develop` also compares them, and may differ slightly from the sandbox; use
 `update-goldens` rather than `flutter test --update-goldens` when committing.
 

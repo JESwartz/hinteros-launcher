@@ -31,7 +31,7 @@ class LoadingIdentity {
       ? 'H'
       : String.fromCharCode(name!.runes.first).toUpperCase();
 
-  /// The guest's user (profiles.md).
+  /// The guest's user.
   static const guestUser = 'hinteros-guest';
 
   /// From the service's public view (`/run/hinteros/profiles-public.json`,

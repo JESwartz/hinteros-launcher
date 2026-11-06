@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Goldens may differ by at most this fraction (0.0005 = 0.05%) of pixels (anti-aliasing noise
-/// across Mesa/CPU variants; see TESTING.md).
+/// across Mesa/CPU variants).
 const goldenTolerance = 0.0005;
 
 /// Compares like [LocalFileComparator] but accepts a tiny difference.

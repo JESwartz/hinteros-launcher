@@ -27,7 +27,7 @@ const List<(String, String?)> mockBuilds = [
   ('etc', null),
 ];
 
-/// Wire stages of each kind of job (system-api.md "Job model").
+/// Wire stages of each kind of job.
 List<Stage> mockStagesOf(JobKind kind) => switch (kind) {
   JobKind.updateCheck || JobKind.channelCheck => const [
     Stage.preparing,

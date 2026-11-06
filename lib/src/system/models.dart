@@ -157,8 +157,8 @@ enum JobKind {
   const JobKind(this.title);
   final String title;
 
-  /// Stages a job of this kind can report, in order (system-api.md "Job
-  /// model": not every job has every stage).
+  /// Stages a job of this kind can report, in order (not every job has
+  /// every stage).
   List<JobStage> get stages => switch (this) {
     clearData => const [JobStage.finishing],
     other => const [JobStage.preparing, JobStage.finishing],

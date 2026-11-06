@@ -22,7 +22,7 @@ class _FailingLaunch extends MockDaemon {
   }
 }
 
-/// Golden screenshots (TESTING.md): every screen at 1920x1080, Home and Games
+/// Golden screenshots: every screen at 1920x1080, Home and Games
 /// also at 3840x2160 (1920x1080 logical at DPR 2), plus Home in the
 /// high-contrast, 1.6x text variant. Regenerate with `nix run .#update-goldens`.
 void main() {

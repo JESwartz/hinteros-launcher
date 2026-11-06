@@ -46,7 +46,7 @@ enum PinKind {
       values.firstWhere((k) => k.name == s, orElse: () => self);
 }
 
-/// The PIN rules (profiles.md): 4 to 8 digits.
+/// The PIN rules: 4 to 8 digits.
 bool validPin(String pin) => RegExp(r'^[0-9]{4,8}$').hasMatch(pin);
 
 /// A display name the service accepts: 1 to 32 characters once trimmed, no

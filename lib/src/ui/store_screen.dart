@@ -27,7 +27,7 @@ import 'widgets.dart';
 /// an app opens its detail page; install and remove start there.
 ///
 /// Icons are resolved at runtime (the app's own icon once installed, the
-/// site's before; see catalog.md "Icons"), with placeholder art until then.
+/// site's before), with placeholder art until then.
 class StoreScreen extends StatefulWidget {
   const StoreScreen({
     super.key,
@@ -701,7 +701,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         ? const <String>[]
         : [for (final s in app.missingServices) s.name];
     if (needs.isNotEmpty) {
-      // Red text, in words (owner answer, apps.md).
+      // Red text, in words (owner answer).
       p.add(
         Text(
           '${app.name} needs ${needs.join(' and ')}. The admin profile can '

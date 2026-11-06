@@ -15,7 +15,7 @@ import '../system/common.dart' show describeError;
 import 'server_model.dart';
 import 'service_page.dart';
 
-/// The Server tab (session API 0.19; design `server.md`): one row per
+/// The Server tab (session API 0.19): one row per
 /// box-wide service with its state. Every profile sees it; A opens the
 /// service's page, where each change asks for the admin PIN.
 class ServerScreen extends StatefulWidget {

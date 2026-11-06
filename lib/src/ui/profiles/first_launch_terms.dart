@@ -1,6 +1,6 @@
 /// The first launch of an app that came with the starter set and has vendor
-/// terms (Steam): the terms in full before it starts (apps.md "Starter set",
-/// owner answer: terms on first launch). Accepting records them for this
+/// terms (Steam): the terms in full before it starts (owner answer: terms
+/// on first launch). Accepting records them for this
 /// profile (`apps.accept_terms`); declining leaves the app installed and
 /// unlaunched, with Remove offered next to it.
 library;

@@ -1,7 +1,7 @@
-/// First-boot mode inside the session (profiles.md "First-boot mode"): when
+/// First-boot mode inside the session: when
 /// `profile.current` says `setup_required` (no admin profile exists; this
 /// session runs on the spare account), the launcher opens this wizard over
-/// Home: controllers, network, time zone (time-zone.md: it starts on the
+/// Home: controllers, network, time zone (it starts on the
 /// box's zone, UTC on a new box, and needs no PIN), display, then the
 /// profile form for the admin profile (`profiles.setup_admin`: no rebuild,
 /// no network), and ends on Home in the new profile.
