@@ -136,7 +136,6 @@ class ExistingInstall {
     this.channel,
     this.hostname,
     this.admin,
-    this.ssh = false,
   });
 
   /// The backend accepts a keepData plan on this disk.
@@ -149,10 +148,9 @@ class ExistingInstall {
   final InstallChannel? channel;
 
   /// The computer name and the admin user of the install; null when not
-  /// set. Keep data starts from them, and from [ssh].
+  /// set. Keep data starts from them; SSH always starts off.
   final String? hostname;
   final String? admin;
-  final bool ssh;
 }
 
 class DiskInfo {

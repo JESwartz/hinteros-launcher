@@ -695,7 +695,7 @@ Restart now = `systemctl reboot`; if that fails, "Cannot restart. Try again." an
 screen offers Keep data (the default) and Erase all; on an install it cannot keep, only Erase all,
 with one line that says so. Keep data shows every step but Apps, and always installs the version
 on the USB stick. The answers not given yet start from the install on the disk (`existing.admin`,
-`hostname`, `ssh`; the channel from `existing.channel`); the password rows say "Not changed", and
+`hostname`; the channel from `existing.channel`), but SSH always starts off; the password rows say "Not changed", and
 an empty password keeps the current one (an install without an admin needs one). The plan is
 `disk`, `diskSeq`, `keepData`, `hostname`, `admin` (`password` only when a new one was typed),
 `ssh`, `channel`, `network` and optional `wifi`; no apps. `keepData` in the flow is read from the chosen disk, so it cannot outlive a change of disk. If the

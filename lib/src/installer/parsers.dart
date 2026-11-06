@@ -53,7 +53,6 @@ ExistingInstall? _existing(Object? v) {
     version: text(version),
     hostname: text(v['hostname']),
     admin: text(v['admin']),
-    ssh: v['ssh'] == true,
     channel: InstallChannel.values
         .where((c) => c.name == v['channel'])
         .firstOrNull,

@@ -777,7 +777,6 @@ class InstallerFlow extends ChangeNotifier {
     if (e == null) return;
     if (!_usernameSet && e.admin != null) username = e.admin!;
     if (!_hostnameSet && e.hostname != null) hostname = e.hostname!;
-    if (!_sshSet) ssh = e.ssh;
   }
 
   // ------------------------------------------------------------- account
@@ -833,9 +832,11 @@ class InstallerFlow extends ChangeNotifier {
   // ------------------------------------------------------------- options
 
   String hostname = 'hinteros';
+
+  /// Off unless turned on here, Keep data too: the install's own setting is
+  /// not taken over.
   bool ssh = false;
   bool _hostnameSet = false;
-  bool _sshSet = false;
   InstallChannel _channel = InstallChannel.stable;
 
   /// Keep data stays on the channel of the disk's install unless changed in
@@ -853,7 +854,6 @@ class InstallerFlow extends ChangeNotifier {
 
   void toggleSsh() {
     ssh = !ssh;
-    _sshSet = true;
     notifyListeners();
   }
 

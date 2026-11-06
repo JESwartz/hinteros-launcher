@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/installer/backend.dart';
 import 'package:hinteros_launcher/src/installer/fake_backend.dart';
 import 'package:hinteros_launcher/src/installer/flow.dart';
+import 'package:hinteros_launcher/src/installer/parsers.dart';
 import 'package:hinteros_launcher/src/installer/plan.dart';
 import 'package:hinteros_launcher/src/installer/progress.dart';
 import 'package:hinteros_launcher/src/ui/widgets.dart';
@@ -436,6 +437,24 @@ void main() {
         'channel': 'stable',
         'network': 'offline',
       });
+    });
+
+    testWidgets('SSH on in the install on the disk: still off', (t) async {
+      // The install's settings as `--list-disks` reports them, SSH on.
+      final sda = parseLsblk(
+        '{"blockdevices":[{"name":"sda","path":"$_sda","size":1000204886016,'
+        '"model":null,"tran":"sata","type":"disk","rm":false,'
+        '"mountpoints":[null],"disk-seq":2,"existing":{"profiles":1,'
+        '"schemaOk":true,"version":"0.6.0","hostname":"den","admin":"alex",'
+        '"ssh":true}}]}',
+      ).single;
+      final disks = mockDisks();
+      final backend = FakeInstallerBackend(
+        disks: [for (final d in disks) d.path == _sda ? sda : d],
+      );
+      final h = await toKeepSummary(t, backend: backend);
+      expect(h.flow.ssh, isFalse);
+      expect(h.flow.buildPlan().toJson()['ssh'], {'enable': false});
     });
 
     testWidgets('online, on a joined Wi-Fi network, on beta', (t) async {
