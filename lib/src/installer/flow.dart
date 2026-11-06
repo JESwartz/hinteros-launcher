@@ -420,6 +420,9 @@ class InstallerFlow extends ChangeNotifier {
   /// A network check (cable, internet) is running.
   bool checking = false;
   bool connecting = false;
+
+  /// The network [joinWifi] is joining; null when none.
+  String? connectingSsid;
   String? networkMessage;
 
   /// A Wi-Fi network this installer joined (kept on the installed box).
@@ -649,6 +652,7 @@ class InstallerFlow extends ChangeNotifier {
   /// Joins [ap]; false (with [networkMessage]) when it did not work.
   Future<bool> joinWifi(WifiAp ap, {String? psk}) async {
     connecting = true;
+    connectingSsid = ap.ssid;
     networkMessage = null;
     notifyListeners();
     var ok = false;
@@ -661,6 +665,7 @@ class InstallerFlow extends ChangeNotifier {
       networkMessage = e.message;
     }
     connecting = false;
+    connectingSsid = null;
     final message = networkMessage;
     await refreshNetwork();
     // The refresh clears the message; a failed join keeps its reason.

@@ -28,7 +28,7 @@ class _NetworkSectionState extends State<NetworkSection> {
   /// Results of our own scans, fed into the pane like the daemon's
   /// `wifi_list_changed`.
   final _scanned = StreamController<List<WifiNetwork>>.broadcast();
-  String? _joining;
+  WifiNetwork? _joining;
   bool _scanning = false;
 
   NetworkRepository get _net => widget.env.services.network;
@@ -107,7 +107,9 @@ class _NetworkSectionState extends State<NetworkSection> {
         final t = HinterTheme.of(context);
         final p = Pane(widget.env.region);
         p.add(_statusLine(status));
-        if (_joining != null) p.add(StatusLine('Connecting to $_joining...'));
+        if (_joining case final j?) {
+          p.add(StatusLine('Connecting to ${j.ssid}...'));
+        }
         if (!status.wifiAvailable) {
           p.add(
             Text('There is no Wi-Fi adapter in this box.', style: t.bodyDim),
@@ -162,7 +164,10 @@ class _NetworkSectionState extends State<NetworkSection> {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (n.secured) const LockMark(),
+                    if (_joining?.id == n.id)
+                      const RowSpinner()
+                    else if (n.secured)
+                      const LockMark(),
                     const SizedBox(width: HinterTokens.s2),
                     SignalBars(bars: n.bars),
                   ],
@@ -228,7 +233,7 @@ class _NetworkSectionState extends State<NetworkSection> {
   /// Joins a saved or open network; a saved password the network no longer
   /// accepts asks for the new one.
   Future<void> _join(WifiNetwork n) async {
-    setState(() => _joining = n.ssid);
+    setState(() => _joining = n);
     try {
       await _net.connect(n.id);
     } on SystemException catch (e) {
@@ -258,6 +263,7 @@ class _NetworkSectionState extends State<NetworkSection> {
       submitLabel: 'Connect',
       submit: (pw) async {
         if (pw.isEmpty) return 'Type the password first.';
+        setState(() => _joining = n);
         try {
           await _net.connect(n.id, password: pw);
           return null;
@@ -265,6 +271,8 @@ class _NetworkSectionState extends State<NetworkSection> {
           return e.kind == SystemErrorKind.wrongPassword
               ? 'Wrong password. Try again.'
               : e.message;
+        } finally {
+          if (mounted) setState(() => _joining = null);
         }
       },
     );

@@ -74,6 +74,9 @@ class _FirstBootPageState extends State<FirstBootPage> {
   String? _message;
   NetworkStatus? _net;
   List<WifiNetwork> _wifi = const [];
+
+  /// The network [_join] is joining.
+  WifiNetwork? _joining;
   List<BtDevice> _devices = const [];
   StreamSubscription<List<BtDevice>>? _bt;
   StreamSubscription<BtConfirmRequest>? _confirms;
@@ -178,16 +181,21 @@ class _FirstBootPageState extends State<FirstBootPage> {
         secret: true,
         submitLabel: 'Join',
         submit: (pw) async {
+          setState(() => _joining = ap);
           try {
             await _s.network.connect(ap.id, password: pw);
             return null;
           } on SystemException catch (e) {
             return e.message;
+          } finally {
+            if (mounted) setState(() => _joining = null);
           }
         },
       );
     } else {
+      setState(() => _joining = ap);
       await _try(() => _s.network.connect(ap.id));
+      if (mounted) setState(() => _joining = null);
     }
     await _loadNetwork();
   }
@@ -455,6 +463,8 @@ class _FirstBootPageState extends State<FirstBootPage> {
               leading: SignalBars(bars: ap.bars),
               trailing: joined
                   ? Text('Connected', style: t.caption)
+                  : _joining?.id == ap.id
+                  ? const RowSpinner()
                   : (ap.secured ? const LockMark() : null),
             ),
           );

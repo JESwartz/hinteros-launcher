@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hinteros_launcher/src/installer/backend.dart';
 import 'package:hinteros_launcher/src/installer/fake_backend.dart';
 import 'package:hinteros_launcher/src/installer/flow.dart';
+import 'package:hinteros_launcher/src/ui/widgets.dart';
 
 import '../support/installer_harness.dart';
 
@@ -277,5 +278,39 @@ void rescanTests() {
     final now = backend.calls.where((c) => c == 'scanWifi').length;
     await t.pump(const Duration(seconds: 30));
     expect(backend.calls.where((c) => c == 'scanWifi').length, now);
+  });
+
+  testWidgets('joining a network: a spinner in place of its lock', (t) async {
+    final gate = Completer<void>();
+    final backend = FakeInstallerBackend(
+      state: const NetworkState(wifiAvailable: true),
+      wifiPasswords: {'Living Room': 'correct horse'},
+    )..connectHold = gate.future;
+    final h = InstallerHarness(backend: backend);
+    await h.pump(t);
+    h.flow.go(InstallerStep.network);
+    await t.pump(const Duration(seconds: 1));
+    final row = find.ancestor(
+      of: find.text('Living Room'),
+      matching: find.byType(SettingRow),
+    );
+    Finder inRow(Type w) => find.descendant(of: row, matching: find.byType(w));
+    expect(inRow(LockMark), findsOneWidget);
+
+    final ap = h.flow.wifi.firstWhere((a) => a.ssid == 'Living Room');
+    final join = h.flow.joinWifi(ap, psk: 'correct horse');
+    await t.pump();
+    expect(inRow(RowSpinner), findsOneWidget);
+    expect(inRow(LockMark), findsNothing);
+    expect(find.byType(RowSpinner), findsOneWidget, reason: 'only that row');
+
+    gate.complete();
+    expect(await join, isTrue);
+    await t.pump(const Duration(seconds: 1));
+    expect(find.byType(RowSpinner), findsNothing);
+    expect(
+      find.descendant(of: row, matching: find.text('Connected')),
+      findsOneWidget,
+    );
   });
 }

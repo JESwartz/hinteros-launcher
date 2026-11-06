@@ -330,6 +330,16 @@ class _BarsPainter extends CustomPainter {
       o.bars != bars || o.on != on || o.off != off;
 }
 
+/// A [Spinner] in the place of a row's [LockMark]: the row's network is being
+/// joined.
+class RowSpinner extends StatelessWidget {
+  const RowSpinner({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      const SizedBox.square(dimension: 32, child: Center(child: Spinner()));
+}
+
 /// A padlock, drawn.
 class LockMark extends StatelessWidget {
   const LockMark({super.key, this.size = 32});

@@ -271,6 +271,9 @@ class FakeInstallerBackend implements InstallerBackend {
   /// plugged in: nothing, connecting, connected); then [state] again.
   final networkQueue = <NetworkState>[];
   Future<void>? scanHold;
+
+  /// When set, `connectWifi()` waits for this first (a slow join, for tests).
+  Future<void>? connectHold;
   final List<WifiAp> _wifi;
   final List<DiskInfo> _disks;
   final List<StoreApp> _catalog;
@@ -393,6 +396,7 @@ class FakeInstallerBackend implements InstallerBackend {
   @override
   Future<void> connectWifi(String ssid, {String? psk}) async {
     calls.add('connectWifi:$ssid');
+    await connectHold;
     final ap = _wifi.where((a) => a.ssid == ssid).firstOrNull;
     if (ap == null) throw const InstallerException('Network not found.');
     if (ap.secured && wifiPasswords[ssid] != psk) {

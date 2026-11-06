@@ -256,6 +256,8 @@ class _NetworkStepState extends State<NetworkStep> {
                           fontWeight: FontWeight.w700,
                         ),
                       )
+                    : f.connectingSsid == ap.ssid
+                    ? const RowSpinner()
                     : (ap.secured
                           ? const LockMark()
                           : Text('Open', style: t.caption)),
