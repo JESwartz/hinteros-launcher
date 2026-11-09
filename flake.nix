@@ -9,7 +9,7 @@
     };
     # The API schema (and the real session daemon for the integration check).
     hinteros-daemon = {
-      url = "git+https://git.hinteros.org/hinteros-daemon.git?ref=pre-1.0";
+      url = "git+https://git.hinteros.org/hinteros-daemon.git";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.git-hooks.follows = "git-hooks";
     };

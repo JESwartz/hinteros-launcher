@@ -65,14 +65,13 @@
       "locked": {
         "lastModified": 1793997411,
         "narHash": "sha256-IdZllJVUPQuZ9nTosYNAmwWrr1vaFIBuPcoi3X5wGc0=",
-        "ref": "pre-1.0",
+        "ref": "refs/heads/main",
         "rev": "df06fb5f26e894e03bc9752a3dd824449a69e0fb",
         "revCount": 380,
         "type": "git",
         "url": "https://git.hinteros.org/hinteros-daemon.git"
       },
       "original": {
-        "ref": "pre-1.0",
         "type": "git",
         "url": "https://git.hinteros.org/hinteros-daemon.git"
       }
